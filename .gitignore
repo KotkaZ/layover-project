@@ -1,0 +1,21 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+
+# Layover runtime state
+/.layover/state/
+/.layover/logbook.md
+/.layover/ground-stop
+/workspace/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
