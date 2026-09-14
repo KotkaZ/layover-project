@@ -2,8 +2,8 @@
 
 **A local-first framework for running a lights-out agent factory.**
 
-> **Status: design phase.** No code yet. The design lives in
-> [`docs/architecture.md`](docs/architecture.md).
+> **Status: early implementation.** The domain core is built and tested; nothing that spawns a
+> process exists yet. The design lives in [`docs/architecture.md`](docs/architecture.md).
 
 Layover does not call LLMs. It is a *supervisor*: it spawns headless agent CLIs, gives them a way
 to talk to one another, persists what they learn, and stops them from running away.
@@ -45,6 +45,20 @@ control. When everything needs to stop, you call a **Ground Stop**.
 
 v0.1 targets Claude Code, GitHub Copilot CLI and OpenAI Codex CLI, on a single machine.
 See [`docs/roadmap.md`](docs/roadmap.md) for what is in and out.
+
+## Building
+
+```
+cargo xtask verify
+```
+
+That is the only definition of done: format, lint, test and doc build, with warnings denied. CI
+runs the same command, unchanged.
+
+What exists today is `crates/layover-core` — configuration, the route graph, load-time
+validation, itinerary accounting and rendezvous barriers, all pure logic and fully tested.
+Process supervision, the MCP server, the HTTP API and the UI are not built yet; they are blocked
+on open questions in [`docs/roadmap.md`](docs/roadmap.md).
 
 ## This repository is itself agentic-first
 

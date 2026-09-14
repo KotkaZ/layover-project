@@ -135,6 +135,7 @@ http_addr = "127.0.0.1:7878"
 runner      = "claude"
 max_hops    = 8
 fuel_usd    = 5.00
+max_runs    = 64
 timeout_sec = 900
 
 # ── How to invoke each supported CLI ───────────────────────────────
@@ -174,18 +175,18 @@ fuel_usd = 1.00          # per-agent override
 [[routes]]
 from = "planner"
 to   = "coder"
-mode = "both"
 
 [[routes]]
 from = "coder"
 to   = "reviewer"
-mode = "request_response"
 
 [[routes]]
 from = "reviewer"
 to   = "planner"
-mode = "async"
 ```
+
+`mode` may be given explicitly, but `async` is the only value v0.1 accepts; blocking
+request/response was superseded by rendezvous joins.
 
 An edge absent from `[[routes]]` means the flight is refused. Direction is explicit:
 `planner → coder` does not imply `coder → planner`.

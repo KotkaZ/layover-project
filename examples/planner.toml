@@ -1,0 +1,64 @@
+# The factory shape documented in docs/architecture.md.
+#
+# This file is parsed and validated by crates/layover-core/tests/examples.rs, so the documented
+# configuration cannot quietly stop being loadable.
+
+[layover]
+state_dir = ".layover/state"
+work_dir  = "workspace"
+logbook   = ".layover/logbook.md"
+http_addr = "127.0.0.1:7878"
+
+[defaults]
+runner      = "claude"
+max_hops    = 8
+fuel_usd    = 5.00
+max_runs    = 64
+timeout_sec = 900
+
+# ── How to invoke each supported CLI ───────────────────────────────
+[runners.claude]
+command = ["claude", "-p", "{prompt}", "--output-format", "stream-json"]
+mcp     = { flag = "--mcp-config", format = "claude_json" }
+
+[runners.copilot]
+command = ["copilot", "-p", "{prompt}", "--allow-all-tools"]
+mcp     = { flag = "--mcp-config", format = "claude_json" }
+
+[runners.codex]
+command = ["codex", "exec", "{prompt}"]
+mcp     = { flag = "-c", format = "codex_toml" }
+
+# ── Agents ─────────────────────────────────────────────────────────
+[agents.planner]
+runner   = "claude"
+model    = "claude-opus-4"
+resident = false
+entry    = true
+prompt   = """
+You break incoming goals into concrete tasks and dispatch them.
+Record durable conclusions with layover_memory_write.
+"""
+
+[agents.coder]
+runner = "copilot"
+prompt = "You implement the task described in the incoming flight."
+
+[agents.reviewer]
+runner   = "codex"
+access   = "read-only"
+prompt   = "You review work and either approve it or return concrete defects."
+fuel_usd = 1.00
+
+# ── The route map: directed edges ──────────────────────────────────
+[[routes]]
+from = "planner"
+to   = "coder"
+
+[[routes]]
+from = "coder"
+to   = "reviewer"
+
+[[routes]]
+from = "reviewer"
+to   = "planner"

@@ -15,10 +15,14 @@ Read `docs/architecture.md` before changing anything structural.
 
 ## Project status
 
-**Design phase. No Rust code exists yet.**
+**Early implementation.**
 
-Do not scaffold crates, add dependencies, or write implementation code unless the task explicitly
-asks for it.
+`crates/layover-core` exists and is fully tested: configuration parsing, the route graph,
+load-time validation, itinerary accounting (Hops, Fuel, run cap) and rendezvous barriers.
+
+**Nothing that touches the outside world exists yet** — no process supervision, no MCP server,
+no HTTP API, no UI. Those are blocked on the run-bootstrap questions in `docs/roadmap.md`,
+which are unanswered. Do not guess at them; ask.
 
 ## The golden rule
 
@@ -77,5 +81,5 @@ type names, API fields and prose alike.
 | `docs/routing.md` | Route map semantics, joins, failure paths |
 | `docs/roadmap.md` | v0.1 scope and open questions |
 | `docs/risks.md` | Known risks and mitigations |
-| `crates/` | Rust workspace — not yet created |
-| `xtask/` | The `verify` command — not yet created |
+| `crates/layover-core` | Domain types: config, graph, validation, itinerary, barriers |
+| `xtask/` | The `verify` command |
