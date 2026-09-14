@@ -1,8 +1,9 @@
 # Architecture
 
 > **Status: design, pre-implementation.** No code exists yet. This document is the canonical
-> description of what we intend to build and *why*. Scope and open questions live in
-> [`roadmap.md`](roadmap.md); known hazards live in [`risks.md`](risks.md).
+> description of what we intend to build and *why*. Route map semantics, joins and failure paths
+> live in [`routing.md`](routing.md); scope and open questions in [`roadmap.md`](roadmap.md);
+> known hazards in [`risks.md`](risks.md).
 
 ---
 
@@ -39,7 +40,7 @@ carries budget across a causal chain, and *Ground Stop* says exactly what a kill
 | Lifecycle | Hybrid — transient per flight, optionally pinned resident |
 | Continuity | **Fresh** — every run is a clean slate |
 | Spawn vs. send | Unified — sending a flight is what starts an agent |
-| Message semantics | Fire-and-forget and blocking request/response |
+| Message semantics | Fire-and-forget; `request_response` deferred, superseded by rendezvous joins |
 | Re-entry | Reentrant — re-entry spawns a second independent run |
 | Concurrency | Unbounded |
 | Control channel | **MCP** — Layover is an MCP server, agents are MCP clients |
@@ -52,6 +53,10 @@ carries budget across a causal chain, and *Ground Stop* says exactly what a kill
 | License | Apache-2.0 |
 | Verification | `cargo xtask verify`, run identically by CI |
 | Dogfooding | Ship an example factory; never point one at Layover's own source |
+| Model shape | **Permission mesh**, not a pipeline engine — agents decide routing |
+| Fan-in | Declarative rendezvous joins on the receiving node |
+| Failure routing | An ordinary edge; the agent decides, the Tower does not evaluate conditions |
+| Workspace access | Per-agent `read-only` / `read-write`; read-only agents get a worktree snapshot |
 
 ## 4. Two central insights
 
@@ -185,6 +190,9 @@ An edge absent from `[[routes]]` means the flight is refused. Direction is expli
 
 Route validation runs at config load, not at first flight — unknown agent names and unreachable
 entry points must fail fast, while a human is still watching.
+
+Edges also carry fan-out, rendezvous joins and failure paths. Those semantics, and a worked
+five-agent development pipeline, are specified in [`routing.md`](routing.md).
 
 ## 7. Disk layout
 

@@ -74,6 +74,7 @@ type names, API fields and prose alike.
 | Path | Purpose |
 |---|---|
 | `docs/architecture.md` | System design and the decision log |
+| `docs/routing.md` | Route map semantics, joins, failure paths |
 | `docs/roadmap.md` | v0.1 scope and open questions |
 | `docs/risks.md` | Known risks and mitigations |
 | `crates/` | Rust workspace — not yet created |

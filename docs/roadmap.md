@@ -1,67 +1,110 @@
 # Roadmap
 
-## v0.1 — prove the factory
+## v0.1 — the development pipeline
 
-The goal of v0.1 is narrow: demonstrate that one agent can trigger another, unattended, with a
-bound on how far that can go.
+v0.1 is validated against one concrete scenario: a five-agent development pipeline that takes a
+goal over HTTP and ends with a pull request. It is specified in
+[`routing.md`](routing.md#5-worked-example-a-development-pipeline).
+
+```
+HTTP ──▶ analyst ──▶ developer ──┬──▶ testing ──┐
+                         ▲       └──▶ review  ──┴──▶ join(all) ──▶ announcer ──▶ PR
+                         └──────── tests failed
+```
+
+> **This is a deliberately demanding target.** It is a significant expansion over "one agent can
+> trigger another" and pulls fan-out, rendezvous joins, failure loops, workspace isolation and
+> credential handling into the first release. Worth knowing before committing to it.
 
 ### Done criteria
 
-1. `layover.toml` parses — agents with prompt, model and runner; routes with direction and mode.
-2. Route validation rejects unknown agents and unreachable entry points **at config load**, not
-   at first flight.
-3. `layover run` starts the Tower: HTTP server and MCP server together.
-4. `POST /flights` triggers a real `claude -p` run inside the shared workspace.
-5. That agent calls `layover_send` and successfully triggers a second, different agent.
-6. Hops decrement across the chain, and a chain terminates when Hops reach zero instead of
-   running forever.
-7. Hangars are written: transcript, run metadata, memory.
-8. `GET /runs` and `GET /runs/:id/stream` return live SSE output.
-9. A minimal UI renders the route map and a live run feed.
-10. `POST /ground-stop` halts a running factory, and it stays halted across a Tower restart.
+**Configuration**
 
-Criterion 6 is the one that matters most. Everything else is plumbing; the Hops bound is the
-difference between a factory and a fork bomb.
+1. `layover.toml` parses: agents with prompt, model, runner, `access` and `entry`; routes with
+   direction, fan-out and `join`.
+2. Validation at config load rejects unknown agent names and unreachable entry points, and warns
+   on fan-out to multiple read-write agents.
 
-### Explicitly out of scope for v0.1
+**Execution**
+
+3. `layover run` starts the Tower — HTTP server and MCP server together.
+4. `POST /flights` triggers the analyst in the shared workspace.
+5. The developer fans out to testing and review, and they run **concurrently**.
+6. The read-only review agent receives a git worktree snapshot, not the live tree.
+
+**The join — the heart of v0.1**
+
+7. `join = "all"` parks flights and spawns the announcer **exactly once**, with both inputs.
+8. A testing failure loops back to the developer; the barrier resets; a full re-dispatch
+   completes it with fresh results.
+9. A barrier that can no longer be reached is abandoned, and the itinerary is marked **stalled**
+   and shown as such — distinctly from failed.
+
+**Safety and observability**
+
+10. Hops decrement across the chain; a chain terminates at zero rather than running forever.
+11. Hangars are written: transcript, run metadata, memory.
+12. `GET /runs` and `GET /runs/:id/stream` return live SSE output.
+13. A minimal UI renders the route map, a live run feed, and stalled itineraries.
+14. `POST /ground-stop` halts a running factory and survives a Tower restart.
+
+**The payoff**
+
+15. The announcer opens a real pull request. Blocked on the credential decision below.
+
+Criteria 7–9 are the ones that matter. Everything else is plumbing; the barrier is the difference
+between a pipeline and a race condition.
+
+### Out of scope for v0.1
 
 - Resident agents
-- `request_response` mode — see [`risks.md`](risks.md#3-blocking-chains-hold-processes-open)
+- `request_response` mode — **no longer needed**; rendezvous joins cover fan-in without holding
+  processes open, which retired two risks rather than deferring them
 - Fuel accounting
-- Workspace contention mediation
+- Two concurrent read-write agents
 - Anything multi-machine
 - Pointing a factory at Layover's own source — permanently out of scope
-
-### Recommendation under consideration
-
-**Cut `request_response` from v0.1 entirely.** It causes risks 1 and 3, and fire-and-forget alone
-is sufficient to prove the concept. Blocking calls can be added once the async path is solid.
 
 ---
 
 ## Open questions
 
-Unresolved. Agents should ask rather than guess on any of these.
+Agents should ask rather than guess on any of these.
 
-1. **Does an agent see who sent a flight?** Sender identity enables trust decisions and loop
-   detection, but also lets agents form behaviour that depends on the topology rather than the
-   task.
-2. **What happens when a run fails?** Retry, dead-letter queue, notify the sender, or drop
-   silently. Unattended operation makes this far more important than it looks.
-3. **Are prompts really inline in TOML?** Long system prompts may want
-   `prompt_file = "prompts/planner.md"` — better diffs, and editable by agents.
-4. **Is the Logbook one flat file or namespaced sections?** One file serializes every write in the
-   factory through a single lock.
-5. **Observability** — structured logs only, or OpenTelemetry traces where an Itinerary is a
-   trace and each Run a span? The latter fits the model almost too neatly.
-6. **How does a factory ever stop?** With no human in the loop, what does "done" mean for an
-   Itinerary? Hops bound it, but exhausting a budget is failure, not success.
-7. **Secrets** — how do child CLIs receive API keys? Inherited environment, or injected per run by
-   the Tower? The latter allows per-agent credentials and revocation.
-8. **UI stack** — plain HTML with SSE, or a framework? It only consumes the HTTP API, so this is
-   reversible.
-9. **Is the aviation terminology confirmed?** It is adopted throughout this repo provisionally.
-   Straightforward to strip back to generic terms while there is no code.
+### Blocking for v0.1
+
+1. **Which branch does the announcer open a PR from?** Branch-per-itinerary was declined, so
+   nothing currently creates or names a branch. The announcer cannot open a pull request without
+   one. Either the developer commits to a convention-named branch, or itineraries get branches
+   after all.
+2. **How do child CLIs receive credentials?** Inherited environment, or Tower-injected per run.
+   Per-run injection allows per-agent credentials — an analyst has no business holding a token
+   that can push.
+3. **How many loop-backs before giving up?** Hops bounds it, but exhausting Hops mid-repair leaves
+   a half-finished change in the workspace and no one to clean it up.
+
+### Open
+
+4. **What happens when a run *crashes*?** Distinct from a test failing: the process dies, exits
+   non-zero, or times out. Retry, dead-letter, notify the sender, or stall the itinerary.
+5. **Are prompts inline in TOML?** The pipeline's prompts are already multi-line and carry
+   behavioural constraints. `prompt_file = "prompts/developer.md"` gives better diffs and lets
+   agents edit them.
+6. **Is the Logbook one flat file or namespaced?** One file serializes every write in the factory
+   through a single lock.
+7. **Observability** — structured logs, or OpenTelemetry traces where an Itinerary is a trace and
+   each Run a span? The latter fits almost too neatly, and would visualise a stalled barrier.
+8. **When is an Itinerary done?** The announcer opening a PR is success, but nothing marks it.
+   Without a terminal state the UI cannot distinguish finished from idle.
+9. **UI stack** — plain HTML with SSE, or a framework. Reversible; it only consumes the HTTP API.
+10. **Is the aviation terminology confirmed?** Adopted provisionally throughout. Cheap to strip
+    while there is no code.
+
+### Resolved by the join design
+
+- **Does an agent see who sent a flight?** *Yes — now mandatory.* The announcer receives two
+  flights and must tell the test result from the review verdict. Sender identity became a
+  requirement rather than a preference.
 
 ---
 
@@ -69,9 +112,9 @@ Unresolved. Agents should ask rather than guess on any of these.
 
 Rough ordering, not commitments.
 
-- Fuel accounting with graceful degradation when a runner cannot report cost
-- `writable_paths` per agent, to make shared-workspace factories safe
+- Fuel accounting, degrading to wall-clock or run count when a runner cannot report cost
+- Safe concurrent read-write agents: path allow-lists or per-run worktrees
 - Resident agents with serialized runs
-- `request_response`, if it proves necessary
+- `join = "any"`, and quorum joins
 - `include = [...]` for multi-file factory definitions
 - Additional runners: Gemini CLI, Aider, arbitrary command templates

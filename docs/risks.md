@@ -19,25 +19,30 @@ documented as such.
 
 ### 2. Shared workspace contention
 
-**Severity: high. Accepted for v0.1.**
+**Severity: high. Partially mitigated.**
 
-Unbounded concurrent coding agents share one working directory and *will* clobber each other's
-files. There is no locking, no worktree isolation and no merge strategy.
+Concurrent read-write agents share one working directory and *will* clobber each other's files.
+There is no locking and no merge strategy.
 
-*Mitigation deferred.* The cheapest future option is a `writable_paths` allow-list per agent,
-enforced by the Tower. Git-backed per-run worktrees are the thorough option and considerably more
-work. Until then this is a known, deliberate limitation and must be stated plainly in user docs —
-a factory of coding agents pointed at one repo is not yet safe.
+*Partial mitigation:* agents now declare `access = "read-only" | "read-write"`, and read-only
+agents receive a git worktree snapshot rather than the live tree — see
+[`routing.md`](routing.md#4-workspace-access). This fully covers the fan-out pattern where only
+one parallel branch writes, which is the dev-pipeline case.
+
+*Still unresolved:* **two concurrent read-write agents remain unsafe.** The route map does not
+prevent that shape, and nothing warns you when you configure one. A load-time check that flags
+fan-out to multiple read-write agents would be cheap and worth having.
 
 ### 3. Blocking chains hold processes open
 
-**Severity: medium.**
+**Severity: medium. Resolved by design.**
 
-A `request_response` chain of depth N keeps N CLI processes alive and idle, each holding memory
-and possibly a provider session. Hops is the only bound on depth.
+A `request_response` chain of depth N would keep N CLI processes alive and idle, each holding
+memory and possibly a provider session. Hops was the only bound on depth.
 
-*Mitigation:* consider cutting `request_response` from v0.1 entirely. Async alone proves the
-factory concept, and this risk plus risk 1 both stem from it.
+*Resolved:* rendezvous joins provide fan-in without blocking anyone, so `request_response` is not
+needed for v0.1 and is deferred indefinitely. The Tower parks flights instead of parking
+processes. This also removed the pressure behind risk 1.
 
 ### 4. Fuel accounting depends on the CLI reporting cost
 
@@ -98,3 +103,41 @@ agree, and an agent trusting a stale document will make confident wrong changes.
 
 *Mitigation:* keep the decision log in `architecture.md` updated in the same commit as the change
 it describes — this is why Conventional Commits and a `docs:` type matter.
+
+### 10. Barrier leak
+
+**Severity: high.**
+
+A rendezvous join parks flights until all upstreams arrive. A failure loop-back diverts one branch
+away from the join, so the barrier can never complete and the itinerary hangs holding parked work
+forever. Hops does not help: nothing is flying.
+
+*Mitigation:* the Tower abandons a barrier by **reachability** — if no live run in the itinerary
+could still reach it, the barrier is dead and the itinerary is marked *stalled*. `timeout_sec` is
+only a backstop. Stalled must be a distinct, visible outcome; silently parked work is worse than
+a crash.
+
+### 11. Barrier staleness
+
+**Severity: high.**
+
+After a loop-back, a barrier may still hold a verdict produced *before* the fix. The announcer
+would then open a pull request for code that was reviewed in a different state — a correctness
+failure that looks like success.
+
+*Mitigation:* a barrier resets when any upstream delivers a second time. This imposes a
+constraint: a loop-back must re-dispatch the **whole** fan-out, not just the failing branch. The
+constraint lives in agent prompts, which makes it fragile — a load-time or runtime check would be
+better and is not yet designed.
+
+### 12. Credential delivery is now blocking
+
+**Severity: high.**
+
+The announcer agent must open a pull request, which requires GitHub credentials inside a child
+CLI. How secrets reach child processes was an open question; making the dev pipeline the v0.1
+acceptance test promotes it to a blocker.
+
+*Mitigation:* decide between inherited environment and Tower-injected per-run credentials before
+implementation starts. Per-run injection is more work but allows per-agent credentials and
+revocation — an analyst agent has no business holding a token that can push.
