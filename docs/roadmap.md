@@ -1,20 +1,9 @@
 # Roadmap
 
-## v0.1 — the development pipeline
+## v0.1 — prove the factory
 
-v0.1 is validated against one concrete scenario: a five-agent development pipeline that takes a
-goal over HTTP and ends with a pull request. It is specified in
-[`routing.md`](routing.md#5-worked-example-a-development-pipeline).
-
-```
-HTTP ──▶ analyst ──▶ developer ──┬──▶ testing ──┐
-                         ▲       └──▶ review  ──┴──▶ join(all) ──▶ announcer ──▶ PR
-                         └──────── tests failed
-```
-
-> **This is a deliberately demanding target.** It is a significant expansion over "one agent can
-> trigger another" and pulls fan-out, rendezvous joins, failure loops, workspace isolation and
-> credential handling into the first release. Worth knowing before committing to it.
+The goal of v0.1 is narrow: demonstrate that agents can trigger one another unattended, that
+several results can rendezvous, and that the whole thing is bounded.
 
 ### Done criteria
 
@@ -28,34 +17,30 @@ HTTP ──▶ analyst ──▶ developer ──┬──▶ testing ──┐
 **Execution**
 
 3. `layover run` starts the Tower — HTTP server and MCP server together.
-4. `POST /flights` triggers the analyst in the shared workspace.
-5. The developer fans out to testing and review, and they run **concurrently**.
-6. The read-only review agent receives a git worktree snapshot, not the live tree.
+4. `POST /flights` triggers a real `claude -p` run inside the shared workspace.
+5. That agent calls `layover_send` and successfully triggers a second, different agent.
+6. An agent fans out to two peers, and they run **concurrently**.
+7. A read-only agent receives a git worktree snapshot rather than the live tree.
 
-**The join — the heart of v0.1**
+**Rendezvous**
 
-7. `join = "all"` parks flights and spawns the announcer **exactly once**, with both inputs.
-8. A testing failure loops back to the developer; the barrier resets; a full re-dispatch
-   completes it with fresh results.
+8. `join = "all"` parks flights and spawns the target **exactly once**, with all inputs.
 9. A barrier that can no longer be reached is abandoned, and the itinerary is marked **stalled**
-   and shown as such — distinctly from failed.
+   and displayed as such — distinctly from failed.
 
 **Safety and observability**
 
-10. Hops decrement across the chain; a chain terminates at zero rather than running forever.
+10. Hops decrement across the chain, and a chain terminates at zero instead of running forever.
 11. Hangars are written: transcript, run metadata, memory.
 12. `GET /runs` and `GET /runs/:id/stream` return live SSE output.
 13. A minimal UI renders the route map, a live run feed, and stalled itineraries.
-14. `POST /ground-stop` halts a running factory and survives a Tower restart.
+14. `POST /ground-stop` halts a running factory and stays halted across a Tower restart.
 
-**The payoff**
+Criteria 8–10 are the ones that matter. Everything else is plumbing; the barrier is the difference
+between a rendezvous and a race, and the Hops bound is the difference between a factory and a
+fork bomb.
 
-15. The announcer opens a real pull request. Blocked on the credential decision below.
-
-Criteria 7–9 are the ones that matter. Everything else is plumbing; the barrier is the difference
-between a pipeline and a race condition.
-
-### Out of scope for v0.1
+### Explicitly out of scope for v0.1
 
 - Resident agents
 - `request_response` mode — **no longer needed**; rendezvous joins cover fan-in without holding
@@ -71,40 +56,35 @@ between a pipeline and a race condition.
 
 Agents should ask rather than guess on any of these.
 
-### Blocking for v0.1
-
-1. **Which branch does the announcer open a PR from?** Branch-per-itinerary was declined, so
-   nothing currently creates or names a branch. The announcer cannot open a pull request without
-   one. Either the developer commits to a convention-named branch, or itineraries get branches
-   after all.
-2. **How do child CLIs receive credentials?** Inherited environment, or Tower-injected per run.
-   Per-run injection allows per-agent credentials — an analyst has no business holding a token
-   that can push.
-3. **How many loop-backs before giving up?** Hops bounds it, but exhausting Hops mid-repair leaves
-   a half-finished change in the workspace and no one to clean it up.
-
-### Open
-
-4. **What happens when a run *crashes*?** Distinct from a test failing: the process dies, exits
-   non-zero, or times out. Retry, dead-letter, notify the sender, or stall the itinerary.
-5. **Are prompts inline in TOML?** The pipeline's prompts are already multi-line and carry
-   behavioural constraints. `prompt_file = "prompts/developer.md"` gives better diffs and lets
-   agents edit them.
-6. **Is the Logbook one flat file or namespaced?** One file serializes every write in the factory
+1. **What happens when a run crashes?** Distinct from an agent reporting failure: the process
+   dies, exits non-zero, or times out. Retry, dead-letter, notify the sender, or stall the
+   itinerary. Unattended operation makes this far more important than it looks.
+2. **How do child CLIs receive credentials?** Inherited environment, or injected per run by the
+   Tower. Per-run injection is more work but allows per-agent credentials and revocation — not
+   every agent needs a token that can push.
+3. **Can the barrier-reset constraint be enforced?** A loop-back must re-dispatch the whole
+   fan-out, and today that lives only in agent prompts. A load-time or runtime check would be
+   sturdier, and is not yet designed.
+4. **Are prompts inline in TOML?** Longer prompts carry behavioural constraints and read poorly
+   in a config file. `prompt_file = "prompts/planner.md"` gives better diffs and lets agents edit
+   them.
+5. **Is the Logbook one flat file or namespaced?** One file serializes every write in the factory
    through a single lock.
-7. **Observability** — structured logs, or OpenTelemetry traces where an Itinerary is a trace and
+6. **Observability** — structured logs, or OpenTelemetry traces where an Itinerary is a trace and
    each Run a span? The latter fits almost too neatly, and would visualise a stalled barrier.
-8. **When is an Itinerary done?** The announcer opening a PR is success, but nothing marks it.
+7. **When is an Itinerary done?** Hops bound it, but exhausting a budget is failure, not success.
    Without a terminal state the UI cannot distinguish finished from idle.
+8. **How many loop-backs before giving up?** Hops bounds it, but exhausting Hops mid-repair can
+   leave half-finished work in the shared workspace and no one to clean it up.
 9. **UI stack** — plain HTML with SSE, or a framework. Reversible; it only consumes the HTTP API.
 10. **Is the aviation terminology confirmed?** Adopted provisionally throughout. Cheap to strip
     while there is no code.
 
 ### Resolved by the join design
 
-- **Does an agent see who sent a flight?** *Yes — now mandatory.* The announcer receives two
-  flights and must tell the test result from the review verdict. Sender identity became a
-  requirement rather than a preference.
+- **Does an agent see who sent a flight?** *Yes — now mandatory.* A joined agent receives several
+  flights at once and must be able to tell them apart. Sender identity became a requirement
+  rather than a preference.
 
 ---
 

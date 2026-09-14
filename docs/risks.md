@@ -26,8 +26,8 @@ There is no locking and no merge strategy.
 
 *Partial mitigation:* agents now declare `access = "read-only" | "read-write"`, and read-only
 agents receive a git worktree snapshot rather than the live tree — see
-[`routing.md`](routing.md#4-workspace-access). This fully covers the fan-out pattern where only
-one parallel branch writes, which is the dev-pipeline case.
+[`routing.md`](routing.md#5-workspace-access). This fully covers the common fan-out shape where
+several agents inspect concurrently and at most one writes.
 
 *Still unresolved:* **two concurrent read-write agents remain unsafe.** The route map does not
 prevent that shape, and nothing warns you when you configure one. A load-time check that flags
@@ -121,23 +121,11 @@ a crash.
 
 **Severity: high.**
 
-After a loop-back, a barrier may still hold a verdict produced *before* the fix. The announcer
-would then open a pull request for code that was reviewed in a different state — a correctness
-failure that looks like success.
+After an upstream re-runs, a barrier may still hold a result produced by a *sibling* branch before
+the re-run. The joined agent then acts on a mixture of old and new state — a correctness failure
+that looks exactly like success.
 
 *Mitigation:* a barrier resets when any upstream delivers a second time. This imposes a
-constraint: a loop-back must re-dispatch the **whole** fan-out, not just the failing branch. The
-constraint lives in agent prompts, which makes it fragile — a load-time or runtime check would be
-better and is not yet designed.
-
-### 12. Credential delivery is now blocking
-
-**Severity: high.**
-
-The announcer agent must open a pull request, which requires GitHub credentials inside a child
-CLI. How secrets reach child processes was an open question; making the dev pipeline the v0.1
-acceptance test promotes it to a blocker.
-
-*Mitigation:* decide between inherited environment and Tower-injected per-run credentials before
-implementation starts. Per-run injection is more work but allows per-agent credentials and
-revocation — an analyst agent has no business holding a token that can push.
+constraint: a loop-back must re-dispatch the **whole** fan-out, not just the branch that failed.
+The constraint currently lives in agent prompts, which makes it fragile — a load-time or runtime
+check would be better and is not yet designed.

@@ -191,8 +191,8 @@ An edge absent from `[[routes]]` means the flight is refused. Direction is expli
 Route validation runs at config load, not at first flight — unknown agent names and unreachable
 entry points must fail fast, while a human is still watching.
 
-Edges also carry fan-out, rendezvous joins and failure paths. Those semantics, and a worked
-five-agent development pipeline, are specified in [`routing.md`](routing.md).
+Edges also carry fan-out, rendezvous joins and failure paths. Those semantics are specified in
+[`routing.md`](routing.md).
 
 ## 7. Disk layout
 
@@ -355,9 +355,20 @@ during an incident and edited by hand when an agent records something wrong. A d
 more robust and less useful. Write safety is recovered by serializing writes through the Tower
 rather than by the storage format.
 
-**Why workspace contention is unmediated in v0.1.** Locking or per-agent worktrees are real work
-and would delay proving the core concept. The risk is accepted explicitly and recorded in
+**Why workspace contention is only partly mediated.** Full locking or per-run worktrees for every
+agent are real work and would delay proving the core concept. Read-only agents get a worktree
+snapshot, which makes the common fan-out shape safe for free; two concurrent read-write agents
+remain unsafe and the risk is recorded in
 [`risks.md`](risks.md#2-shared-workspace-contention) rather than forgotten.
+
+**Why fan-in is a join on the receiving node rather than a pipeline definition.** Two edges into
+one agent would otherwise fire it twice, on the first arrival rather than the last — duplicate
+side effects, silently. A pipeline DSL would fix that by dictating sequence, but it would also
+turn the route map from a permission graph into an execution graph and take routing decisions
+away from agents. Declaring the barrier on the *receiver* keeps senders free and the mesh
+emergent: nobody is told what to do next, a joined agent simply cannot be woken by one input
+alone. It also removed the need for blocking `request_response`, because the Tower parks flights
+instead of parking processes.
 
 **Why the factory never targets Layover's own source.** It removes an entire class of hazard —
 agents editing the supervisor that is running them — and makes it safe to give agents full write
