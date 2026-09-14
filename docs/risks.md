@@ -46,14 +46,19 @@ processes. This also removed the pressure behind risk 1.
 
 ### 4. Fuel accounting depends on the CLI reporting cost
 
-**Severity: medium.**
+**Severity: critical.**
 
 Claude Code reports token usage in `stream-json`. Codex and Copilot CLI report less consistently.
 If a runner reports nothing, Fuel silently stops metering and the budget rail becomes fiction.
 
-*Mitigation:* Fuel must degrade to a secondary bound — wall-clock time or run count — whenever a
-runner cannot report cost, and the Tower should log loudly when it does so. A safety rail that
-fails silently is worse than no rail.
+This was merely awkward while Fuel was a nice-to-have. Now that Fuel is the **only** bound on
+breadth — Hops bounds depth alone — a silent metering failure removes the sole protection against
+an exponential fan-out spending unbounded money.
+
+*Mitigation, mandatory:* Fuel must degrade to a deterministic fallback that needs no runner
+cooperation — a per-itinerary run cap, optionally wall-clock — whenever cost reporting is absent
+or partial, and the Tower must log loudly when it does. A safety rail that fails silently is worse
+than no rail, because it is trusted.
 
 ### 5. Agents rewriting their own static context
 

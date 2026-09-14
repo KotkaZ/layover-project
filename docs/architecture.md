@@ -50,6 +50,8 @@ carries budget across a causal chain, and *Ground Stop* says exactly what a kill
 | Workspace | One shared working directory; contention deliberately unmediated in v0.1 |
 | Outside surface | HTTP API with SSE; the UI is purely a client |
 | Safety rails | Hops (TTL), Fuel (chain budget), Ground Stop |
+| Hops semantics | One hop per flight; branches inherit the remaining count, so Hops bounds **depth** only |
+| Breadth bound | Fuel — required in v0.1, with a deterministic fallback when runners cannot report cost |
 | License | Apache-2.0 |
 | Verification | `cargo xtask verify`, run identically by CI |
 | Dogfooding | Ship an example factory; never point one at Layover's own source |
@@ -373,3 +375,12 @@ instead of parking processes.
 **Why the factory never targets Layover's own source.** It removes an entire class of hazard —
 agents editing the supervisor that is running them — and makes it safe to give agents full write
 access inside their workspace. The cost is losing the most persuasive dogfooding demo.
+
+**Why Fuel is required in v0.1 rather than deferred.** Hops was originally assumed to be the
+anti-fork-bomb rail. It is not. A hop is spent per flight and branches inherit the remaining
+count, so Hops caps how *deep* a chain runs and says nothing about how *wide* it spreads — a
+branching factor of 3 at `max_hops = 8` permits thousands of real, paid CLI invocations from a
+single trigger. Only a shared per-itinerary budget bounds that, so Fuel moved from "later" to
+"required". The follow-on consequence is that Fuel may not depend on runners voluntarily
+reporting cost; it needs a deterministic fallback, or the single breadth rail can vanish silently
+while still appearing to be enforced.

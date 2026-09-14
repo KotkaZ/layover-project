@@ -31,8 +31,13 @@ from = "planner"
 to   = ["probe_a", "probe_b"]
 ```
 
-Nothing about this is special — it is two ordinary flights. Concurrency is unbounded by design,
-so the only things restraining a fan-out are Hops and Fuel.
+Nothing about this is special — it is two ordinary flights.
+
+**Hops does not restrain a fan-out.** A flight costs one hop, and branches inherit the remaining
+count rather than splitting it, so Hops bounds *depth* only. With `max_hops = 8` and a branching
+factor of 3, one trigger permits up to 3⁸ ≈ 6,500 runs. **Fuel is what bounds breadth**, which is
+why it is a v0.1 requirement rather than a later refinement — see
+[`roadmap.md`](roadmap.md#why-fuel-is-not-optional).
 
 ## 3. Rendezvous joins
 
