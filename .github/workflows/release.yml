@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  binaries:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,  target: x86_64-unknown-linux-gnu,  ext: "" }
+          - { os: macos-latest,   target: aarch64-apple-darwin,      ext: "" }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc,    ext: ".exe" }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }} -p layover-cli
+
+      - name: Package
+        shell: bash
+        # The tag reaches bash through the environment rather than `${{ }}` interpolation:
+        # Actions substitutes contexts as literal text before bash runs, and a tag name may
+        # legally contain `$`, backticks and `;`, which would then execute on a runner holding a
+        # `contents: write` token.
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          TARGET: ${{ matrix.target }}
+          EXT: ${{ matrix.ext }}
+          RUNNER_OS: ${{ runner.os }}
+        run: |
+          set -euo pipefail
+          name="layover-${REF_NAME}-${TARGET}"
+          mkdir -p "dist/$name"
+          cp "target/${TARGET}/release/layover${EXT}" "dist/$name/"
+          cp README.md LICENSE "dist/$name/"
+          cd dist
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            7z a "$name.zip" "$name"
+          else
+            tar czf "$name.tar.gz" "$name"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: dist/*.{tar.gz,zip}
+          if-no-files-found: error
+
+  publish:
+    name: Publish
+    needs: binaries
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          files: dist/*
+          generate_release_notes: true
