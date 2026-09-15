@@ -1,0 +1,199 @@
+# The work-item factory: intake → investigation → development → review loop → published PR.
+#
+# Walked through in README.md alongside this file, and parsed, validated and exercised by
+# crates/layover-core/tests/workitem_factory.rs — so the documented factory cannot quietly stop
+# being loadable.
+
+[layover]
+state_dir  = ".layover/state"
+work_dir   = "workspace"
+logbook    = ".layover/logbook.md"
+prompt_dir = "prompts"
+http_addr  = "127.0.0.1:7878"
+
+[defaults]
+runner = "claude"
+
+# 22 = 2N + 6 at N = 8, sized for the *longer* of the two entry paths: the scheduled pipeline
+# spends one extra flight getting from `pr_scanner` to `analyst`. Both pipelines therefore get
+# eight test/review cycles and can still reach the publisher after the last one. The arithmetic is
+# derived in README.md; do not lower this without redoing it, because Hops running out mid-repair
+# abandons half-finished work in the workspace.
+max_hops = 22
+
+# Eight cycles cost at most 3N + 7 = 31 runs. The cap is the deterministic backstop that holds
+# when a runner does not report its cost, so it is sized for the loop rather than left at default.
+max_runs = 40
+
+fuel_usd = 20.00
+
+# A test suite and a build are slower than a single answer.
+timeout_sec = 1800
+
+# ── How to invoke each supported CLI ───────────────────────────────
+[runners.claude]
+command = ["claude", "-p", "{prompt}", "--output-format", "stream-json"]
+mcp     = { flag = "--mcp-config", format = "claude_json" }
+
+[runners.copilot]
+command = ["copilot", "-p", "{prompt}", "--allow-all-tools"]
+mcp     = { flag = "--mcp-config", format = "claude_json" }
+
+[runners.codex]
+command = ["codex", "exec", "{prompt}"]
+mcp     = { flag = "-c", format = "codex_toml" }
+
+# ── Intake ─────────────────────────────────────────────────────────
+
+[agents.analyst]
+description = "Turns a request into a work item a developer can act on"
+purpose     = """
+Route here when a request is still a description of a problem rather than a description of
+work. The analyst gathers evidence, decides what is actually being asked for, and writes the
+acceptance criteria the tester will later check against.
+"""
+runner      = "claude"
+model       = "claude-opus-4"
+access      = "read-only"
+prompt_file = "analyst.md"
+
+[agents.investigator]
+description = "Establishes what is actually true about a reported problem"
+purpose     = """
+Route here for questions about the code itself: why something behaves as it does, where a
+defect actually lives, whether a report reproduces. Reads only.
+"""
+runner      = "claude"
+access      = "read-only"
+prompt_file = "investigator.md"
+
+[agents.kusto]
+description = "Answers questions about production behaviour from telemetry"
+purpose     = """
+Route here for questions about the world rather than the code: how often something fails, who
+it affects, when it started, which build introduced it.
+"""
+runner      = "copilot"
+access      = "read-only"
+prompt_file = "kusto.md"
+
+# ── Development ────────────────────────────────────────────────────
+
+[agents.developer]
+description = "Implements the work item and repairs what review rejects"
+purpose     = """
+The only agent that writes to the shared workspace. Also the agent that decides when the work
+is finished, because both verdicts rendezvous here.
+"""
+runner      = "copilot"
+prompt_file = "developer.md"
+
+[agents.tester]
+description = "Builds the change and runs the suite, then returns a verdict"
+purpose     = """
+Route here to find out whether the change works. Gets its own worktree, so it may build and run
+freely. Judges behaviour, never style.
+"""
+runner      = "codex"
+access      = "read-only"
+prompt_file = "tester.md"
+
+[agents.reviewer]
+description = "Reads the change for correctness and design, then returns a verdict"
+purpose     = """
+Route here for a second opinion formed independently of the test results. Deliberately does not
+run the suite, so that a green build and a sound design are established separately.
+"""
+runner      = "codex"
+access      = "read-only"
+prompt_file = "reviewer.md"
+
+# ── Delivery ───────────────────────────────────────────────────────
+
+[agents.publisher]
+description = "Commits the finished work and opens the pull request in Azure DevOps"
+purpose     = """
+The terminal agent. Does not judge the work — that already happened — and opens nothing when the
+workspace is not in a publishable state.
+"""
+runner      = "copilot"
+prompt_file = "publisher.md"
+
+# ── Scheduled intake ───────────────────────────────────────────────
+
+[agents.pr_scanner]
+description = "Polls Azure DevOps for the user's active pull requests"
+purpose     = """
+The scheduled entry point. Reports only pull requests that have changed since the last run, so
+an hourly schedule does not re-review the same work forever.
+"""
+runner      = "copilot"
+access      = "read-only"
+prompt_file = "pr-scanner.md"
+
+# ── Pipelines: how work enters the mesh ────────────────────────────
+
+# Feature work. A human starts it, because deciding that something should be built is not a
+# decision a clock should make.
+[pipelines.development]
+description = "Take a request through investigation, development and review to a pull request"
+entry       = "analyst"
+trigger     = "manual"
+
+[pipelines.development.flags]
+deep_analysis = { default = false, description = "Widen the investigation beyond the reported symptom" }
+run_e2e       = { default = false, description = "Also run the remote end-to-end suite before approving" }
+draft_pr      = { default = true, description = "Open the pull request as a draft for a human to promote" }
+
+# Review work. Nobody has to remember to start it, which is the whole point.
+[pipelines.review-bot]
+description = "Review my open Azure DevOps pull requests once an hour"
+entry       = "pr_scanner"
+trigger     = { every = "1h" }
+
+[pipelines.review-bot.flags]
+deep_analysis = { default = false, description = "Widen the investigation beyond the reported symptom" }
+run_e2e       = { default = false, description = "Also run the remote end-to-end suite before approving" }
+draft_pr      = { default = true, description = "Open the pull request as a draft for a human to promote" }
+
+# ── The route map: directed edges ──────────────────────────────────
+
+# The scheduled scanner hands work to the same analyst the manual pipeline uses.
+[[routes]]
+from = "pr_scanner"
+to   = "analyst"
+
+# Intake fans out to both helpers. Both are read-only, so they inspect the workspace
+# concurrently without clobbering each other.
+[[routes]]
+from = "analyst"
+to   = ["investigator", "kusto"]
+
+# ...and rendezvous back on the analyst. A flight from a human, a schedule or `pr_scanner` is not
+# a declared upstream of this barrier, so it wakes the analyst directly instead of parking.
+[[routes]]
+from        = ["investigator", "kusto"]
+to          = "analyst"
+join        = "all"
+timeout_sec = 3600
+
+[[routes]]
+from = "analyst"
+to   = "developer"
+
+# The review fan-out. Both are read-only, so the developer's tree is not a moving target.
+[[routes]]
+from = "developer"
+to   = ["tester", "reviewer"]
+
+# Both verdicts rendezvous back on the developer, which then loops or publishes. The barrier
+# covers `tester` and `reviewer` only, so the analyst's work item still arrives directly.
+[[routes]]
+from        = ["tester", "reviewer"]
+to          = "developer"
+join        = "all"
+timeout_sec = 3600
+
+[[routes]]
+from = "developer"
+to   = "publisher"

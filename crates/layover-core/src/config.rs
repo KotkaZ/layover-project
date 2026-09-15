@@ -3,66 +3,14 @@
 //! Unknown fields are rejected rather than ignored: a typo in a factory definition should fail
 //! at load time, while a human is still watching, rather than silently changing behaviour.
 
-use std::collections::BTreeMap;
-use std::fmt;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
-/// The name of an agent, as written in `layover.toml`.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
-#[serde(transparent)]
-pub struct AgentName(String);
-
-impl AgentName {
-    /// Creates an agent name.
-    #[must_use]
-    pub fn new(name: impl Into<String>) -> Self {
-        Self(name.into())
-    }
-
-    /// Returns the name as a string slice.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for AgentName {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl From<&str> for AgentName {
-    fn from(value: &str) -> Self {
-        Self(value.to_owned())
-    }
-}
-
-/// Whether an agent may write to the shared workspace.
-///
-/// Read-only agents are given a worktree snapshot rather than the live tree, which is real
-/// enforcement rather than an advisory flag.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Access {
-    /// Receives a read-only snapshot of the workspace.
-    ReadOnly,
-    /// Works directly in the shared workspace.
-    #[default]
-    ReadWrite,
-}
-
-/// The condition under which a rendezvous barrier releases.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Join {
-    /// Wait for every declared upstream.
-    All,
-    /// Release as soon as any one upstream arrives.
-    Any,
-}
+use crate::agent::{Agent, AgentName};
+use crate::pipeline::{Pipeline, PipelineName};
+use crate::route::Route;
 
 /// Filesystem and network locations used by the Tower.
 #[derive(Debug, Clone, Deserialize)]
@@ -77,6 +25,9 @@ pub struct Paths {
     /// Path to the shared Logbook.
     #[serde(default = "default_logbook")]
     pub logbook: PathBuf,
+    /// Directory that `prompt_file` paths are resolved against.
+    #[serde(default = "default_prompt_dir")]
+    pub prompt_dir: PathBuf,
     /// Address the HTTP API binds to.
     #[serde(default = "default_http_addr")]
     pub http_addr: String,
@@ -88,6 +39,7 @@ impl Default for Paths {
             state_dir: default_state_dir(),
             work_dir: default_work_dir(),
             logbook: default_logbook(),
+            prompt_dir: default_prompt_dir(),
             http_addr: default_http_addr(),
         }
     }
@@ -153,74 +105,6 @@ pub struct Runner {
     pub mcp: Option<McpWiring>,
 }
 
-/// A configured agent.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Agent {
-    /// Runner to invoke; falls back to [`Defaults::runner`].
-    #[serde(default)]
-    pub runner: Option<String>,
-    /// Model identifier passed to the runner.
-    #[serde(default)]
-    pub model: Option<String>,
-    /// The agent's standing instructions.
-    pub prompt: String,
-    /// Whether the agent may write to the shared workspace.
-    #[serde(default)]
-    pub access: Access,
-    /// Whether a human may send flights directly to this agent.
-    #[serde(default)]
-    pub entry: bool,
-    /// Whether the agent is pinned resident rather than transient.
-    #[serde(default)]
-    pub resident: bool,
-    /// Per-agent Fuel override.
-    #[serde(default)]
-    pub fuel_usd: Option<f64>,
-}
-
-/// Delivery semantics for an edge.
-///
-/// v0.1 has a single mode. Blocking request/response was superseded by rendezvous joins, which
-/// park flights instead of parking processes. The field exists so that a configuration written
-/// against the older design fails with a clear message rather than an unknown-field error.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Mode {
-    /// Fire-and-forget. The sender continues immediately.
-    #[default]
-    Async,
-}
-
-/// A directed edge, or set of edges, in the route map.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Route {
-    /// Sending agents. Accepts a bare string or a list.
-    #[serde(deserialize_with = "one_or_many")]
-    pub from: Vec<AgentName>,
-    /// Receiving agents. Accepts a bare string or a list.
-    #[serde(deserialize_with = "one_or_many")]
-    pub to: Vec<AgentName>,
-    /// Delivery semantics.
-    #[serde(default)]
-    pub mode: Mode,
-    /// Rendezvous condition. When set, flights are parked until it is met.
-    #[serde(default)]
-    pub join: Option<Join>,
-    /// Backstop for an unreachable barrier.
-    #[serde(default)]
-    pub timeout_sec: Option<u64>,
-}
-
-impl Route {
-    /// Returns `true` when this edge parks flights at a barrier.
-    #[must_use]
-    pub fn is_join(&self) -> bool {
-        self.join.is_some()
-    }
-}
-
 /// A whole factory definition.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -237,6 +121,9 @@ pub struct Config {
     /// Configured agents, keyed by name.
     #[serde(default)]
     pub agents: BTreeMap<AgentName, Agent>,
+    /// Named, triggerable entry points, keyed by name.
+    #[serde(default)]
+    pub pipelines: BTreeMap<PipelineName, Pipeline>,
     /// The route map.
     #[serde(default)]
     pub routes: Vec<Route>,
@@ -271,12 +158,23 @@ impl Config {
         Self::from_toml(&text, path)
     }
 
-    /// Returns the agents a human may send flights to.
+    /// Returns the agents a human or a schedule may send flights to.
+    ///
+    /// An agent is an entry point when it is marked `entry = true` or when a pipeline names it.
+    /// The two are different things: `entry` is a bare permission, while a pipeline is a named
+    /// trigger that also carries a schedule and flags.
+    ///
+    /// Each agent appears once however many pipelines name it.
     pub fn entry_agents(&self) -> impl Iterator<Item = &AgentName> {
-        self.agents
+        let marked = self
+            .agents
             .iter()
             .filter(|(_, agent)| agent.entry)
-            .map(|(name, _)| name)
+            .map(|(name, _)| name);
+
+        let piped = self.pipelines.values().map(|pipeline| &pipeline.entry);
+
+        marked.chain(piped).collect::<BTreeSet<_>>().into_iter()
     }
 
     /// Returns the effective Fuel budget for an itinerary started at `agent`.
@@ -286,6 +184,20 @@ impl Config {
             .get(agent)
             .and_then(|a| a.fuel_usd)
             .unwrap_or(self.defaults.fuel_usd)
+    }
+
+    /// Returns every flag name declared by any pipeline.
+    pub fn declared_flags(&self) -> impl Iterator<Item = &str> {
+        self.pipelines
+            .values()
+            .flat_map(|pipeline| pipeline.flags.keys().map(String::as_str))
+    }
+
+    /// Returns the pipelines a clock triggers.
+    pub fn scheduled_pipelines(&self) -> impl Iterator<Item = (&PipelineName, &Pipeline)> {
+        self.pipelines
+            .iter()
+            .filter(|(_, pipeline)| !pipeline.trigger.is_manual())
     }
 }
 
@@ -312,24 +224,6 @@ pub enum ConfigError {
     },
 }
 
-/// Accepts either `from = "a"` or `from = ["a", "b"]`.
-fn one_or_many<'de, D>(deserializer: D) -> Result<Vec<AgentName>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Raw {
-        One(AgentName),
-        Many(Vec<AgentName>),
-    }
-
-    Ok(match Raw::deserialize(deserializer)? {
-        Raw::One(name) => vec![name],
-        Raw::Many(names) => names,
-    })
-}
-
 fn default_state_dir() -> PathBuf {
     PathBuf::from(".layover/state")
 }
@@ -340,6 +234,10 @@ fn default_work_dir() -> PathBuf {
 
 fn default_logbook() -> PathBuf {
     PathBuf::from(".layover/logbook.md")
+}
+
+fn default_prompt_dir() -> PathBuf {
+    PathBuf::from("prompts")
 }
 
 fn default_http_addr() -> String {
@@ -365,6 +263,7 @@ const fn default_timeout_sec() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pipeline::Trigger;
 
     #[test]
     fn omitted_sections_fall_back_to_defaults() {
@@ -374,22 +273,8 @@ mod tests {
         assert_eq!(config.defaults.max_runs, 64);
         assert_eq!(config.layover.http_addr, "127.0.0.1:7878");
         assert_eq!(config.layover.state_dir, PathBuf::from(".layover/state"));
-    }
-
-    #[test]
-    fn from_and_to_accept_a_string_or_a_list() {
-        let config = Config::from_toml(
-            r#"
-            [[routes]]
-            from = "planner"
-            to = ["probe_a", "probe_b"]
-            "#,
-            "test.toml",
-        )
-        .expect("config parses");
-
-        assert_eq!(config.routes[0].from, vec![AgentName::from("planner")]);
-        assert_eq!(config.routes[0].to.len(), 2);
+        assert_eq!(config.layover.prompt_dir, PathBuf::from("prompts"));
+        assert!(config.pipelines.is_empty());
     }
 
     #[test]
@@ -403,56 +288,6 @@ mod tests {
             "test.toml",
         )
         .expect_err("an unrecognised field must not be silently dropped");
-
-        assert!(matches!(error, ConfigError::Parse { .. }));
-    }
-
-    #[test]
-    fn access_uses_kebab_case() {
-        let config = Config::from_toml(
-            r#"
-            [agents.reviewer]
-            prompt = "review"
-            access = "read-only"
-            "#,
-            "test.toml",
-        )
-        .expect("config parses");
-
-        assert_eq!(
-            config.agents[&AgentName::from("reviewer")].access,
-            Access::ReadOnly
-        );
-    }
-
-    #[test]
-    fn the_only_supported_mode_is_async() {
-        let config = Config::from_toml(
-            r#"
-            [[routes]]
-            from = "a"
-            to = "b"
-            mode = "async"
-            "#,
-            "test.toml",
-        )
-        .expect("async parses");
-
-        assert_eq!(config.routes[0].mode, Mode::Async);
-    }
-
-    #[test]
-    fn a_deferred_mode_is_rejected_with_a_clear_error() {
-        let error = Config::from_toml(
-            r#"
-            [[routes]]
-            from = "a"
-            to = "b"
-            mode = "request_response"
-            "#,
-            "test.toml",
-        )
-        .expect_err("request_response was superseded by rendezvous joins");
 
         assert!(matches!(error, ConfigError::Parse { .. }));
     }
@@ -480,21 +315,136 @@ mod tests {
     }
 
     #[test]
-    fn entry_agents_are_listed() {
+    fn entry_agents_include_marked_agents_and_pipeline_entries() {
         let config = Config::from_toml(
             r#"
             [agents.front_door]
             prompt = "start here"
             entry = true
 
+            [agents.scanner]
+            prompt = "poll for work"
+
             [agents.inner]
             prompt = "not directly reachable"
+
+            [pipelines.review-bot]
+            entry = "scanner"
+            trigger = { every = "1h" }
             "#,
             "test.toml",
         )
         .expect("config parses");
 
-        let entries: Vec<&AgentName> = config.entry_agents().collect();
-        assert_eq!(entries, vec![&AgentName::from("front_door")]);
+        let mut entries: Vec<String> = config.entry_agents().map(ToString::to_string).collect();
+        entries.sort();
+
+        assert_eq!(entries, ["front_door", "scanner"]);
+    }
+
+    #[test]
+    fn an_agent_that_is_both_marked_and_piped_is_listed_once() {
+        let config = Config::from_toml(
+            r#"
+            [agents.analyst]
+            prompt = "analyse"
+            entry = true
+
+            [pipelines.development]
+            entry = "analyst"
+            "#,
+            "test.toml",
+        )
+        .expect("config parses");
+
+        assert_eq!(config.entry_agents().count(), 1);
+    }
+
+    #[test]
+    fn two_pipelines_sharing_an_entry_agent_list_it_once() {
+        let config = Config::from_toml(
+            r#"
+            [agents.analyst]
+            prompt = "analyse"
+
+            [pipelines.development]
+            entry = "analyst"
+
+            [pipelines.nightly]
+            entry = "analyst"
+            trigger = { every = "1d" }
+            "#,
+            "test.toml",
+        )
+        .expect("config parses");
+
+        assert_eq!(
+            config.entry_agents().collect::<Vec<_>>(),
+            vec![&AgentName::from("analyst")]
+        );
+    }
+
+    #[test]
+    fn scheduled_pipelines_are_separable_from_manual_ones() {
+        let config = Config::from_toml(
+            r#"
+            [agents.analyst]
+            prompt = "analyse"
+
+            [agents.scanner]
+            prompt = "scan"
+
+            [pipelines.development]
+            entry = "analyst"
+            trigger = "manual"
+
+            [pipelines.review-bot]
+            entry = "scanner"
+            trigger = { cron = "0 * * * *" }
+            "#,
+            "test.toml",
+        )
+        .expect("config parses");
+
+        let scheduled: Vec<&str> = config
+            .scheduled_pipelines()
+            .map(|(name, _)| name.as_str())
+            .collect();
+
+        assert_eq!(scheduled, ["review-bot"]);
+        assert_eq!(
+            config.pipelines[&PipelineName::from("development")].trigger,
+            Trigger::Manual
+        );
+    }
+
+    #[test]
+    fn declared_flags_are_collected_across_pipelines() {
+        let config = Config::from_toml(
+            r#"
+            [agents.analyst]
+            prompt = "analyse"
+
+            [pipelines.development]
+            entry = "analyst"
+
+            [pipelines.development.flags]
+            run_e2e = { default = false }
+
+            [pipelines.nightly]
+            entry = "analyst"
+            trigger = { every = "1d" }
+
+            [pipelines.nightly.flags]
+            deep_scan = { default = true }
+            "#,
+            "test.toml",
+        )
+        .expect("config parses");
+
+        let mut flags: Vec<&str> = config.declared_flags().collect();
+        flags.sort_unstable();
+
+        assert_eq!(flags, ["deep_scan", "run_e2e"]);
     }
 }

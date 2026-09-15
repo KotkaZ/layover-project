@@ -5,7 +5,7 @@ use std::time::SystemTime;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
-use crate::config::AgentName;
+use crate::agent::AgentName;
 
 /// Identifier of a single flight.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]

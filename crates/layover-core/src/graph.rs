@@ -6,7 +6,9 @@
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use crate::config::{AgentName, Config, Join};
+use crate::agent::AgentName;
+use crate::config::Config;
+use crate::route::Join;
 
 /// The rendezvous condition attached to a receiving agent.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,18 +92,37 @@ impl RouteGraph {
         &self,
         sources: impl IntoIterator<Item = &'a AgentName>,
     ) -> BTreeSet<AgentName> {
-        let mut seen = BTreeSet::new();
+        self.distances_from(sources).into_keys().collect()
+    }
+
+    /// Returns every agent reachable from `sources`, each with its distance in edges.
+    ///
+    /// The sources sit at distance zero. An agent at distance `d` is therefore woken by flight
+    /// `d + 1` of a chain that began at a source, which is what makes the figure directly
+    /// comparable against `max_hops` — see [`mod@crate::validate`].
+    ///
+    /// Shortest paths are an optimistic bound. A factory whose agents loop will spend far more
+    /// hops than the distance suggests, so this proves an agent *can* be reached, never that a
+    /// particular itinerary will get there.
+    pub fn distances_from<'a>(
+        &self,
+        sources: impl IntoIterator<Item = &'a AgentName>,
+    ) -> BTreeMap<AgentName, u32> {
+        let mut seen: BTreeMap<AgentName, u32> = BTreeMap::new();
         let mut queue: VecDeque<AgentName> = VecDeque::new();
 
         for source in sources {
-            if seen.insert(source.clone()) {
+            if !seen.contains_key(source) {
+                seen.insert(source.clone(), 0);
                 queue.push_back(source.clone());
             }
         }
 
         while let Some(current) = queue.pop_front() {
+            let depth = seen[&current];
             for next in self.successors(&current) {
-                if seen.insert(next.clone()) {
+                if !seen.contains_key(next) {
+                    seen.insert(next.clone(), depth + 1);
                     queue.push_back(next.clone());
                 }
             }
@@ -209,5 +230,67 @@ mod tests {
 
         let reachable = graph.reachable_from([&AgentName::from("a")]);
         assert_eq!(reachable.len(), 2);
+    }
+
+    #[test]
+    fn distance_counts_edges_from_the_source() {
+        let graph = graph_from(
+            r#"
+            [[routes]]
+            from = "planner"
+            to = "probe_a"
+
+            [[routes]]
+            from = "probe_a"
+            to = "collector"
+            "#,
+        );
+
+        let distances = graph.distances_from([&AgentName::from("planner")]);
+
+        assert_eq!(distances[&AgentName::from("planner")], 0);
+        assert_eq!(distances[&AgentName::from("probe_a")], 1);
+        assert_eq!(distances[&AgentName::from("collector")], 2);
+    }
+
+    #[test]
+    fn distance_is_the_shortest_path_not_the_longest() {
+        // `collector` is two edges away the long way round and one edge away directly. Hops are
+        // spent along whichever path an agent actually chooses, so the short answer is a bound
+        // and not a prediction.
+        let graph = graph_from(
+            r#"
+            [[routes]]
+            from = "planner"
+            to = ["probe_a", "collector"]
+
+            [[routes]]
+            from = "probe_a"
+            to = "collector"
+            "#,
+        );
+
+        let distances = graph.distances_from([&AgentName::from("planner")]);
+
+        assert_eq!(distances[&AgentName::from("collector")], 1);
+    }
+
+    #[test]
+    fn distance_omits_agents_no_edge_leads_to() {
+        let graph = graph_from(
+            r#"
+            [[routes]]
+            from = "planner"
+            to = "probe_a"
+
+            [[routes]]
+            from = "orphan"
+            to = "elsewhere"
+            "#,
+        );
+
+        let distances = graph.distances_from([&AgentName::from("planner")]);
+
+        assert!(!distances.contains_key(&AgentName::from("orphan")));
     }
 }

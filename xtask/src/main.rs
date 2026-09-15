@@ -1,16 +1,45 @@
-//! The single verification entrypoint for this repository.
+//! Repository automation.
 //!
 //! `cargo xtask verify` is the only definition of done. CI runs this exact command, so a local
-//! pass is a CI pass. It deliberately has no dependencies beyond the standard library: an agent
-//! must be able to run it on a clean checkout without installing anything.
+//! pass is a CI pass.
+//!
+//! The other tasks exist so that things which *could* drift cannot: the HTTP server is generated
+//! from `api/openapi.yaml`, and the documentation is checked for links that no longer resolve.
+//! Both run inside `verify`, which is what makes them binding rather than advisory.
 
-use std::process::{Command, ExitCode};
+mod docs;
+mod openapi;
+mod verify;
+
+use std::path::{Path, PathBuf};
+use std::process::ExitCode;
 
 fn main() -> ExitCode {
     let task = std::env::args().nth(1);
+    let root = repository_root();
 
     match task.as_deref() {
-        Some("verify") => verify(),
+        Some("verify") => verify::run(&root),
+        Some("generate-api") => match openapi::generate(&root, openapi::Mode::Write) {
+            Ok(report) => {
+                println!("{report}");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("{error}");
+                ExitCode::FAILURE
+            }
+        },
+        Some("docs") => match docs::check(&root) {
+            Ok(report) => {
+                println!("{report}");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("{error}");
+                ExitCode::FAILURE
+            }
+        },
         Some(other) => {
             eprintln!("unknown task `{other}`");
             usage();
@@ -24,49 +53,17 @@ fn main() -> ExitCode {
 }
 
 fn usage() {
-    eprintln!("usage: cargo xtask verify");
+    eprintln!("usage: cargo xtask <task>");
+    eprintln!();
+    eprintln!("  verify        format, lint, generated-code freshness, docs, test, doc build");
+    eprintln!("  generate-api  regenerate the HTTP server from api/openapi.yaml");
+    eprintln!("  docs          check documentation links and examples");
 }
 
-fn verify() -> ExitCode {
-    let steps: [(&str, &[&str]); 4] = [
-        ("format", &["fmt", "--all", "--check"]),
-        (
-            "lint",
-            &[
-                "clippy",
-                "--workspace",
-                "--all-targets",
-                "--",
-                "-D",
-                "warnings",
-            ],
-        ),
-        ("test", &["test", "--workspace"]),
-        ("doc", &["doc", "--workspace", "--no-deps"]),
-    ];
-
-    for (name, args) in steps {
-        println!("\n=== {name} ===");
-
-        let mut command = Command::new(env!("CARGO"));
-        command.args(args);
-        if name == "doc" {
-            command.env("RUSTDOCFLAGS", "-D warnings");
-        }
-
-        match command.status() {
-            Ok(status) if status.success() => {}
-            Ok(status) => {
-                eprintln!("\nverify failed at `{name}` ({status})");
-                return ExitCode::FAILURE;
-            }
-            Err(error) => {
-                eprintln!("\ncould not run `cargo {}`: {error}", args.join(" "));
-                return ExitCode::FAILURE;
-            }
-        }
-    }
-
-    println!("\nverify passed");
-    ExitCode::SUCCESS
+/// The repository root, found from this crate's manifest rather than the working directory.
+fn repository_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("xtask always lives one level below the repository root")
+        .to_path_buf()
 }

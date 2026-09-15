@@ -1,5 +1,17 @@
 # Roadmap
 
+## Where things stand
+
+**v0.2 is released.** It is everything that happens *before* the first process is spawned:
+
+- `layover.toml` parses and validates, including agents with identity, pipelines with triggers and
+  flags, and prompts composed from files.
+- The HTTP surface is specified in `api/openapi.yaml` and the server is generated from it.
+- `layover` installs from crates.io and offers `validate`, `explain` and `prompt`.
+- Documentation is published to GitHub Pages from `book/`.
+
+**v0.1 — the part that actually runs a factory — is still open.** Everything below is unbuilt.
+
 ## v0.1 — prove the factory
 
 The goal of v0.1 is narrow: demonstrate that agents can trigger one another unattended, that
@@ -7,12 +19,13 @@ several results can rendezvous, and that the whole thing is bounded in both dept
 
 ### Done criteria
 
-**Configuration**
+**Configuration** — *done in v0.2*
 
-1. `layover.toml` parses: agents with prompt, model, runner, `access` and `entry`; routes with
-   direction, fan-out and `join`.
+1. `layover.toml` parses: agents with prompt, model, runner, `access`, `description` and
+   `purpose`; routes with direction, fan-out and `join`; pipelines with triggers and flags.
 2. Validation at config load rejects unknown agent names and unreachable entry points, and warns
-   on fan-out to multiple read-write agents.
+   on fan-out to multiple read-write agents, undescribed agents, agents beyond the hop budget, and
+   schedules faster than their own runs.
 
 **Execution**
 
@@ -22,28 +35,46 @@ several results can rendezvous, and that the whole thing is bounded in both dept
 6. An agent fans out to two peers, and they run **concurrently**.
 7. A read-only agent receives a git worktree snapshot rather than the live tree.
 
+**Triggers**
+
+8. A manual pipeline starts on `POST /flights`, carrying the flags the request set.
+9. A scheduled pipeline fires on its own, without a request, and does not overlap itself silently.
+
 **Rendezvous**
 
-8. `join = "all"` parks flights and spawns the target **exactly once**, with all inputs.
-9. A barrier that can no longer be reached is abandoned, and the itinerary is marked **stalled**
-   and displayed as such — distinctly from failed.
+10. `join = "all"` parks flights and spawns the target **exactly once**, with all inputs.
+11. A barrier that can no longer be reached is abandoned, and the itinerary is marked **stalled**
+    and displayed as such — distinctly from failed.
 
 **Bounds**
 
-10. Hops decrement per flight; a chain terminates at zero instead of running forever.
-11. **Fuel debits against the itinerary and halts it when exhausted.** Hops bounds depth only, so
+12. Hops decrement per flight; a chain terminates at zero instead of running forever.
+13. **Fuel debits against the itinerary and halts it when exhausted.** Hops bounds depth only, so
     Fuel is what bounds total work — see the fan-out arithmetic below.
-12. **Fuel degrades to a deterministic fallback** — a per-itinerary run cap — whenever a runner
+14. **Fuel degrades to a deterministic fallback** — a per-itinerary run cap — whenever a runner
     cannot report cost, and the Tower logs loudly when it does. Without this, Fuel is not a rail.
 
 **Observability and control**
 
-13. Hangars are written: transcript, run metadata, memory.
-14. `GET /runs` and `GET /runs/:id/stream` return live SSE output.
-15. A minimal UI renders the route map, a live run feed, and stalled itineraries.
-16. `POST /ground-stop` halts a running factory and stays halted across a Tower restart.
+15. Hangars are written: transcript, run metadata, memory.
+16. `GET /runs` and `GET /runs/:id/stream` return live SSE output.
+17. A minimal UI renders the route map, a live run feed, and stalled itineraries.
+18. `POST /ground-stop` halts a running factory and stays halted across a Tower restart.
 
-Criteria 8, 9, 11 and 12 are the ones that matter. Everything else is plumbing.
+**The reference scenario**
+
+19. [`examples/workitem-factory/`](../examples/workitem-factory/README.md) runs end to end: a
+    request reaches the analyst from either pipeline, both helpers are consulted concurrently and
+    rendezvous back onto the analyst, the developer builds, the tester and reviewer report
+    together, the developer loops until both approve, and the publisher opens a pull request.
+
+This is **the** v0.1 scenario. It is what the design is sized against, and it is the reason
+criteria 10, 11, 13 and 14 exist. It exercises two things nothing else does: a rendezvous landing
+on an agent that ordinary edges also reach, and a loop that turns an unknown number of times. Its
+configuration is parsed, validated and exercised by
+`crates/layover-core/tests/workitem_factory*.rs`.
+
+Criteria 10, 11, 13 and 14 are the ones that matter. Everything else is plumbing.
 
 ### Why Fuel is not optional
 
@@ -103,11 +134,17 @@ Agents should ask rather than guess on any of these.
 ### Concurrency edges
 
 10. **Two humans POST simultaneously** — one itinerary or two?
-11. **An agent reachable by both a joined and an unjoined edge** — which behaviour applies?
-12. **How many loop-backs before giving up?** Hops bounds it, but exhausting Hops mid-repair can
+11. **How many loop-backs before giving up?** Hops bounds it, but exhausting Hops mid-repair can
     leave half-finished work in the shared workspace and no one to clean it up.
-13. **Can the barrier-reset constraint be enforced?** A loop-back must re-dispatch the whole
+12. **Can the barrier-reset constraint be enforced?** A loop-back must re-dispatch the whole
     fan-out, and today that lives only in agent prompts.
+13. **Can a join wait only for the upstreams that were actually dispatched?** `join = "all"` waits
+    for every *declared* upstream, so an agent that consults a specialist only when the work needs
+    one strands its own rendezvous. The workaround is to dispatch everyone every time and let the
+    idle specialist reply "nothing to add" — see
+    [`routing.md`](routing.md#a-join-has-no-optional-upstreams). A real fix needs the Tower to
+    observe dispatch, and it has a race: a fast upstream could release the barrier before its
+    sibling has been dispatched at all.
 
 ### Platform
 
@@ -117,17 +154,31 @@ Agents should ask rather than guess on any of these.
 
 ### Everything else
 
-15. **How do child CLIs receive credentials?** Inherited environment, or injected per run by the
+15. **How does an agent get MCP servers of its own?** `[runners]` wires up Layover's own MCP
+    endpoint and nothing else. An agent whose whole job is querying a data source — the telemetry
+    agent in the reference scenario — needs its own server, and today that has to be configured
+    outside Layover in the CLI's own settings, invisibly to the route map.
+16. **How do child CLIs receive credentials?** Inherited environment, or injected per run by the
     Tower. Per-run injection allows per-agent credentials and revocation.
-16. **Are prompts inline in TOML?** Longer prompts read poorly in config.
-    `prompt_file = "prompts/planner.md"` gives better diffs and lets agents edit them.
 17. **Is the Logbook one flat file or namespaced?** One file serializes every write in the factory
     through a single lock.
 18. **Observability** — structured logs, or OpenTelemetry traces where an Itinerary is a trace and
     each Run a span? The latter would visualise a stalled barrier.
 19. **UI stack** — plain HTML with SSE, or a framework. Reversible; it only consumes the HTTP API.
-20. **Is the aviation terminology confirmed?** Adopted provisionally throughout. Cheap to strip
-    while there is no code.
+20. **Is the aviation terminology confirmed?** Adopted provisionally throughout. Now that code
+    exists it is no longer free to strip, but it is still only names.
+21. **Does a scheduled pipeline skip a tick it is still working on, or start a second run?**
+    Runs are reentrant, so today it would start a second. Validation warns when the firing gap is
+    shorter than `timeout_sec`, which is a smell test rather than an answer. An independent review
+    argued the safe default for unattended spending is to *skip* the tick and require
+    `overlap = "allow"` to opt in; that is probably right and is a Tower behaviour, so it is
+    recorded here rather than guessed at.
+22. **What time zone does a cron expression mean?** Local to the Tower is the obvious answer and
+    the obvious source of a 1am surprise twice a year.
+23. **Should `entry = true` survive at all?** A review argued it is two ways to do one thing, and
+    that a pipeline with no flags expresses the same intent. The counter-argument is in the
+    decision log. The deciding evidence would be whether anyone actually uses a bare entry agent
+    once pipelines exist; nobody has used either yet.
 
 ### Resolved
 
@@ -135,6 +186,19 @@ Agents should ask rather than guess on any of these.
   flights at once and must be able to tell them apart.
 - **What does a fan-out cost in Hops?** One hop per flight; branches inherit the remaining count
   rather than splitting it. Hence the breadth problem above.
+- **An agent reachable by both a joined and an unjoined edge — which behaviour applies?**
+  *The barrier wins only for the upstreams it names.* A flight from any other permitted sender
+  bypasses the barrier, wakes the agent on its own, and leaves parked state untouched. The
+  alternative — gating every inbound edge — would park an entry agent's own trigger while it
+  waited for helpers that cannot run until it dispatches them. Settled by the reference scenario,
+  where both barriers land on an agent that ordinary edges also reach. See
+  [`routing.md`](routing.md#what-a-barrier-does-and-does-not-guard).
+- **Are prompts inline in TOML?** *Both.* `prompt` for short instructions, `prompt_file` for
+  anything that needs composing. Exactly one of the two; setting both is an error rather than an
+  undefined precedence. See [the prompt reference](../book/src/prompts.md).
+- **Can one factory definition serve several situations?** *Yes, through pipeline flags and
+  conditional `@include` directives* — booleans chosen at trigger time, not a templating language,
+  so every possible prompt stays a file somebody can read.
 
 ---
 
@@ -144,6 +208,8 @@ Rough ordering, not commitments.
 
 - Safe concurrent read-write agents: path allow-lists or per-run worktrees
 - Resident agents with serialized runs
-- `join = "any"`, and quorum joins
+- `join = "any"`, quorum joins, and joins that wait only for the upstreams actually dispatched
+- Per-agent MCP servers, pushed on by the reference scenario's telemetry agent
+- Non-boolean pipeline parameters, if booleans turn out not to be enough
 - `include = [...]` for multi-file factory definitions
 - Additional runners: Gemini CLI, Aider, arbitrary command templates

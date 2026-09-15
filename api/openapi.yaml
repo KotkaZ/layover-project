@@ -1,0 +1,531 @@
+# The Layover HTTP surface.
+#
+# This file is the contract, not a description of one. `cargo xtask generate-api` turns it into
+# crates/layover-http/src/generated.rs, and `cargo xtask verify` fails when that file is out of
+# date, so the server cannot drift away from the spec.
+#
+# The generator understands a deliberate subset of OpenAPI — see xtask/src/openapi/mod.rs. It
+# fails loudly on anything outside that subset rather than silently ignoring it, so this file
+# cannot quietly grow constructs the server does not implement. It also refuses any schema,
+# property or parameter with no `description`: this document is what the published documentation
+# is built from, so an undescribed field here is an undescribed field everywhere.
+
+openapi: 3.2.0
+
+info:
+  title: Layover Tower API
+  version: 0.2.0
+  summary: Control surface for a local-first agent factory.
+  description: |
+    The UI is purely a client of this API, so this document bounds what the UI can ever do.
+
+    Everything is local-first and unauthenticated by default: the Tower binds to loopback. Do not
+    expose it without putting something in front of it.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+
+servers:
+  - url: http://127.0.0.1:7878
+    description: The default local Tower.
+
+tags:
+  - name: factory
+    summary: What the factory is made of.
+  - name: work
+    summary: Starting and observing work.
+  - name: control
+    summary: Stopping everything.
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Liveness, version and whether a Ground Stop is engaged.
+      tags: [control]
+      responses:
+        "200":
+          description: The Tower is up.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+
+  /agents:
+    get:
+      operationId: listAgents
+      summary: Every configured agent and the route map between them.
+      description: |
+        This is the UI's graph view, and it is also how a human answers "what can talk to what"
+        without reading the TOML.
+      tags: [factory]
+      responses:
+        "200":
+          description: The factory's agents and edges.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentList"
+
+  /pipelines:
+    get:
+      operationId: listPipelines
+      summary: Every declared pipeline, its trigger and the flags it accepts.
+      tags: [factory]
+      responses:
+        "200":
+          description: The declared pipelines.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PipelineList"
+
+  /flights:
+    post:
+      operationId: sendFlight
+      summary: Start work by sending the first flight of a new itinerary.
+      description: |
+        Give either a `pipeline` or a `to`. A pipeline is the normal way in: it names the entry
+        agent and declares which flags may be set. A bare `to` sends to an agent marked
+        `entry = true` and accepts no flags.
+      tags: [work]
+      requestBody:
+        required: true
+        description: What to run, and with which flags.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendFlightRequest"
+      responses:
+        "202":
+          description: The flight was accepted and a run is being started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FlightAccepted"
+        "400":
+          description: The request named an unknown pipeline, agent or flag.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: A Ground Stop is engaged, so no new work may start.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /runs:
+    get:
+      operationId: listRuns
+      summary: Runs, live and historical.
+      tags: [work]
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Return only runs in this state.
+          schema:
+            $ref: "#/components/schemas/RunStatus"
+        - name: itinerary_id
+          in: query
+          required: false
+          description: Return only runs belonging to this itinerary.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of runs to return, newest first.
+          schema:
+            type: integer
+            format: int32
+      responses:
+        "200":
+          description: Matching runs.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunList"
+
+  /runs/{run_id}:
+    get:
+      operationId: getRun
+      summary: One run, including how it ended.
+      tags: [work]
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          description: Identifier of the run to fetch.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The run.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        "404":
+          description: No such run.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /runs/{run_id}/stream:
+    get:
+      operationId: streamRun
+      summary: Live output from a run, as server-sent events.
+      tags: [work]
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          description: Identifier of the run to stream.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A stream of output lines, ending when the run exits.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: One output line per event.
+        "404":
+          description: No such run.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /ground-stop:
+    post:
+      operationId: engageGroundStop
+      summary: Halt everything.
+      description: |
+        Ground Stop is a file on disk rather than in-memory state, so it survives a Tower crash
+        and can be set by hand when nothing else is responding.
+      tags: [control]
+      responses:
+        "200":
+          description: Everything is halted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroundStop"
+    delete:
+      operationId: releaseGroundStop
+      summary: Resume.
+      tags: [control]
+      responses:
+        "200":
+          description: Work may start again.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroundStop"
+
+components:
+  schemas:
+    Status:
+      type: string
+      description: Liveness of the Tower itself.
+      enum: [ok]
+
+    Health:
+      type: object
+      description: Whether the Tower is up and whether it is allowed to do anything.
+      required: [status, version, ground_stop]
+      properties:
+        status:
+          $ref: "#/components/schemas/Status"
+          description: Always `ok`; failure is signalled by not answering at all.
+        version:
+          type: string
+          description: The Tower's own version.
+        ground_stop:
+          type: boolean
+          description: True when a Ground Stop is engaged and no new work may start.
+
+    Access:
+      type: string
+      description: Whether an agent writes to the shared workspace or gets a snapshot.
+      enum: [read-only, read-write]
+
+    Join:
+      type: string
+      description: The condition under which a rendezvous barrier releases.
+      enum: [all, any]
+
+    Agent:
+      type: object
+      description: One configured agent.
+      required: [name, access, entry, resident]
+      properties:
+        name:
+          type: string
+          description: The key the agent is declared under, and what routes refer to.
+        description:
+          type: [string, "null"]
+          description: One line saying what the agent is.
+        purpose:
+          type: [string, "null"]
+          description: A longer statement of when to route work here.
+        runner:
+          type: [string, "null"]
+          description: Which runner invokes this agent's CLI.
+        model:
+          type: [string, "null"]
+          description: Model identifier passed to the runner.
+        access:
+          $ref: "#/components/schemas/Access"
+          description: Whether the agent writes to the shared workspace.
+        entry:
+          type: boolean
+          description: Whether a human may send flights straight to this agent.
+        resident:
+          type: boolean
+          description: Whether the agent is pinned resident rather than transient.
+
+    Route:
+      type: object
+      description: One entry of the route map, possibly expanding to several edges.
+      required: [from, to]
+      properties:
+        from:
+          type: array
+          description: Sending agents.
+          items:
+            type: string
+            description: An agent name.
+        to:
+          type: array
+          description: Receiving agents.
+          items:
+            type: string
+            description: An agent name.
+        join:
+          $ref: "#/components/schemas/Join"
+          description: Set when flights on this edge are parked at a rendezvous barrier.
+        timeout_sec:
+          type: [integer, "null"]
+          format: int64
+          description: Backstop for a barrier that never completes.
+
+    AgentList:
+      type: object
+      description: The factory's agents and the edges between them.
+      required: [agents, routes]
+      properties:
+        agents:
+          type: array
+          description: Every configured agent.
+          items:
+            $ref: "#/components/schemas/Agent"
+        routes:
+          type: array
+          description: The route map.
+          items:
+            $ref: "#/components/schemas/Route"
+
+    TriggerKind:
+      type: string
+      description: Whether a human or a clock starts a pipeline.
+      enum: [manual, scheduled]
+
+    Trigger:
+      type: object
+      description: What starts a pipeline.
+      required: [kind]
+      properties:
+        kind:
+          $ref: "#/components/schemas/TriggerKind"
+          description: Whether a human or a clock starts this pipeline.
+        every_seconds:
+          type: [integer, "null"]
+          format: int64
+          description: Set when the pipeline fires on a fixed interval.
+        cron:
+          type: [string, "null"]
+          description: Set when the pipeline fires on a five-field cron expression.
+
+    Flag:
+      type: object
+      description: A boolean parameter a pipeline accepts at trigger time.
+      required: [name, default]
+      properties:
+        name:
+          type: string
+          description: The name a prompt tests with `@include(name)`.
+        description:
+          type: [string, "null"]
+          description: What turning this flag on actually does.
+        default:
+          type: boolean
+          description: Value used when the trigger does not set the flag.
+
+    Pipeline:
+      type: object
+      description: A named entry point into the mesh.
+      required: [name, entry, trigger, flags]
+      properties:
+        name:
+          type: string
+          description: The key the pipeline is declared under.
+        description:
+          type: [string, "null"]
+          description: One line saying what this pipeline is for.
+        entry:
+          type: string
+          description: The agent that receives the first flight.
+        trigger:
+          $ref: "#/components/schemas/Trigger"
+          description: What starts it.
+        flags:
+          type: array
+          description: The boolean parameters this pipeline accepts.
+          items:
+            $ref: "#/components/schemas/Flag"
+
+    PipelineList:
+      type: object
+      description: Every declared pipeline.
+      required: [pipelines]
+      properties:
+        pipelines:
+          type: array
+          description: The pipelines.
+          items:
+            $ref: "#/components/schemas/Pipeline"
+
+    SendFlightRequest:
+      type: object
+      description: |
+        Exactly one of `pipeline` and `to` must be given, and flags are only accepted alongside a
+        pipeline, because a pipeline is what declares them.
+
+        Neither is marked required here because JSON Schema cannot state "exactly one of these"
+        in a way this generator supports. The Tower enforces it and answers `400` — so a client
+        that satisfies this schema can still be rejected.
+      required: [body]
+      properties:
+        pipeline:
+          type: [string, "null"]
+          description: Name of the pipeline to start.
+        to:
+          type: [string, "null"]
+          description: Name of an `entry = true` agent to send to directly.
+        body:
+          type: string
+          description: What the receiving agent is being asked to do.
+        flags:
+          type: object
+          description: Flag overrides, keyed by flag name. Unset flags take their declared default.
+          additionalProperties:
+            type: boolean
+            description: Whether the flag is on.
+
+    FlightAccepted:
+      type: object
+      description: Confirmation that work has been started.
+      required: [flight_id, itinerary_id, to]
+      properties:
+        flight_id:
+          type: string
+          description: Identifier of the flight that was created.
+        itinerary_id:
+          type: string
+          description: Identifier of the new chain, which carries Hops and Fuel.
+        to:
+          type: string
+          description: The agent the flight was addressed to.
+
+    RunStatus:
+      type: string
+      description: |
+        How a run ended, or that it has not. `stalled` is deliberately distinct from `failed`: a
+        factory that quietly parks work forever is worse than one that crashes, so it has to be
+        visible as its own outcome.
+      enum: [running, succeeded, failed, stalled, cancelled]
+
+    Run:
+      type: object
+      description: One supervised CLI execution.
+      required: [run_id, itinerary_id, agent, status, started_at]
+      properties:
+        run_id:
+          type: string
+          description: Identifier of this run.
+        itinerary_id:
+          type: string
+          description: The chain this run belongs to.
+        agent:
+          type: string
+          description: Which agent was run.
+        status:
+          $ref: "#/components/schemas/RunStatus"
+          description: How it ended, or that it has not.
+        started_at:
+          type: string
+          format: date-time
+          description: When the process was spawned.
+        finished_at:
+          type: [string, "null"]
+          format: date-time
+          description: When the process exited; null while it is still running.
+        exit_code:
+          type: [integer, "null"]
+          format: int32
+          description: Process exit code, when there was one.
+        cost_usd:
+          type: [number, "null"]
+          format: double
+          description: Null when the runner reported no cost, which the Tower logs loudly.
+        hops_remaining:
+          type: [integer, "null"]
+          format: int32
+          description: Hops left when this run was started, mirrored for display only.
+
+    RunList:
+      type: object
+      description: Matching runs, newest first.
+      required: [runs]
+      properties:
+        runs:
+          type: array
+          description: The runs.
+          items:
+            $ref: "#/components/schemas/Run"
+
+    GroundStop:
+      type: object
+      description: Whether everything is halted.
+      required: [engaged]
+      properties:
+        engaged:
+          type: boolean
+          description: True when no new work may start.
+        since:
+          type: [string, "null"]
+          format: date-time
+          description: When the Ground Stop was engaged.
+
+    Problem:
+      type: object
+      description: An error, shaped after RFC 9457.
+      required: [title, status]
+      properties:
+        title:
+          type: string
+          description: A short, human-readable summary of the problem.
+        status:
+          type: integer
+          format: int32
+          description: The HTTP status code, repeated in the body for clients that lose it.
+        detail:
+          type: [string, "null"]
+          description: An explanation specific to this occurrence.

@@ -45,10 +45,15 @@ carries budget across a causal chain, and *Ground Stop* says exactly what a kill
 | Concurrency | Unbounded |
 | Control channel | **MCP** — Layover is an MCP server, agents are MCP clients |
 | Config | A single `layover.toml` |
+| Entry points | Named **pipelines**: an entry agent, a trigger (manual or scheduled) and boolean flags |
+| Schedules | `every = "1h"` or a five-field cron expression; a one-minute floor, enforced at load |
+| Prompts | Inline, or a file that composes others conditionally on a run's flags |
+| Agent identity | Name (the table key), a one-line `description`, and a longer `purpose` |
 | Per-agent state | Transcript, session ID, self-edited memory, inbox/outbox, run history, artifacts |
 | Shared memory | One Markdown **Logbook**; all writes serialized by the Tower |
 | Workspace | One shared working directory; contention deliberately unmediated in v0.1 |
-| Outside surface | HTTP API with SSE; the UI is purely a client |
+| Outside surface | HTTP API with SSE, **generated from `api/openapi.yaml`**; the UI is purely a client |
+| Distribution | `cargo install layover-cli`; documentation published to GitHub Pages |
 | Safety rails | Hops (TTL), Fuel (chain budget), Ground Stop |
 | Hops semantics | One hop per flight; branches inherit the remaining count, so Hops bounds **depth** only |
 | Breadth bound | Fuel — required in v0.1, with a deterministic fallback when runners cannot report cost |
@@ -58,7 +63,9 @@ carries budget across a causal chain, and *Ground Stop* says exactly what a kill
 | Model shape | **Permission mesh**, not a pipeline engine — agents decide routing |
 | Fan-in | Declarative rendezvous joins on the receiving node |
 | Failure routing | An ordinary edge; the agent decides, the Tower does not evaluate conditions |
+| Join scope | A barrier constrains the upstreams it names; any other permitted sender bypasses it |
 | Workspace access | Per-agent `read-only` / `read-write`; read-only agents get a worktree snapshot |
+| Reference scenario | [`examples/workitem-factory/`](../examples/workitem-factory/README.md) — the shape v0.1 is sized against |
 
 ## 4. Two central insights
 
@@ -197,6 +204,11 @@ entry points must fail fast, while a human is still watching.
 Edges also carry fan-out, rendezvous joins and failure paths. Those semantics are specified in
 [`routing.md`](routing.md).
 
+A factory exercising all of it — intake, a rendezvous back onto the entry agent, a test/review
+loop that turns until two agents agree, and a publishing step — is in
+[`examples/workitem-factory/`](../examples/workitem-factory/README.md). That is the reference
+scenario for v0.1 and the shape the rails are sized against.
+
 ## 7. Disk layout
 
 ```
@@ -266,11 +278,20 @@ Two of these matter more than they look:
 
 The UI is purely a client of this API, so this list bounds what the UI can ever do.
 
+**[`api/openapi.yaml`](../api/openapi.yaml) is the contract, not a description of one.**
+`cargo xtask generate-api` turns it into `crates/layover-http/src/generated.rs` — types, the `Api`
+trait and the axum router — and `cargo xtask verify` regenerates it and fails if the result
+differs. An endpoint that exists in code but not in the specification is impossible; one that
+exists in the specification but is not implemented is a compile error.
+
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/flights` | Human entry point — send a flight to an `entry = true` agent |
+| `GET` | `/health` | Liveness, version, and whether a Ground Stop is engaged |
 | `GET` | `/agents` | Agents plus the route map (the UI's graph view) |
+| `GET` | `/pipelines` | Declared pipelines, their triggers and their flags |
+| `POST` | `/flights` | Start work — name a pipeline, or an `entry = true` agent |
 | `GET` | `/runs` | Runs, live and historical |
+| `GET` | `/runs/:id` | One run, including how it ended |
 | `GET` | `/runs/:id/stream` | SSE live output |
 | `POST` | `/ground-stop` | Halt everything |
 | `DELETE` | `/ground-stop` | Resume |
@@ -279,18 +300,20 @@ The UI is purely a client of this API, so this list bounds what the UI can ever 
 
 ```
 layover/
+├── api/openapi.yaml      # THE HTTP CONTRACT — the server is generated from this
+├── book/                 # the published documentation site (mdBook → GitHub Pages)
 ├── crates/
-│   ├── layover-core/     # Agent, Flight, Itinerary, Route, config parsing, route validation
-│   ├── layover-store/    # hangars, logbook, serialized writes, transcripts
-│   ├── layover-tower/    # scheduler, process supervision, itinerary accounting, ground stop
-│   ├── layover-mcp/      # rmcp server, per-run token auth
-│   ├── layover-http/     # axum API and SSE
-│   └── layover-cli/      # the `layover` binary
-├── xtask/                # cargo xtask verify — the single source of truth for CI
+│   ├── layover-core/     # Agent, Flight, Itinerary, Route, Pipeline, prompts, config, validation
+│   ├── layover-http/     # generated types, the Api trait, the axum router
+│   ├── layover-cli/      # the `layover` binary
+│   ├── layover-store/    # (not built) hangars, logbook, serialized writes, transcripts
+│   ├── layover-tower/    # (not built) scheduler, supervision, itinerary accounting, ground stop
+│   └── layover-mcp/      # (not built) rmcp server, per-run token auth
+├── xtask/                # cargo xtask verify / generate-api / docs
 └── ui/                   # later; a plain SPA over the HTTP API
 ```
 
-Dependencies: `tokio`, `axum`, `rmcp`, `serde`, `toml`, `tracing`, `clap`, `ulid`.
+Dependencies: `tokio`, `axum`, `rmcp`, `serde`, `toml`, `clap`, `croner`, `tracing`, `ulid`.
 
 The split is not only separation of concerns. Each crate plus its tests should fit inside a single
 agent's working context — see §12.
@@ -373,9 +396,95 @@ emergent: nobody is told what to do next, a joined agent simply cannot be woken 
 alone. It also removed the need for blocking `request_response`, because the Tower parks flights
 instead of parking processes.
 
+**Why a barrier guards its upstreams rather than its agent.** A join could plausibly mean "this
+agent may not run until these inputs arrive". It does not; it means "these inputs reach this agent
+together". The difference only shows up when a joined agent is also reachable another way, and
+then it decides whether the design works at all: an entry agent that collects results from the
+helpers it dispatches would, under the stricter reading, park its own human trigger while waiting
+for agents that cannot run until it has been triggered. Deadlock on the first flight. Scoping the
+barrier to its declared upstreams also removes the need for an intermediary gate agent in a review
+loop — verdicts rendezvous directly on the agent that produced the work, which then decides for
+itself whether to loop or move on. The cost is that a run may wake holding less than everything
+in flight for it, which is why sender identity is mandatory.
+
+**Why optionality lives in prompts rather than in the route map.** `join = "all"` waits for every
+*declared* upstream, so an agent that consults a specialist only when the work calls for one would
+strand its own rendezvous — the barrier waits for an agent that was never asked, and the itinerary
+stalls on the happy path. Making the barrier wait only for upstreams actually dispatched is the
+real fix, and it is deferred rather than dismissed: it requires the Tower to observe dispatch, and
+it races, because a fast upstream could release the barrier before its sibling is dispatched at
+all. Until then the rule is to dispatch everyone every time and let an idle specialist answer
+"nothing to add" — a cheap read-only run in exchange for a barrier that can always be satisfied.
+
+**Why Hops is checked at load time but only weakly.** An agent further from an entry point than
+`max_hops` can carry is configured, appears live in the route map, and never runs — worth catching
+before the first flight. Plain reachability is not enough on its own, though: a `join = "all"`
+target looks close when *any* upstream is close, while it actually waits for the last, so a second
+check requires every upstream to be able to afford the flight into the barrier. Both measure
+shortest paths, and the budget is really consumed by *loops*: a two-agent review cycle costs two
+hops per turn, so a route map three flights deep can need twenty to be useful. Nothing static can
+know how many times a loop will turn, so the checks deliberately prove only the negative. The
+reference scenario carries the arithmetic instead, and a regression test pins it, because the
+default `max_hops = 8` permits that factory's happy path and not one round of rework.
+
 **Why the factory never targets Layover's own source.** It removes an entire class of hazard —
 agents editing the supervisor that is running them — and makes it safe to give agents full write
 access inside their workspace. The cost is losing the most persuasive dogfooding demo.
+
+**Why the HTTP server is generated from a specification rather than described by one.** A
+hand-written server with a hand-written OpenAPI document beside it has two sources of truth and no
+force keeping them equal; the document rots first and quietly, because nothing breaks when it
+does. Generating the server makes the document load-bearing: a drifted spec is a failing build,
+not a stale page. The cost is a generator to maintain, and it is kept cheap by supporting only the
+subset this API uses and erroring loudly on anything else — a generator that silently ignored
+part of the specification would recreate exactly the problem it was meant to solve.
+
+**Why pipelines are separate from `entry = true`.** They are different things. `entry` is a bare
+permission: a human may poke this agent. A pipeline is a *named trigger* that also carries a
+schedule and the flags a run is parameterised by. Folding them together would either force every
+one-off entry point to declare a pipeline, or leave schedules and flags with nowhere to live.
+Keeping pipelines thin — an entry agent, a trigger, some booleans — is what stops them becoming
+the pipeline engine the route map deliberately is not.
+
+**Why a schedule may not fire more than once a minute.** A schedule is the only part of Layover
+that starts work with nobody present, and runs are reentrant: a schedule that outruns its own work
+does not queue, it accumulates concurrent copies. Six-field cron expressions are refused for the
+same reason — a seconds field can schedule work faster than a run can finish, which is a fork bomb
+with a clock attached. The floor is a minute because that is the finest a five-field expression
+can state, so `every` and `cron` agree about what is possible.
+
+**Why prompt composition is conditional rather than templated.** Prompts wanted to vary — a tester
+that sometimes runs a remote suite is the same agent with one extra paragraph — and the obvious
+answer is string interpolation. Booleans chosen at trigger time are deliberately less powerful:
+every possible prompt is a file somebody can read and review, and `layover prompt` can render any
+of them exactly as a run would receive it. A templating language would make prompts programs, and
+the thing an agent is told would stop being reviewable. The rails around it all exist because the
+failure mode is silent: an undeclared flag is an error rather than false, because treating it as
+false would let a typo delete a section of instructions without anyone noticing.
+
+**Why prompt flags are checked per entry point rather than per factory.** A run carries the flags
+of the one pipeline that triggered it, never the union of every pipeline in the factory. Checking
+a prompt against that union looks equivalent and is not: a second pipeline that reaches the same
+agent without declaring the flag passes validation and then fails at composition time, hours
+later, with nobody watching. So validation walks reachability from *each* entry point and requires
+every flag a reachable prompt tests to be declared *there*. The same rule covers a bare
+`entry = true` agent, which supplies no flags at all — any conditional prompt downstream of one is
+unreachable in practice, and saying so at load time is the whole point.
+
+**Why the overlap warning reads a cron expression's minute field.** A schedule that outruns its
+own work accumulates concurrent runs rather than queueing, so the check needs a lower bound on how
+often a pipeline can fire. `every` states it outright. Cron does not, but the common footguns —
+`* * * * *` and `*/5 * * * *` — state it in the minute field, and reading only those two forms is
+enough to catch them. Lists and ranges are deliberately left alone: a wrong lower bound produces a
+warning that is not true, and a validator that cries wolf is one people stop reading.
+
+**Why documentation upkeep is in `AGENTS.md` rather than in review.** `docs/` is normative and
+hand-maintained, and an agent that trusts a stale document makes confident wrong changes. Review
+catches that only if a human remembers to look. So the standing instruction is that every change
+carries its documentation, `AGENTS.md` names which file goes with which kind of change, and
+`verify` enforces the mechanical part — links that resolve, generated code that matches, examples
+that still validate. No tool can check whether a paragraph is still true, which is precisely why
+the instruction has to be standing rather than requested.
 
 **Why Fuel is required in v0.1 rather than deferred.** Hops was originally assumed to be the
 anti-fork-bomb rail. It is not. A hop is spent per flight and branches inherit the remaining

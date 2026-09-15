@@ -9,6 +9,9 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = "1.0.151"
+serde_yaml_bw = "2"
 
 [lints]
 workspace = true

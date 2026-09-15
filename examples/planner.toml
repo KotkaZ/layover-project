@@ -1,13 +1,17 @@
-# The factory shape documented in docs/architecture.md.
+# The minimal factory shape documented in docs/architecture.md.
+#
+# Start here: three agents, one loop, one manual pipeline. For the reference scenario — scheduled
+# triggers, conditional prompts and a rendezvous on both ends — see workitem-factory/.
 #
 # This file is parsed and validated by crates/layover-core/tests/examples.rs, so the documented
 # configuration cannot quietly stop being loadable.
 
 [layover]
-state_dir = ".layover/state"
-work_dir  = "workspace"
-logbook   = ".layover/logbook.md"
-http_addr = "127.0.0.1:7878"
+state_dir  = ".layover/state"
+work_dir   = "workspace"
+logbook    = ".layover/logbook.md"
+prompt_dir = "prompts"
+http_addr  = "127.0.0.1:7878"
 
 [defaults]
 runner      = "claude"
@@ -31,24 +35,35 @@ mcp     = { flag = "-c", format = "codex_toml" }
 
 # ── Agents ─────────────────────────────────────────────────────────
 [agents.planner]
+description = "Breaks incoming goals into concrete tasks and dispatches them"
+purpose     = """
+Route here when a goal still needs decomposing. The planner is also where rejected work comes
+back to, so it decides whether to retry, re-scope or stop.
+"""
 runner   = "claude"
 model    = "claude-opus-4"
 resident = false
-entry    = true
 prompt   = """
 You break incoming goals into concrete tasks and dispatch them.
 Record durable conclusions with layover_memory_write.
 """
 
 [agents.coder]
-runner = "copilot"
-prompt = "You implement the task described in the incoming flight."
+description = "Implements the task described in the incoming flight"
+runner      = "copilot"
+prompt      = "You implement the task described in the incoming flight."
 
 [agents.reviewer]
-runner   = "codex"
-access   = "read-only"
-prompt   = "You review work and either approve it or return concrete defects."
-fuel_usd = 1.00
+description = "Approves work or returns concrete defects"
+runner      = "codex"
+access      = "read-only"
+prompt      = "You review work and either approve it or return concrete defects."
+
+# ── Pipelines: how work enters the mesh ────────────────────────────
+[pipelines.build]
+description = "Turn a goal into reviewed work"
+entry       = "planner"
+trigger     = "manual"
 
 # ── The route map: directed edges ──────────────────────────────────
 [[routes]]

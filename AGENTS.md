@@ -17,12 +17,20 @@ Read `docs/architecture.md` before changing anything structural.
 
 **Early implementation.**
 
-`crates/layover-core` exists and is fully tested: configuration parsing, the route graph,
-load-time validation, itinerary accounting (Hops, Fuel, run cap) and rendezvous barriers.
+What exists and is fully tested:
 
-**Nothing that touches the outside world exists yet** — no process supervision, no MCP server,
-no HTTP API, no UI. Those are blocked on the run-bootstrap questions in `docs/roadmap.md`,
-which are unanswered. Do not guess at them; ask.
+- `crates/layover-core` — configuration, agents, routes, pipelines, prompt composition, the route
+  graph, load-time validation, itinerary accounting (Hops, Fuel, run cap) and rendezvous barriers.
+- `crates/layover-http` — the HTTP surface, **generated** from `api/openapi.yaml`. Types, the
+  `Api` trait and the axum router. Nothing implements `Api` yet.
+- `crates/layover-cli` — the `layover` binary: `validate`, `explain`, `prompt`.
+
+**Nothing that spawns a process exists yet** — no process supervision, no MCP server, no Tower,
+no UI. Those are blocked on the run-bootstrap questions in `docs/roadmap.md`, which are
+unanswered. Do not guess at them; ask.
+
+`layover run` is deliberately absent rather than stubbed. A command that pretends to start a
+factory is worse than one that says it cannot.
 
 ## The golden rule
 
@@ -30,10 +38,40 @@ which are unanswered. Do not guess at them; ask.
 cargo xtask verify
 ```
 
-This is the only definition of done. It runs `fmt --check`, `clippy -D warnings`, `test` and the
-doc build. CI runs this exact command and nothing else, so a local pass is a CI pass.
+This is the only definition of done. It runs generated-code freshness, documentation checks,
+`fmt --check`, `clippy -D warnings`, `test` and the doc build. CI runs this exact command and
+nothing else, so a local pass is a CI pass.
 
 Never report work complete without running it. Never weaken it to make it pass.
+
+## Documentation is part of the change
+
+**Every change carries its documentation with it. You do not need to be asked.**
+
+Before you call any task finished, work through this list. It is not optional and it is not a
+courtesy — an agent that trusts a stale document makes confident wrong changes, and this
+repository is meant to be worked on by agents.
+
+| If you changed... | Then update... |
+|---|---|
+| Anything in `layover.toml`'s shape | `book/src/configuration.md`, both `examples/`, `docs/architecture.md` §6 |
+| Route, join or barrier semantics | `docs/routing.md`, `book/src/configuration.md` |
+| Pipelines, triggers or flags | `book/src/pipelines.md`, `examples/workitem-factory/` |
+| Prompt composition | `book/src/prompts.md` |
+| The HTTP surface | `api/openapi.yaml` (the contract — never edit `generated.rs`), `book/src/http-api.md` |
+| A safety rail: Hops, Fuel, run cap, Ground Stop | `docs/architecture.md`, `docs/risks.md`, and the arithmetic in `examples/workitem-factory/README.md` |
+| A decision that was not obvious | The decision log in `docs/architecture.md` §13 — *why*, not what |
+| Anything listed as open in `docs/roadmap.md` | Move it to **Resolved** with the answer and the reasoning |
+| A new known hazard | `docs/risks.md` |
+| The CLI's commands or flags | `crates/layover-cli/README.md`, `book/src/install.md` |
+
+`cargo xtask verify` enforces the parts a machine can check: links that resolve, generated code
+that matches its specification, examples that still parse and validate. It cannot tell you whether
+a paragraph is still true. That part is yours.
+
+**If a change contradicts something written down, fix the writing in the same commit.** Do not
+leave it for later, do not open a follow-up issue, and do not wait to be asked.
+
 
 ## Conventions
 
@@ -77,9 +115,14 @@ type names, API fields and prose alike.
 
 | Path | Purpose |
 |---|---|
+| `api/openapi.yaml` | **The HTTP contract.** Edit this, never `generated.rs`. |
+| `book/` | The published documentation site (mdBook → GitHub Pages) |
 | `docs/architecture.md` | System design and the decision log |
 | `docs/routing.md` | Route map semantics, joins, failure paths |
 | `docs/roadmap.md` | v0.1 scope and open questions |
 | `docs/risks.md` | Known risks and mitigations |
-| `crates/layover-core` | Domain types: config, graph, validation, itinerary, barriers |
-| `xtask/` | The `verify` command |
+| `examples/workitem-factory/` | The reference v0.1 factory, with its sizing arithmetic |
+| `crates/layover-core` | Domain types: config, agents, routes, pipelines, prompts, graph, validation, itinerary, barriers |
+| `crates/layover-http` | The generated HTTP surface and the `Api` trait |
+| `crates/layover-cli` | The `layover` binary |
+| `xtask/` | `verify`, `generate-api` and `docs` |

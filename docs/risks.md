@@ -30,8 +30,10 @@ agents receive a git worktree snapshot rather than the live tree — see
 several agents inspect concurrently and at most one writes.
 
 *Still unresolved:* **two concurrent read-write agents remain unsafe.** The route map does not
-prevent that shape, and nothing warns you when you configure one. A load-time check that flags
-fan-out to multiple read-write agents would be cheap and worth having.
+prevent that shape, and the load-time check only looks *within* one route's fan-out. A sequential
+hand-off between two writers — a developer sending finished work to a publisher that commits it —
+is not flagged at all, even though the sender's process may still be alive when the receiver
+starts. Nothing today guarantees the sender has exited.
 
 ### 3. Blocking chains hold processes open
 
@@ -133,4 +135,37 @@ that looks exactly like success.
 *Mitigation:* a barrier resets when any upstream delivers a second time. This imposes a
 constraint: a loop-back must re-dispatch the **whole** fan-out, not just the branch that failed.
 The constraint currently lives in agent prompts, which makes it fragile — a load-time or runtime
-check would be better and is not yet designed.
+check would be better and is not yet designed. The reference factory in
+[`examples/workitem-factory/`](../examples/workitem-factory/README.md) turns this loop on every
+rework round, and `a_rework_round_that_re_dispatches_only_one_branch_waits_forever` shows exactly
+what a half re-dispatch costs.
+
+### 12. Prompt composition has no output-size bound
+
+**Severity: low.**
+
+`@include` is guarded against cycles and against nesting more than eight deep, but not against
+*breadth*. A non-cyclic diamond — eight levels where each file includes the same two children —
+expands super-linearly, because cycle detection tracks the ancestor stack rather than a visited
+set, and nothing caps the size of the assembled prompt.
+
+The blast radius is small: prompt files are repository content under the same review as the rest
+of the factory, and the failure is a large string rather than anything escaping the process. But
+an agent editing its own prompts is a stated goal, which puts a machine on the writing end.
+
+*Mitigation:* cap the assembled prompt at some generous size and fail with a clear error, the same
+way depth does. Worth doing when prompts become agent-writable, not before.
+
+### 13. Third-party GitHub Actions run with write tokens
+
+**Severity: low. Mitigated.**
+
+The release workflow holds `contents: write` and the Pages workflow holds `id-token: write`. Any
+third-party action in those jobs runs with those tokens, so a compromised upstream would be a
+release-pipeline compromise.
+
+*Mitigation:* third-party actions are pinned to full commit SHAs rather than mutable tags, and the
+tag name is passed to `bash` through the environment rather than interpolated into the script —
+a tag may legally contain `$` and backticks, which would otherwise execute on the runner.
+
+*Residual:* `actions/*` are still pinned to major tags, which is the usual trade-off.

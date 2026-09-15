@@ -21,17 +21,21 @@ max_runs = 16
 command = ["claude", "-p", "{prompt}"]
 
 [agents.planner]
+description = "Breaks the goal down and dispatches it"
 prompt = "Break the goal down and dispatch it."
 entry = true
 
 [agents.probe_a]
+description = "Does the work"
 prompt = "Do the work."
 
 [agents.probe_b]
+description = "Inspects the work"
 prompt = "Inspect the work."
 access = "read-only"
 
 [agents.collector]
+description = "Combines both inputs"
 prompt = "Combine both inputs."
 
 [[routes]]

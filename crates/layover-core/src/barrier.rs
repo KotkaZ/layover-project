@@ -4,8 +4,12 @@
 //! flights rather than parking processes, which is what makes fan-in possible without a blocking
 //! request/response mode.
 //!
-//! Two behaviours here are subtle and exist because of failure loop-backs:
+//! Three behaviours here are subtle:
 //!
+//! - **Scope.** A barrier constrains the upstreams it names and nobody else. The same agent may
+//!   also sit behind ordinary unjoined edges — including a human entry point — and a flight
+//!   arriving on one of those wakes it immediately without touching the barrier. A join declares
+//!   *which inputs an agent needs together*, not *when an agent is allowed to run*.
 //! - **Reset.** A second delivery from the same upstream discards partial state, so a stale
 //!   result from a sibling branch cannot satisfy the barrier alongside a fresh one.
 //! - **Abandonment.** A barrier whose missing upstreams can no longer be reached by any live run
@@ -13,10 +17,11 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::config::{AgentName, Join};
+use crate::agent::AgentName;
 use crate::flight::{Flight, ItineraryId};
 use crate::graph::JoinSpec;
 use crate::graph::RouteGraph;
+use crate::route::Join;
 
 /// Identifies a barrier within the Tower.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -45,8 +50,12 @@ pub enum Delivery {
     },
     /// The condition is met. The agent should be spawned exactly once with these flights.
     Ready(Vec<Flight>),
-    /// The sender is not a declared upstream of this barrier, so the Tower must decide.
-    Unexpected(Box<Flight>),
+    /// The sender is not a declared upstream, so the barrier does not apply.
+    ///
+    /// The flight bypasses the barrier and wakes the agent on its own. It is not an error: the
+    /// route check has already established that the edge exists, and a barrier only speaks for
+    /// the upstreams it names. This is what lets a joined agent also be an entry point.
+    Direct(Box<Flight>),
 }
 
 /// A rendezvous barrier holding flights until its condition is met.
@@ -70,16 +79,20 @@ impl Barrier {
 
     /// Delivers a flight to the barrier.
     ///
+    /// A flight from a sender the barrier does not name is returned as [`Delivery::Direct`] and
+    /// leaves parked state untouched, so an agent behind a join can still be triggered by a human
+    /// or by an unjoined peer.
+    ///
     /// A second delivery from an upstream that has already reported resets the barrier: partial
     /// state is discarded and every upstream must deliver again. This is what stops a stale
     /// verdict from before a failure loop-back being combined with a fresh one.
     pub fn deliver(&mut self, flight: Flight) -> Delivery {
         let Some(sender) = flight.from.agent().cloned() else {
-            return Delivery::Unexpected(Box::new(flight));
+            return Delivery::Direct(Box::new(flight));
         };
 
         if !self.required.contains(&sender) {
-            return Delivery::Unexpected(Box::new(flight));
+            return Delivery::Direct(Box::new(flight));
         }
 
         if self.parked.contains_key(&sender) {
@@ -222,17 +235,17 @@ mod tests {
     }
 
     #[test]
-    fn a_sender_outside_the_join_is_not_parked() {
+    fn a_sender_outside_the_join_is_delivered_directly() {
         let mut barrier = barrier_all();
 
         let outcome = barrier.deliver(flight_from("stranger", "hello"));
 
-        assert!(matches!(outcome, Delivery::Unexpected(_)));
+        assert!(matches!(outcome, Delivery::Direct(_)));
         assert_eq!(barrier.parked_count(), 0);
     }
 
     #[test]
-    fn a_human_flight_is_not_parked() {
+    fn a_human_flight_is_delivered_directly() {
         let mut barrier = barrier_all();
         let flight = Flight::new(
             ItineraryId::generate(),
@@ -242,7 +255,25 @@ mod tests {
             5,
         );
 
-        assert!(matches!(barrier.deliver(flight), Delivery::Unexpected(_)));
+        assert!(matches!(barrier.deliver(flight), Delivery::Direct(_)));
+    }
+
+    #[test]
+    fn a_direct_flight_leaves_parked_state_intact() {
+        // A joined agent may also be an entry point. Waking it by the front door must not discard
+        // the half-collected rendezvous, or the upstream that already reported would be lost.
+        let mut barrier = barrier_all();
+        let _ = barrier.deliver(flight_from("probe_a", "a"));
+
+        let _ = barrier.deliver(flight_from("stranger", "unrelated work"));
+
+        assert_eq!(barrier.parked_count(), 1);
+        assert_eq!(barrier.waiting_for(), vec![AgentName::from("probe_b")]);
+
+        let Delivery::Ready(flights) = barrier.deliver(flight_from("probe_b", "b")) else {
+            panic!("the barrier should still complete normally");
+        };
+        assert_eq!(flights.len(), 2);
     }
 
     fn pipeline_graph() -> RouteGraph {

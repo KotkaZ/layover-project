@@ -1,0 +1,21 @@
+[package]
+name = "layover-http"
+description = "The Layover Tower HTTP surface, generated from api/openapi.yaml."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+axum = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+serde_json = "1"
+
+[lints]
+workspace = true

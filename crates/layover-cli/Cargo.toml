@@ -1,0 +1,24 @@
+[package]
+name = "layover-cli"
+description = "Run a lights-out agent factory: supervise headless agent CLIs, route messages between them, and keep them bounded."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage = "https://kotkaz.github.io/layover-project/"
+documentation = "https://kotkaz.github.io/layover-project/"
+readme = "README.md"
+keywords = ["agents", "orchestration", "llm", "automation", "supervisor"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "layover"
+path = "src/main.rs"
+
+[dependencies]
+layover-core = { path = "../layover-core", version = "0.2.0" }
+clap = { workspace = true, features = ["derive"] }
+
+[lints]
+workspace = true

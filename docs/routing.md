@@ -65,6 +65,26 @@ This matters because without a join, two edges into one agent make that agent fi
 and the first firing happens when the *fastest* branch finishes, not when the work is done.
 Duplicate side effects are the usual result.
 
+### What a barrier does and does not guard
+
+**Rule: a barrier constrains the upstreams it names and nobody else.** A flight from any other
+permitted sender — including a human at an entry point — bypasses the barrier entirely, wakes the
+agent on its own, and leaves parked state untouched.
+
+A join declares *which inputs an agent needs together*, not *when an agent is allowed to run*. The
+other reading, where a barrier gates every inbound edge, breaks the common case: an agent that
+both takes work from a human and collects results from the helpers it dispatches would park its
+own trigger, waiting for agents that cannot run until it does.
+
+This is what makes a review loop cheap to express. Verdicts from a tester and a reviewer can
+rendezvous directly on the agent that produced the work, which then decides for itself whether to
+loop or move on — no intermediary gate agent, and the work item that started it still arrives
+normally. See [`examples/workitem-factory/`](../examples/workitem-factory/README.md).
+
+The residual sharp edge: a direct flight can wake an agent while a barrier for that same agent
+still holds a partial rendezvous. That is intended — they are independent causes — but the run
+that wakes must not assume it is seeing everything. Sender identity is how it tells.
+
 ### Abandoning a barrier
 
 A parked barrier that can never complete would hang an itinerary forever, holding work that no
@@ -93,6 +113,18 @@ The rule carries a constraint: **a loop-back must re-dispatch the whole fan-out,
 branch that failed.** Re-sending to only one upstream leaves the barrier waiting for a sibling
 that never comes, until reachability analysis abandons it. This currently relies on agent prompts,
 which is fragile — see [`risks.md`](risks.md).
+
+### A join has no optional upstreams
+
+`join = "all"` means *every* declared upstream, which rules out the shape that looks most natural
+for an agent gathering help: dispatch to one specialist, or two, depending on what the work needs.
+Skip a dispatch and the barrier waits for an agent that was never asked, until reachability
+analysis abandons it and the itinerary is marked stalled. The happy path becomes a failure.
+
+Until dispatch-aware barriers exist — see [`roadmap.md`](roadmap.md) — **optionality belongs in
+prompts, not in the route map.** Dispatch every upstream every time, and let a specialist with
+nothing to contribute reply *"nothing to add, here is why"*. That reply is not waste: it is what
+releases the rendezvous, and it records the fact that the question was asked and answered.
 
 ## 4. Failure paths
 
@@ -166,3 +198,20 @@ to   = "planner"          # failure loop-back
 Note that the loop-back edge and the join edge coexist. `probe_a` chooses between them at
 runtime, and the Tower's reachability analysis is what keeps the barrier from leaking when it
 chooses the loop-back.
+
+A fuller worked example — intake, a rendezvous back onto the entry agent, a test/review loop and
+a publishing step — is in [`examples/workitem-factory/`](../examples/workitem-factory/README.md).
+
+## 7. Sizing Hops for a loop
+
+A chain carries at most `max_hops` flights: the trigger is flight 1, and every send spends one
+hop. Layover warns at config load when an agent sits further from an entry point than `max_hops`
+can reach, but that check measures **shortest paths** and so says nothing about cycles.
+
+A loop is where the budget actually goes. A two-agent review cycle costs two hops per turn, so a
+route map that looks three flights deep can need twenty to be useful. Nothing computes that for
+you, because nothing can know how many times a loop will turn.
+
+Getting it wrong is not a clean failure. Hops running out mid-repair leaves half-finished work in
+the shared workspace and no run alive to clean it up — see open question 11 in
+[`roadmap.md`](roadmap.md). Do the arithmetic; the example above shows it worked through.
