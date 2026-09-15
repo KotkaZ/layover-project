@@ -42,6 +42,12 @@ This is the only definition of done. It runs generated-code freshness, documenta
 `fmt --check`, `clippy -D warnings`, `test` and the doc build. CI runs this exact command and
 nothing else, so a local pass is a CI pass.
 
+That promise depends on `rust-toolchain.toml`, which pins the exact compiler. Clippy gains lints
+between releases, so without a pin a contributor on an older toolchain passes locally and fails in
+CI — the one failure an unattended agent cannot diagnose. Do not remove the pin. Bumping it is an
+ordinary change: raise the version, run `verify`, fix what the newer lints find, commit it all
+together.
+
 Never report work complete without running it. Never weaken it to make it pass.
 
 ## Documentation is part of the change

@@ -1,0 +1,13 @@
+# Pin the toolchain so that a local pass really is a CI pass.
+#
+# `cargo xtask verify` is the only definition of done, and it lints with warnings denied. Clippy
+# gains lints between releases, so a contributor on an older toolchain can pass locally and fail in
+# CI — which is exactly the failure an unattended agent cannot diagnose. Pinning removes the
+# variable.
+#
+# Bumping this is an ordinary change: raise the version, run `cargo xtask verify`, fix what the
+# newer lints find, and commit it together.
+
+[toolchain]
+channel = "1.98.1"
+components = ["rustfmt", "clippy"]

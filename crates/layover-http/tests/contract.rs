@@ -3,6 +3,12 @@
 //! The generator is only worth having if its output is exercised. These tests drive the real
 //! router through `tower::Service`, so a route that does not exist, a status code that does not
 //! match the specification, or a body that does not deserialise all fail here.
+//!
+//! The `Api` implementation below is a stub that answers from constants, so nothing it does can
+//! await. The trait returns `impl Future + Send` precisely so implementors may write `async fn`;
+//! hand-rolling ready futures here to satisfy a lint would make the test double harder to read
+//! than the thing it stands in for.
+#![allow(clippy::unused_async_trait_impl)]
 
 use std::sync::Arc;
 
@@ -18,7 +24,6 @@ use tower::ServiceExt as _;
 
 /// A minimal implementation that returns fixed values.
 struct Stub;
-
 fn sample_run() -> Run {
     Run {
         run_id: "run_1".to_owned(),
@@ -33,6 +38,7 @@ fn sample_run() -> Run {
     }
 }
 
+// A stub answers from constants, so none of these bodies await anything.
 impl Api for Stub {
     async fn get_health(&self) -> Result<Health, Problem> {
         Ok(Health {

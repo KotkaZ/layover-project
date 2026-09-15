@@ -63,5 +63,5 @@ cargo xtask verify
 ```
 
 It runs formatting, lints with warnings denied, generated-code freshness, documentation link
-checks, the test suite and the doc build. CI runs that exact command and nothing else, so a local
-pass is a CI pass.
+checks, the test suite and the doc build. CI runs that exact command and nothing else, and
+`rust-toolchain.toml` pins the compiler, so a local pass really is a CI pass.
