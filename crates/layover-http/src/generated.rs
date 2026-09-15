@@ -58,6 +58,63 @@ pub struct AgentList {
     pub routes: Vec<Route>,
 }
 
+/// One named slice of spend, such as an agent or a model.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CostBucket {
+    /// The agent or model this slice belongs to.
+    pub name: String,
+    /// Totals for this slice.
+    pub summary: CostSummary,
+}
+
+/// Where the factory's money went.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CostReport {
+    /// Spend per agent, most expensive first.
+    pub by_agent: Vec<CostBucket>,
+    /// Spend per model, most expensive first. Runs with no reported model are omitted.
+    pub by_model: Vec<CostBucket>,
+    /// The factory-wide ceiling and what is left of it.
+    pub reserve: ReserveState,
+    /// Totals across every run in scope.
+    pub total: CostSummary,
+}
+
+/// Where a cost figure came from, worst-first. `reported` is the only kind worth billing
+/// against; `rate_card` was derived from token counts and published prices; `unreported`
+/// means the runner said nothing, so the figure is zero and means nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CostSource {
+    /// `reported`
+    #[serde(rename = "reported")]
+    Reported,
+    /// `rate_card`
+    #[serde(rename = "rate_card")]
+    RateCard,
+    /// `unreported`
+    #[serde(rename = "unreported")]
+    Unreported,
+}
+
+/// Totals over some set of runs, carrying their own confidence.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CostSummary {
+    /// The weakest source contributing to this total.
+    pub confidence: CostSource,
+    /// Runs priced from a rate card rather than measured.
+    pub estimated_runs: i32,
+    /// Fraction of runs whose cost the runner actually reported, 0.0 to 1.0.
+    pub measured_share: f64,
+    /// How many runs contributed.
+    pub runs: i32,
+    /// Runs whose runner reported no cost at all.
+    pub unreported_runs: i32,
+    /// Total tokens.
+    pub usage: TokenUsage,
+    /// Total cost in US dollars.
+    pub usd: f64,
+}
+
 /// A boolean parameter a pipeline accepts at trigger time.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Flag {
@@ -146,6 +203,25 @@ pub struct Problem {
     pub status: i32,
     /// A short, human-readable summary of the problem.
     pub title: String,
+}
+
+/// The factory-wide spend ceiling. Distinct from Fuel, which bounds one itinerary: a
+/// scheduled pipeline mints a fresh itinerary with a fresh Fuel budget on every tick, so
+/// only the Reserve bounds the total. The window rolls rather than resetting at midnight.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReserveState {
+    /// Ceiling for the window. Null when no ceiling is enforced.
+    #[serde(default)]
+    pub cap_usd: Option<f64>,
+    /// True when the Reserve is currently refusing new work.
+    pub exhausted: bool,
+    /// Left before new work is refused. Null when unlimited.
+    #[serde(default)]
+    pub remaining_usd: Option<f64>,
+    /// Spend within the current window.
+    pub spent_usd: f64,
+    /// How far back the rolling window reaches.
+    pub window_hours: i64,
 }
 
 /// One entry of the route map, possibly expanding to several edges.
@@ -248,6 +324,21 @@ pub enum Status {
     Ok,
 }
 
+/// Tokens consumed. Cached reads and writes are counted apart from fresh input because
+/// providers price them very differently, and blending them makes any derived cost wrong by
+/// whatever the cache hit rate happened to be.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TokenUsage {
+    /// Tokens served from the provider's prompt cache.
+    pub cache_read: i64,
+    /// Tokens written into the provider's prompt cache.
+    pub cache_write: i64,
+    /// Prompt tokens billed at the input rate.
+    pub input: i64,
+    /// Generated tokens.
+    pub output: i64,
+}
+
 /// What starts a pipeline.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Trigger {
@@ -270,6 +361,14 @@ pub enum TriggerKind {
     /// `scheduled`
     #[serde(rename = "scheduled")]
     Scheduled,
+}
+
+/// query parameters for `getCosts`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GetCostsQuery {
+    /// Only count runs that finished within this many hours. Omit for all time.
+    #[serde(default)]
+    pub window_hours: Option<i32>,
 }
 
 /// query parameters for `listRuns`.
@@ -313,6 +412,20 @@ pub trait Api: Send + Sync + 'static {
     ///
     /// `GET /agents`
     fn list_agents(&self) -> impl core::future::Future<Output = Result<AgentList, Problem>> + Send;
+    /// What the factory has spent, and how much of that is measured.
+    ///
+    /// A single Fuel figure says whether a chain may continue. This says where the money went —
+    /// per agent, per model — and, critically, how much of the total the runners actually
+    /// reported rather than Layover inferring it from a rate card.
+    ///
+    /// Treat `confidence` as part of the number. A total that is mostly measured is still not
+    /// measured, so any estimated or unreported run downgrades the whole figure.
+    ///
+    /// `GET /costs`
+    fn get_costs(
+        &self,
+        query: GetCostsQuery,
+    ) -> impl core::future::Future<Output = Result<CostReport, Problem>> + Send;
     /// Start work by sending the first flight of a new itinerary.
     ///
     /// Give either a `pipeline` or a `to`. A pipeline is the normal way in: it names the entry
@@ -379,6 +492,7 @@ pub trait Api: Send + Sync + 'static {
 pub fn router<A: Api>(api: std::sync::Arc<A>) -> axum::Router {
     axum::Router::new()
         .route("/agents", axum::routing::get(handle_list_agents::<A>))
+        .route("/costs", axum::routing::get(handle_get_costs::<A>))
         .route("/flights", axum::routing::post(handle_send_flight::<A>))
         .route(
             "/ground-stop",
@@ -400,6 +514,16 @@ async fn handle_list_agents<A: Api>(
     axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
 ) -> axum::response::Response {
     match api.list_agents().await {
+        Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
+        Err(problem) => problem.into_response(),
+    }
+}
+
+async fn handle_get_costs<A: Api>(
+    axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
+    axum::extract::Query(query): axum::extract::Query<GetCostsQuery>,
+) -> axum::response::Response {
+    match api.get_costs(query).await {
         Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
         Err(problem) => problem.into_response(),
     }
@@ -484,8 +608,9 @@ async fn handle_stream_run<A: Api>(
 /// Every operation the specification declares, as (method, path, operationId).
 ///
 /// Exposed so tests can assert the router and the specification agree.
-pub const OPERATIONS: [(&str, &str, &str); 9] = [
+pub const OPERATIONS: [(&str, &str, &str); 10] = [
     ("GET", "/agents", "listAgents"),
+    ("GET", "/costs", "getCosts"),
     ("POST", "/flights", "sendFlight"),
     ("POST", "/ground-stop", "engageGroundStop"),
     ("DELETE", "/ground-stop", "releaseGroundStop"),

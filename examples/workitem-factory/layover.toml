@@ -30,6 +30,34 @@ fuel_usd = 20.00
 # A test suite and a build are slower than a single answer.
 timeout_sec = 1800
 
+# ── What the whole factory may spend ───────────────────────────────
+#
+# Fuel above is per *itinerary*, and that is not a bound on this factory. `review-bot` fires
+# hourly, and every tick mints a fresh itinerary with a fresh $20 — so 24 × $20 = $480 a day,
+# with every individual chain perfectly inside its rail.
+#
+# The Reserve is what actually bounds it. 6 × $20 = $120 buys six full-budget review cycles in
+# any rolling 24 hours, which is far more than a day's real pull requests and still an order of
+# magnitude under the uncapped worst case. `layover validate` warns when the schedule could
+# outspend this.
+#
+# Rolling, not per calendar day: a daily bucket can be spent twice across midnight, and needs a
+# timezone to decide when midnight is.
+[reserve]
+fuel_usd     = 120.00
+window_hours = 24
+
+# ── Model prices, for runners that report tokens but not dollars ───
+#
+# Only ever a fallback, and anything derived from it is labelled as an estimate rather than
+# folded in as a measurement. Prices change; keep this current or leave it out entirely — a
+# stale rate card is how a cost estimate drifts by a factor of two without anyone noticing.
+[rates.claude-opus-4]
+input_usd       = 5.00
+output_usd      = 25.00
+cache_read_usd  = 0.50
+cache_write_usd = 6.25
+
 # ── How to invoke each supported CLI ───────────────────────────────
 [runners.claude]
 command = ["claude", "-p", "{prompt}", "--output-format", "stream-json"]

@@ -5,10 +5,12 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use serde::Deserialize;
 
 use crate::agent::{Agent, AgentName};
+use crate::cost::{RateCard, Reserve};
 use crate::pipeline::{Pipeline, PipelineName};
 use crate::route::Route;
 
@@ -105,6 +107,54 @@ pub struct Runner {
     pub mcp: Option<McpWiring>,
 }
 
+/// A bound on what the whole factory may spend, across every itinerary.
+///
+/// Fuel bounds one chain. This bounds the factory, which is a different question: a scheduled
+/// pipeline mints a fresh itinerary — and a fresh Fuel budget — on every tick, so every chain can
+/// stay inside its rail while the total runs away. See [`crate::cost::reserve`].
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReserveConfig {
+    /// Ceiling for the window, in US dollars. Zero means unlimited.
+    #[serde(default = "default_reserve_usd")]
+    pub fuel_usd: f64,
+    /// How far back the rolling window reaches.
+    ///
+    /// Rolling rather than per calendar day, deliberately: a daily bucket can be spent twice
+    /// across midnight, and needs a timezone to decide when midnight is.
+    #[serde(default = "default_reserve_window_hours")]
+    pub window_hours: u64,
+}
+
+impl ReserveConfig {
+    /// Returns the window as a duration.
+    #[must_use]
+    pub fn window(&self) -> Duration {
+        Duration::from_secs(self.window_hours.saturating_mul(3_600))
+    }
+
+    /// Builds the runtime Reserve this configuration describes.
+    #[must_use]
+    pub fn to_reserve(&self) -> Reserve {
+        Reserve::new(self.fuel_usd, self.window())
+    }
+
+    /// Returns `true` when no ceiling is enforced.
+    #[must_use]
+    pub fn is_unlimited(&self) -> bool {
+        !(self.fuel_usd.is_finite() && self.fuel_usd > 0.0)
+    }
+}
+
+impl Default for ReserveConfig {
+    fn default() -> Self {
+        Self {
+            fuel_usd: default_reserve_usd(),
+            window_hours: default_reserve_window_hours(),
+        }
+    }
+}
+
 /// A whole factory definition.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -115,6 +165,12 @@ pub struct Config {
     /// Factory-wide defaults.
     #[serde(default)]
     pub defaults: Defaults,
+    /// The factory-wide spend ceiling.
+    #[serde(default)]
+    pub reserve: ReserveConfig,
+    /// Published model prices, used only when a runner reports tokens but no cost.
+    #[serde(default)]
+    pub rates: RateCard,
     /// Available runners, keyed by name.
     #[serde(default)]
     pub runners: BTreeMap<String, Runner>,
@@ -254,6 +310,14 @@ const fn default_fuel_usd() -> f64 {
 
 const fn default_max_runs() -> u32 {
     64
+}
+
+const fn default_reserve_usd() -> f64 {
+    100.0
+}
+
+const fn default_reserve_window_hours() -> u64 {
+    24
 }
 
 const fn default_timeout_sec() -> u64 {

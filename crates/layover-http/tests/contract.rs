@@ -16,9 +16,10 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt as _;
 use layover_http::{
-    Access, Agent, AgentList, Api, EventStream, FlightAccepted, GetRunPath, GroundStop, Health,
-    ListRunsQuery, OPERATIONS, Pipeline, PipelineList, Problem, Run, RunList, RunStatus,
-    SendFlightRequest, Status, StreamRunPath, Trigger, TriggerKind, router,
+    Access, Agent, AgentList, Api, CostBucket, CostReport, CostSource, CostSummary, EventStream,
+    FlightAccepted, GetCostsQuery, GetRunPath, GroundStop, Health, ListRunsQuery, OPERATIONS,
+    Pipeline, PipelineList, Problem, ReserveState, Run, RunList, RunStatus, SendFlightRequest,
+    Status, StreamRunPath, TokenUsage, Trigger, TriggerKind, router,
 };
 use tower::ServiceExt as _;
 
@@ -114,6 +115,57 @@ impl Api for Stub {
         Ok(EventStream::new(Body::from("data: hello\n\n")))
     }
 
+    async fn get_costs(&self, query: GetCostsQuery) -> Result<CostReport, Problem> {
+        // One measured run and one estimated one, so the report has something to be honest about.
+        let usage = TokenUsage {
+            input: 1_000,
+            output: 500,
+            cache_read: 100,
+            cache_write: 50,
+        };
+        let measured = CostSummary {
+            runs: 1,
+            usd: 4.0,
+            usage: usage.clone(),
+            unreported_runs: 0,
+            estimated_runs: 0,
+            confidence: CostSource::Reported,
+            measured_share: 1.0,
+        };
+        let mixed = CostSummary {
+            runs: 2,
+            usd: 6.0,
+            usage,
+            unreported_runs: 0,
+            estimated_runs: 1,
+            confidence: CostSource::RateCard,
+            measured_share: 0.5,
+        };
+
+        Ok(CostReport {
+            total: if query.window_hours.is_some() {
+                measured.clone()
+            } else {
+                mixed
+            },
+            by_agent: vec![CostBucket {
+                name: "developer".to_owned(),
+                summary: measured.clone(),
+            }],
+            by_model: vec![CostBucket {
+                name: "claude-opus-5".to_owned(),
+                summary: measured,
+            }],
+            reserve: ReserveState {
+                cap_usd: Some(120.0),
+                spent_usd: 6.0,
+                remaining_usd: Some(114.0),
+                window_hours: 24,
+                exhausted: false,
+            },
+        })
+    }
+
     async fn engage_ground_stop(&self) -> Result<GroundStop, Problem> {
         Ok(GroundStop {
             engaged: true,
@@ -168,7 +220,7 @@ fn json(body: &str) -> serde_json::Value {
 
 #[test]
 fn every_specified_operation_is_routed() {
-    assert_eq!(OPERATIONS.len(), 9);
+    assert_eq!(OPERATIONS.len(), 10);
 
     for (method, path, operation) in OPERATIONS {
         assert!(path.starts_with('/'), "`{operation}` has an odd path");
@@ -181,6 +233,7 @@ fn every_specified_operation_is_routed() {
     let paths: Vec<&str> = OPERATIONS.iter().map(|(_, path, _)| *path).collect();
     assert!(paths.contains(&"/ground-stop"));
     assert!(paths.contains(&"/runs/{run_id}/stream"));
+    assert!(paths.contains(&"/costs"));
 }
 
 #[tokio::test]

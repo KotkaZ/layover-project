@@ -29,6 +29,40 @@ spreads. At `max_hops = 8` with a branching factor of 3, one trigger permits rou
 paid CLI invocations. Fuel is what stops that, and `max_runs` is what stops it when the runner
 does not report its cost.
 
+Nor does Fuel bound the *factory* — it resets with every new itinerary. See `[reserve]` below.
+
+## `[reserve]` — what the whole factory may spend
+
+```toml
+[reserve]
+fuel_usd     = 120.00   # at most this much...
+window_hours = 24       # ...in any rolling 24 hours
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `fuel_usd` | `100.00` | Ceiling for the window. `0` means unlimited. |
+| `window_hours` | `24` | How far back the rolling window reaches. |
+
+A scheduled pipeline mints a fresh itinerary — and a fresh Fuel budget — on every tick, so an
+hourly pipeline at `fuel_usd = 20` permits `24 × 20 = $480` a day with every chain inside its rail.
+The Reserve is the only thing that sees that. It rolls rather than resetting at midnight, because
+a daily bucket can be spent twice across the boundary and needs a timezone to decide where the
+boundary is. See [Cost](./cost.md).
+
+## `[rates]` — prices, for runners that report tokens but not dollars
+
+```toml
+[rates.claude-opus-4]
+input_usd       = 5.00
+output_usd      = 25.00
+cache_read_usd  = 0.50
+cache_write_usd = 6.25
+```
+
+Optional and always a fallback. Anything derived from it is labelled an estimate and never folded
+in as a measurement — see [Cost](./cost.md) for why that distinction is load-bearing.
+
 ## `[runners.*]` — how to invoke a CLI
 
 ```toml

@@ -202,6 +202,34 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
 
+  /costs:
+    get:
+      operationId: getCosts
+      summary: What the factory has spent, and how much of that is measured.
+      description: |
+        A single Fuel figure says whether a chain may continue. This says where the money went —
+        per agent, per model — and, critically, how much of the total the runners actually
+        reported rather than Layover inferring it from a rate card.
+
+        Treat `confidence` as part of the number. A total that is mostly measured is still not
+        measured, so any estimated or unreported run downgrades the whole figure.
+      tags: [work]
+      parameters:
+        - name: window_hours
+          in: query
+          required: false
+          description: Only count runs that finished within this many hours. Omit for all time.
+          schema:
+            type: integer
+            format: int32
+      responses:
+        "200":
+          description: The cost breakdown.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CostReport"
+
   /ground-stop:
     post:
       operationId: engageGroundStop
@@ -500,6 +528,133 @@ components:
           description: The runs.
           items:
             $ref: "#/components/schemas/Run"
+
+    CostSource:
+      type: string
+      description: |
+        Where a cost figure came from, worst-first. `reported` is the only kind worth billing
+        against; `rate_card` was derived from token counts and published prices; `unreported`
+        means the runner said nothing, so the figure is zero and means nothing.
+      enum: [reported, rate_card, unreported]
+
+    TokenUsage:
+      type: object
+      description: |
+        Tokens consumed. Cached reads and writes are counted apart from fresh input because
+        providers price them very differently, and blending them makes any derived cost wrong by
+        whatever the cache hit rate happened to be.
+      required: [input, output, cache_read, cache_write]
+      properties:
+        input:
+          type: integer
+          format: int64
+          description: Prompt tokens billed at the input rate.
+        output:
+          type: integer
+          format: int64
+          description: Generated tokens.
+        cache_read:
+          type: integer
+          format: int64
+          description: Tokens served from the provider's prompt cache.
+        cache_write:
+          type: integer
+          format: int64
+          description: Tokens written into the provider's prompt cache.
+
+    CostSummary:
+      type: object
+      description: Totals over some set of runs, carrying their own confidence.
+      required: [runs, usd, usage, unreported_runs, estimated_runs, confidence, measured_share]
+      properties:
+        runs:
+          type: integer
+          format: int32
+          description: How many runs contributed.
+        usd:
+          type: number
+          format: double
+          description: Total cost in US dollars.
+        usage:
+          $ref: "#/components/schemas/TokenUsage"
+          description: Total tokens.
+        unreported_runs:
+          type: integer
+          format: int32
+          description: Runs whose runner reported no cost at all.
+        estimated_runs:
+          type: integer
+          format: int32
+          description: Runs priced from a rate card rather than measured.
+        confidence:
+          $ref: "#/components/schemas/CostSource"
+          description: The weakest source contributing to this total.
+        measured_share:
+          type: number
+          format: double
+          description: Fraction of runs whose cost the runner actually reported, 0.0 to 1.0.
+
+    CostBucket:
+      type: object
+      description: One named slice of spend, such as an agent or a model.
+      required: [name, summary]
+      properties:
+        name:
+          type: string
+          description: The agent or model this slice belongs to.
+        summary:
+          $ref: "#/components/schemas/CostSummary"
+          description: Totals for this slice.
+
+    ReserveState:
+      type: object
+      description: |
+        The factory-wide spend ceiling. Distinct from Fuel, which bounds one itinerary: a
+        scheduled pipeline mints a fresh itinerary with a fresh Fuel budget on every tick, so
+        only the Reserve bounds the total. The window rolls rather than resetting at midnight.
+      required: [spent_usd, window_hours, exhausted]
+      properties:
+        cap_usd:
+          type: [number, "null"]
+          format: double
+          description: Ceiling for the window. Null when no ceiling is enforced.
+        spent_usd:
+          type: number
+          format: double
+          description: Spend within the current window.
+        remaining_usd:
+          type: [number, "null"]
+          format: double
+          description: Left before new work is refused. Null when unlimited.
+        window_hours:
+          type: integer
+          format: int64
+          description: How far back the rolling window reaches.
+        exhausted:
+          type: boolean
+          description: True when the Reserve is currently refusing new work.
+
+    CostReport:
+      type: object
+      description: Where the factory's money went.
+      required: [total, by_agent, by_model, reserve]
+      properties:
+        total:
+          $ref: "#/components/schemas/CostSummary"
+          description: Totals across every run in scope.
+        by_agent:
+          type: array
+          description: Spend per agent, most expensive first.
+          items:
+            $ref: "#/components/schemas/CostBucket"
+        by_model:
+          type: array
+          description: Spend per model, most expensive first. Runs with no reported model are omitted.
+          items:
+            $ref: "#/components/schemas/CostBucket"
+        reserve:
+          $ref: "#/components/schemas/ReserveState"
+          description: The factory-wide ceiling and what is left of it.
 
     GroundStop:
       type: object

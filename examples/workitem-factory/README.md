@@ -210,7 +210,7 @@ A barrier resets when any upstream delivers a second time, precisely so a verdic
 constraint: re-sending to one upstream alone leaves the barrier waiting for a sibling that never
 comes.
 
-Today this lives only in the developer's prompt, which is fragile. It is recorded as risk 11 in
+Today this lives only in the developer's prompt, which is fragile. It is recorded as risk 12 in
 [`docs/risks.md`](../../docs/risks.md).
 
 ### 5.5 One tester, two suites
@@ -256,6 +256,9 @@ Honest gaps, so nobody discovers them at runtime:
 - **The hourly schedule does not queue.** Runs are reentrant, so a run that outlasts its interval
   produces a second concurrent copy rather than waiting. An hour against a 30-minute timeout is
   deliberate headroom.
+- **The Reserve, not Fuel, is what bounds this factory.** `review-bot` fires hourly and every tick
+  mints a fresh itinerary with a fresh $20 of Fuel — $480 a day, with every chain inside its rail.
+  `[reserve] fuel_usd = 120.00` is the real ceiling. See risk 5.
 - **Secrets never go in this file.** Credentials reach child CLIs through the environment.
 
 ## 7. Running it

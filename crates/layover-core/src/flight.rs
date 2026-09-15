@@ -1,4 +1,4 @@
-//! The Flight envelope.
+//! The Flight envelope, and the identifiers that track work through the Tower.
 
 use std::time::SystemTime;
 
@@ -6,6 +6,40 @@ use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
 use crate::agent::AgentName;
+
+/// Identifier of one supervised CLI execution.
+///
+/// Lives here with the other identifiers rather than with the cost ledger that first needed it: a
+/// run is a core domain object, and several parts of the Tower will key off it.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
+#[serde(transparent)]
+pub struct RunId(String);
+
+impl RunId {
+    /// Mints a new identifier.
+    #[must_use]
+    pub fn generate() -> Self {
+        Self(format!("run_{}", Ulid::new()))
+    }
+
+    /// Returns the identifier as a string slice.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<&str> for RunId {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+}
+
+impl std::fmt::Display for RunId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
 
 /// Identifier of a single flight.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]

@@ -12,7 +12,8 @@
 //! - [`graph`] — the route map as a directed graph
 //! - [`mod@validate`] — load-time checks that fail before a human stops watching
 //! - [`flight`] — the message envelope
-//! - [`itinerary`] — Hops, Fuel and the deterministic run cap
+//! - [cost] — the ledger, rate cards and the factory-wide Fuel Reserve
+//! - [itinerary] — Hops, Fuel and the deterministic run cap
 //! - [`barrier`] — rendezvous joins, including reset and reachability-based abandonment
 //!
 //! See `docs/architecture.md` and `docs/routing.md` in the repository for the design these
@@ -21,6 +22,7 @@
 pub mod agent;
 pub mod barrier;
 pub mod config;
+pub mod cost;
 pub mod flight;
 pub mod graph;
 pub mod itinerary;
@@ -31,8 +33,11 @@ pub mod validate;
 
 pub use agent::{Access, Agent, AgentName, PromptSpec, PromptSpecError};
 pub use barrier::{Barrier, BarrierKey, Delivery};
-pub use config::{Config, ConfigError, Defaults, McpWiring, Paths, Runner};
-pub use flight::{Flight, FlightId, ItineraryId, Origin};
+pub use config::{Config, ConfigError, Defaults, McpWiring, Paths, ReserveConfig, Runner};
+pub use cost::{
+    CostSource, Ledger, ModelRates, RateCard, Reserve, ReserveState, RunCost, Summary, TokenUsage,
+};
+pub use flight::{Flight, FlightId, ItineraryId, Origin, RunId};
 pub use graph::RouteGraph;
 pub use itinerary::{Denial, Itinerary};
 pub use pipeline::{

@@ -13,6 +13,7 @@
 - [Configuration](./configuration.md)
 - [Pipelines and triggers](./pipelines.md)
 - [Prompts](./prompts.md)
+- [Cost](./cost.md)
 - [HTTP API](./http-api.md)
 
 # Design

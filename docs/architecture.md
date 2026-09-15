@@ -54,9 +54,11 @@ carries budget across a causal chain, and *Ground Stop* says exactly what a kill
 | Workspace | One shared working directory; contention deliberately unmediated in v0.1 |
 | Outside surface | HTTP API with SSE, **generated from `api/openapi.yaml`**; the UI is purely a client |
 | Distribution | `cargo install layover-cli`; documentation published to GitHub Pages |
-| Safety rails | Hops (TTL), Fuel (chain budget), Ground Stop |
+| Safety rails | Hops (TTL), Fuel (chain budget), Reserve (factory budget), Ground Stop |
 | Hops semantics | One hop per flight; branches inherit the remaining count, so Hops bounds **depth** only |
 | Breadth bound | Fuel — required in v0.1, with a deterministic fallback when runners cannot report cost |
+| Total bound | **Reserve** — a rolling-window ceiling across every itinerary, because Fuel resets per chain |
+| Cost provenance | Every figure is `reported`, `rate_card` or `unreported`; totals carry the weakest of them |
 | License | Apache-2.0 |
 | Verification | `cargo xtask verify`, run identically by CI |
 | Dogfooding | Ship an example factory; never point one at Layover's own source |
@@ -293,6 +295,7 @@ exists in the specification but is not implemented is a compile error.
 | `GET` | `/runs` | Runs, live and historical |
 | `GET` | `/runs/:id` | One run, including how it ended |
 | `GET` | `/runs/:id/stream` | SSE live output |
+| `GET` | `/costs` | Spend per agent and per model, with its provenance, plus the Reserve |
 | `POST` | `/ground-stop` | Halt everything |
 | `DELETE` | `/ground-stop` | Resume |
 
@@ -485,6 +488,37 @@ carries its documentation, `AGENTS.md` names which file goes with which kind of 
 `verify` enforces the mechanical part — links that resolve, generated code that matches, examples
 that still validate. No tool can check whether a paragraph is still true, which is precisely why
 the instruction has to be standing rather than requested.
+
+**Why there is a Reserve as well as Fuel.** Fuel bounds one itinerary, and that turned out not to
+bound the factory. A scheduled pipeline mints a *fresh* itinerary — and a fresh Fuel budget — on
+every tick, so an hourly pipeline at `fuel_usd = 20` permits `24 × 20 = $480` a day with every
+individual chain sitting perfectly inside its rail. The rail was real and the arithmetic still
+ran away. The Reserve is the missing axis: a ceiling on total spend that no per-chain budget can
+reset.
+
+**Why the Reserve rolls instead of resetting daily.** A daily cap sounds simpler and is worse
+twice over. Midnight doubles it — spend the cap at 23:59 and the bucket resets a minute later, so
+"$50 a day" permits $100 in two minutes. And a day needs a timezone: a sibling project's daily
+gate bucketed by UTC while its ledger bucketed by local time, so between local midnight and the
+UTC offset the gate read the wrong day's total and let spending through. "At most $50 in any
+rolling 24 hours" has no midnight, no timezone and no daylight-saving edge, and is strictly
+stricter.
+
+**Why a cost figure carries where it came from.** A number can be reported by the runner, derived
+by Layover from token counts and a rate card, or absent entirely, and those are not
+interchangeable. Collapsing them is how a budget quietly becomes fiction: the same sibling project
+priced runs from a hand-maintained table and ran **2.7× over actual** — billing one model at `$75`
+per million output tokens where the provider charged `$25` — with nothing in the totals saying
+"this is a guess". So `CostSource` is a field, not a comment; a total reports the *weakest* source
+that fed it, and a summary that is 90% measured still reports as an estimate. For the same reason
+Layover ships no rate card: prices change per provider and per context tier, and a stale table
+baked into a release is precisely how the drift happens.
+
+**Why the run cap is not the same as a cost rail.** Fuel depends on runners voluntarily reporting
+cost and not all of them do, so the deterministic run cap holds when Fuel cannot. What changed is
+that the gap is now *countable* rather than a boolean: an itinerary records how many of its runs
+went unmetered, so "three of forty" and "all forty" are distinguishable. The first is a gap; the
+second means the cost rail is not running at all.
 
 **Why Fuel is required in v0.1 rather than deferred.** Hops was originally assumed to be the
 anti-fork-bomb rail. It is not. A hop is spent per flight and branches inherit the remaining

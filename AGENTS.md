@@ -61,6 +61,7 @@ repository is meant to be worked on by agents.
 | If you changed... | Then update... |
 |---|---|
 | Anything in `layover.toml`'s shape | `book/src/configuration.md`, both `examples/`, `docs/architecture.md` §6 |
+| Cost accounting, Fuel, the Reserve or a rate card | `book/src/cost.md`, `docs/risks.md` risks 4 and 5 |
 | Route, join or barrier semantics | `docs/routing.md`, `book/src/configuration.md` |
 | Pipelines, triggers or flags | `book/src/pipelines.md`, `examples/workitem-factory/` |
 | Prompt composition | `book/src/prompts.md` |
@@ -102,6 +103,7 @@ type names, API fields and prose alike.
 | **Itinerary** | One causal chain of flights from a single trigger; carries Hops and Fuel |
 | **Hops** | Remaining TTL for an itinerary |
 | **Fuel** | Remaining token/cost budget for an itinerary |
+| **Reserve** | Remaining cost budget for the whole factory, over a rolling window |
 | **Tower** | The Layover supervisor process |
 | **Run** | One supervised CLI execution |
 | **Hangar** | An agent's private state directory |

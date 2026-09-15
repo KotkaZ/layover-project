@@ -30,6 +30,7 @@ Point any OpenAPI tool at the file to get a client, a mock server or rendered do
 | `GET` | `/runs` | Runs, live and historical. |
 | `GET` | `/runs/{run_id}` | One run, including how it ended. |
 | `GET` | `/runs/{run_id}/stream` | Live output, as server-sent events. |
+| `GET` | `/costs` | What the factory has spent, and how much of it is measured. |
 | `POST` | `/ground-stop` | Halt everything. |
 | `DELETE` | `/ground-stop` | Resume. |
 

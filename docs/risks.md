@@ -48,7 +48,7 @@ processes. This also removed the pressure behind risk 1.
 
 ### 4. Fuel accounting depends on the CLI reporting cost
 
-**Severity: critical.**
+**Severity: critical. Partially mitigated.**
 
 Claude Code reports token usage in `stream-json`. Codex and Copilot CLI report less consistently.
 If a runner reports nothing, Fuel silently stops metering and the budget rail becomes fiction.
@@ -57,12 +57,35 @@ This was merely awkward while Fuel was a nice-to-have. Now that Fuel is the **on
 breadth — Hops bounds depth alone — a silent metering failure removes the sole protection against
 an exponential fan-out spending unbounded money.
 
-*Mitigation, mandatory:* Fuel must degrade to a deterministic fallback that needs no runner
-cooperation — a per-itinerary run cap, optionally wall-clock — whenever cost reporting is absent
-or partial, and the Tower must log loudly when it does. A safety rail that fails silently is worse
-than no rail, because it is trusted.
+*Mitigation, in place:* the gap is measured rather than merely flagged. Every run records a
+[`CostSource`] of `reported`, `rate_card` or `unreported`; an itinerary counts how many of its runs
+went unmetered and exposes `metered_share()`; and every total in the ledger reports the *weakest*
+source that fed it, so a mostly-measured figure still reads as an estimate. A rate card can price
+a run that reported tokens but no dollars — labelled as an estimate, never folded in as a
+measurement.
 
-### 5. Agents rewriting their own static context
+*Still unresolved:* none of this makes an unreporting runner report. The deterministic run cap is
+what actually holds, and an operator has to look at `measured_share` to know whether Fuel is
+metering or merely appearing to.
+
+### 5. Spend that no per-chain budget can see
+
+**Severity: high. Mitigated.**
+
+Fuel is per itinerary. A scheduled pipeline mints a fresh itinerary — and a fresh Fuel budget — on
+every tick, so an hourly pipeline at `fuel_usd = 20` permits `24 × 20 = $480` a day while every
+chain stays perfectly inside its rail.
+
+*Mitigation:* the **Reserve**, a rolling-window ceiling across every itinerary, checked before an
+itinerary is minted. It rolls rather than resetting daily, because a calendar bucket can be spent
+twice across midnight and needs a timezone to decide when midnight is. `layover validate` warns
+when a factory has a scheduled pipeline and no Reserve, or a Reserve too small to fund one run of
+it.
+
+*Residual:* the Reserve is only as good as the cost figures feeding it, so risk 4 applies here
+too — an unreporting runner spends against a Reserve that never decrements.
+
+### 6. Agents rewriting their own static context
 
 **Severity: medium.**
 
@@ -73,7 +96,7 @@ file shaping their behaviour. That is a drift loop with no human in it.
 in config. Note this applies to *users'* repositories; it does not apply here, because no factory
 targets this repo.
 
-### 6. Transcripts persisted but not exposed
+### 7. Transcripts persisted but not exposed
 
 **Severity: low.**
 
@@ -82,7 +105,7 @@ transcripts and run metadata. Post-incident review would mean reading files by h
 
 *Mitigation:* add `GET /runs/:id` and `GET /runs/:id/transcript` when the UI needs them.
 
-### 7. Self-modification
+### 8. Self-modification
 
 **Severity: low — largely resolved.**
 
@@ -92,7 +115,7 @@ and a bad rebuild would brick the factory.
 *Resolved by scope:* no factory ever targets this repository. The residual rule is that the Tower
 always runs from an installed binary outside any workspace, never `cargo run` from inside one.
 
-### 8. `layover.toml` as a single file
+### 9. `layover.toml` as a single file
 
 **Severity: low.**
 
@@ -101,7 +124,7 @@ the factory definition.
 
 *Mitigation:* add `include = [...]` when it actually hurts. Not before.
 
-### 9. Architecture drift between docs and code
+### 10. Architecture drift between docs and code
 
 **Severity: low, but grows.**
 
@@ -111,7 +134,7 @@ agree, and an agent trusting a stale document will make confident wrong changes.
 *Mitigation:* keep the decision log in `architecture.md` updated in the same commit as the change
 it describes — this is why Conventional Commits and a `docs:` type matter.
 
-### 10. Barrier leak
+### 11. Barrier leak
 
 **Severity: high.**
 
@@ -124,7 +147,7 @@ could still reach it, the barrier is dead and the itinerary is marked *stalled*.
 only a backstop. Stalled must be a distinct, visible outcome; silently parked work is worse than
 a crash.
 
-### 11. Barrier staleness
+### 12. Barrier staleness
 
 **Severity: high.**
 
@@ -140,7 +163,7 @@ check would be better and is not yet designed. The reference factory in
 rework round, and `a_rework_round_that_re_dispatches_only_one_branch_waits_forever` shows exactly
 what a half re-dispatch costs.
 
-### 12. Prompt composition has no output-size bound
+### 13. Prompt composition has no output-size bound
 
 **Severity: low.**
 
@@ -156,7 +179,7 @@ an agent editing its own prompts is a stated goal, which puts a machine on the w
 *Mitigation:* cap the assembled prompt at some generous size and fail with a clear error, the same
 way depth does. Worth doing when prompts become agent-writable, not before.
 
-### 13. Third-party GitHub Actions run with write tokens
+### 14. Third-party GitHub Actions run with write tokens
 
 **Severity: low. Mitigated.**
 

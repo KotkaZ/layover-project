@@ -11,6 +11,43 @@ pub(super) fn check_pipelines(config: &Config, found: &mut Vec<Diagnostic>) {
     check_flag_names_are_usable(config, found);
     check_flag_declarations_agree(config, found);
     check_schedules_are_survivable(config, found);
+    check_schedules_fit_the_reserve(config, found);
+}
+
+/// Warns when the Reserve cannot fund the scheduled work at all.
+///
+/// Per-itinerary Fuel cannot see this: each tick of a scheduled pipeline is a *new* itinerary with
+/// a *full* Fuel budget, so every chain stays inside its rail while the total runs away. An hourly
+/// pipeline at `fuel_usd = 20` permits `24 × 20 = $480` a day.
+///
+/// Deliberately **not** a warning when the Reserve is merely lower than that worst case — being
+/// lower is the entire reason to have a cap, and hitting it is a graceful pause rather than a
+/// failure. What is reported is the unambiguously broken shape: a Reserve too small to fund even
+/// one run of the pipeline, which can therefore never complete.
+fn check_schedules_fit_the_reserve(config: &Config, found: &mut Vec<Diagnostic>) {
+    let scheduled: Vec<_> = config.scheduled_pipelines().collect();
+    if scheduled.is_empty() {
+        return;
+    }
+
+    if config.reserve.is_unlimited() {
+        found.push(Diagnostic::warning(
+            "this factory has a scheduled pipeline but no `[reserve] fuel_usd`; each tick mints a \
+             fresh itinerary with a fresh Fuel budget, so nothing bounds total spend",
+        ));
+        return;
+    }
+
+    for (name, pipeline) in scheduled {
+        let per_itinerary = config.fuel_for(&pipeline.entry);
+        if per_itinerary > config.reserve.fuel_usd {
+            found.push(Diagnostic::warning(format!(
+                "pipeline `{name}` may spend ${per_itinerary:.2} on one itinerary but `[reserve] \
+                 fuel_usd` is ${:.2}; it could never run to completion",
+                config.reserve.fuel_usd
+            )));
+        }
+    }
 }
 
 fn check_entries_exist(config: &Config, found: &mut Vec<Diagnostic>) {
@@ -217,6 +254,9 @@ mod tests {
             [defaults]
             timeout_sec = 900
 
+            [reserve]
+            fuel_usd = 200.0
+
             {AGENT}
 
             [pipelines.review-bot]
@@ -293,11 +333,101 @@ mod tests {
             [defaults]
             timeout_sec = 1800
 
+            [reserve]
+            fuel_usd = 0.0
+
             {AGENT}
 
             [pipelines.review-bot]
             entry = "analyst"
             trigger = {{ cron = "0,30 * * * *" }}
+            "#
+        ));
+
+        assert_mentions(&warnings(&config), "nothing bounds total spend");
+        assert!(
+            !warnings(&config).iter().any(|m| m.contains("could spend")),
+            "an indeterminate cron cannot be projected"
+        );
+    }
+
+    #[test]
+    fn a_reserve_too_small_for_one_itinerary_warns() {
+        // Unambiguously broken: the pipeline could never run to completion even once.
+        let config = parse(&format!(
+            r#"
+            [defaults]
+            fuel_usd = 20.0
+
+            [reserve]
+            fuel_usd = 5.0
+
+            {AGENT}
+
+            [pipelines.review-bot]
+            entry = "analyst"
+            trigger = {{ every = "1h" }}
+            "#
+        ));
+
+        assert_mentions(&warnings(&config), "could never run to completion");
+    }
+
+    #[test]
+    fn a_reserve_below_the_theoretical_worst_case_is_not_flagged() {
+        // 24 hourly ticks at $20 is $480 of theoretical worst case against a $120 Reserve — and
+        // that is fine. Capping below worst case is the entire reason a cap exists, and reaching
+        // it pauses the factory rather than breaking it.
+        let config = parse(&format!(
+            r#"
+            [defaults]
+            fuel_usd = 20.0
+
+            [reserve]
+            fuel_usd = 120.0
+
+            {AGENT}
+
+            [pipelines.review-bot]
+            entry = "analyst"
+            trigger = {{ every = "1h" }}
+            "#
+        ));
+
+        assert_eq!(validate(&config), Vec::new());
+    }
+
+    #[test]
+    fn a_scheduled_factory_with_no_reserve_warns() {
+        let config = parse(&format!(
+            r#"
+            [reserve]
+            fuel_usd = 0.0
+
+            {AGENT}
+
+            [pipelines.review-bot]
+            entry = "analyst"
+            trigger = {{ every = "1h" }}
+            "#
+        ));
+
+        assert_mentions(&warnings(&config), "nothing bounds total spend");
+    }
+
+    #[test]
+    fn a_manual_only_factory_needs_no_reserve() {
+        // Nobody is spending money while nobody is pressing the button.
+        let config = parse(&format!(
+            r#"
+            [reserve]
+            fuel_usd = 0.0
+
+            {AGENT}
+
+            [pipelines.development]
+            entry = "analyst"
+            trigger = "manual"
             "#
         ));
 

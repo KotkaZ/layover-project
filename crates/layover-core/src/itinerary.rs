@@ -20,6 +20,12 @@ pub enum Denial {
     /// The itinerary has started as many runs as it is allowed.
     #[error("run cap reached: the itinerary started its maximum number of runs")]
     RunCapReached,
+    /// The whole factory has spent its rolling-window budget.
+    ///
+    /// Distinct from [`Denial::FuelExhausted`]: this itinerary may have plenty of Fuel left, and
+    /// still be refused because everything else running has drained the shared Reserve.
+    #[error("reserve exhausted: the factory spent its budget for the current window")]
+    ReserveExhausted,
 }
 
 /// Accounting for one causal chain of flights.
@@ -31,7 +37,7 @@ pub struct Itinerary {
     fuel_spent_usd: f64,
     max_runs: u32,
     runs_started: u32,
-    cost_reporting_gap: bool,
+    unreported_runs: u32,
 }
 
 impl Itinerary {
@@ -45,7 +51,7 @@ impl Itinerary {
             fuel_spent_usd: 0.0,
             max_runs,
             runs_started: 0,
-            cost_reporting_gap: false,
+            unreported_runs: 0,
         }
     }
 
@@ -116,14 +122,37 @@ impl Itinerary {
     /// Fuel is the only bound on breadth, so a runner that reports nothing would otherwise let
     /// the rail disappear silently while still appearing to be enforced. The Tower is expected to
     /// surface this, and the run cap is what actually holds in its absence.
+    ///
+    /// A count rather than a flag: "three of forty runs went unmetered" and "every run went
+    /// unmetered" are the difference between a gap and a broken rail, and a boolean cannot tell
+    /// them apart.
     pub fn note_unreported_cost(&mut self) {
-        self.cost_reporting_gap = true;
+        self.unreported_runs = self.unreported_runs.saturating_add(1);
     }
 
     /// Returns `true` if any run has completed without reporting its cost.
     #[must_use]
     pub fn has_cost_reporting_gap(&self) -> bool {
-        self.cost_reporting_gap
+        self.unreported_runs > 0
+    }
+
+    /// How many completed runs reported no cost.
+    #[must_use]
+    pub fn unreported_runs(&self) -> u32 {
+        self.unreported_runs
+    }
+
+    /// Fraction of started runs whose cost was actually reported, from 0.0 to 1.0.
+    ///
+    /// This is what says whether Fuel is metering the itinerary or merely appearing to. A value
+    /// below 1.0 means the remaining budget is an upper bound, not a measurement.
+    #[must_use]
+    pub fn metered_share(&self) -> f64 {
+        if self.runs_started == 0 {
+            return 1.0;
+        }
+        f64::from(self.runs_started.saturating_sub(self.unreported_runs))
+            / f64::from(self.runs_started)
     }
 
     /// Returns `true` once the shared budget is spent.
