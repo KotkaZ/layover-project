@@ -14,6 +14,7 @@
 - [Pipelines and triggers](./pipelines.md)
 - [Prompts](./prompts.md)
 - [Cost](./cost.md)
+- [Recovery and steering](./recovery.md)
 - [HTTP API](./http-api.md)
 
 # Design

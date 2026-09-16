@@ -342,6 +342,7 @@ mod tests {
             prompt = "publish"
             entry = true
             work_dir = "../other-repo"
+            recovery = "manual"
 
             [pipelines.publish]
             entry = "publisher"

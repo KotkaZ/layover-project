@@ -38,7 +38,9 @@ carries budget across a causal chain, and *Ground Stop* says exactly what a kill
 | Agent execution | Wrap and supervise external headless CLIs |
 | Target CLIs (v0.1) | Claude Code, GitHub Copilot CLI, OpenAI Codex CLI |
 | Lifecycle | Hybrid — transient per flight, optionally pinned resident |
-| Continuity | **Fresh** — every run is a clean slate |
+| Continuity | **Fresh** — every run is a clean slate; nothing is ever resumed |
+| Recovery | A new run seeded with a **handover**, never a resumed process |
+| Steering | Also a new run, carrying the human's instruction and prior state |
 | Spawn vs. send | Unified — sending a flight is what starts an agent |
 | Message semantics | Fire-and-forget; `request_response` deferred, superseded by rendezvous joins |
 | Re-entry | Reentrant — re-entry spawns a second independent run |
@@ -502,6 +504,31 @@ anything for a factory that does not load, because a service failing at every lo
 no service. All three artefacts install into the logged-in user's session and never machine-wide:
 the Tower spawns agents using *that user's* credentials, git identity and workspace, and a system
 service would have none of them or would run as root with all of them.
+
+**Why recovery and steering are the same mechanism.** They arrived as different requests — survive
+a VM restart, and let a human redirect work in progress — and both looked like they needed a
+process kept alive: resume the conversation, or pipe input into the running child. Either would
+have made `resident` the normal case and brought back the reentrancy hazard that fresh runs
+retired. Starting a *new* run seeded with a **handover** answers both, because what the second run
+actually needs is not the first run's process but its context. Nothing is resumed, no session is
+held open, and the locked "fresh runs" decision survives intact: a run is still a clean slate
+process, it simply opens with more to read.
+
+**Why recovery is bounded like every other rail.** A restarted run spends a hop, debits Fuel,
+counts against the run cap and draws on the Reserve, and `max_recovery_attempts` bounds it on top
+of all that. A crash loop that restarts itself forever is a fork bomb that looks like resilience.
+A Ground Stop is never restarted through, because a factory that restarts past its own kill switch
+is not one anybody can stop.
+
+**Why Layover does not guess which agents are unsafe to restart.** Repeating work is harmless for
+an agent that reads and reports, and dangerous for one that opened a pull request — a run
+interrupted after pushing a branch but before recording it would, on restart, open a second. The
+tempting check is "terminal and read-write", and it is a topological guess at a semantic property:
+it fires on plenty of factories where repeating is fine, and a validator that cries wolf is one
+people stop reading. So the mitigation sits in two better places. The handover text *tells the
+agent* to check whether the earlier run already did the thing, which is the only party that can
+actually look; and `recovery = "manual"` stops the restart outright for the steps where checking
+is not good enough. The reference factory sets it on exactly one agent.
 
 **Why documentation upkeep is in `AGENTS.md` rather than in review.** `docs/` is normative and
 hand-maintained, and an agent that trusts a stale document makes confident wrong changes. Review

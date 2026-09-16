@@ -72,6 +72,12 @@ pub struct Defaults {
     /// Wall-clock limit for a single run.
     #[serde(default = "default_timeout_sec")]
     pub timeout_sec: u64,
+    /// How many times interrupted work may be restarted automatically.
+    ///
+    /// A crash loop that restarts itself forever is a fork bomb that looks like resilience, so
+    /// recovery is bounded like every other rail. Zero disables automatic recovery.
+    #[serde(default = "default_max_recovery_attempts")]
+    pub max_recovery_attempts: u32,
 }
 
 impl Default for Defaults {
@@ -82,6 +88,7 @@ impl Default for Defaults {
             fuel_usd: default_fuel_usd(),
             max_runs: default_max_runs(),
             timeout_sec: default_timeout_sec(),
+            max_recovery_attempts: default_max_recovery_attempts(),
         }
     }
 }
@@ -310,6 +317,10 @@ const fn default_fuel_usd() -> f64 {
 
 const fn default_max_runs() -> u32 {
     64
+}
+
+const fn default_max_recovery_attempts() -> u32 {
+    2
 }
 
 const fn default_reserve_usd() -> f64 {

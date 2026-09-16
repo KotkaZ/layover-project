@@ -156,6 +156,11 @@ workspace is not in a publishable state.
 runner      = "copilot"
 prompt_file = "publisher.md"
 
+# The one irreversible step in this factory. If a run is interrupted after it pushed a branch but
+# before it recorded that it had, restarting it automatically would open a second pull request.
+# A human decides instead.
+recovery    = "manual"
+
 [agents.publisher.mcp.ado]
 url      = "https://dev.azure.com/mcp/"
 env_from = ["ADO_PAT"]

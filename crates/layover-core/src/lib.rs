@@ -26,6 +26,7 @@ pub mod config;
 pub mod cost;
 pub mod flight;
 pub mod graph;
+pub mod handover;
 pub mod itinerary;
 pub mod mcp;
 pub mod pipeline;
@@ -42,6 +43,9 @@ pub use cost::{
 };
 pub use flight::{Flight, FlightId, ItineraryId, Origin, RunId};
 pub use graph::RouteGraph;
+pub use handover::{
+    Cause, Handover, Interruption, Recovery, RecoveryDenied, RecoveryPolicy, Steer,
+};
 pub use itinerary::{Denial, Itinerary};
 pub use mcp::{McpServer, McpTransport};
 pub use pipeline::{

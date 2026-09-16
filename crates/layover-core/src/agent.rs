@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+use crate::handover::RecoveryPolicy;
 use crate::mcp::McpServer;
 
 /// The name of an agent, as written in `layover.toml`.
@@ -124,6 +125,12 @@ pub struct Agent {
     /// here: see [`crate::mcp`].
     #[serde(default)]
     pub mcp: BTreeMap<String, McpServer>,
+    /// Whether interrupted work for this agent may be restarted without asking.
+    ///
+    /// The question is not whether the Tower *can* restart it but whether doing the work twice
+    /// is safe. An agent that opened a pull request would open a second.
+    #[serde(default)]
+    pub recovery: RecoveryPolicy,
     /// Directory this agent works in, overriding `[layover] work_dir`.
     ///
     /// For an agent whose job is somewhere else entirely — mining telemetry from a different
