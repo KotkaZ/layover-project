@@ -53,7 +53,7 @@ carries budget across a causal chain, and *Ground Stop* says exactly what a kill
 | Shared memory | One Markdown **Logbook**; all writes serialized by the Tower |
 | Workspace | One shared working directory; contention deliberately unmediated in v0.1 |
 | Outside surface | HTTP API with SSE, **generated from `api/openapi.yaml`**; the UI is purely a client |
-| Distribution | `cargo install layover-cli`; documentation published to GitHub Pages |
+| Distribution | `dist`-generated installers: shell, PowerShell, npm and prebuilt archives; `cargo install` for those who have it; documentation on GitHub Pages |
 | Safety rails | Hops (TTL), Fuel (chain budget), Reserve (factory budget), Ground Stop |
 | Hops semantics | One hop per flight; branches inherit the remaining count, so Hops bounds **depth** only |
 | Breadth bound | Fuel — required in v0.1, with a deterministic fallback when runners cannot report cost |

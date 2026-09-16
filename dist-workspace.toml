@@ -1,0 +1,40 @@
+# How the `layover` binary is distributed.
+#
+# `cargo install` needs a Rust toolchain, which is a steep ask for a tool whose users are mostly
+# installing Node-based agent CLIs. `dist` builds the binaries and generates installers that need
+# neither Rust nor Node: a shell one-liner, a PowerShell one-liner, and an npm package for the
+# many users who already have Node because that is how Claude Code, Copilot CLI and Codex CLI
+# ship.
+#
+# Regenerate .github/workflows/release.yml with `dist init` after changing anything here. That
+# file is generated and carries a header saying so; `dist plan` checks this config without
+# releasing anything.
+
+[workspace]
+members = ["cargo:."]
+
+[dist]
+cargo-dist-version = "0.32.0"
+
+# Only the binary is shipped. layover-core and layover-http are libraries, and xtask is
+# `publish = false`, so none of them produce an artifact.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+]
+
+installers = ["shell", "powershell", "npm"]
+
+# Published under a scope so the unscoped name stays free, and because `npx @layover/cli` reads
+# as clearly a scoped tool rather than a squatted word.
+npm-scope = "@layover"
+
+ci = "github"
+pr-run-mode = "plan"
+install-updater = false
+
+# Every artifact is checksummed, and the installers verify before unpacking.
+checksum = "sha256"

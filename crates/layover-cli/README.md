@@ -10,9 +10,14 @@ Full documentation: <https://kotkaz.github.io/layover-project/>
 
 ## Install
 
+Layover is a single binary. No Rust toolchain needed.
+
 ```sh
 cargo install layover-cli
 ```
+
+...or a shell one-liner, a PowerShell one-liner, or npm — see the
+[install guide](https://kotkaz.github.io/layover-project/install.html).
 
 The binary is called `layover`.
 

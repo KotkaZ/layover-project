@@ -71,6 +71,7 @@ repository is meant to be worked on by agents.
 | Anything listed as open in `docs/roadmap.md` | Move it to **Resolved** with the answer and the reasoning |
 | A new known hazard | `docs/risks.md` |
 | The CLI's commands or flags | `crates/layover-cli/README.md`, `book/src/install.md` |
+| How Layover is installed or released | `dist-workspace.toml` then `dist generate`, `book/src/install.md`, both READMEs |
 
 `cargo xtask verify` enforces the parts a machine can check: links that resolve, generated code
 that matches its specification, examples that still parse and validate. It cannot tell you whether
@@ -124,6 +125,7 @@ type names, API fields and prose alike.
 | Path | Purpose |
 |---|---|
 | `api/openapi.yaml` | **The HTTP contract.** Edit this, never `generated.rs`. |
+| `dist-workspace.toml` | **Release configuration.** Edit this, never `.github/workflows/release.yml`. |
 | `book/` | The published documentation site (mdBook → GitHub Pages) |
 | `docs/architecture.md` | System design and the decision log |
 | `docs/routing.md` | Route map semantics, joins, failure paths |

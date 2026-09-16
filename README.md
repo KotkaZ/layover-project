@@ -15,9 +15,25 @@ which agents may trigger which others, and how work gets in. Layover then runs i
 
 ## Install
 
+Layover is a single binary. No Rust toolchain needed.
+
 ```sh
+# macOS / Linux
+curl --proto '=https' --tlsv1.2 -LsSf \
+  https://github.com/KotkaZ/layover-project/releases/latest/download/layover-cli-installer.sh | sh
+
+# Windows
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/KotkaZ/layover-project/releases/latest/download/layover-cli-installer.ps1 | iex"
+
+# ...or, since you probably already have Node for the agent CLIs
+npm i -g https://github.com/KotkaZ/layover-project/releases/latest/download/layover-cli-npm-package.tar.gz
+
+# ...or with Cargo, if you have it
 cargo install layover-cli
 ```
+
+Other options — direct download, building from source — are in
+[the install guide](https://kotkaz.github.io/layover-project/install.html).
 
 ```sh
 layover validate --config layover.toml --strict   # check a factory before it runs
