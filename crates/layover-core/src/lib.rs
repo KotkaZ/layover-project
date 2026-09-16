@@ -22,13 +22,16 @@
 pub mod agent;
 pub mod autostart;
 pub mod barrier;
+pub mod brief;
 pub mod config;
 pub mod cost;
 pub mod diagram;
 pub mod flight;
 pub mod graph;
 pub mod handover;
+pub mod help;
 pub mod itinerary;
+pub mod learning;
 pub mod mcp;
 pub mod pipeline;
 pub mod prompt;
@@ -39,6 +42,7 @@ pub mod validate;
 pub use agent::{Access, Agent, AgentName, PromptSpec, PromptSpecError};
 pub use autostart::{Autostart, Platform};
 pub use barrier::{Barrier, BarrierKey, Delivery};
+pub use brief::brief;
 pub use config::{Config, ConfigError, Defaults, McpWiring, Paths, ReserveConfig, Runner};
 pub use cost::{
     CostSource, Ledger, ModelRates, RateCard, Reserve, ReserveState, RunCost, Summary, TokenUsage,
@@ -49,7 +53,9 @@ pub use graph::RouteGraph;
 pub use handover::{
     Cause, ChildState, Handover, Interruption, Recovery, RecoveryDenied, RecoveryPolicy, Steer,
 };
+pub use help::{Blocker, HelpRequest};
 pub use itinerary::{Denial, Itinerary};
+pub use learning::{Impact, Learning, LearningId, Learnings, Proposal, Uptake};
 pub use mcp::{McpServer, McpTransport};
 pub use pipeline::{
     FlagError, FlagSpec, Flags, Pipeline, PipelineName, Schedule, Trigger, TriggerError, Workspace,
