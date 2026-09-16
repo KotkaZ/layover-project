@@ -71,7 +71,7 @@ impl Api for Stub {
     async fn get_health(&self) -> Result<Health, Problem> {
         Ok(Health {
             status: Status::Ok,
-            version: "0.2.0".to_owned(),
+            version: env!("CARGO_PKG_VERSION").to_owned(),
             ground_stop: false,
         })
     }

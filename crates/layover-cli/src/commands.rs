@@ -7,6 +7,8 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
+use jiff::{Timestamp, ToSpan};
+use layover_core::cost::RETENTION_DAYS;
 use layover_dashboard::{Dashboard, DashboardState};
 use layover_store::{History, Journal};
 
@@ -148,10 +150,23 @@ pub fn serve(path: &Path, addr: &str, history: Option<&Path>) -> Result<String, 
     let store = History::open(&history_dir).map_err(|error| error.to_string())?;
     let journal =
         Journal::open(history_dir.with_file_name("journal")).map_err(|error| error.to_string())?;
+
+    // Enforce retention on the way up. `prune` and `sweep` existed and were called only from
+    // tests, so the documented ninety days was a promise nothing kept: history grew forever while
+    // the book said it did not. Doing it at startup rather than on a timer is enough for a
+    // process meant to run continuously and be restarted when it is not.
+    let horizon = Timestamp::now()
+        .checked_sub((RETENTION_DAYS * 24).hours())
+        .unwrap_or(Timestamp::MIN);
+    store.prune(horizon).map_err(|error| error.to_string())?;
+    journal.prune(horizon).map_err(|error| error.to_string())?;
+    journal.sweep(horizon).map_err(|error| error.to_string())?;
+
     let dashboard = Dashboard::new(DashboardState {
         config_path: path.to_path_buf(),
         history: store,
         journal,
+        ground_stop: history_dir.with_file_name("ground-stop"),
     });
 
     let runtime = tokio::runtime::Builder::new_current_thread()

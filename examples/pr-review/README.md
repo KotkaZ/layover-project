@@ -6,7 +6,7 @@ agent per pull request**, working in parallel, each with its own budget and its 
 ```mermaid
 flowchart LR
   p["pr_sweep<br/><small>every 30m</small>"] ==> s["scanner"]
-  s -. "layover_spawn, one per PR" .-> r1["reviewer<br/><small>PR 1543477</small>"]
+  s -. "spawn route, one per PR" .-> r1["reviewer<br/><small>PR 1543477</small>"]
   s -. " " .-> r2["reviewer<br/><small>PR 1546721</small>"]
   s -. " " .-> r3["reviewer<br/><small>PR 1524843</small>"]
 ```
@@ -24,7 +24,7 @@ skips the important pull request is worse than one that does not run.
 **Every reviewer would share one workspace.** `workspace = "per-itinerary"` isolates one sweep
 from the next, not one reviewer from its siblings.
 
-`layover_spawn` opens a **sibling itinerary** per item instead. Each gets its own Fuel, its own hop
+A `mode = "spawn"` route opens a **sibling itinerary** per flight instead. Each gets its own Fuel, its own hop
 budget, its own worktree, and each draws on the factory-wide Reserve — so the total is still
 bounded, but by a number that means something.
 

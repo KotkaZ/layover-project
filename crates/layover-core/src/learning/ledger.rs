@@ -81,9 +81,9 @@ impl Learnings {
         self.entries.iter().find(|learning| learning.id == *id)
     }
 
-    /// The learnings an agent's next run should be given, most recently proposed last.
+    /// The learnings an agent's next run should be given, oldest first.
     ///
-    /// Confirmed ones first, because they have earned their place, and a run that has to skim is
+    /// Confirmed ones lead, because they have earned their place, and a run that has to skim is
     /// better off skimming the provisional tail.
     #[must_use]
     pub fn active_for(&self, agent: &AgentName) -> Vec<&Learning> {
@@ -94,13 +94,10 @@ impl Learnings {
             .collect();
 
         active.sort_by(|left, right| {
-            right
-                .state
-                .is_active()
-                .cmp(&left.state.is_active())
-                .then_with(|| {
-                    (right.state == State::Confirmed).cmp(&(left.state == State::Confirmed))
-                })
+            // Only the confirmed/provisional split and age matter: everything here is active by
+            // construction, so comparing on that would be a comparison that can never differ.
+            (right.state == State::Confirmed)
+                .cmp(&(left.state == State::Confirmed))
                 .then_with(|| left.first_at.cmp(&right.first_at))
         });
         active
@@ -141,7 +138,7 @@ impl Learnings {
                 learning.text.push_str(text);
                 learning.impact = learning.impact.max(proposal.impact);
 
-                if learning.proposals >= CONFIRM_AFTER {
+                if learning.proposals.saturating_sub(1) >= CONFIRM_AFTER {
                     learning.state = State::Confirmed;
                     learning.runs_left = 0;
                     Uptake::Confirmed
@@ -323,17 +320,29 @@ mod tests {
         lapse(&mut learnings);
         assert_eq!(
             learnings.propose(&proposal("the token expires every thirty days")),
+            Uptake::Rediscovered { proposals: 3 }
+        );
+
+        lapse(&mut learnings);
+        assert_eq!(
+            learnings.propose(&proposal("the token expires every thirty days")),
             Uptake::Confirmed
         );
 
         let learning = learnings.all().next().expect("one");
         assert_eq!(learning.state, State::Confirmed);
-        assert_eq!(learning.proposals, CONFIRM_AFTER);
+        assert_eq!(
+            learning.proposals,
+            CONFIRM_AFTER + 1,
+            "the original discovery plus three rediscoveries"
+        );
     }
 
     #[test]
     fn a_confirmed_learning_never_lapses() {
         let mut learnings = Learnings::new();
+        learnings.propose(&proposal("the token expires every thirty days"));
+        lapse(&mut learnings);
         learnings.propose(&proposal("the token expires every thirty days"));
         lapse(&mut learnings);
         learnings.propose(&proposal("the token expires every thirty days"));

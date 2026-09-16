@@ -34,6 +34,8 @@ pub struct DashboardState {
     pub history: History,
     /// Help requests and learnings.
     pub journal: Journal,
+    /// The Ground Stop file. Its presence means everything is halted.
+    pub ground_stop: PathBuf,
 }
 
 /// The dashboard's implementation of the Tower API.
@@ -56,6 +58,16 @@ impl Dashboard {
     #[must_use]
     pub fn state(&self) -> &DashboardState {
         &self.0
+    }
+
+    /// Whether a Ground Stop is currently engaged.
+    ///
+    /// Read from disk on every request rather than held in memory, which is the entire reason the
+    /// kill switch is a file: it survives a crash and can be set by hand when nothing else is
+    /// responding. Reporting a remembered `false` would make the dashboard tell an operator who
+    /// had just pulled the handle that nothing was stopped.
+    fn ground_stop_engaged(&self) -> bool {
+        self.0.ground_stop.exists()
     }
 
     /// Loads the factory definition as it is on disk right now.
@@ -126,7 +138,7 @@ impl Api for Dashboard {
         Ok(Health {
             status: Status::Ok,
             version: env!("CARGO_PKG_VERSION").to_owned(),
-            ground_stop: false,
+            ground_stop: self.ground_stop_engaged(),
         })
     }
 

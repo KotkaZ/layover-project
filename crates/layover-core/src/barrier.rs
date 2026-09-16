@@ -56,6 +56,15 @@ pub enum Delivery {
     /// route check has already established that the edge exists, and a barrier only speaks for
     /// the upstreams it names. This is what lets a joined agent also be an entry point.
     Direct(Box<Flight>),
+    /// The barrier already released for this dispatch wave, and this upstream arrived after.
+    ///
+    /// Only `join = "any"` produces this: it releases on the first arrival, so every other
+    /// upstream in the same wave is necessarily late. Dropping the flight is the whole point of
+    /// `any` — the alternative is waking the agent once per upstream, which for a publisher means
+    /// one pull request per straggler.
+    ///
+    /// Returned rather than silently discarded so the Tower can record that work was superseded.
+    Late(Box<Flight>),
 }
 
 /// A rendezvous barrier holding flights until its condition is met.
@@ -64,6 +73,13 @@ pub struct Barrier {
     required: BTreeSet<AgentName>,
     join: Join,
     parked: BTreeMap<AgentName, Flight>,
+    /// Upstreams that have arrived in the current dispatch wave, parked or already consumed.
+    ///
+    /// Distinct from `parked`, which is emptied when the barrier releases. Without this an `any`
+    /// barrier forgets it ever fired.
+    seen: BTreeSet<AgentName>,
+    /// Whether this wave has already woken the agent.
+    released: bool,
 }
 
 impl Barrier {
@@ -74,6 +90,8 @@ impl Barrier {
             required: spec.upstreams.clone(),
             join: spec.join,
             parked: BTreeMap::new(),
+            seen: BTreeSet::new(),
+            released: false,
         }
     }
 
@@ -83,9 +101,13 @@ impl Barrier {
     /// leaves parked state untouched, so an agent behind a join can still be triggered by a human
     /// or by an unjoined peer.
     ///
-    /// A second delivery from an upstream that has already reported resets the barrier: partial
-    /// state is discarded and every upstream must deliver again. This is what stops a stale
-    /// verdict from before a failure loop-back being combined with a fresh one.
+    /// A second delivery from an upstream that has already reported starts a **new dispatch
+    /// wave**: partial state is discarded and every upstream must deliver again. This is what
+    /// stops a stale verdict from before a failure loop-back being combined with a fresh one, and
+    /// it is also what lets a loop re-run: the barrier is reusable, but only deliberately.
+    ///
+    /// Within one wave the agent is woken at most once. An upstream arriving after an `any`
+    /// barrier has fired is [`Delivery::Late`].
     pub fn deliver(&mut self, flight: Flight) -> Delivery {
         let Some(sender) = flight.from.agent().cloned() else {
             return Delivery::Direct(Box::new(flight));
@@ -95,9 +117,19 @@ impl Barrier {
             return Delivery::Direct(Box::new(flight));
         }
 
-        if self.parked.contains_key(&sender) {
+        // An upstream reporting twice is the signal that a new wave has begun — under `all`
+        // because the fan-out was re-dispatched, and under `any` because the loop came round.
+        if self.seen.contains(&sender) {
             self.parked.clear();
+            self.seen.clear();
+            self.released = false;
         }
+        self.seen.insert(sender.clone());
+
+        if self.released {
+            return Delivery::Late(Box::new(flight));
+        }
+
         self.parked.insert(sender, flight);
 
         let complete = match self.join {
@@ -106,12 +138,19 @@ impl Barrier {
         };
 
         if complete {
+            self.released = true;
             Delivery::Ready(std::mem::take(&mut self.parked).into_values().collect())
         } else {
             Delivery::Parked {
                 waiting_for: self.waiting_for(),
             }
         }
+    }
+
+    /// Returns `true` when this wave has already woken the agent.
+    #[must_use]
+    pub fn has_released(&self) -> bool {
+        self.released
     }
 
     /// Upstreams that have not yet delivered.
@@ -155,6 +194,56 @@ mod tests {
     use crate::config::Config;
     use crate::flight::Origin;
 
+    #[test]
+    fn an_any_barrier_wakes_the_agent_once_however_many_upstreams_arrive() {
+        // `Delivery::Ready` promises the agent is spawned exactly once. Before this, an `any`
+        // barrier released on the first arrival, cleared its parked state, and then released
+        // again on the second -- so a two-upstream `any` into a publisher opened two pull
+        // requests, with Hops, Fuel and the run cap all satisfied because both were ordinary
+        // first runs. Manual recovery could not help: neither was a recovery.
+        let mut barrier = barrier_any();
+
+        assert!(matches!(
+            barrier.deliver(flight_from("probe_a", "first")),
+            Delivery::Ready(_)
+        ));
+        assert!(barrier.has_released());
+
+        match barrier.deliver(flight_from("probe_b", "second")) {
+            Delivery::Late(flight) => assert_eq!(flight.body, "second"),
+            other => panic!("the straggler must not wake the agent again: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn an_any_barrier_can_still_fire_again_on_the_next_time_round_the_loop() {
+        // Late must not mean dead. A repeat from an upstream that already reported is the signal
+        // that a new dispatch wave has begun, which is what makes a barrier inside a loop usable.
+        let mut barrier = barrier_any();
+        barrier.deliver(flight_from("probe_a", "first"));
+        barrier.deliver(flight_from("probe_b", "late"));
+
+        match barrier.deliver(flight_from("probe_a", "next time round")) {
+            Delivery::Ready(flights) => {
+                assert_eq!(flights.len(), 1);
+                assert_eq!(flights[0].body, "next time round");
+            }
+            other => panic!("a new wave should release: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn an_all_barrier_also_wakes_the_agent_only_once_per_wave() {
+        let mut barrier = barrier_all();
+        barrier.deliver(flight_from("probe_a", "a"));
+
+        assert!(matches!(
+            barrier.deliver(flight_from("probe_b", "b")),
+            Delivery::Ready(_)
+        ));
+        assert!(barrier.has_released());
+    }
+
     fn flight_from(sender: &str, body: &str) -> Flight {
         Flight::new(
             ItineraryId::generate(),
@@ -165,11 +254,23 @@ mod tests {
         )
     }
 
+    fn barrier_any() -> Barrier {
+        Barrier {
+            required: ["probe_a".into(), "probe_b".into()].into_iter().collect(),
+            join: Join::Any,
+            parked: BTreeMap::new(),
+            seen: BTreeSet::new(),
+            released: false,
+        }
+    }
+
     fn barrier_all() -> Barrier {
         Barrier {
             required: ["probe_a".into(), "probe_b".into()].into_iter().collect(),
             join: Join::All,
             parked: BTreeMap::new(),
+            seen: BTreeSet::new(),
+            released: false,
         }
     }
 
@@ -206,6 +307,8 @@ mod tests {
             required: ["probe_a".into(), "probe_b".into()].into_iter().collect(),
             join: Join::Any,
             parked: BTreeMap::new(),
+            seen: BTreeSet::new(),
+            released: false,
         };
 
         let Delivery::Ready(flights) = barrier.deliver(flight_from("probe_a", "a")) else {

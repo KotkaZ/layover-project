@@ -138,7 +138,17 @@ impl RunCost {
         usage: TokenUsage,
         usd: f64,
     ) -> Self {
-        let (usd, source) = if usd.is_finite() && usd >= 0.0 {
+        // A zero alongside real token counts is not a measurement, it is a runner that did not
+        // fill the field in. Believing it is how every economic rail is defeated at once: Fuel
+        // debits nothing, the Reserve records nothing, and the run cap — the deterministic
+        // fallback for exactly this case — never engages, because the cost *was* reported.
+        //
+        // Tokens are kept so a rate card can price it later. Zero cost with zero tokens is left
+        // alone: a run that genuinely did nothing is a real measurement, and the distinction
+        // between that and silence is the whole reason this field exists.
+        let implausible = usd == 0.0 && !usage.is_empty();
+
+        let (usd, source) = if usd.is_finite() && usd >= 0.0 && !implausible {
             (usd, CostSource::Reported)
         } else {
             (0.0, CostSource::Unreported)
@@ -235,12 +245,35 @@ mod tests {
     }
 
     #[test]
-    fn a_zero_report_is_still_a_report() {
-        // A run that genuinely cost nothing is different from a runner that said nothing, and the
-        // difference decides whether the budget rail is working.
-        let cost = run_cost(0.0);
+    fn a_genuine_zero_is_still_a_report() {
+        // A run that truly cost nothing is different from a runner that said nothing, and the
+        // difference decides whether the budget rail is working. With no tokens either, zero is
+        // a real measurement.
+        let cost = RunCost::reported(
+            RunId::generate(),
+            ItineraryId::generate(),
+            "analyst".into(),
+            None,
+            TokenUsage::default(),
+            0.0,
+        );
 
         assert_eq!(cost.source, CostSource::Reported);
+    }
+
+    #[test]
+    fn zero_dollars_alongside_real_tokens_is_silence_rather_than_a_measurement() {
+        // The cheapest way to defeat every economic rail at once. Believing a zero report means
+        // Fuel debits nothing, the Reserve records nothing, and the run cap — the deterministic
+        // fallback for exactly this case — never engages, because as far as the accounting is
+        // concerned the cost *was* reported.
+        let cost = run_cost(0.0);
+
+        assert_eq!(cost.source, CostSource::Unreported);
+        assert!(
+            !cost.usage.is_empty(),
+            "the tokens are kept so a rate card can price it"
+        );
     }
 
     #[test]

@@ -200,3 +200,51 @@ generated, `dist plan` would report a hand-edit as drift, and diverging from ups
 low-severity issue costs more than it saves. Revisit if `dist` addresses it upstream.
 
 *Residual:* `actions/*` are pinned to major tags, which is the usual trade-off.
+
+### 15. Budgets are metered after the fact, not reserved before it
+
+**What could happen.** `Reserve::authorize` is given no proposed liability and tracks nothing
+in flight. With a `$40` Reserve and four Slots, four runs each costing `$20` all authorise while
+recorded spend is still zero, and the factory ends `$40` over. Fuel has the same shape: a run
+admitted with one cent remaining may spend a hundred dollars before its completion report arrives.
+
+**Why it is not fixed.** A reservation needs a *worst-case estimate* before a run starts, and the
+only honest source for that is a rate card and a token ceiling the Tower controls — neither of
+which can be wired up before the supervisor exists. Guessing a ceiling now would either throttle
+real work or provide false assurance.
+
+**Mitigation until then.** Slots bound how many runs can be simultaneously overshooting, so the
+overshoot is bounded by `max_concurrent_runs × worst single run` rather than being open-ended.
+Size the Reserve with that headroom in mind.
+
+### 16. A rail bounds Layover's own runs, not what a child does inside one
+
+**What could happen.** Hops, Fuel, Slots and the route map govern Tower-mediated flights and runs.
+They say nothing about what a child process does once started: it runs as the same OS user, the
+shipped runners pass `--allow-all-tools`, and MCP wiring grants a whole server rather than named
+tools. A compromised reviewer can use a write-capable MCP tool to open a pull request directly,
+bypassing the publisher route and its `recovery = "manual"` policy entirely — and consuming no
+Hops, because none of it is a flight.
+
+**Why it is not fixed.** Real containment means a separate OS identity or a sandbox, plus per-tool
+MCP allowlists. Both belong with process supervision.
+
+**What this means for reading the rails.** They bound *the shape of the factory*, not the
+authority of an agent. An agent given a write-capable tool has that authority whatever the route
+map says. Grant tools as narrowly as the runner allows.
+
+### 17. External effects have no idempotency key
+
+**What could happen.** A layover is picked up by reading a `Booked` record, starting an itinerary,
+and later amending it to `Resumed`. A crash between the second and third steps leaves it `Booked`,
+so the next sweep starts a second itinerary for the same work — and both are *initial* runs, so
+`recovery = "manual"` never applies. Automatic recovery has the mirror problem: `ChildState::Gone`
+proves the local process ended, never that the pull request it was opening did not succeed.
+
+**Why it is not fixed.** Exactly-once external effects need a durable claim with a lease, and a
+stable operation identity carried across recovery, layover pickup and spawn. That is supervisor
+work, and doing half of it would be worse than none.
+
+**Mitigation until then.** `recovery = "manual"` on the one irreversible agent in the reference
+factory, and the handover text telling a resumed run to check whether the earlier one already did
+the thing. Both rely on the agent looking, which is weaker than a key.

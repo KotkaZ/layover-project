@@ -64,16 +64,23 @@ A `409` means a Ground Stop is engaged.
 
 ## Run status
 
-`RunStatus` has a value most APIs would not bother with:
+`RunStatus` has two values most APIs would not bother with:
 
 ```text
-running | succeeded | failed | stalled | cancelled
+running | succeeded | failed | timed_out | halted | interrupted
 ```
 
-**`stalled` is deliberately distinct from `failed`.** It means a rendezvous barrier can no longer
-be satisfied — some branch went somewhere else and nothing alive can deliver the missing input.
-A lights-out factory that quietly parks work forever is worse than one that crashes, so it has to
-be visible as its own outcome.
+**`halted` is deliberately distinct from `failed`.** A rail stopping work — Hops, Fuel, the run
+cap or the Reserve — is the system doing its job, and colouring it like a crash teaches people to
+ignore the colour.
+
+**`interrupted` means the run was alive when the Tower went away.** It is recoverable, and
+[recovery](./recovery.md) starts a *new* run rather than resuming this one.
+
+There is deliberately no `stalled`. Stalling is something an **itinerary** does when it parks at a
+barrier that can no longer be satisfied; a run either finishes or does not. That state is real and
+matters — a factory that quietly parks work forever is worse than one that crashes — but it
+belongs to the chain, and there is no itinerary endpoint yet to carry it.
 
 ## Errors
 

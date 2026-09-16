@@ -78,6 +78,8 @@ pub fn validate(config: &Config) -> Vec<Diagnostic> {
     agents::check_runners_exist(config, &mut found);
     agents::check_prompts_are_unambiguous(config, &mut found);
     agents::check_agents_are_described(config, &mut found);
+    agents::check_fuel_is_usable(config, &mut found);
+    agents::check_reserve_window_is_usable(config, &mut found);
     reach::check_entry_points(config, &mut found);
     routes::check_joins_are_unambiguous(config, &mut found);
     routes::check_read_write_fan_out(config, &mut found);

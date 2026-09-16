@@ -33,12 +33,19 @@ pub(super) fn check_entry_points(config: &Config, found: &mut Vec<Diagnostic>) {
 /// proves one is in reach. A factory whose agents loop spends far more hops than the shortest
 /// path suggests, and no static check can know how many times a loop will turn.
 pub(super) fn check_every_agent_is_within_reach(config: &Config, found: &mut Vec<Diagnostic>) {
-    let entries: Vec<&AgentName> = config.entry_agents().collect();
+    let graph = RouteGraph::from_config(config);
+
+    // Spawn targets count as entry points here. Each begins a fresh itinerary with a full hop
+    // budget, so measuring its depth from the trigger that eventually caused it would warn that a
+    // chain is cut when that chain has not even started yet.
+    let mut entries: Vec<&AgentName> = config.entry_agents().collect();
+    entries.extend(graph.spawn_targets());
+    entries.sort();
+    entries.dedup();
     if entries.is_empty() {
         return;
     }
 
-    let graph = RouteGraph::from_config(config);
     let distances = graph.distances_from(entries);
     let max_hops = config.defaults.max_hops;
 

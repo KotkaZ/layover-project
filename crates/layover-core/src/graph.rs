@@ -25,6 +25,12 @@ pub struct JoinSpec {
 #[derive(Debug, Clone, Default)]
 pub struct RouteGraph {
     edges: BTreeMap<AgentName, BTreeSet<AgentName>>,
+    /// Edges that open a new itinerary rather than continuing the current one.
+    ///
+    /// Kept apart from `edges` because a spawn is a permission like any other but a *distance* of
+    /// a different kind: the receiver starts a fresh chain with fresh Hops, so counting a spawn as
+    /// one more step of the same chain measures something that does not exist.
+    spawns: BTreeMap<AgentName, BTreeSet<AgentName>>,
     joins: BTreeMap<AgentName, JoinSpec>,
 }
 
@@ -46,6 +52,14 @@ impl RouteGraph {
                         .entry(from.clone())
                         .or_default()
                         .insert(to.clone());
+
+                    if route.is_spawn() {
+                        graph
+                            .spawns
+                            .entry(from.clone())
+                            .or_default()
+                            .insert(to.clone());
+                    }
                 }
             }
 
@@ -66,6 +80,12 @@ impl RouteGraph {
         graph
     }
 
+    /// Returns `true` when this edge opens a new itinerary rather than continuing one.
+    #[must_use]
+    pub fn is_spawn(&self, from: &AgentName, to: &AgentName) -> bool {
+        self.spawns.get(from).is_some_and(|tos| tos.contains(to))
+    }
+
     /// Returns `true` if `from` is permitted to send to `to`.
     #[must_use]
     pub fn permits(&self, from: &AgentName, to: &AgentName) -> bool {
@@ -75,6 +95,14 @@ impl RouteGraph {
     /// Returns the agents `from` may send to.
     pub fn successors(&self, from: &AgentName) -> impl Iterator<Item = &AgentName> {
         self.edges.get(from).into_iter().flatten()
+    }
+
+    /// Every agent reached by a spawn edge.
+    ///
+    /// These begin chains of their own, so for any question about hop depth they are entry points
+    /// rather than destinations.
+    pub fn spawn_targets(&self) -> impl Iterator<Item = &AgentName> {
+        self.spawns.values().flatten()
     }
 
     /// Returns the rendezvous condition guarding `agent`, if any.
@@ -121,6 +149,14 @@ impl RouteGraph {
         while let Some(current) = queue.pop_front() {
             let depth = seen[&current];
             for next in self.successors(&current) {
+                // A spawn edge is a permission, not a step. The receiver starts a fresh itinerary
+                // with fresh Hops, so counting it as one more hop of this chain measures a
+                // distance that does not exist — and for barrier abandonment it is worse than
+                // wrong: a spawned agent runs under a different itinerary and can never deliver
+                // to this one's barrier, so treating it as reachable keeps a dead barrier parked.
+                if self.is_spawn(&current, next) {
+                    continue;
+                }
                 if !seen.contains_key(next) {
                     seen.insert(next.clone(), depth + 1);
                     queue.push_back(next.clone());

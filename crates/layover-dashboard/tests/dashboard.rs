@@ -51,6 +51,7 @@ impl Factory {
             config_path: self.0.join("layover.toml"),
             history: History::open(self.0.join("history")).expect("opens history"),
             journal: Journal::open(self.0.join("journal")).expect("opens journal"),
+            ground_stop: self.0.join("ground-stop"),
         }))
     }
 
@@ -338,4 +339,20 @@ async fn a_failed_run_colours_its_agent_on_the_route_map() {
         svg.contains(r#"class="node agent failed" id="a_developer""#),
         "{svg}"
     );
+}
+
+#[tokio::test]
+async fn health_reports_a_ground_stop_that_was_engaged_by_hand() {
+    // The kill switch is a file precisely so it survives a crash and can be set when nothing else
+    // responds. Health used to report a hardcoded `false`, so an operator who had just pulled the
+    // handle would be told nothing was stopped -- the one lie a safety rail must never tell.
+    let factory = Factory::new("ground-stop");
+
+    let (_, before) = call(factory.router(), "/health").await;
+    assert_eq!(json(&before)["ground_stop"], false);
+
+    fs::write(factory.path().join("ground-stop"), "halted by hand").expect("writes");
+
+    let (_, after) = call(factory.router(), "/health").await;
+    assert_eq!(json(&after)["ground_stop"], true);
 }

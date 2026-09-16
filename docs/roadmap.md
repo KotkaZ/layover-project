@@ -162,31 +162,29 @@ recovery and steering use the one mechanism — see
 16. **Does a parked barrier survive a restart?** Its upstreams' runs did not. Re-dispatching the
     whole fan-out is the rule for a loop-back; the same probably applies here, which would mean a
     recovered itinerary discards partial barrier state.
-17. **Is `interrupted` a third outcome beside `failed` and `stalled`?** It has to be visible, for
-    the same reason `stalled` does — but it may be a state a human resolves rather than an ending.
 ### Platform
 
-18. **Windows support.** Development happens on Windows, where process-tree termination, git
+17. **Windows support.** Development happens on Windows, where process-tree termination, git
     worktrees and signal handling all differ from Unix. Ground Stop and timeouts are the
     OS-specific parts.
 
 ### Everything else
 
-19. **How do child CLIs receive credentials?** Inherited environment, or injected per run by the
+18. **How do child CLIs receive credentials?** Inherited environment, or injected per run by the
     Tower. Per-run injection allows per-agent credentials and revocation.
-20. **Is the Logbook one flat file or namespaced?** One file serializes every write in the factory
+19. **Is the Logbook one flat file or namespaced?** One file serializes every write in the factory
     through a single lock.
-21. **Observability** — structured logs, or OpenTelemetry traces where an Itinerary is a trace and
+20. **Observability** — structured logs, or OpenTelemetry traces where an Itinerary is a trace and
     each Run a span? The latter would visualise a stalled barrier.
-22. **Is the aviation terminology confirmed?** Adopted provisionally throughout. Now that code
+21. **Is the aviation terminology confirmed?** Adopted provisionally throughout. Now that code
     exists it is no longer free to strip, but it is still only names.
-23. **Does a scheduled pipeline skip a tick it is still working on, or start a second run?**
+22. **Does a scheduled pipeline skip a tick it is still working on, or start a second run?**
     Runs are reentrant, so today it would start a second. Validation warns when the firing gap is
     shorter than `timeout_sec`, which is a smell test rather than an answer. An independent review
     argued the safe default for unattended spending is to *skip* the tick and require
     `overlap = "allow"` to opt in; that is probably right and is a Tower behaviour, so it is
     recorded here rather than guessed at.
-24. **Should `entry = true` survive at all?** A review argued it is two ways to do one thing, and
+23. **Should `entry = true` survive at all?** A review argued it is two ways to do one thing, and
     that a pipeline with no flags expresses the same intent. The counter-argument is in the
     decision log. The deciding evidence would be whether anyone actually uses a bare entry agent
     once pipelines exist; nobody has used either yet.
@@ -223,6 +221,7 @@ recovery and steering use the one mechanism — see
 - **How does work fan out over a number of items nobody knows in advance?** *A `mode = "spawn"` route opens one itinerary per flight, each with its own Fuel and workspace, bounded by `max_concurrent_runs` and `max_spawn_generations`.*
 - **What bounds how many agent CLIs run at once?** *Slots.* The one rail that queues rather than refusing, because it protects a machine rather than a budget.
 - **How does a chain follow something up days later?** *It books a Layover and a resuming pipeline opens a new itinerary seeded with a handover.* Nothing is kept alive in between.
+- **Is `interrupted` a run outcome?** *Yes, and `stalled` is not.* A run either finishes or does not; stalling is what an itinerary does at a barrier nothing can satisfy, so it belongs to the chain. There is no itinerary endpoint yet to carry it, which is tracked below.
 
 ---
 

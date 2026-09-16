@@ -42,6 +42,54 @@ pub(super) fn check_prompts_are_unambiguous(config: &Config, found: &mut Vec<Dia
 /// `layover_peers()` hands descriptions to a running agent so it can choose where to send work.
 /// An agent with no description is a bare name, and a peer deciding between `tester` and
 /// `reviewer` on names alone is guessing.
+/// The Reserve window must be long enough to hold anything.
+///
+/// `Reserve::expire` drops entries older than `now - window`. With a window of zero every
+/// recorded charge is expired the instant the next authorisation runs, so spend is permanently
+/// zero and the cap never refuses anything — an unlimited factory wearing a ceiling.
+pub(super) fn check_reserve_window_is_usable(config: &Config, found: &mut Vec<Diagnostic>) {
+    if config.reserve.fuel_usd > 0.0 && config.reserve.window_hours == 0 {
+        found.push(Diagnostic::error(
+            "`[reserve] window_hours` is 0, so every charge expires before the next one is \
+             checked and the cap never refuses anything. Set a real window, or set `fuel_usd = 0` \
+             if the Reserve is meant to be unlimited"
+                .to_owned(),
+        ));
+    }
+}
+
+/// Fuel must be a usable positive number.
+///
+/// `Itinerary::fuel_exhausted` is `spent >= budget`, so a budget of zero is exhausted before the
+/// first run starts: every itinerary is refused and the factory does nothing, with no diagnostic
+/// saying why.
+///
+/// It is worth an explicit check rather than a saturating default because the identically named
+/// `[reserve] fuel_usd` documents zero as *unlimited* and implements it that way. The same value
+/// in the same-named field means "no ceiling" in one place and "nothing may ever run" in the
+/// other, so the one that fails closed has to say so out loud.
+pub(super) fn check_fuel_is_usable(config: &Config, found: &mut Vec<Diagnostic>) {
+    if config.defaults.fuel_usd <= 0.0 || config.defaults.fuel_usd.is_nan() {
+        found.push(Diagnostic::error(format!(
+            "`[defaults] fuel_usd` is {}, so every itinerary is out of Fuel before its first run \
+             and nothing will ever start. Note that `[reserve] fuel_usd = 0` does mean unlimited, \
+             but this one does not",
+            config.defaults.fuel_usd
+        )));
+    }
+
+    for (name, agent) in &config.agents {
+        if let Some(fuel) = agent.fuel_usd {
+            if fuel <= 0.0 || fuel.is_nan() {
+                found.push(Diagnostic::error(format!(
+                    "agent `{name}` sets `fuel_usd = {fuel}`, so any itinerary starting there is \
+                     out of Fuel before its first run"
+                )));
+            }
+        }
+    }
+}
+
 pub(super) fn check_agents_are_described(config: &Config, found: &mut Vec<Diagnostic>) {
     for (name, agent) in &config.agents {
         match agent.description.as_deref().map(str::trim) {

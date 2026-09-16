@@ -85,7 +85,7 @@ anyone noticing. An unknown model produces `unreported`, never a flattering zero
 
 ```sh
 curl localhost:7878/costs
-curl 'localhost:7878/costs?window_hours=24'
+curl 'localhost:7878/costs?window=last_24h'
 ```
 
 ```json

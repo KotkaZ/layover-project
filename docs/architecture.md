@@ -691,7 +691,7 @@ fresh run cap — that is the entire point, because per-item work wants per-item
 exactly what makes spawning unbounded: Hops counts depth *within* a chain and cannot see across
 chains, so an agent that spawns an agent that spawns an agent recurses forever while every
 individual chain stays perfectly inside its rails. Generation is Hops one level up, and it is the
-only thing standing between `layover_spawn` and a fork bomb that no existing rail can see.
+only thing standing between a spawn route and a fork bomb that no existing rail can see.
 
 **Why spawning is a route mode rather than a capability.** The first draft had the scanner call
 `layover_spawn` with no route between it and the reviewer, and validation immediately reported the

@@ -46,6 +46,11 @@ mod ledger;
 pub use ledger::{Learnings, Uptake};
 
 /// How many independent rediscoveries make a learning permanent.
+///
+/// A rediscovery is an arrival *after* the learning has lapsed — the first proposal is a
+/// discovery, not a rediscovery, and does not count towards this. Reaching the bar therefore
+/// takes roughly `CONFIRM_AFTER * PROVISIONAL_RUNS` of the agent's runs, which is deliberate:
+/// permanence is the one state nothing expires out of, so it should be expensive.
 pub const CONFIRM_AFTER: u32 = 3;
 
 /// How many of an agent's runs a provisional learning survives.
@@ -230,7 +235,8 @@ pub struct Learning {
     pub impact: Impact,
     /// Where it is in its life.
     pub state: State,
-    /// How many times it has been independently rediscovered, including the first proposal.
+    /// How many times this insight has been proposed: one for the original discovery, plus one
+    /// for each independent rediscovery after a lapse. Echoes never count.
     pub proposals: u32,
     /// Runs left before it lapses. Meaningless unless [`State::Provisional`].
     pub runs_left: u32,
@@ -295,9 +301,20 @@ impl Learning {
 /// lost without trace.
 #[must_use]
 pub fn says_the_same_thing(left: &str, right: &str) -> bool {
+    // A negation mismatch is disqualifying rather than one more differing word. Adding `not` to
+    // an eight-word sentence still scores 0.83 similarity, comfortably over the rewording
+    // threshold — so treating it as an ordinary token left "X is safe" and "X is not safe" as one
+    // insight. Nothing about the shape of the two sentences can be allowed to outvote the fact
+    // that one asserts the opposite of the other.
+    if is_negated(left) != is_negated(right) {
+        return false;
+    }
+
     let (left, right) = (significant_words(left), significant_words(right));
+    // Two texts with nothing substantive in them are not evidence of anything. Returning "equal"
+    // here made every pair of short scraps one insight — "use rg now" and "go to bed" matched.
     if left.is_empty() || right.is_empty() {
-        return left == right;
+        return false;
     }
 
     let shared = left.iter().filter(|word| right.contains(*word)).count();
@@ -327,15 +344,36 @@ fn precise(count: usize) -> f64 {
     u32::try_from(count).map_or(f64::from(u32::MAX), f64::from)
 }
 
+/// Returns `true` when a text reverses the sense of what it says.
+///
+/// Deliberately generous about what counts. A false positive here makes two genuinely equivalent
+/// learnings look different, which costs one spurious confirmation count. A false negative merges
+/// a claim with its own correction, which loses the correction and keeps the wrong claim — so the
+/// list includes words that only sometimes negate.
+fn is_negated(text: &str) -> bool {
+    text.split(|c: char| !c.is_alphanumeric())
+        .any(|word| NEGATIONS.contains(&word.to_lowercase().as_str()))
+}
+
+/// Words taken to reverse a claim, at any length.
+///
+/// `t` is here because splitting on non-alphanumerics turns `don't` and `isn't` into `don`/`isn`
+/// and `t`.
+const NEGATIONS: [&str; 10] = [
+    "not", "no", "nor", "never", "t", "cannot", "without", "unless", "neither", "none",
+];
+
 /// Reduces prose to the set of words worth comparing.
 ///
-/// Words of three characters or fewer are dropped: they are overwhelmingly articles and
-/// prepositions, and counting them makes every sentence look like every other one.
+/// Tokens of three characters or fewer are dropped, because they are overwhelmingly articles and
+/// prepositions and counting them makes every sentence resemble every other one. Numbers survive
+/// that rule: `30` and `90` are under four characters, so "the token expires every 30 days" and
+/// "every 90 days" were the same learning, and numeric facts are most of what a learning is.
 fn significant_words(text: &str) -> Vec<String> {
     let mut words: Vec<String> = text
         .split(|c: char| !c.is_alphanumeric())
-        .filter(|word| word.chars().count() > 3)
         .map(str::to_lowercase)
+        .filter(|word| word.chars().count() > 3 || word.chars().any(|c| c.is_ascii_digit()))
         .collect();
     words.sort();
     words.dedup();
@@ -394,6 +432,41 @@ mod tests {
             "the token expires every thirty days",
             "the token expires every thirty days, refresh before publishing"
         ));
+    }
+
+    #[test]
+    fn a_claim_and_its_negation_are_not_the_same_claim() {
+        // The worst case this function can produce, and it was live. "not" is three characters,
+        // so both sides reduced to the same word set and matched at similarity 1.0. The effect
+        // in the ledger: an agent proposing the correction gets `Echo`, the correction is
+        // dropped, and the dangerous learning stays active -- while across lapse cycles the two
+        // contradictory phrasings count as independent rediscoveries of "the same insight" and
+        // drive it to permanent.
+        assert!(!says_the_same_thing(
+            "the migration is safe to run during business hours",
+            "the migration is not safe to run during business hours"
+        ));
+        assert!(!says_the_same_thing(
+            "delete the old worktree before starting the next itinerary",
+            "do not delete the old worktree before starting the next itinerary"
+        ));
+    }
+
+    #[test]
+    fn learnings_differing_only_in_a_number_are_different_learnings() {
+        // Numeric facts are most of what a learning is, and digits were being filtered out for
+        // being short.
+        assert!(!says_the_same_thing(
+            "the token expires every 30 days",
+            "the token expires every 90 days"
+        ));
+    }
+
+    #[test]
+    fn two_texts_with_nothing_substantive_in_them_do_not_match() {
+        // Returning "equal" for two empty word sets made every pair of short scraps one insight.
+        assert!(!says_the_same_thing("use rg now", "go to bed"));
+        assert!(!says_the_same_thing("", ""));
     }
 
     #[test]

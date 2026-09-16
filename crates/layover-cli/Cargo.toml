@@ -22,6 +22,7 @@ clap = { workspace = true, features = ["derive"] }
 layover-dashboard = { path = "../layover-dashboard", version = "0.6.0" }
 layover-store = { path = "../layover-store", version = "0.6.0" }
 axum = { workspace = true }
+jiff = { workspace = true }
 tokio = { workspace = true, features = ["rt", "net", "macros", "signal"] }
 
 [lints]
