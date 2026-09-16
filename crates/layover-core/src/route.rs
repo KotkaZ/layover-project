@@ -26,9 +26,29 @@ pub enum Join {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Mode {
-    /// Fire-and-forget. The sender continues immediately.
+    /// Fire-and-forget within the current itinerary. The sender continues immediately.
     #[default]
     Async,
+    /// Opens a *new* itinerary rather than continuing this one.
+    ///
+    /// The receiver gets its own Fuel, its own hop budget and its own workspace. That is what
+    /// makes per-item work affordable: a scanner dispatching one reviewer per pull request over
+    /// an `async` edge would put every reviewer on one budget, so the sweep would stop partway
+    /// and which pull requests got reviewed would be arbitrary.
+    ///
+    /// It is a route rather than a free-standing capability because the route map is the single
+    /// source of truth for who may reach whom. A spawn that skipped it would be an unchecked
+    /// edge — and an agent able to open a fresh, fully funded chain into any peer is a larger
+    /// hole than one able to send it a message.
+    Spawn,
+}
+
+impl Mode {
+    /// Returns `true` when this edge opens a new itinerary.
+    #[must_use]
+    pub fn is_spawn(self) -> bool {
+        matches!(self, Self::Spawn)
+    }
 }
 
 /// A directed edge, or set of edges, in the route map.
@@ -53,6 +73,12 @@ pub struct Route {
 }
 
 impl Route {
+    /// Returns `true` when this edge opens a new itinerary per flight.
+    #[must_use]
+    pub fn is_spawn(&self) -> bool {
+        self.mode.is_spawn()
+    }
+
     /// Returns `true` when this edge parks flights at a barrier.
     #[must_use]
     pub fn is_join(&self) -> bool {
@@ -127,6 +153,20 @@ mod tests {
         );
 
         assert_eq!(route.mode, Mode::Async);
+    }
+
+    #[test]
+    fn a_spawn_edge_is_recognised() {
+        let route = route(
+            r#"
+            from = "scanner"
+            to = "reviewer"
+            mode = "spawn"
+            "#,
+        );
+
+        assert!(route.is_spawn());
+        assert_eq!(route.mode, Mode::Spawn);
     }
 
     #[test]

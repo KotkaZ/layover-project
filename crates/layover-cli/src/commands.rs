@@ -411,8 +411,24 @@ mod tests {
             .expect("the reference factory must be clean even under --strict");
 
         assert!(output.contains("no errors"), "{output}");
-        assert!(output.contains("8 agent(s)"), "{output}");
-        assert!(output.contains("2 pipeline(s)"), "{output}");
+        assert!(output.contains("9 agent(s)"), "{output}");
+        assert!(output.contains("3 pipeline(s)"), "{output}");
+    }
+
+    #[test]
+    fn every_shipped_example_validates_under_strict() {
+        // The examples are the documentation people copy. One that warns teaches the warning is
+        // normal, and one that errors teaches that validation is noise.
+        for name in [
+            "workitem-factory/layover.toml",
+            "pr-review/layover.toml",
+            "news-digest/layover.toml",
+        ] {
+            let output = validate_config(&example(name), true)
+                .unwrap_or_else(|error| panic!("{name} does not validate: {error}"));
+
+            assert!(output.contains("0 warning(s)"), "{name}: {output}");
+        }
     }
 
     #[test]

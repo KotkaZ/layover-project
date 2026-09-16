@@ -255,3 +255,51 @@ timeout_sec = 3600
 [[routes]]
 from = "developer"
 to   = "publisher"
+
+# ── Following the pull request afterwards ──────────────────────────────────────
+#
+# Publishing is not the end of the work: comments arrive on the pull request over the following
+# days, and something has to answer them. Neither obvious approach works. Keeping the chain alive
+# and polling spends a hop and real money every tick, so Hops kills it long before a human replies
+# -- and the whole point of Hops is that it should. Re-triggering on a bare schedule arrives
+# knowing nothing about which work item it is following.
+#
+# So the publisher books a *layover*: the work is set down with everything needed to resume it,
+# and this pipeline picks up whatever is due and opens a new itinerary seeded with that context.
+# Nothing stays alive in between -- no process, no parked chain, no held budget.
+[pipelines.follow_up]
+description = "Pick up published work whose pull request has comments waiting"
+entry       = "follower"
+# Forty-five minutes rather than twenty. A follow-up that finds work hands it back to the
+# developer, and that leg can run for half an hour; a shorter interval would have the next tick
+# start while the last was still working. Validation says so, and it is right.
+trigger     = { every = "45m" }
+resumes     = true
+workspace   = "per-itinerary"
+
+[agents.follower]
+description = "Checks a published pull request for anything needing an answer"
+purpose     = """
+Resumed from a layover, so it arrives knowing which work item it is following and what the earlier
+chain concluded. Reads the pull request, and either sets the work down again or hands it back to
+the developer with what needs addressing.
+"""
+runner      = "copilot"
+prompt_file = "follower.md"
+access      = "read-only"
+
+[[routes]]
+from = "publisher"
+to   = "follower"
+
+# A resumed chain can reach the same agents the original did, so it has to offer the same flags or
+# their prompts cannot be composed. Validation checks this per entry point rather than against the
+# union of all pipelines, which is why it catches it here and not on `development`.
+[pipelines.follow_up.flags]
+deep_analysis = { default = false, description = "Widen the investigation beyond the reported symptom" }
+run_e2e       = { default = false, description = "Also run the remote end-to-end suite before approving" }
+draft_pr      = { default = true, description = "Open the pull request as a draft for a human to promote" }
+
+[[routes]]
+from = "follower"
+to   = "developer"

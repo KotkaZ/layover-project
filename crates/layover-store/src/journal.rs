@@ -21,6 +21,7 @@ use jiff::tz::TimeZone;
 use layover_core::agent::AgentName;
 use layover_core::cost::Span;
 use layover_core::help::{Blocker, HelpRequest};
+use layover_core::layover::{Layover, LayoverId, Standing};
 use layover_core::learning::{Learning, Learnings};
 
 use crate::history::StoreError;
@@ -156,22 +157,9 @@ impl Journal {
     ///
     /// Returns [`StoreError::Io`] if the file exists but cannot be read.
     pub fn learnings(&self) -> Result<Learnings, StoreError> {
-        let path = self.learnings_path();
-        let raw = match fs::read_to_string(&path) {
-            Ok(raw) => raw,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return Ok(Learnings::new());
-            }
-            Err(error) => return Err(StoreError::at(&path)(error)),
-        };
-
-        let entries: Vec<Learning> = raw
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .filter_map(|line| serde_json::from_str(line).ok())
-            .collect();
-
-        Ok(Learnings::from_entries(entries))
+        Ok(Learnings::from_entries(crate::segment::read_document(
+            &self.learnings_path(),
+        )?))
     }
 
     /// Writes the learnings back.
@@ -184,17 +172,8 @@ impl Journal {
     ///
     /// Returns [`StoreError::Io`] if it cannot be written or moved into place.
     pub fn save_learnings(&self, learnings: &Learnings) -> Result<(), StoreError> {
-        let path = self.learnings_path();
-        let staging = path.with_extension("jsonl.writing");
-
-        let mut body = String::new();
-        for learning in learnings.all() {
-            body.push_str(&serde_json::to_string(learning)?);
-            body.push('\n');
-        }
-
-        fs::write(&staging, body).map_err(StoreError::at(&staging))?;
-        fs::rename(&staging, &path).map_err(StoreError::at(&path))
+        let entries: Vec<&Learning> = learnings.all().collect();
+        crate::segment::write_document(&self.learnings_path(), &entries)
     }
 
     /// Where the learnings live.
@@ -206,5 +185,103 @@ impl Journal {
     fn help_segment(&self, at: Timestamp) -> PathBuf {
         let date = at.to_zoned(TimeZone::UTC).date();
         self.root.join(format!("help-{date}.jsonl"))
+    }
+}
+
+impl Journal {
+    /// Reads the booked layovers.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Io`] if the file exists but cannot be read.
+    pub fn layovers(&self) -> Result<Vec<Layover>, StoreError> {
+        crate::segment::read_document(&self.layovers_path())
+    }
+
+    /// Writes the layovers back.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Io`] if it cannot be written, or [`StoreError::Serialise`] if a
+    /// layover cannot be encoded.
+    pub fn save_layovers(&self, layovers: &[Layover]) -> Result<(), StoreError> {
+        crate::segment::write_document(&self.layovers_path(), layovers)
+    }
+
+    /// Books a layover.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Io`] if the file cannot be read back or written.
+    pub fn book(&self, layover: Layover) -> Result<(), StoreError> {
+        let mut booked = self.layovers()?;
+        booked.push(layover);
+        self.save_layovers(&booked)
+    }
+
+    /// The layovers due to be picked up at `now`, soonest first.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Io`] if the file cannot be read.
+    pub fn due(&self, now: Timestamp) -> Result<Vec<Layover>, StoreError> {
+        let mut due: Vec<Layover> = self
+            .layovers()?
+            .into_iter()
+            .filter(|layover| layover.is_due(now))
+            .collect();
+
+        due.sort_by_key(|layover| layover.due_at);
+        Ok(due)
+    }
+
+    /// Applies a change to one layover, reporting whether it was there.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Io`] if the file cannot be read or written.
+    pub fn amend(
+        &self,
+        id: &LayoverId,
+        change: impl FnOnce(&mut Layover),
+    ) -> Result<bool, StoreError> {
+        let mut booked = self.layovers()?;
+        let Some(layover) = booked.iter_mut().find(|layover| layover.id == *id) else {
+            return Ok(false);
+        };
+
+        change(layover);
+        self.save_layovers(&booked)?;
+        Ok(true)
+    }
+
+    /// Drops layovers that are finished with and older than `horizon`.
+    ///
+    /// Only the ones nothing will pick up again. A booked layover is kept however old it is,
+    /// because its age is exactly what makes it interesting — something still waiting after two
+    /// months is a question, not rubbish.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Io`] if the file cannot be read or written.
+    pub fn sweep(&self, horizon: Timestamp) -> Result<usize, StoreError> {
+        let booked = self.layovers()?;
+        let was = booked.len();
+
+        let kept: Vec<Layover> = booked
+            .into_iter()
+            .filter(|layover| layover.standing == Standing::Booked || layover.booked_at >= horizon)
+            .collect();
+
+        let removed = was - kept.len();
+        if removed > 0 {
+            self.save_layovers(&kept)?;
+        }
+        Ok(removed)
+    }
+
+    /// Where the layovers live.
+    fn layovers_path(&self) -> PathBuf {
+        self.root.join("layovers.jsonl")
     }
 }

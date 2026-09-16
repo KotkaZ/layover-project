@@ -450,3 +450,144 @@ fn the_whole_life_of_a_learning_persists() {
         "and so did its second life"
     );
 }
+
+fn layover(waiting_for: &str, due: &str) -> layover_core::layover::Layover {
+    layover_core::layover::Layover::book(
+        "developer".into(),
+        ItineraryId::generate(),
+        waiting_for,
+        layover_core::handover::Handover::steered(
+            layover_core::handover::Steer {
+                previous: RunId::generate(),
+                note: "address the review comments".to_owned(),
+                at: at("2026-09-16T10:00:00Z"),
+            },
+            Vec::new(),
+        ),
+        at("2026-09-16T10:00:00Z"),
+        at(due),
+        8,
+    )
+}
+
+#[test]
+fn a_booked_layover_survives_a_round_trip_with_its_context() {
+    // The context is the whole reason this is not just a scheduled pipeline: a fresh itinerary
+    // that arrives knowing nothing cannot follow anything up.
+    let dir = TempDir::new("lay-roundtrip");
+    let journal = journal(&dir);
+
+    journal
+        .book(layover("comments on PR 1543477", "2026-09-16T12:00:00Z"))
+        .expect("books");
+
+    let back = journal.layovers().expect("reads");
+    assert_eq!(back.len(), 1);
+    assert_eq!(back[0].waiting_for, "comments on PR 1543477");
+    assert!(
+        back[0]
+            .handover
+            .brief()
+            .contains("address the review comments")
+    );
+}
+
+#[test]
+fn only_layovers_whose_time_has_come_are_due() {
+    let dir = TempDir::new("lay-due");
+    let journal = journal(&dir);
+    journal
+        .book(layover("soon", "2026-09-16T11:00:00Z"))
+        .expect("books");
+    journal
+        .book(layover("later", "2026-09-16T18:00:00Z"))
+        .expect("books");
+
+    let due = journal.due(at("2026-09-16T12:00:00Z")).expect("reads");
+
+    assert_eq!(due.len(), 1);
+    assert_eq!(due[0].waiting_for, "soon");
+}
+
+#[test]
+fn setting_a_layover_down_again_persists_its_backoff() {
+    // Otherwise every restart resets the polling rate, and a week-old follow-up starts checking
+    // every fifteen minutes again.
+    let dir = TempDir::new("lay-backoff");
+    let journal = journal(&dir);
+    journal
+        .book(layover("comments", "2026-09-16T11:00:00Z"))
+        .expect("books");
+    let id = journal.layovers().expect("reads")[0].id.clone();
+
+    for _ in 0..3 {
+        journal
+            .amend(&id, |layover| {
+                layover.set_down_again(at("2026-09-16T12:00:00Z"));
+            })
+            .expect("amends");
+    }
+
+    let back = journal.layovers().expect("reads");
+    assert_eq!(back[0].checks, 3);
+    assert_eq!(
+        back[0].minutes_until_due(at("2026-09-16T12:00:00Z")),
+        Some(60),
+        "fifteen, thirty, sixty"
+    );
+}
+
+#[test]
+fn a_resumed_layover_stops_being_due() {
+    let dir = TempDir::new("lay-resume");
+    let journal = journal(&dir);
+    journal
+        .book(layover("comments", "2026-09-16T11:00:00Z"))
+        .expect("books");
+    let id = journal.layovers().expect("reads")[0].id.clone();
+
+    journal
+        .amend(&id, layover_core::layover::Layover::resumed)
+        .expect("amends");
+
+    assert!(
+        journal
+            .due(at("2026-09-17T00:00:00Z"))
+            .expect("reads")
+            .is_empty()
+    );
+}
+
+#[test]
+fn amending_something_that_is_not_there_reports_so() {
+    let dir = TempDir::new("lay-ghost");
+    let journal = journal(&dir);
+
+    let found = journal
+        .amend(&layover_core::layover::LayoverId::generate(), |_| {})
+        .expect("does not fail");
+
+    assert!(!found);
+}
+
+#[test]
+fn sweeping_keeps_anything_still_waiting_however_old_it_is() {
+    // Age is exactly what makes a booked layover interesting. Something still waiting after two
+    // months is a question, not rubbish.
+    let dir = TempDir::new("lay-sweep");
+    let journal = journal(&dir);
+    journal
+        .book(layover("still waiting", "2026-09-16T11:00:00Z"))
+        .expect("books");
+
+    let mut finished = layover("long since dealt with", "2026-09-16T11:00:00Z");
+    finished.resumed();
+    journal.book(finished).expect("books");
+
+    let removed = journal.sweep(at("2026-09-16T11:00:00Z")).expect("sweeps");
+
+    let kept = journal.layovers().expect("reads");
+    assert_eq!(removed, 1);
+    assert_eq!(kept.len(), 1);
+    assert_eq!(kept[0].waiting_for, "still waiting");
+}

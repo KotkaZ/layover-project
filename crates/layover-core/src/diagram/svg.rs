@@ -141,8 +141,9 @@ fn render_edge(out: &mut String, layout: &Layout, edge: &Edge) {
         EdgeStyle::Entry => "edge entry",
         EdgeStyle::Joined => "edge joined",
         EdgeStyle::Bypass => "edge bypass",
+        EdgeStyle::Spawn => "edge spawn",
     };
-    let marker = if edge.style == EdgeStyle::Bypass {
+    let marker = if matches!(edge.style, EdgeStyle::Bypass | EdgeStyle::Spawn) {
         "arrow-bypass"
     } else {
         "arrow"

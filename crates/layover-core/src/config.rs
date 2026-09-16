@@ -78,6 +78,22 @@ pub struct Defaults {
     /// recovery is bounded like every other rail. Zero disables automatic recovery.
     #[serde(default = "default_max_recovery_attempts")]
     pub max_recovery_attempts: u32,
+    /// How many runs may be live at once, across the whole factory.
+    ///
+    /// The one rail that protects the machine rather than a budget. Hops bounds depth, Fuel and
+    /// the Reserve bound money, the run cap bounds a chain's total — none of them bounds how many
+    /// headless CLIs start simultaneously, which is what a fan-out over an unknown number of
+    /// items produces. Excess work queues rather than being refused: a busy machine will not be
+    /// busy in a minute, so delaying is right where refusing would silently drop work.
+    #[serde(default = "default_max_concurrent_runs")]
+    pub max_concurrent_runs: usize,
+    /// How many generations of spawning separate a chain from the trigger that began it.
+    ///
+    /// A spawned itinerary gets fresh Hops, so Hops cannot see across chains: without this an
+    /// agent that spawns an agent that spawns an agent recurses forever while every individual
+    /// chain stays perfectly inside its rails. This is Hops, one level up.
+    #[serde(default = "default_max_spawn_generations")]
+    pub max_spawn_generations: u32,
 }
 
 impl Default for Defaults {
@@ -89,6 +105,8 @@ impl Default for Defaults {
             max_runs: default_max_runs(),
             timeout_sec: default_timeout_sec(),
             max_recovery_attempts: default_max_recovery_attempts(),
+            max_concurrent_runs: default_max_concurrent_runs(),
+            max_spawn_generations: default_max_spawn_generations(),
         }
     }
 }
@@ -340,6 +358,16 @@ const fn default_max_hops() -> u32 {
 
 const fn default_fuel_usd() -> f64 {
     5.0
+}
+
+/// Four at once: enough for a fan-out to be worth having, few enough that a laptop stays usable.
+const fn default_max_concurrent_runs() -> usize {
+    4
+}
+
+/// One generation. A scanner may spawn a reviewer per item; that reviewer may not spawn more.
+const fn default_max_spawn_generations() -> u32 {
+    1
 }
 
 const fn default_max_runs() -> u32 {

@@ -59,6 +59,24 @@ pub(super) fn check_joins_are_unambiguous(config: &Config, found: &mut Vec<Diagn
     }
 }
 
+/// A spawn edge cannot also be a rendezvous.
+///
+/// A barrier holds flights until every named upstream has arrived *in the same itinerary*, and a
+/// spawn opens a new one per flight — so each spawned chain would arrive at a barrier alone and
+/// park there forever. It is not a judgement call or a smell: the two mean opposite things, and
+/// the result is silently stalled work rather than an error anybody would see.
+pub(super) fn check_spawns_do_not_join(config: &Config, found: &mut Vec<Diagnostic>) {
+    for (index, route) in config.routes.iter().enumerate() {
+        if route.is_spawn() && route.is_join() {
+            found.push(Diagnostic::error(format!(
+                "route {index} both spawns and joins. A spawn opens a new itinerary per flight, \
+                 so each one would reach the barrier alone and park there forever. Use `mode = \
+                 \"spawn\"` or `join`, not both"
+            )));
+        }
+    }
+}
+
 pub(super) fn check_read_write_fan_out(config: &Config, found: &mut Vec<Diagnostic>) {
     for (index, route) in config.routes.iter().enumerate() {
         if route.to.len() < 2 {
@@ -189,6 +207,61 @@ mod tests {
         ));
 
         assert_mentions(&warnings(&config), "fewer than two upstreams");
+    }
+
+    #[test]
+    fn a_route_that_both_spawns_and_joins_is_rejected() {
+        // Not a judgement call. A barrier waits for upstreams within one itinerary and a spawn
+        // opens a new one per flight, so every spawned chain would reach the barrier alone and
+        // park there forever -- silently stalled work rather than an error anybody would see.
+        let config = parse(
+            r#"
+            [agents.scanner]
+            prompt = "scan"
+            entry = true
+
+            [agents.left]
+            prompt = "left"
+
+            [agents.right]
+            prompt = "right"
+
+            [[routes]]
+            from = ["left", "right"]
+            to = "scanner"
+            join = "all"
+            mode = "spawn"
+            "#,
+        );
+
+        assert_mentions(&errors(&config), "both spawns and joins");
+    }
+
+    #[test]
+    fn spawning_without_a_join_is_fine() {
+        let config = parse(
+            r#"
+            [agents.scanner]
+            prompt = "scan"
+            entry = true
+
+            [agents.reviewer]
+            prompt = "review"
+
+            [[routes]]
+            from = "scanner"
+            to = "reviewer"
+            mode = "spawn"
+            "#,
+        );
+
+        assert!(
+            !errors(&config)
+                .iter()
+                .any(|message| message.contains("spawns and joins")),
+            "a plain spawn edge is the normal case: {:?}",
+            errors(&config)
+        );
     }
 
     #[test]

@@ -1,0 +1,68 @@
+# Review every pull request assigned to me, one agent per pull request.
+#
+# The interesting part is that the number of reviewers is not known until the scanner looks, so
+# the fan-out cannot be written in the route map. See README.md.
+
+[layover]
+work_dir   = "workspace"
+prompt_dir = "prompts"
+
+[defaults]
+runner   = "copilot"
+max_hops = 6
+fuel_usd = 3.00
+# Four agent CLIs at once. The forty-sixth pull request is delayed, never dropped.
+max_concurrent_runs = 4
+# The scanner may spawn reviewers. A reviewer may not spawn anything.
+max_spawn_generations = 1
+
+[reserve]
+fuel_usd     = 40.00
+window_hours = 24
+
+[runners.copilot]
+command = ["copilot", "--allow-all-tools", "--output-format", "json"]
+mcp     = { flag = "--mcp-config", format = "claude_json" }
+
+[agents.scanner]
+description = "Finds the pull requests assigned to you and opens one review per pull request"
+purpose     = """
+Route here to start a sweep. Lists open pull requests where you are a reviewer, skips the ones
+already reviewed at their current commit, and spawns one reviewer per remaining pull request.
+Never reviews anything itself.
+"""
+prompt_file = "scanner.md"
+access      = "read-only"
+
+[agents.reviewer]
+description = "Reviews exactly one pull request and leaves its comments on it"
+purpose     = """
+Handed a single pull request. Reads the diff, judges it against the repository's own conventions,
+and posts comments. Sees one pull request and only one: a reviewer juggling six reviews all six
+worse than it would review one.
+"""
+prompt_file = "reviewer.md"
+access      = "read-only"
+fuel_usd    = 3.00
+
+[pipelines.pr_sweep]
+description = "Every half hour, review whatever is assigned to me"
+entry       = "scanner"
+trigger     = { every = "30m" }
+workspace   = "per-itinerary"
+
+[pipelines.pr_sweep.flags.drafts]
+description = "Also review pull requests still marked as drafts"
+default     = false
+
+# `mode = "spawn"` is what makes this a fan-out over an unknown number of items. Each flight over
+# this edge opens its *own* itinerary, so every reviewer gets its own Fuel, its own hop budget and
+# its own worktree. An ordinary `async` edge would put all of them on one budget, and the sweep
+# would stop partway through with no way to say which pull requests it skipped.
+#
+# It is still a route, because the route map is the single source of truth for who may reach whom.
+# A spawn outside it would be an unchecked edge into a fully funded fresh chain.
+[[routes]]
+from = "scanner"
+to   = "reviewer"
+mode = "spawn"

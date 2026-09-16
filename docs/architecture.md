@@ -675,3 +675,43 @@ a moment, is answered or not, and stops mattering. They are segmented by day and
 ninety-day horizon as run history. Learnings are state, rewritten as they are rediscovered or
 revoked, and exempt from retention entirely — a confirmed learning that expired for being ninety
 days old would be the one thing in the system that got worse the longer it was right.
+
+**Why Slots queue where every other rail refuses.** Hops bounds depth, Fuel and the Reserve bound
+money, the run cap bounds a chain's total — and none of them bounds how many agent CLIs are alive
+at one instant, which is the number that takes a machine down. The gap surfaced by writing a real
+pipeline: a scanner dispatching one reviewer per pull request assigned to you has a width nobody
+knows until it looks, and fifty assigned pull requests meant fifty simultaneous processes with
+every rail satisfied. Slots queue rather than refusing because every other rail protects a budget,
+and money spent is gone, whereas a machine that is busy now will not be busy in a minute. Refusing
+would turn "review twelve pull requests" into "review four and silently drop eight", which is the
+worst available reading of a concurrency limit.
+
+**Why spawning needs a generation counter.** A spawned itinerary gets fresh Hops, fresh Fuel and a
+fresh run cap — that is the entire point, because per-item work wants per-item budget. It is also
+exactly what makes spawning unbounded: Hops counts depth *within* a chain and cannot see across
+chains, so an agent that spawns an agent that spawns an agent recurses forever while every
+individual chain stays perfectly inside its rails. Generation is Hops one level up, and it is the
+only thing standing between `layover_spawn` and a fork bomb that no existing rail can see.
+
+**Why spawning is a route mode rather than a capability.** The first draft had the scanner call
+`layover_spawn` with no route between it and the reviewer, and validation immediately reported the
+reviewer as unreachable — correctly, because reachability only knows about routes. The deeper
+problem was that `layover_send` is checked against the route map and a free-standing spawn would
+not have been: an agent able to open a fresh, fully funded chain into any peer is a larger hole
+than one able to send that peer a message. `mode = "spawn"` keeps the route map the single source
+of truth for who may reach whom, and makes reachability, the hop check and the diagram all work
+without special cases. A route may not both spawn and join, because a barrier waits for upstreams
+within one itinerary while a spawn opens one per flight, so every spawned chain would arrive alone
+and park forever — silently stalled work rather than an error anybody would see.
+
+**Why a Layover is work set down rather than a chain kept alive.** A chain that publishes a pull
+request and then wants to answer the comments arriving on it over the following days had no
+expressible shape. Polling spends a hop and real money every tick, so Hops kills it long before a
+human replies — and Hops is right to. Re-triggering on a bare schedule works mechanically but
+arrives knowing nothing: which work item, what was tried, what the earlier chain concluded. So a
+run books a layover, and a resuming pipeline opens a *new* itinerary seeded with a `Handover`.
+Nothing stays alive in between — no process, no parked chain, no held budget — which is the same
+answer recovery and steering reached, for the same reason: what the later run needs is the earlier
+one's context, not its process. Checks back off and eventually expire, because something waiting
+on a human who has moved on must stop costing money, and the difference between waiting patiently
+and leaking is a count.

@@ -40,7 +40,10 @@ fn both_pipelines_are_entry_points_and_nothing_else_is() {
     let mut entries: Vec<String> = config.entry_agents().map(ToString::to_string).collect();
     entries.sort();
 
-    assert_eq!(entries, ["analyst", "pr_scanner"]);
+    // The follower is an entry point too, and a slightly surprising one: it is reached by a
+    // resuming pipeline rather than by a human or a clock. That is the point of a layover — the
+    // work is picked up cold, so whatever picks it up has to be an entry.
+    assert_eq!(entries, ["analyst", "follower", "pr_scanner"]);
 }
 
 #[test]

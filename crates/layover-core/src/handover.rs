@@ -123,7 +123,7 @@ impl RecoveryPolicy {
 }
 
 /// A restart of work that was interrupted.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Recovery {
     /// The run that did not finish.
     pub previous: RunId,
@@ -134,7 +134,7 @@ pub struct Recovery {
 }
 
 /// A human redirecting work that is already under way.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Steer {
     /// The run being redirected.
     pub previous: RunId,
@@ -145,7 +145,8 @@ pub struct Steer {
 }
 
 /// Why a run is being started.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Cause {
     /// A flight arrived in the ordinary way.
     Dispatch,
@@ -167,7 +168,7 @@ impl Cause {
 }
 
 /// Everything a new run is told about the run it is taking over from.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Handover {
     /// Why this run is starting.
     pub cause: Cause,

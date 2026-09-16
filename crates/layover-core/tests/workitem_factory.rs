@@ -51,7 +51,7 @@ fn the_example_factory_validates_cleanly() {
         Vec::new(),
         "the reference factory must load with no findings at all"
     );
-    assert_eq!(config.agents.len(), 8);
+    assert_eq!(config.agents.len(), 9);
 }
 
 #[test]

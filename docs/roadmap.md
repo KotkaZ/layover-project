@@ -220,6 +220,9 @@ recovery and steering use the one mechanism — see
 - **How does a run receive its prompt?** *On stdin.* Never on the command line: Windows caps one at 32,767 characters and real prompts run to tens of kilobytes. `{prompt}` in a runner command is a *path* to the composed instructions, for CLIs that take one.
 - **How does an agent report that it is stuck?** *A structured help request, surfaced on the dashboard, with the blocker category and whether it stopped the work.* The run that raised it carries a one-line `blocked_on` so it does not look clean in a list.
 - **How does a factory get better at its job over time?** *Agents propose learnings that apply immediately and expire after twenty runs unless independently rediscovered.* No approval queue; review by exception.
+- **How does work fan out over a number of items nobody knows in advance?** *A `mode = "spawn"` route opens one itinerary per flight, each with its own Fuel and workspace, bounded by `max_concurrent_runs` and `max_spawn_generations`.*
+- **What bounds how many agent CLIs run at once?** *Slots.* The one rail that queues rather than refusing, because it protects a machine rather than a budget.
+- **How does a chain follow something up days later?** *It books a Layover and a resuming pipeline opens a new itinerary seeded with a handover.* Nothing is kept alive in between.
 
 ---
 

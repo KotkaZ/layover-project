@@ -1,0 +1,56 @@
+# Twice a day, find what changed in the world and write it up.
+#
+# The simplest factory that is still worth running, and a good first one to copy: a schedule, two
+# agents, one route.
+
+[layover]
+work_dir   = "workspace"
+prompt_dir = "prompts"
+
+[defaults]
+runner   = "copilot"
+max_hops = 4
+fuel_usd = 1.50
+max_concurrent_runs = 2
+
+[reserve]
+fuel_usd     = 10.00
+window_hours = 24
+
+[runners.copilot]
+command = ["copilot", "--allow-all-tools", "--output-format", "json"]
+mcp     = { flag = "--mcp-config", format = "claude_json" }
+
+[agents.scout]
+description = "Reads the news and decides what is actually worth knowing"
+purpose     = """
+Route here to find out what changed. Reads widely, keeps little. Judges significance, never
+writes the final text.
+"""
+prompt_file = "scout.md"
+access      = "read-only"
+
+[agents.mailman]
+description = "Writes the digest and posts it"
+purpose     = """
+Route here with findings that have already been judged worth reporting. Turns them into something
+readable and posts it. Does not decide what matters.
+"""
+prompt_file = "mailman.md"
+
+[pipelines.digest]
+description = "A twice-daily digest, at eight and at six"
+entry       = "scout"
+trigger     = { cron = "0 8,18 * * *" }
+# Two instances can never overlap at twelve hours apart, but the mailman writes, so each run gets
+# its own worktree anyway. The cost is a checkout; the alternative is a rare corruption that only
+# shows up when a schedule changes.
+workspace   = "per-itinerary"
+
+[pipelines.digest.flags.deep]
+description = "Read further back and include second-tier sources"
+default     = false
+
+[[routes]]
+from = "scout"
+to   = "mailman"

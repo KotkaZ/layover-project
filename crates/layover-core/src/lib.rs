@@ -31,12 +31,14 @@ pub mod graph;
 pub mod handover;
 pub mod help;
 pub mod itinerary;
+pub mod layover;
 pub mod learning;
 pub mod mcp;
 pub mod pipeline;
 pub mod prompt;
 pub mod route;
 pub mod run;
+pub mod slots;
 pub mod validate;
 
 pub use agent::{Access, Agent, AgentName, PromptSpec, PromptSpecError};
@@ -55,6 +57,7 @@ pub use handover::{
 };
 pub use help::{Blocker, HelpRequest};
 pub use itinerary::{Denial, Itinerary};
+pub use layover::{Layover, LayoverId};
 pub use learning::{Impact, Learning, LearningId, Learnings, Proposal, Uptake};
 pub use mcp::{McpServer, McpTransport};
 pub use pipeline::{
@@ -63,4 +66,5 @@ pub use pipeline::{
 pub use prompt::{PromptDir, PromptError, PromptMap, PromptSource};
 pub use route::{Join, Mode, Route};
 pub use run::{Outcome, RunRecord};
+pub use slots::{Admission, Slots};
 pub use validate::{Diagnostic, Severity, validate, validate_prompts};

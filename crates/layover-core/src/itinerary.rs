@@ -26,6 +26,12 @@ pub enum Denial {
     /// still be refused because everything else running has drained the shared Reserve.
     #[error("reserve exhausted: the factory spent its budget for the current window")]
     ReserveExhausted,
+    /// Spawning would open an itinerary too many generations from the trigger that began it.
+    #[error("spawn depth reached: already {max_generations} generation(s) from the trigger")]
+    SpawnDepthReached {
+        /// How many generations of spawning are permitted.
+        max_generations: u32,
+    },
 }
 
 /// Accounting for one causal chain of flights.
@@ -38,6 +44,7 @@ pub struct Itinerary {
     max_runs: u32,
     runs_started: u32,
     unreported_runs: u32,
+    generation: u32,
 }
 
 impl Itinerary {
@@ -52,7 +59,53 @@ impl Itinerary {
             max_runs,
             runs_started: 0,
             unreported_runs: 0,
+            generation: 0,
         }
+    }
+
+    /// How many spawns separate this itinerary from one a human or a schedule started.
+    ///
+    /// Zero for a chain a trigger opened. One for a chain an agent spawned, and so on.
+    #[must_use]
+    pub fn generation(&self) -> u32 {
+        self.generation
+    }
+
+    /// Opens a sibling itinerary spawned from this one.
+    ///
+    /// The generation is the only thing that carries across, and it is the whole point. A spawned
+    /// itinerary gets *fresh* Hops, fresh Fuel and a fresh run cap — that is what makes per-item
+    /// work affordable, and it is also exactly what makes spawning unbounded: Hops counts depth
+    /// within a chain and cannot see across chains, so an agent that spawns an agent that spawns
+    /// an agent recurses forever while every individual chain stays perfectly inside its rails.
+    ///
+    /// Generation is the rail that closes that. It is Hops, one level up.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Denial::SpawnDepthReached`] once `max_generations` spawns separate this chain
+    /// from the trigger that began it.
+    pub fn spawn(
+        &self,
+        id: ItineraryId,
+        fuel_budget_usd: f64,
+        max_generations: u32,
+    ) -> Result<Self, Denial> {
+        let generation = self.generation.saturating_add(1);
+        if generation > max_generations {
+            return Err(Denial::SpawnDepthReached { max_generations });
+        }
+
+        Ok(Self {
+            id,
+            max_hops: self.max_hops,
+            fuel_budget_usd,
+            fuel_spent_usd: 0.0,
+            max_runs: self.max_runs,
+            runs_started: 0,
+            unreported_runs: 0,
+            generation,
+        })
     }
 
     /// Returns the itinerary identifier.
@@ -183,6 +236,65 @@ impl Itinerary {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_trigger_opens_generation_zero() {
+        let itinerary = Itinerary::new(ItineraryId::generate(), 8, 5.0, 64);
+
+        assert_eq!(itinerary.generation(), 0);
+    }
+
+    #[test]
+    fn a_spawned_itinerary_gets_its_own_budget_and_the_next_generation() {
+        // Fresh Fuel is the point: per-item work wants per-item budget, so that reviewing twelve
+        // pull requests does not become reviewing four and halting.
+        let parent = Itinerary::new(ItineraryId::generate(), 8, 5.0, 64);
+
+        let child = parent
+            .spawn(ItineraryId::generate(), 3.0, 2)
+            .expect("one generation is within the limit");
+
+        assert_eq!(child.generation(), 1);
+        assert_eq!(
+            child.initial_hops(),
+            8,
+            "fresh Hops, not the parent's remainder"
+        );
+        assert!((child.fuel_remaining_usd() - 3.0).abs() < 1e-9);
+        assert_eq!(child.runs_remaining(), 64);
+    }
+
+    #[test]
+    fn spawning_is_bounded_even_though_every_chain_stays_inside_its_own_rails() {
+        // The hazard that generation exists for. A spawned itinerary gets fresh Hops, so Hops
+        // cannot see across chains: an agent that spawns an agent that spawns an agent recurses
+        // forever while each individual chain looks perfectly well behaved.
+        let mut current = Itinerary::new(ItineraryId::generate(), 8, 5.0, 64);
+
+        for expected in 1..=2 {
+            current = current
+                .spawn(ItineraryId::generate(), 5.0, 2)
+                .expect("within the limit");
+            assert_eq!(current.generation(), expected);
+        }
+
+        assert_eq!(
+            current.spawn(ItineraryId::generate(), 5.0, 2).unwrap_err(),
+            Denial::SpawnDepthReached { max_generations: 2 }
+        );
+    }
+
+    #[test]
+    fn a_factory_that_forbids_spawning_says_so_on_the_first_attempt() {
+        let itinerary = Itinerary::new(ItineraryId::generate(), 8, 5.0, 64);
+
+        assert_eq!(
+            itinerary
+                .spawn(ItineraryId::generate(), 5.0, 0)
+                .unwrap_err(),
+            Denial::SpawnDepthReached { max_generations: 0 }
+        );
+    }
 
     fn itinerary() -> Itinerary {
         Itinerary::new(ItineraryId::generate(), 8, 5.0, 64)

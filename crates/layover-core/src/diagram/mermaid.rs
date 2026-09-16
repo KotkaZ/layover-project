@@ -107,6 +107,11 @@ fn render_edges(out: &mut String, config: &Config, graph: &RouteGraph) {
                 // bypasses it and wakes the agent directly, leaving parked flights untouched, so
                 // labelling such an edge with the join condition would state the opposite of
                 // what happens. It gets a dotted arrow instead, which reads as going around.
+                if route.is_spawn() {
+                    let _ = writeln!(out, "  {} -- spawn --> {}", agent_id(from), agent_id(to));
+                    continue;
+                }
+
                 match graph.join_for(to) {
                     Some(spec) if spec.upstreams.contains(from) => {
                         let label = match spec.join {

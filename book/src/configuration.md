@@ -23,6 +23,8 @@ a human is still watching.
 | `max_runs` | `64` | Deterministic run cap; holds when a runner reports no cost. |
 | `timeout_sec` | `900` | Wall-clock limit for one run. |
 | `max_recovery_attempts` | `2` | How many times interrupted work may be [restarted](./recovery.md). |
+| `max_concurrent_runs` | `4` | How many agent CLIs may be alive **at once**, factory-wide. Excess work queues. |
+| `max_spawn_generations` | `1` | How many `mode = "spawn"` hops separate a chain from the trigger that began it. |
 
 `max_hops` and `fuel_usd` are not interchangeable. A hop is spent per flight and branches *inherit*
 the remaining count rather than splitting it, so Hops says nothing about how wide a fan-out
@@ -165,6 +167,23 @@ write whatever it likes inside its own checkout.
 Fanning out to two `read-write` agents is a warning: they share one working directory and will
 overwrite each other.
 
+### Bounding width, not just depth
+
+`max_hops` and `fuel_usd` bound how *deep* and how *expensive* one chain is. Neither bounds how
+many agent CLIs are running simultaneously, and that is the number that takes a machine down. A
+scanner that dispatches one reviewer per pull request assigned to you produces a fan-out whose
+width is not known until it looks.
+
+`max_concurrent_runs` is the rail for it, and it is the only one that **queues rather than
+refusing**. Every other rail protects a budget, and money spent is gone. This one protects a
+machine, and a machine that is busy now will not be busy in a minute — refusing would turn "review
+twelve pull requests" into "review four and silently drop eight".
+
+`max_spawn_generations` bounds the other direction. A spawned itinerary gets *fresh* Hops, so Hops
+cannot see across chains: without a generation limit an agent that spawns an agent that spawns an
+agent recurses forever while every individual chain stays perfectly inside its rails. It is Hops,
+one level up.
+
 ## `[pipelines.*]` — how work gets in
 
 See [Pipelines and triggers](./pipelines.md).
@@ -192,6 +211,20 @@ timeout_sec = 3600
 | `timeout_sec` | Backstop for a barrier that never completes. |
 
 Direction is explicit. An edge absent from `[[routes]]` means the flight is refused.
+
+### Spawning
+
+`mode = "spawn"` makes an edge open a **new itinerary** per flight instead of continuing the
+current one. The receiver gets its own Fuel, its own hop budget and its own workspace.
+
+That is what makes per-item work affordable. An ordinary `async` edge puts every receiver on one
+Fuel budget, so a sweep over twelve pull requests stops partway and *which* ones got done is
+whichever finished first.
+
+It is a route rather than a free-standing capability because the route map is the single source of
+truth for who may reach whom — a spawn outside it would be an unchecked edge into a fresh, fully
+funded chain. A route may not both spawn and join: a barrier waits for upstreams within one
+itinerary, so each spawned chain would arrive alone and park forever. Validation rejects it.
 
 ### Rendezvous joins
 

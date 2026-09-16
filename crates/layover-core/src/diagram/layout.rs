@@ -117,6 +117,8 @@ pub enum EdgeStyle {
     /// A permitted sender that the barrier does *not* name, and which therefore wakes the agent
     /// directly rather than parking at it.
     Bypass,
+    /// Opens a new itinerary per flight rather than continuing this one.
+    Spawn,
 }
 
 /// A positioned edge.
@@ -260,19 +262,25 @@ impl Layout {
                     // sender wakes the agent directly, leaving parked flights untouched, so
                     // labelling that edge with the join condition would state the opposite of
                     // what happens.
-                    let (style, label) = match graph.join_for(to) {
-                        Some(spec) if spec.upstreams.contains(from) => (
-                            EdgeStyle::Joined,
-                            Some(
-                                match spec.join {
-                                    Join::All => "all",
-                                    Join::Any => "any",
-                                }
-                                .to_owned(),
+                    // A spawn is checked first: it opens a new itinerary, so a barrier on the
+                    // receiver cannot apply to it -- validation rejects that combination outright.
+                    let (style, label) = if route.is_spawn() {
+                        (EdgeStyle::Spawn, Some("spawn".to_owned()))
+                    } else {
+                        match graph.join_for(to) {
+                            Some(spec) if spec.upstreams.contains(from) => (
+                                EdgeStyle::Joined,
+                                Some(
+                                    match spec.join {
+                                        Join::All => "all",
+                                        Join::Any => "any",
+                                    }
+                                    .to_owned(),
+                                ),
                             ),
-                        ),
-                        Some(_) => (EdgeStyle::Bypass, None),
-                        None => (EdgeStyle::Plain, None),
+                            Some(_) => (EdgeStyle::Bypass, None),
+                            None => (EdgeStyle::Plain, None),
+                        }
                     };
 
                     let back = self.layer_of(&pair.0) >= self.layer_of(&pair.1);

@@ -206,6 +206,14 @@ pub struct Pipeline {
     /// Whether instances of this pipeline share a workspace or get one each.
     #[serde(default)]
     pub workspace: Workspace,
+    /// Whether this pipeline picks up booked layovers rather than starting fresh work.
+    ///
+    /// A resuming pipeline does not open an itinerary on every tick. It looks for work that was
+    /// set down and is now due, and opens one seeded with what the earlier chain knew. A tick
+    /// that finds nothing due costs nothing, which is what makes checking every twenty minutes
+    /// affordable.
+    #[serde(default)]
+    pub resumes: bool,
     /// Boolean parameters this pipeline accepts, keyed by flag name.
     #[serde(default)]
     pub flags: BTreeMap<String, FlagSpec>,

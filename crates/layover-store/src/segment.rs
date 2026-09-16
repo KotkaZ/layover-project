@@ -209,3 +209,47 @@ fn segment_date(path: &Path, prefix: &str) -> Option<Date> {
         .parse()
         .ok()
 }
+
+/// Reads a whole-document store: one JSON object per line, all of it one record.
+///
+/// Distinct from a segment despite the shape. A segment holds events, so a torn line costs one
+/// event; here the file is the record, which is why the writer is atomic.
+///
+/// # Errors
+///
+/// Returns [`StoreError::Io`] if the file exists but cannot be read.
+pub fn read_document<T: DeserializeOwned>(path: &Path) -> Result<Vec<T>, StoreError> {
+    let raw = match fs::read_to_string(path) {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(StoreError::at(path)(error)),
+    };
+
+    Ok(raw
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .filter_map(|line| serde_json::from_str(line).ok())
+        .collect())
+}
+
+/// Writes a whole-document store, atomically.
+///
+/// Written to a neighbouring file and renamed, so an interrupted write cannot leave the factory
+/// with half its memory.
+///
+/// # Errors
+///
+/// Returns [`StoreError::Io`] if it cannot be written or moved into place, or
+/// [`StoreError::Serialise`] if a record cannot be encoded.
+pub fn write_document<T: Serialize>(path: &Path, records: &[T]) -> Result<(), StoreError> {
+    let staging = path.with_extension("jsonl.writing");
+
+    let mut body = String::new();
+    for record in records {
+        body.push_str(&serde_json::to_string(record)?);
+        body.push('\n');
+    }
+
+    fs::write(&staging, body).map_err(StoreError::at(&staging))?;
+    fs::rename(&staging, path).map_err(StoreError::at(path))
+}
