@@ -89,6 +89,26 @@ names, and make sure each works on its own before pointing Layover at it:
 Credentials reach child CLIs through the environment. **Never put an API key in `layover.toml`** —
 it is a file people commit.
 
+## Starting with the computer
+
+A lights-out factory that stops at every reboot is not lights-out.
+
+```sh
+layover autostart                 # writes the file
+layover autostart --show          # print it instead, to read first
+```
+
+That generates your platform's own artefact — a Scheduled Task on Windows, a launchd agent on
+macOS, a systemd user unit on Linux — and prints the single command that registers it. It does
+**not** register it for you: that touches the machine, and you should see what is being installed.
+
+It also refuses to write anything if the factory does not load, because a service that fails at
+every logon is worse than no service.
+
+All three run as **you**, never elevated and never machine-wide. The Tower spawns agents that use
+your provider credentials, your git identity and your workspace; a system service would have none
+of them, or would run as root with all of them.
+
 ## Verify your setup
 
 ```sh

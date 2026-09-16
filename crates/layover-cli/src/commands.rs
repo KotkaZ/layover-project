@@ -5,13 +5,13 @@
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use layover_core::agent::PromptSpec;
 use layover_core::prompt::resolve;
 use layover_core::{
-    AgentName, Config, Diagnostic, Flags, PipelineName, PromptDir, Severity, Trigger, validate,
-    validate_prompts,
+    AgentName, Autostart, Config, Diagnostic, Flags, PipelineName, Platform, PromptDir, Severity,
+    Trigger, validate, validate_prompts,
 };
 
 /// Anything that stops a command from finishing.
@@ -253,10 +253,71 @@ fn resolve_flags(
     Ok(Flags::new(values))
 }
 
+/// Writes the file that starts Layover at logon.
+///
+/// # Errors
+///
+/// Returns a message when the platform has no supported mechanism, the configuration cannot be
+/// loaded, or the file cannot be written.
+pub fn autostart(config: &Path, output: Option<&Path>, show: bool) -> Result<String, Failure> {
+    // Load the configuration even though only its path is used: writing an autostart entry for a
+    // factory that does not parse would produce a service that fails at every logon.
+    let (_, _) = load(config)?;
+
+    let Some(platform) = Platform::current() else {
+        return Err(format!(
+            "no autostart mechanism for `{}`; run Layover under a supervisor of your own",
+            std::env::consts::OS
+        ));
+    };
+
+    let binary = std::env::current_exe()
+        .map_err(|error| format!("could not find this executable: {error}"))?;
+    let config = config.canonicalize().map_or_else(
+        |_| config.to_path_buf(),
+        |path| strip_verbatim(path.as_path()),
+    );
+
+    let entry = Autostart::new(strip_verbatim(&binary), &config);
+    let rendered = entry.render(platform);
+
+    if show {
+        return Ok(rendered);
+    }
+
+    let target = match output {
+        Some(path) => path.to_path_buf(),
+        None => config
+            .parent()
+            .unwrap_or(Path::new("."))
+            .join(platform.artefact_name()),
+    };
+
+    std::fs::write(&target, &rendered)
+        .map_err(|error| format!("could not write {}: {error}", target.display()))?;
+
+    Ok(format!(
+        "Wrote a {platform} to {}\n\nRegister it with:\n\n{}\n",
+        target.display(),
+        platform.install_hint(&target)
+    ))
+}
+
+/// Removes Windows' `\\?\` verbatim prefix.
+///
+/// `canonicalize` produces it on Windows, and `schtasks` rejects a path that carries it — with an
+/// error naming neither the path nor the prefix.
+fn strip_verbatim(path: &Path) -> PathBuf {
+    let shown = path.display().to_string();
+    match shown.strip_prefix(r"\\?\") {
+        Some(rest) => PathBuf::from(rest),
+        None => path.to_path_buf(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
     fn example(name: &str) -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../examples")
@@ -399,5 +460,23 @@ mod tests {
         .expect_err("an undeclared flag is an error");
 
         assert!(error.contains("nonesuch"), "{error}");
+    }
+
+    #[test]
+    fn autostart_renders_without_writing_anything() {
+        let text = autostart(&example("workitem-factory/layover.toml"), None, true)
+            .expect("renders for this platform");
+
+        assert!(text.contains("layover.toml"), "{text}");
+        assert!(
+            !text.contains(r"\\?\"),
+            "the Windows verbatim prefix breaks schtasks: {text}"
+        );
+    }
+
+    #[test]
+    fn autostart_refuses_a_factory_that_does_not_load() {
+        // Registering a service for a broken factory would fail silently at every logon.
+        assert!(autostart(Path::new("no-such-factory.toml"), None, true).is_err());
     }
 }

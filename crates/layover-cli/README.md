@@ -27,6 +27,7 @@ The binary is called `layover`.
 layover validate --config layover.toml     # check a factory before it runs
 layover explain                            # what can trigger what, and what talks to what
 layover prompt tester --flag run_e2e=true  # what an agent would actually be told
+layover autostart --show                   # the file that starts Layover at logon
 ```
 
 `layover validate` exits non-zero when anything would block startup. Run it in CI over your

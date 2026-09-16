@@ -61,6 +61,22 @@ enum Command {
         #[arg(long = "flag", value_name = "NAME=BOOL")]
         flags: Vec<String>,
     },
+
+    /// Write the file that starts Layover when you log in.
+    ///
+    /// A lights-out factory that stops at every reboot is not lights-out. This generates the
+    /// platform's own artefact — a Scheduled Task, a launchd agent or a systemd user unit — and
+    /// tells you the one command that registers it. It deliberately does not register it for
+    /// you: that touches the machine, and you should see what is being installed first.
+    Autostart {
+        /// Where to write the generated file. Defaults to beside the configuration.
+        #[arg(long, short, value_name = "FILE")]
+        output: Option<PathBuf>,
+
+        /// Print the file instead of writing it.
+        #[arg(long)]
+        show: bool,
+    },
 }
 
 fn main() -> ExitCode {
@@ -74,6 +90,9 @@ fn main() -> ExitCode {
             pipeline,
             flags,
         } => commands::prompt(&cli.config, &agent, pipeline.as_deref(), &flags),
+        Command::Autostart { output, show } => {
+            commands::autostart(&cli.config, output.as_deref(), show)
+        }
     };
 
     match result {

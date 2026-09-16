@@ -31,6 +31,32 @@ turn the permission mesh into a pipeline engine.
 | `trigger = { every = "1h" }` | Fires on a fixed interval: `s`, `m`, `h`, `d`. |
 | `trigger = { cron = "0 9 * * 1-5" }` | Fires on a five-field cron expression, in local time. |
 
+## Running several instances at once
+
+One pipeline, many instances — one per pull request, say. Each trigger mints its own itinerary
+with its own Hops, Fuel, barriers and flags, so instances are already independent in every respect
+but one: **the workspace**.
+
+```toml
+[pipelines.development]
+entry     = "analyst"
+workspace = "per-itinerary"
+```
+
+| Value | Meaning |
+|---|---|
+| `shared` | Every itinerary works in the one `work_dir`. The default. |
+| `per-itinerary` | Each itinerary gets its own git worktree, named after the itinerary. |
+
+With `shared`, two instances that both reach a `read-write` agent edit the same files at the same
+time. That fails in the way hardest to notice — plausible output built from two unrelated changes.
+`per-itinerary` is what makes parallel instances safe.
+
+`layover validate` warns when a **scheduled** pipeline uses `shared` and reaches a writer, because
+a schedule overlaps itself with nobody watching. It does not warn for manual pipelines: a human
+starting a second instance knows they did, and warning on every manual pipeline with a writer
+would fire on almost every factory.
+
 Setting both `every` and `cron` is an error rather than a silent choice between them.
 
 ### The one-minute floor

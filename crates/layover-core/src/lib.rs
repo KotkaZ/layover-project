@@ -20,18 +20,21 @@
 //! types implement.
 
 pub mod agent;
+pub mod autostart;
 pub mod barrier;
 pub mod config;
 pub mod cost;
 pub mod flight;
 pub mod graph;
 pub mod itinerary;
+pub mod mcp;
 pub mod pipeline;
 pub mod prompt;
 pub mod route;
 pub mod validate;
 
 pub use agent::{Access, Agent, AgentName, PromptSpec, PromptSpecError};
+pub use autostart::{Autostart, Platform};
 pub use barrier::{Barrier, BarrierKey, Delivery};
 pub use config::{Config, ConfigError, Defaults, McpWiring, Paths, ReserveConfig, Runner};
 pub use cost::{
@@ -40,8 +43,9 @@ pub use cost::{
 pub use flight::{Flight, FlightId, ItineraryId, Origin, RunId};
 pub use graph::RouteGraph;
 pub use itinerary::{Denial, Itinerary};
+pub use mcp::{McpServer, McpTransport};
 pub use pipeline::{
-    FlagError, FlagSpec, Flags, Pipeline, PipelineName, Schedule, Trigger, TriggerError,
+    FlagError, FlagSpec, Flags, Pipeline, PipelineName, Schedule, Trigger, TriggerError, Workspace,
 };
 pub use prompt::{PromptDir, PromptError, PromptMap, PromptSource};
 pub use route::{Join, Mode, Route};

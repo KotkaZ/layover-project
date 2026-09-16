@@ -105,6 +105,15 @@ runner      = "copilot"
 access      = "read-only"
 prompt_file = "kusto.md"
 
+# The Kusto agent needs a Kusto server; Layover's own MCP endpoint is wired up separately and
+# always. Note what is NOT here: credentials. `env` is for values that are safe in a committed
+# file, and anything that authenticates is named in `env_from` and read from the Tower's own
+# environment at spawn time. `layover validate` refuses a literal that looks like a credential.
+[agents.kusto.mcp.kusto]
+command  = ["agency", "mcp", "kusto"]
+env      = { KUSTO_CLUSTER = "ic3-aria-eus2", KUSTO_DATABASE = "Web Media Prod" }
+env_from = ["AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET"]
+
 # ── Development ────────────────────────────────────────────────────
 
 [agents.developer]
@@ -147,6 +156,10 @@ workspace is not in a publishable state.
 runner      = "copilot"
 prompt_file = "publisher.md"
 
+[agents.publisher.mcp.ado]
+url      = "https://dev.azure.com/mcp/"
+env_from = ["ADO_PAT"]
+
 # ── Scheduled intake ───────────────────────────────────────────────
 
 [agents.pr_scanner]
@@ -168,6 +181,10 @@ description = "Take a request through investigation, development and review to a
 entry       = "analyst"
 trigger     = "manual"
 
+# One instance per request. Each itinerary gets its own git worktree, so several pull requests
+# can be in flight at once without the developer in one overwriting the developer in another.
+workspace   = "per-itinerary"
+
 [pipelines.development.flags]
 deep_analysis = { default = false, description = "Widen the investigation beyond the reported symptom" }
 run_e2e       = { default = false, description = "Also run the remote end-to-end suite before approving" }
@@ -178,6 +195,10 @@ draft_pr      = { default = true, description = "Open the pull request as a draf
 description = "Review my open Azure DevOps pull requests once an hour"
 entry       = "pr_scanner"
 trigger     = { every = "1h" }
+
+# A schedule fires whether or not the last instance finished, and runs are reentrant, so this one
+# needs isolation even more than the manual pipeline does.
+workspace   = "per-itinerary"
 
 [pipelines.review-bot.flags]
 deep_analysis = { default = false, description = "Widen the investigation beyond the reported symptom" }

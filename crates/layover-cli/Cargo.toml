@@ -17,7 +17,7 @@ name = "layover"
 path = "src/main.rs"
 
 [dependencies]
-layover-core = { path = "../layover-core", version = "0.2.0" }
+layover-core = { path = "../layover-core", version = "0.3.0" }
 clap = { workspace = true, features = ["derive"] }
 
 [lints]

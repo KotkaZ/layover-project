@@ -19,12 +19,15 @@ control. When everything needs to stop, you call a **Ground Stop**.
 
 ## How it works
 
-```text
-  you ──POST /flights──▶  Tower  ──spawns──▶  claude -p / copilot / codex exec
-                            ▲                          │
-                            │                          │ MCP: layover_send(...)
-                            └──────────────────────────┘
-                                   routes, meters, persists
+```mermaid
+flowchart LR
+    you([you]) -->|POST /flights| tower[Tower]
+    tower -->|spawns| cli["claude -p<br/>copilot<br/>codex exec"]
+    cli -->|"MCP: layover_send(...)"| tower
+    tower -.->|routes · meters · persists| store[("hangars<br/>logbook")]
+
+    classDef t fill:#eaf2fb,stroke:#3f6fa3,color:#12263a
+    class tower t
 ```
 
 - **Sending a message is what starts an agent.** There is no separate spawn step.

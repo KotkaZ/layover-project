@@ -2,8 +2,17 @@
 
 The scenario Layover is designed and sized against:
 
-```text
-human → analyst ⇄ [investigator, kusto]  →  developer ⇄ [tester, reviewer]  →  publisher
+```mermaid
+flowchart LR
+    human([human]) --> analyst
+    clock([clock · hourly]) --> scanner[pr_scanner] --> analyst
+    analyst --> investigator & kusto --> joinA{{join = all}} --> analyst
+    analyst -->|work item| developer
+    developer --> tester & reviewer --> joinB{{join = all}} --> developer
+    developer -->|both approved| publisher
+
+    classDef jn fill:#f2e9fd,stroke:#7a44b0,color:#2a1240
+    class joinA,joinB jn
 ```
 
 A request is investigated and backed with telemetry, turned into a work item, implemented, then

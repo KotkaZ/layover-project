@@ -177,6 +177,7 @@ mod tests {
             runner = "claude"
             description = "plans"
             prompt = "plan"
+            access = "read-only"
 
             [pipelines.nightly]
             entry = "planner"

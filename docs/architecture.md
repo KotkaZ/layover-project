@@ -104,30 +104,25 @@ have no way to prove who it is.
 
 ## 5. Runtime flow
 
-```
-  human ──HTTP POST /flights──▶ Tower
-                                  │  mint itinerary { hops, fuel }
-                                  ▼
-                          route check: is from→to permitted?
-                                  │
-                                  ▼
-                        spawn run ── CLI: claude -p "<prompt + flight>"
-                                          --mcp-config <tower url + run token>
-                                  │
-                   child agent calls layover_send(...) ──▶ Tower
-                                  │                          │
-                                  │                  resolve token → identity
-                                  │                  decrement hops, debit fuel
-                                  │                  route check
-                                  ▼                          ▼
-                        stdout ──▶ transcript.jsonl    spawn next run
-                                  │                    (recursively)
-                                  ▼
-                        exit ──▶ run meta.json, artifacts
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Human
+    participant Tower
+    participant CLI as Agent CLI<br/>(claude -p)
+    participant Next as Next run
+
+    Human->>Tower: POST /flights
+    Note over Tower: mint itinerary { hops, fuel }<br/>check the Reserve<br/>route check: is from→to permitted?
+    Tower->>CLI: spawn with prompt + flight<br/>--mcp-config (tower url + run token)
+    CLI-->>Tower: stdout → transcript.jsonl
+    CLI->>Tower: layover_send(to, body)
+    Note over Tower: resolve token → identity<br/>decrement hops, debit fuel<br/>route check
+    Tower->>Next: spawn (recursively)
+    CLI-->>Tower: exit → meta.json, artifacts
 ```
 
-`mode = "request_response"` holds the caller's MCP tool call open until the callee's run exits and
-returns its result. `mode = "async"` returns a flight ID immediately.
+The token — never the agent's claims — is what resolves to `(agent_id, itinerary_id)`. See §4.2.
 
 ## 6. Configuration
 
@@ -480,6 +475,33 @@ often a pipeline can fire. `every` states it outright. Cron does not, but the co
 `* * * * *` and `*/5 * * * *` — state it in the minute field, and reading only those two forms is
 enough to catch them. Lists and ranges are deliberately left alone: a wrong lower bound produces a
 warning that is not true, and a validator that cries wolf is one people stop reading.
+
+**Why MCP servers are declared per agent rather than left to each CLI.** A telemetry agent needs a
+Kusto endpoint and a publisher needs an issue tracker, and configuring those in each CLI's own
+settings puts them somewhere the route map cannot see, nothing validates, and no reviewer reads.
+Declaring them in `layover.toml` makes an agent's reach part of its definition. The cost is that
+config now sits next to credentials, which is why `env` and `env_from` are separate: `env` is for
+values safe in a committed file, `env_from` names variables forwarded from the Tower's own
+environment, and validation *refuses* a literal whose name looks like a credential. A warning
+would not do — the failure is a key in git history, which is not undone by noticing later.
+
+**Why parallel instances needed only a workspace change.** "One pipeline instance per pull
+request" sounds like it needs an instance concept, and it does not: every trigger already mints
+its own itinerary with its own Hops, Fuel, barriers and flags, because barriers are keyed by
+`(itinerary_id, to_agent)` and Fuel is per chain. The single thing instances actually shared was
+the working directory. `workspace = "per-itinerary"` gives each a git worktree and the rest was
+already true. Left as opt-in because a worktree per itinerary costs disk and setup time, and a
+single-instance pipeline wants neither.
+
+**Why autostart generates rather than installs.** A lights-out factory that stops at every reboot
+is not lights-out, so the Tower has to survive one. But registering a service writes to the
+machine, and the artefact is exactly the kind of thing a person should read before it runs at
+every logon. So `layover autostart` renders the platform's own file — Scheduled Task, launchd
+agent, systemd user unit — and prints the one command that registers it. It also refuses to write
+anything for a factory that does not load, because a service failing at every logon is worse than
+no service. All three artefacts install into the logged-in user's session and never machine-wide:
+the Tower spawns agents using *that user's* credentials, git identity and workspace, and a system
+service would have none of them or would run as root with all of them.
 
 **Why documentation upkeep is in `AGENTS.md` rather than in review.** `docs/` is normative and
 hand-maintained, and an agent that trusts a stale document makes confident wrong changes. Review

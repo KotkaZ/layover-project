@@ -52,12 +52,15 @@ control. When everything needs to stop, you call a **Ground Stop**.
 
 ## How it works
 
-```
-  you ──POST /flights──▶  Tower  ──spawns──▶  claude -p / copilot / codex exec
-                            ▲                          │
-                            │                          │ MCP: layover_send(...)
-                            └──────────────────────────┘
-                                   routes, meters, persists
+```mermaid
+flowchart LR
+    you([you]) -->|POST /flights| tower[Tower]
+    tower -->|spawns| cli["claude -p<br/>copilot<br/>codex exec"]
+    cli -->|"MCP: layover_send(...)"| tower
+    tower -.->|routes · meters · persists| store[("hangars<br/>logbook")]
+
+    classDef t fill:#eaf2fb,stroke:#3f6fa3,color:#12263a
+    class tower t
 ```
 
 - **Sending a message is what starts an agent.** There is no separate spawn step — a flight's
@@ -84,8 +87,17 @@ See [`docs/roadmap.md`](docs/roadmap.md) for what is in and out.
 [`examples/workitem-factory/`](examples/workitem-factory/README.md) is the scenario v0.1 is sized
 against, and the best place to start reading:
 
-```
-human → analyst ⇄ [investigator, kusto]  →  developer ⇄ [tester, reviewer]  →  publisher
+```mermaid
+flowchart LR
+    human([human]) --> analyst
+    clock([clock · hourly]) --> scanner[pr_scanner] --> analyst
+    analyst --> investigator & kusto --> joinA{{join = all}} --> analyst
+    analyst -->|work item| developer
+    developer --> tester & reviewer --> joinB{{join = all}} --> developer
+    developer -->|both approved| publisher
+
+    classDef jn fill:#f2e9fd,stroke:#7a44b0,color:#2a1240
+    class joinA,joinB jn
 ```
 
 A request is investigated and backed with telemetry, turned into a work item, implemented, then

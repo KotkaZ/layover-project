@@ -101,6 +101,39 @@ prompt_file = "tester.md"
 | `entry` | `false` | Whether a human may send flights straight here. |
 | `resident` | `false` | Pin the agent resident rather than transient. Not in v0.1. |
 | `fuel_usd` | — | Fuel override for itineraries that *start* at this agent. |
+| `work_dir` | — | Work somewhere other than the shared `work_dir`. |
+
+### MCP servers
+
+Layover is itself an MCP server — that is how agents send flights. `[agents.<name>.mcp.<server>]`
+declares the *other* servers an agent needs:
+
+```toml
+[agents.kusto.mcp.kusto]
+command  = ["agency", "mcp", "kusto"]
+env      = { KUSTO_CLUSTER = "ic3-aria-eus2" }
+env_from = ["AZURE_CLIENT_SECRET"]
+
+[agents.publisher.mcp.ado]
+url      = "https://dev.azure.com/mcp/"
+env_from = ["ADO_PAT"]
+```
+
+Give exactly one of `command` (stdio) or `url` (HTTP).
+
+**`env` is for values that are safe in a committed file** — a cluster name, a region. Anything
+that authenticates goes in `env_from`, which names variables the Tower forwards from *its own*
+environment at spawn time, so the value never appears in `layover.toml`.
+
+`layover validate` **refuses** a literal whose name looks like a credential:
+
+```text
+error: agent `kusto` MCP server `kusto` sets `AZURE_CLIENT_SECRET` literally in `env`, and that
+       name looks like a credential; move it to `env_from = ["AZURE_CLIENT_SECRET"]`
+```
+
+It also warns about plain HTTP to a non-local address, since anything forwarded through `env_from`
+would cross the network in the clear.
 
 Exactly one of `prompt` and `prompt_file` must be given. Setting both is an error, because which
 one applies would otherwise be undefined.

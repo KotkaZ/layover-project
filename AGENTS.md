@@ -70,6 +70,8 @@ repository is meant to be worked on by agents.
 | A decision that was not obvious | The decision log in `docs/architecture.md` §13 — *why*, not what |
 | Anything listed as open in `docs/roadmap.md` | Move it to **Resolved** with the answer and the reasoning |
 | A new known hazard | `docs/risks.md` |
+| MCP servers, workspaces or autostart | `book/src/configuration.md`, `book/src/pipelines.md`, `book/src/install.md` |
+| Any diagram | Use Mermaid, not ASCII — GitHub and the book both render it |
 | The CLI's commands or flags | `crates/layover-cli/README.md`, `book/src/install.md` |
 | How Layover is installed or released | `dist-workspace.toml` then `dist generate`, `book/src/install.md`, both READMEs |
 

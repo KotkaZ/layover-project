@@ -154,6 +154,34 @@ pub struct FlagSpec {
     pub description: Option<String>,
 }
 
+/// How an itinerary's workspace relates to other itineraries'.
+///
+/// A pipeline that can have several instances in flight — one per pull request, say — needs each
+/// to work somewhere of its own, or two `read-write` agents in two unrelated itineraries will
+/// clobber each other in the shared directory.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Workspace {
+    /// Every itinerary works in the one shared `work_dir`.
+    ///
+    /// The default, because it is what a single-instance pipeline wants and because a worktree
+    /// per itinerary costs disk and setup time.
+    #[default]
+    Shared,
+    /// Each itinerary gets its own git worktree, named after the itinerary.
+    ///
+    /// This is what makes several instances of one pipeline safe to run at once.
+    PerItinerary,
+}
+
+impl Workspace {
+    /// Returns `true` when each itinerary is isolated from the others.
+    #[must_use]
+    pub fn is_isolated(&self) -> bool {
+        matches!(self, Self::PerItinerary)
+    }
+}
+
 /// A named entry point into the mesh.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -166,6 +194,9 @@ pub struct Pipeline {
     /// What starts it.
     #[serde(default = "manual_trigger")]
     pub trigger: Trigger,
+    /// Whether instances of this pipeline share a workspace or get one each.
+    #[serde(default)]
+    pub workspace: Workspace,
     /// Boolean parameters this pipeline accepts, keyed by flag name.
     #[serde(default)]
     pub flags: BTreeMap<String, FlagSpec>,

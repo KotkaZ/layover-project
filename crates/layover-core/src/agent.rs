@@ -5,10 +5,13 @@
 //! these descriptions to a running agent so it can decide where to route work. An agent with no
 //! description is a name the mesh cannot reason about.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
+
+use crate::mcp::McpServer;
 
 /// The name of an agent, as written in `layover.toml`.
 ///
@@ -114,6 +117,19 @@ pub struct Agent {
     /// Per-agent Fuel override, applied when an itinerary starts at this agent.
     #[serde(default)]
     pub fuel_usd: Option<f64>,
+    /// MCP servers this agent may reach, keyed by name.
+    ///
+    /// Layover's own server is always wired up; these are the ones the agent needs to do its job
+    /// — a telemetry agent's Kusto endpoint, a publisher's issue tracker. Secrets never appear
+    /// here: see [`crate::mcp`].
+    #[serde(default)]
+    pub mcp: BTreeMap<String, McpServer>,
+    /// Directory this agent works in, overriding `[layover] work_dir`.
+    ///
+    /// For an agent whose job is somewhere else entirely — mining telemetry from a different
+    /// checkout, say. Resolved relative to the configuration file.
+    #[serde(default)]
+    pub work_dir: Option<PathBuf>,
 }
 
 impl Agent {

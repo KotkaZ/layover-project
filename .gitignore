@@ -3,6 +3,13 @@
 **/*.rs.bk
 *.pdb
 
+# Documentation site build output, and the Mermaid assets `mdbook-mermaid install book`
+# generates. Both are produced by the Pages workflow; committing them would mean two sources of
+# truth for a file nobody edits.
+/book/book/
+/book/mermaid.min.js
+/book/mermaid-init.js
+
 # Layover runtime state
 /.layover/state/
 /.layover/logbook.md

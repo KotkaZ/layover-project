@@ -165,18 +165,17 @@ one writes. **Two concurrent read-write agents remain unsafe**; see [`risks.md`]
 A minimal shape exercising every mechanism above: one agent fans out to two, one of which is
 read-only, and their results rendezvous at a third.
 
-```
-        planner
-           │
-     ┌─────┴─────┐
-     ▼           ▼
-  probe_a     probe_b        (concurrent; probe_b is read-only)
-     │           │
-     └─────┬─────┘
-           ▼
-     join = "all"
-           ▼
-       collector
+```mermaid
+flowchart TD
+    planner --> probe_a
+    planner --> probe_b["probe_b<br/><i>read-only</i>"]
+    probe_a --> barrier{{"join = all<br/>timeout_sec = 1800"}}
+    probe_b --> barrier
+    barrier --> collector
+    probe_a -.->|"failure loop-back"| planner
+
+    classDef jn fill:#f2e9fd,stroke:#7a44b0,color:#2a1240
+    class barrier jn
 ```
 
 ```toml

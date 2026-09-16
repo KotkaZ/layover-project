@@ -5,8 +5,15 @@ authors = ["The Layover contributors"]
 language = "en"
 src = "src"
 
+# Renders the `mermaid` blocks in the sources. Without it mdBook prints them as code, while
+# GitHub renders them natively — so the same file would look right in one place and wrong in the
+# other. `mdbook-mermaid install book` drops the two JS assets the theme needs.
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
+
 [output.html]
 default-theme = "ayu"
 preferred-dark-theme = "ayu"
 git-repository-url = "https://github.com/KotkaZ/layover-project"
 edit-url-template = "https://github.com/KotkaZ/layover-project/edit/main/book/{path}"
+additional-js = ["mermaid.min.js", "mermaid-init.js"]

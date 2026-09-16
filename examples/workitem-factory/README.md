@@ -16,49 +16,48 @@ Alongside this file: [`layover.toml`](layover.toml) and [`prompts/`](prompts/ana
 
 ## 1. The route map
 
+```mermaid
+flowchart TD
+    human([human]) --> analyst
+    clock([clock · hourly]) --> scanner
+
+    scanner["pr_scanner"] --> analyst
+
+    analyst["analyst"] --> investigator["investigator"]
+    analyst --> kusto["kusto"]
+
+    investigator --> joinA{{"join = all"}}
+    kusto --> joinA
+    joinA -->|"wakes once, holding both replies"| analyst
+
+    analyst -->|"work item"| developer["developer"]
+
+    developer --> tester["tester"]
+    developer --> reviewer["reviewer"]
+
+    tester --> joinB{{"join = all"}}
+    reviewer --> joinB
+    joinB -->|"both verdicts together"| developer
+
+    developer -->|"both approved"| publisher["publisher"]
+
+    classDef ro fill:#eaf2fb,stroke:#3f6fa3,color:#12263a
+    classDef rw fill:#fff1e0,stroke:#c07400,color:#3a2200
+    classDef jn fill:#f2e9fd,stroke:#7a44b0,color:#2a1240
+    classDef ev fill:#eef0f2,stroke:#7a828a,color:#1b1f23
+    class scanner,analyst,investigator,kusto,tester,reviewer ro
+    class developer,publisher rw
+    class joinA,joinB jn
+    class human,clock ev
 ```
-                         human                          clock (hourly)
-                           │                                 │
-                           │                                 ▼
-                           │                            pr_scanner
-                           │                                 │
-                           ▼                                 │
-    ┌─────────────────▶ analyst ◀─────────────────────────────┘        two ways in
-    │                      │
-    │             ┌────────┴────────┐
-    │             ▼                 ▼
-    │       investigator          kusto         concurrent · both read-only
-    │             │                 │
-    │             └────────┬────────┘
-    │                 join = "all"
-    └──────────────────────┘
 
-                        analyst
-                           │
-                           ▼
-    ┌────────────────▶ developer                the only writer
-    │                      │
-    │             ┌────────┴────────┐
-    │             ▼                 ▼
-    │          tester            reviewer       concurrent · both read-only
-    │             │                 │
-    │             └────────┬────────┘
-    │                 join = "all"
-    └──────────────────────┘
+Blue agents are `read-only` and get a worktree snapshot; orange ones are `read-write` and share
+the live workspace. The two purple nodes are rendezvous barriers, not agents — nothing runs there.
 
-                       developer
-                           │  both approved
-                           ▼
-                       publisher                opens the pull request in ADO
-```
-
-`analyst` and `developer` appear twice because they *run* twice — or, for the developer, once per
-round of the loop. Every run is a clean slate, so the second one is a different process that
-remembers nothing of the first; it knows only what its incoming flights and its `memory.md` tell
-it.
-
-Seven edges. Two of them are rendezvous joins, and both join back onto an agent that ordinary
-edges also reach — see §4.2.
+Both barriers land on an agent that ordinary edges also reach — see §5.2 for why that works. The
+loop is `developer → tester/reviewer → developer`, turning until both approve. Nothing in Layover
+enforces that sequence: the route map says these edges are *permitted*, and the developer decides
+at runtime whether to loop or to publish.
 
 ## 2. Two ways in
 

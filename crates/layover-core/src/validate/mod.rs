@@ -12,6 +12,7 @@ mod pipelines;
 mod prompts;
 mod reach;
 mod routes;
+mod wiring;
 
 use crate::config::Config;
 use crate::prompt::PromptSource;
@@ -82,6 +83,7 @@ pub fn validate(config: &Config) -> Vec<Diagnostic> {
     routes::check_read_write_fan_out(config, &mut found);
     reach::check_every_agent_is_within_reach(config, &mut found);
     pipelines::check_pipelines(config, &mut found);
+    wiring::check_mcp_and_workspaces(config, &mut found);
 
     found
 }

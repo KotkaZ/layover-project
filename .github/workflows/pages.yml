@@ -28,7 +28,13 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
 
       - name: Install mdBook
-        run: cargo install mdbook --version ^0.4 --locked
+        run: |
+          cargo install mdbook --version ^0.4 --locked
+          cargo install mdbook-mermaid --version ^0.15 --locked
+
+      # Drops mermaid.min.js and mermaid-init.js into book/, which book.toml references.
+      - name: Install Mermaid assets
+        run: mdbook-mermaid install book
 
       # The book includes example configurations by path. If one is renamed, the
       # build fails here rather than publishing a page with a dangling include.

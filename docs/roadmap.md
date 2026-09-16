@@ -146,36 +146,75 @@ Agents should ask rather than guess on any of these.
     observe dispatch, and it has a race: a fast upstream could release the barrier before its
     sibling has been dispatched at all.
 
+### Surviving a restart — blocks "lights-out"
+
+14. **What does the Tower do about work that was in flight when it died?** A VM restart, a crash,
+    a laptop lid. Today nothing survives: runs are child processes and the itinerary lives in
+    memory, so a restart silently loses every chain that was mid-flight. For a factory that is
+    supposed to run unattended for weeks, that is the difference between "unattended" and
+    "unattended until something happens".
+
+    The shape that seems right, and what it costs:
+
+    - **Itinerary state is already durable-shaped.** Hops, Fuel, the run cap and parked barriers
+      are plain data keyed by `itinerary_id`. Persisting them per flight is cheap.
+    - **A run is not.** A killed child process cannot be resumed — its context is gone. The
+      honest options are to *re-dispatch* the flight that started it (idempotent only if the
+      agent's prompt makes it so) or to mark the itinerary **interrupted** and let a human decide.
+    - **A prior art worth copying.** The `ai-buddies` pipeline makes a session "a UUID plus the
+      CLI's own on-disk conversation plus a transcript, with no long-lived process between
+      turns", so a session survives a reboot because there was never a process to lose. That
+      works because the *CLI* persists the conversation, not the supervisor.
+
+    Open questions inside this: is an interrupted run re-dispatched automatically or only on
+    request? Does a parked barrier survive, given its upstreams' runs did not? Is `interrupted` a
+    third outcome beside `failed` and `stalled`, and if so who resolves it? **This touches the
+    locked "fresh runs" decision and needs a call before anyone implements it.**
+
+15. **Can a human steer a run while it is happening?** Watching a factory publish the wrong thing
+    and being unable to say "not like that" is the complaint that most undermines trusting it.
+
+    This directly contradicts two locked decisions — *Lifecycle: transient per flight* and
+    *Continuity: fresh* — so it is not a feature that can be added quietly. Two shapes, and they
+    are genuinely different:
+
+    - **Queue a flight to the running agent.** Fits the mesh: steering is just another flight,
+      delivered at the next tool call. Needs no new lifecycle, but the agent only notices when it
+      next talks to the Tower, and a run deep in a tool call may never look.
+    - **Keep a resumable conversation per agent.** What `ai-buddies` does for its interactive
+      agents: the CLI owns the conversation on disk and Layover drives it turn by turn. Genuinely
+      steerable, and it makes `resident` the normal case rather than the exception — which brings
+      back risk 1 (resident + reentrant) and undoes the reason fresh runs were chosen.
+
+    The first is a small change to a large idea; the second is a large change to a small one.
+    Deciding needs an answer to "what is Layover for" more than to any technical question.
+
 ### Platform
 
-14. **Windows support.** Development happens on Windows, where process-tree termination, git
+16. **Windows support.** Development happens on Windows, where process-tree termination, git
     worktrees and signal handling all differ from Unix. Ground Stop and timeouts are the
     OS-specific parts.
 
 ### Everything else
 
-15. **How does an agent get MCP servers of its own?** `[runners]` wires up Layover's own MCP
-    endpoint and nothing else. An agent whose whole job is querying a data source — the telemetry
-    agent in the reference scenario — needs its own server, and today that has to be configured
-    outside Layover in the CLI's own settings, invisibly to the route map.
-16. **How do child CLIs receive credentials?** Inherited environment, or injected per run by the
+17. **How do child CLIs receive credentials?** Inherited environment, or injected per run by the
     Tower. Per-run injection allows per-agent credentials and revocation.
-17. **Is the Logbook one flat file or namespaced?** One file serializes every write in the factory
+18. **Is the Logbook one flat file or namespaced?** One file serializes every write in the factory
     through a single lock.
-18. **Observability** — structured logs, or OpenTelemetry traces where an Itinerary is a trace and
+19. **Observability** — structured logs, or OpenTelemetry traces where an Itinerary is a trace and
     each Run a span? The latter would visualise a stalled barrier.
-19. **UI stack** — plain HTML with SSE, or a framework. Reversible; it only consumes the HTTP API.
-20. **Is the aviation terminology confirmed?** Adopted provisionally throughout. Now that code
+20. **UI stack** — plain HTML with SSE, or a framework. Reversible; it only consumes the HTTP API.
+21. **Is the aviation terminology confirmed?** Adopted provisionally throughout. Now that code
     exists it is no longer free to strip, but it is still only names.
-21. **Does a scheduled pipeline skip a tick it is still working on, or start a second run?**
+22. **Does a scheduled pipeline skip a tick it is still working on, or start a second run?**
     Runs are reentrant, so today it would start a second. Validation warns when the firing gap is
     shorter than `timeout_sec`, which is a smell test rather than an answer. An independent review
     argued the safe default for unattended spending is to *skip* the tick and require
     `overlap = "allow"` to opt in; that is probably right and is a Tower behaviour, so it is
     recorded here rather than guessed at.
-22. **What time zone does a cron expression mean?** Local to the Tower is the obvious answer and
+23. **What time zone does a cron expression mean?** Local to the Tower is the obvious answer and
     the obvious source of a 1am surprise twice a year.
-23. **Should `entry = true` survive at all?** A review argued it is two ways to do one thing, and
+24. **Should `entry = true` survive at all?** A review argued it is two ways to do one thing, and
     that a pipeline with no flags expresses the same intent. The counter-argument is in the
     decision log. The deciding evidence would be whether anyone actually uses a bare entry agent
     once pipelines exist; nobody has used either yet.
@@ -199,6 +238,8 @@ Agents should ask rather than guess on any of these.
 - **Can one factory definition serve several situations?** *Yes, through pipeline flags and
   conditional `@include` directives* — booleans chosen at trigger time, not a templating language,
   so every possible prompt stays a file somebody can read.
+- **How does an agent get MCP servers of its own?** *Declared per agent, in `[agents.<name>.mcp.<server>]`.* Credentials are named in `env_from` and read from the Tower's environment rather than written into a committed file, and validation refuses a literal that looks like one.
+- **Can several instances of one pipeline run at once?** *Yes.* Each trigger already mints its own itinerary, barriers and flags; `workspace = "per-itinerary"` adds the missing piece by giving each a git worktree of its own.
 
 ---
 

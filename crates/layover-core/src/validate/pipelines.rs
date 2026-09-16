@@ -146,6 +146,7 @@ mod tests {
         [agents.analyst]
         runner = "claude"
         description = "analyses"
+        access = "read-only"
         prompt = "analyse"
     "#;
 
