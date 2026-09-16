@@ -26,3 +26,9 @@ unsafe_code = "forbid"
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 module_name_repetitions = "allow"
+
+# Required by `dist`, which builds releases with `--profile dist`. Its absence is invisible to
+# `dist plan` and only surfaces once a tag starts a real build.
+[profile.dist]
+inherits = "release"
+lto = "thin"
