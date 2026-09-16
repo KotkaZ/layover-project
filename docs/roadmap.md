@@ -186,9 +186,7 @@ recovery and steering use the one mechanism — see
     argued the safe default for unattended spending is to *skip* the tick and require
     `overlap = "allow"` to opt in; that is probably right and is a Tower behaviour, so it is
     recorded here rather than guessed at.
-24. **What time zone does a cron expression mean?** Local to the Tower is the obvious answer and
-    the obvious source of a 1am surprise twice a year.
-25. **Should `entry = true` survive at all?** A review argued it is two ways to do one thing, and
+24. **Should `entry = true` survive at all?** A review argued it is two ways to do one thing, and
     that a pipeline with no flags expresses the same intent. The counter-argument is in the
     decision log. The deciding evidence would be whether anyone actually uses a bare entry agent
     once pipelines exist; nobody has used either yet.
@@ -218,6 +216,7 @@ recovery and steering use the one mechanism — see
 - **Can a human steer a run that is already going?** *Yes, by starting a new run carrying their instruction and the prior run's state.* Same mechanism as recovery, which is why neither needed resident agents.
 - **What does the UI look like?** *Server-rendered HTML with an SVG route map, embedded in the binary.* No npm, no framework, no build step, and the graph layout is a pure function with unit tests rather than a 2.5 MB JavaScript dependency. Reversible: the page only consumes the HTTP API.
 - **How far back does history go, and where does it live?** *Ninety days, as one JSON Lines file per UTC day under `.layover/history`.* Retention is deleting whole files.
+- **What time zone does a cron expression fire in?** *The Tower's local zone, recorded alongside the schedule.* Same rule as calendar cost windows: a calendar thing is reckoned locally and says which zone it used. `0 3 * * *` means three in the morning where the operator is, which is what whoever wrote it meant.
 
 ---
 
