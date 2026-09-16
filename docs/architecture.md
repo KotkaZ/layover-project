@@ -638,3 +638,40 @@ requests. So those interruptions carry `ChildState::Unknown` until something che
 `authorize_recovery` refuses them; the run record keeps the process id so there is something to
 check. A recycled process id can make a dead run look alive, which fails towards refusing to
 recover — the safe direction, because stalled work is visible and duplicated work is not.
+
+**Why learnings apply immediately instead of waiting for approval.** The obvious design puts a
+human between a proposal and its use. A sibling project built exactly that — proposal format,
+duplicate detection, impact ratings, a review endpoint, a dashboard queue — and after 22 days of
+real operation held 88 learnings, every one still pending, none ever approved. Since only approved
+learnings were injected, not one had ever reached a run: everything was built except the step that
+creates the value. That is not a discipline failure but an incentive one. Approving buys a diffuse
+future benefit, rejecting buys nothing, and ignoring costs nothing today, so a gate whose default
+action is free gets defaulted forever. A learning here applies at once and expires after twenty of
+its agent's runs, so a wrong one decays rather than compounding, and review happens by exception.
+That is only defensible because run history records which learnings were live for each run, which
+makes "what was it told when it did that?" answerable and revocation a single press.
+
+**Why an echo does not count as a rediscovery.** Confirmation comes from a learning being
+independently arrived at three times, which is evidence — unlike the `impact` rating, which is the
+agent's own claim about its own work and therefore decides nothing. The trap is that showing a
+learning to an agent contaminates the signal: repeating advice you were just given proves nothing,
+and counting it would let a single fluke confirm itself within three runs. So duplicates are
+suppressed while a learning is active — the same behaviour the sibling project needed, for the
+opposite reason — and only a proposal arriving while the learning has lapsed increments the count.
+
+**Why sameness is decided by containment rather than overlap.** Whether two sentences say the same
+thing decides whether rediscovery is ever recognised, and it fails silently in both directions: too
+strict and nothing is ever confirmed while the mechanism appears to work, too loose and two
+insights merge and one is lost without trace. Word overlap is the wrong measure because real
+learnings share sentence frames — "the workspace needs careful handling before publishing" and "the
+manifest needs careful handling before publishing" overlap five words out of seven while being
+different claims. Containment discriminates correctly: a rediscovery with an added clause is a
+superset, while two different insights each carry a word the other lacks. A minimum length stops a
+two-word learning matching everything, and a ceiling on elaboration keeps a substantially more
+specific claim separate, which is what a refinement is.
+
+**Why help requests are pruned and learnings are not.** Help requests are events: each happened at
+a moment, is answered or not, and stops mattering. They are segmented by day and expire on the same
+ninety-day horizon as run history. Learnings are state, rewritten as they are rediscovered or
+revoked, and exempt from retention entirely — a confirmed learning that expired for being ninety
+days old would be the one thing in the system that got worse the longer it was right.

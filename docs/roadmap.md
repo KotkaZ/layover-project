@@ -218,6 +218,8 @@ recovery and steering use the one mechanism — see
 - **How far back does history go, and where does it live?** *Ninety days, as one JSON Lines file per UTC day under `.layover/history`.* Retention is deleting whole files.
 - **What time zone does a cron expression fire in?** *The Tower's local zone, recorded alongside the schedule.* Same rule as calendar cost windows: a calendar thing is reckoned locally and says which zone it used. `0 3 * * *` means three in the morning where the operator is, which is what whoever wrote it meant.
 - **How does a run receive its prompt?** *On stdin.* Never on the command line: Windows caps one at 32,767 characters and real prompts run to tens of kilobytes. `{prompt}` in a runner command is a *path* to the composed instructions, for CLIs that take one.
+- **How does an agent report that it is stuck?** *A structured help request, surfaced on the dashboard, with the blocker category and whether it stopped the work.* The run that raised it carries a one-line `blocked_on` so it does not look clean in a list.
+- **How does a factory get better at its job over time?** *Agents propose learnings that apply immediately and expire after twenty runs unless independently rediscovered.* No approval queue; review by exception.
 
 ---
 

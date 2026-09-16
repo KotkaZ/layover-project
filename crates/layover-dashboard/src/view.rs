@@ -11,8 +11,9 @@ use layover_core::pipeline::{Schedule, Trigger as CoreTrigger};
 use layover_core::route::Join as CoreJoin;
 use layover_core::run::{Outcome, RunRecord};
 use layover_http::{
-    Access, Agent, AgentList, CostSource, CostSummary, CostWindow, Flag, Join, Pipeline,
-    PipelineList, Route, Run, RunStatus, TokenUsage, Trigger, TriggerKind, WindowSpan,
+    Access, Agent, AgentList, Blocker, CostSource, CostSummary, CostWindow, Flag, HelpRequest,
+    Impact, Join, Learning, LearningState, Pipeline, PipelineList, Route, Run, RunStatus,
+    TokenUsage, Trigger, TriggerKind, WindowSpan,
 };
 
 /// Describes the factory's agents and the edges between them.
@@ -116,6 +117,7 @@ pub fn run(record: &RunRecord) -> Run {
         cost_usd: (record.source != CoreSource::Unreported).then_some(record.usd),
         cost_source: source(record.source),
         detail: record.detail.clone(),
+        blocked_on: record.blocked_on.clone(),
         hops_remaining: None,
     }
 }
@@ -182,5 +184,87 @@ fn window(window: Window) -> CostWindow {
         Window::MonthToDate => CostWindow::MonthToDate,
         Window::Last90Days => CostWindow::Last90d,
         Window::AllTime => CostWindow::AllTime,
+    }
+}
+
+/// Describes one help request.
+pub fn help(request: &layover_core::help::HelpRequest) -> HelpRequest {
+    HelpRequest {
+        agent: request.agent.to_string(),
+        run_id: request.run.to_string(),
+        itinerary_id: request.itinerary.as_str().to_owned(),
+        blocker: blocker(request.blocker),
+        summary: request.summary.clone(),
+        detail: request.detail.clone(),
+        fatal: request.fatal,
+        at: request.at.to_string(),
+        resolved_at: request.resolved_at.map(|at| at.to_string()),
+    }
+}
+
+/// Names a blocker on the wire.
+fn blocker(blocker: layover_core::help::Blocker) -> Blocker {
+    use layover_core::help::Blocker as Core;
+    match blocker {
+        Core::Access => Blocker::Access,
+        Core::Tooling => Blocker::Tooling,
+        Core::Ambiguity => Blocker::Ambiguity,
+        Core::Environment => Blocker::Environment,
+        Core::Decision => Blocker::Decision,
+        Core::Other => Blocker::Other,
+    }
+}
+
+/// Reads a blocker off the wire.
+pub fn blocker_from(blocker: Blocker) -> layover_core::help::Blocker {
+    use layover_core::help::Blocker as Core;
+    match blocker {
+        Blocker::Access => Core::Access,
+        Blocker::Tooling => Core::Tooling,
+        Blocker::Ambiguity => Core::Ambiguity,
+        Blocker::Environment => Core::Environment,
+        Blocker::Decision => Core::Decision,
+        Blocker::Other => Core::Other,
+    }
+}
+
+/// Describes one learning.
+pub fn learning(learning: &layover_core::learning::Learning) -> Learning {
+    Learning {
+        id: learning.id.to_string(),
+        agent: learning.agent.to_string(),
+        text: learning.text.clone(),
+        impact: match learning.impact {
+            layover_core::learning::Impact::Low => Impact::Low,
+            layover_core::learning::Impact::Medium => Impact::Medium,
+            layover_core::learning::Impact::High => Impact::High,
+        },
+        state: learning_state(learning.state),
+        proposals: i32::try_from(learning.proposals).unwrap_or(i32::MAX),
+        runs_left: i32::try_from(learning.runs_left).unwrap_or(i32::MAX),
+        first_at: learning.first_at.to_string(),
+        last_at: learning.last_at.to_string(),
+    }
+}
+
+/// Names a learning state on the wire.
+fn learning_state(state: layover_core::learning::State) -> LearningState {
+    use layover_core::learning::State as Core;
+    match state {
+        Core::Provisional => LearningState::Provisional,
+        Core::Confirmed => LearningState::Confirmed,
+        Core::Lapsed => LearningState::Lapsed,
+        Core::Rejected => LearningState::Rejected,
+    }
+}
+
+/// Reads a learning state off the wire.
+pub fn learning_state_from(state: LearningState) -> layover_core::learning::State {
+    use layover_core::learning::State as Core;
+    match state {
+        LearningState::Provisional => Core::Provisional,
+        LearningState::Confirmed => Core::Confirmed,
+        LearningState::Lapsed => Core::Lapsed,
+        LearningState::Rejected => Core::Rejected,
     }
 }

@@ -16,10 +16,12 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt as _;
 use layover_http::{
-    Access, Agent, AgentList, Api, CostBucket, CostReport, CostSource, CostSummary, CostWindow,
-    EventStream, FlightAccepted, GetCostsQuery, GetRunPath, GroundStop, Health, ListRunsQuery,
-    OPERATIONS, Pipeline, PipelineList, Problem, ReserveState, RouteMap, Run, RunList, RunStatus,
-    SendFlightRequest, Status, StreamRunPath, TokenUsage, Trigger, TriggerKind, WindowSpan, router,
+    Access, Agent, AgentList, Api, Blocker, CostBucket, CostReport, CostSource, CostSummary,
+    CostWindow, EventStream, FlightAccepted, GetCostsQuery, GetRunPath, GroundStop, Health,
+    HelpList, HelpRequest, Impact, Learning, LearningList, LearningState, ListHelpQuery,
+    ListLearningsQuery, ListRunsQuery, OPERATIONS, Pipeline, PipelineList, Problem, ReserveState,
+    RouteMap, Run, RunList, RunStatus, SendFlightRequest, Status, StreamRunPath, TokenUsage,
+    Trigger, TriggerKind, WindowSpan, router,
 };
 use tower::ServiceExt as _;
 
@@ -59,6 +61,7 @@ fn sample_run() -> Run {
         cost_usd: None,
         cost_source: CostSource::Unreported,
         detail: Some("the Tower went away mid-run".to_owned()),
+        blocked_on: None,
         hops_remaining: Some(21),
     }
 }
@@ -199,6 +202,40 @@ impl Api for Stub {
         })
     }
 
+    async fn list_help(&self, _: ListHelpQuery) -> Result<HelpList, Problem> {
+        Ok(HelpList {
+            requests: vec![HelpRequest {
+                agent: "publisher".to_owned(),
+                run_id: "run_1".to_owned(),
+                itinerary_id: "itn_1".to_owned(),
+                blocker: Blocker::Access,
+                summary: "the ADO token expired".to_owned(),
+                detail: "tried to push, got 401, needs a fresh token".to_owned(),
+                fatal: true,
+                at: "2026-09-16T12:00:00Z".to_owned(),
+                resolved_at: None,
+            }],
+            open: 1,
+        })
+    }
+
+    async fn list_learnings(&self, _: ListLearningsQuery) -> Result<LearningList, Problem> {
+        Ok(LearningList {
+            learnings: vec![Learning {
+                id: "lrn_1".to_owned(),
+                agent: "publisher".to_owned(),
+                text: "the ADO token expires every thirty days".to_owned(),
+                impact: Impact::High,
+                state: LearningState::Confirmed,
+                proposals: 3,
+                runs_left: 0,
+                first_at: "2026-08-16T12:00:00Z".to_owned(),
+                last_at: "2026-09-16T12:00:00Z".to_owned(),
+            }],
+            active: 1,
+        })
+    }
+
     async fn engage_ground_stop(&self) -> Result<GroundStop, Problem> {
         Ok(GroundStop {
             engaged: true,
@@ -253,7 +290,7 @@ fn json(body: &str) -> serde_json::Value {
 
 #[test]
 fn every_specified_operation_is_routed() {
-    assert_eq!(OPERATIONS.len(), 11);
+    assert_eq!(OPERATIONS.len(), 13);
 
     for (method, path, operation) in OPERATIONS {
         assert!(path.starts_with('/'), "`{operation}` has an odd path");

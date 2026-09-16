@@ -76,6 +76,7 @@ repository is meant to be worked on by agents.
 | Any diagram | Use Mermaid, not ASCII — GitHub and the book both render it |
 | Recovery, steering or the handover | `book/src/recovery.md`, `docs/architecture.md` §13 |
 | The dashboard, history or cost windows | `book/src/dashboard.md`, `book/src/cost.md` |
+| Help requests or learnings | `book/src/learning.md`, `docs/architecture.md` §13 |
 | The CLI's commands or flags | `crates/layover-cli/README.md`, `book/src/install.md` |
 | How Layover is installed or released | `dist-workspace.toml` then `dist generate`, `book/src/install.md`, both READMEs |
 

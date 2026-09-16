@@ -13,7 +13,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt as _;
 use layover_dashboard::{Dashboard, DashboardState, router};
-use layover_store::History;
+use layover_store::{History, Journal};
 use tower::ServiceExt as _;
 
 /// A temporary factory: a configuration file and a history directory that clean themselves up.
@@ -50,6 +50,7 @@ impl Factory {
         router(Dashboard::new(DashboardState {
             config_path: self.0.join("layover.toml"),
             history: History::open(self.0.join("history")).expect("opens history"),
+            journal: Journal::open(self.0.join("journal")).expect("opens journal"),
         }))
     }
 

@@ -27,5 +27,8 @@
 //! each end and filters by instant, which is cheap and cannot be wrong.
 
 mod history;
+mod journal;
+mod segment;
 
 pub use history::{History, RunFilter, StoreError};
+pub use journal::{HelpFilter, Journal};

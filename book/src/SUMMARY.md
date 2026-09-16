@@ -15,6 +15,7 @@
 - [Prompts](./prompts.md)
 - [Cost](./cost.md)
 - [The dashboard](./dashboard.md)
+- [Help and learnings](./learning.md)
 - [Recovery and steering](./recovery.md)
 - [HTTP API](./http-api.md)
 

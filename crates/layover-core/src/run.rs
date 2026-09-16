@@ -127,6 +127,15 @@ pub struct RunRecord {
     /// Why it ended, for the outcomes where that is not obvious.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
+    /// What the run could not get past, when it asked for help.
+    ///
+    /// Present whether or not the run succeeded, because the two are independent: an agent can
+    /// finish its task and still have been unable to check something. Without this a blocked run
+    /// looks exactly like a clean one on a list, which is the failure mode a lights-out factory
+    /// can least afford — the detail lives with the help request, and this is the one line that
+    /// makes the run worth opening.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocked_on: Option<String>,
     /// The operating system process id, while the run is live.
     ///
     /// Recorded so that a Tower coming back from a restart can *check* whether the process is
@@ -162,6 +171,7 @@ impl RunRecord {
             source: CostSource::Unreported,
             usage: TokenUsage::default(),
             detail: None,
+            blocked_on: None,
             pid: None,
         }
     }
@@ -202,6 +212,19 @@ impl RunRecord {
     pub fn because(mut self, detail: impl Into<String>) -> Self {
         self.detail = Some(detail.into());
         self
+    }
+
+    /// Notes that the run asked for help, and what about.
+    #[must_use]
+    pub fn blocked_on(mut self, summary: impl Into<String>) -> Self {
+        self.blocked_on = Some(summary.into());
+        self
+    }
+
+    /// Returns `true` when the run reported something in its way.
+    #[must_use]
+    pub fn needed_help(&self) -> bool {
+        self.blocked_on.is_some()
     }
 
     /// Notes the process id, so a later Tower can check whether it is still running.
@@ -343,6 +366,19 @@ mod tests {
 
         assert!(!line.contains("null"), "{line}");
         assert!(!line.contains("finished_at"), "{line}");
+    }
+
+    #[test]
+    fn a_run_can_succeed_and_still_have_been_blocked() {
+        // The two are independent. An agent that finished its task but could not check one thing
+        // is worth opening, and on a list it would otherwise look identical to a clean run.
+        let limited = record()
+            .finished(Outcome::Succeeded, at("2026-09-16T10:05:00Z"))
+            .blocked_on("could not read the linked file: permission denied");
+
+        assert!(limited.outcome.is_success());
+        assert!(limited.needed_help());
+        assert!(!record().needed_help());
     }
 
     #[test]

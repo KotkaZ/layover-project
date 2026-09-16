@@ -8,7 +8,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use layover_dashboard::{Dashboard, DashboardState};
-use layover_store::History;
+use layover_store::{History, Journal};
 
 use layover_core::agent::PromptSpec;
 use layover_core::prompt::resolve;
@@ -146,9 +146,12 @@ pub fn serve(path: &Path, addr: &str, history: Option<&Path>) -> Result<String, 
     );
 
     let store = History::open(&history_dir).map_err(|error| error.to_string())?;
+    let journal =
+        Journal::open(history_dir.with_file_name("journal")).map_err(|error| error.to_string())?;
     let dashboard = Dashboard::new(DashboardState {
         config_path: path.to_path_buf(),
         history: store,
+        journal,
     });
 
     let runtime = tokio::runtime::Builder::new_current_thread()

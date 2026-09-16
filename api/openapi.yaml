@@ -14,7 +14,7 @@ openapi: 3.2.0
 
 info:
   title: Layover Tower API
-  version: 0.4.0
+  version: 0.5.0
   summary: Control surface for a local-first agent factory.
   description: |
     The UI is purely a client of this API, so this document bounds what the UI can ever do.
@@ -275,6 +275,84 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CostReport"
+
+  /help:
+    get:
+      operationId: listHelp
+      summary: What agents are stuck on.
+      description: |
+        A lights-out factory's worst failure is not a crash — a crash is loud. It is an agent that
+        quietly cannot do what it was asked, produces something plausible anyway, and passes it
+        downstream. This is the channel that stops that being invisible.
+
+        Measured against a working prototype, five of six requests were permission or access
+        failures, so `access` is worth filtering for first.
+      tags: [work]
+      parameters:
+        - name: agent
+          in: query
+          required: false
+          description: Only requests from this agent.
+          schema:
+            type: string
+        - name: blocker
+          in: query
+          required: false
+          description: Only requests of this kind.
+          schema:
+            $ref: "#/components/schemas/Blocker"
+        - name: open
+          in: query
+          required: false
+          description: Only requests nobody has dealt with yet.
+          schema:
+            type: boolean
+        - name: window
+          in: query
+          required: false
+          description: How far back to look. Defaults to the last 30 days.
+          schema:
+            $ref: "#/components/schemas/CostWindow"
+      responses:
+        "200":
+          description: Matching requests, most recent first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HelpList"
+
+  /learnings:
+    get:
+      operationId: listLearnings
+      summary: What agents have worked out, and how well established it is.
+      description: |
+        A learning applies as soon as it is proposed and expires unless later runs arrive at it
+        independently. There is no approval queue, deliberately: a sibling project built one and
+        after 22 days held 88 learnings, none ever approved, so not one had ever reached a run.
+
+        A learning becomes permanent through independent rediscovery, which is evidence, rather
+        than through its `impact` rating, which is the agent's own claim about its own work.
+      tags: [work]
+      parameters:
+        - name: agent
+          in: query
+          required: false
+          description: Only learnings belonging to this agent.
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          description: Only learnings in this state.
+          schema:
+            $ref: "#/components/schemas/LearningState"
+      responses:
+        "200":
+          description: Matching learnings.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearningList"
 
   /ground-stop:
     post:
@@ -584,6 +662,12 @@ components:
         detail:
           type: [string, "null"]
           description: Why the run ended, for the outcomes where that is not self-evident.
+        blocked_on:
+          type: [string, "null"]
+          description: |
+            What the run could not get past, when it asked for help. Independent of `status`: an
+            agent can finish its task and still have been unable to check something. Without it a
+            blocked run looks exactly like a clean one on a list.
         hops_remaining:
           type: [integer, "null"]
           format: int32
@@ -664,6 +748,136 @@ components:
           type: number
           format: double
           description: Fraction of runs whose cost the runner actually reported, 0.0 to 1.0.
+
+    Blocker:
+      type: string
+      description: |
+        What kind of thing an agent is stuck on. Coarse on purpose: the point is to make "half my
+        runs are stuck on credentials" visible at a glance, with the detail in the prose.
+      enum: [access, tooling, ambiguity, environment, decision, other]
+
+    HelpRequest:
+      type: object
+      description: One agent asking a human for something.
+      required: [agent, run_id, itinerary_id, blocker, summary, detail, fatal, at]
+      properties:
+        agent:
+          type: string
+          description: Who is asking.
+        run_id:
+          type: string
+          description: The run that raised it.
+        itinerary_id:
+          type: string
+          description: The chain it belonged to.
+        blocker:
+          $ref: "#/components/schemas/Blocker"
+          description: What kind of thing is in the way.
+        summary:
+          type: string
+          description: One line, for a list.
+        detail:
+          type: string
+          description: What was tried, what happened, and what is needed.
+        fatal:
+          type: boolean
+          description: |
+            Whether this stopped the work or merely limited it. An agent can finish its task and
+            still have been unable to check something; that is worth reporting and is not an
+            outage.
+        at:
+          type: string
+          format: date-time
+          description: When it was raised.
+        resolved_at:
+          type: [string, "null"]
+          format: date-time
+          description: When a human marked it dealt with. Null while it is still open.
+
+    HelpList:
+      type: object
+      description: Matching help requests, most recent first.
+      required: [requests, open]
+      properties:
+        requests:
+          type: array
+          description: The requests.
+          items:
+            $ref: "#/components/schemas/HelpRequest"
+        open:
+          type: integer
+          format: int32
+          description: How many of them nobody has dealt with.
+
+    Impact:
+      type: string
+      description: |
+        How much applying a learning would change a future run. Self-assessed, and therefore used
+        for display and triage only — never to decide whether a learning applies.
+      enum: [low, medium, high]
+
+    LearningState:
+      type: string
+      description: |
+        Where a learning is in its life. `provisional` applies now and will lapse unless
+        rediscovered; `confirmed` has been rediscovered enough times to be treated as real;
+        `lapsed` is remembered only so a later rediscovery can be recognised as one; `rejected`
+        was refused by a human and never counts again.
+      enum: [provisional, confirmed, lapsed, rejected]
+
+    Learning:
+      type: object
+      description: Something an agent worked out, with its history.
+      required: [id, agent, text, impact, state, proposals, runs_left, first_at, last_at]
+      properties:
+        id:
+          type: string
+          description: Identifier.
+        agent:
+          type: string
+          description: The agent this applies to. Learnings do not cross agents.
+        text:
+          type: string
+          description: The insight.
+        impact:
+          $ref: "#/components/schemas/Impact"
+          description: The agent's own rating, for triage.
+        state:
+          $ref: "#/components/schemas/LearningState"
+          description: Where it is in its life.
+        proposals:
+          type: integer
+          format: int32
+          description: |
+            How many times it has been independently rediscovered, including the first proposal.
+            Repeating advice the agent was just shown does not count — an echo is not evidence.
+        runs_left:
+          type: integer
+          format: int32
+          description: Runs before it lapses. Meaningless unless `provisional`.
+        first_at:
+          type: string
+          format: date-time
+          description: When it was first proposed.
+        last_at:
+          type: string
+          format: date-time
+          description: When it was most recently proposed.
+
+    LearningList:
+      type: object
+      description: Matching learnings.
+      required: [learnings, active]
+      properties:
+        learnings:
+          type: array
+          description: The learnings.
+          items:
+            $ref: "#/components/schemas/Learning"
+        active:
+          type: integer
+          format: int32
+          description: How many of them are currently given to runs.
 
     CostWindow:
       type: string

@@ -79,6 +79,7 @@ function showView(name) {
   if (name === "map") loadMap();
   if (name === "runs") loadRuns();
   if (name === "cost") loadCost();
+  if (name === "journal") loadJournal();
 }
 
 async function loadHealth() {
@@ -217,6 +218,81 @@ async function loadCost(selected = "last_30d") {
   }
 }
 
+async function loadJournal() {
+  const helpBody = document.querySelector("#help-table tbody");
+  const helpEmpty = $("#help-empty");
+
+  try {
+    const { requests } = await get("/help?open=true&window=last_90d");
+    helpBody.replaceChildren();
+
+    for (const request of requests) {
+      const row = el("tr");
+      const kind = el("td");
+      kind.append(el("span", `kind ${request.blocker}`, request.blocker));
+      row.append(el("td", "", when(request.at)), el("td", "", request.agent), kind);
+      const what = el("td", "wide", request.summary);
+      what.title = request.detail;
+      row.append(what, el("td", "", request.fatal ? "stopped the run" : "limited it"));
+      helpBody.append(row);
+    }
+
+    $("#help-table").hidden = requests.length === 0;
+    helpEmpty.hidden = requests.length > 0;
+    helpEmpty.textContent = "Nothing is stuck.";
+  } catch (error) {
+    $("#help-table").hidden = true;
+    helpEmpty.hidden = false;
+    helpEmpty.textContent = `Could not read help requests: ${error.message}`;
+  }
+
+  const learnBody = document.querySelector("#learn-table tbody");
+  const learnEmpty = $("#learn-empty");
+
+  try {
+    const { learnings } = await get("/learnings");
+    learnBody.replaceChildren();
+
+    // Active first, then by how well established. A lapsed learning is still worth seeing: it is
+    // what a rediscovery would revive, so it explains why a repeat proposal counted.
+    const order = { confirmed: 0, provisional: 1, lapsed: 2, rejected: 3 };
+    learnings.sort((a, b) => order[a.state] - order[b.state] || b.proposals - a.proposals);
+
+    for (const learning of learnings) {
+      const row = el("tr");
+      row.append(el("td", "", learning.agent), el("td", "wide", learning.text));
+      row.append(el("td", `standing ${learning.state}`, learning.state));
+      row.append(
+        el("td", "num", `${learning.proposals}\u00d7`),
+        el("td", "num", learning.state === "provisional" ? `${learning.runs_left}` : "\u2014"),
+      );
+      row.title = `impact: ${learning.impact}`;
+      learnBody.append(row);
+    }
+
+    $("#learn-table").hidden = learnings.length === 0;
+    learnEmpty.hidden = learnings.length > 0;
+    learnEmpty.textContent = "Nothing learned yet.";
+  } catch (error) {
+    $("#learn-table").hidden = true;
+    learnEmpty.hidden = false;
+    learnEmpty.textContent = `Could not read learnings: ${error.message}`;
+  }
+}
+
+// The count of open help requests sits on the tab, because a blocked factory is the one thing
+// worth seeing without navigating to it.
+async function loadHelpBadge() {
+  const badge = $("#help-badge");
+  try {
+    const { open } = await get("/help?open=true&window=last_90d");
+    badge.textContent = `${open}`;
+    badge.hidden = open === 0;
+  } catch {
+    badge.hidden = true;
+  }
+}
+
 async function loadAgentNames() {
   try {
     const { agents } = await get("/agents");
@@ -251,6 +327,7 @@ function start() {
 
   loadHealth();
   loadAgentNames();
+  loadHelpBadge();
   showView("map");
 }
 

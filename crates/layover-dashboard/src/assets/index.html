@@ -13,6 +13,7 @@
     <button class="tab" data-view="map" aria-current="true">Route map</button>
     <button class="tab" data-view="runs">Runs</button>
     <button class="tab" data-view="cost">Cost</button>
+    <button class="tab" data-view="journal">Help &amp; learnings<span id="help-badge" class="badge" hidden></span></button>
   </nav>
   <span id="health" class="pill"></span>
 </header>
@@ -83,6 +84,41 @@
       History is kept for 90 days. A window reaching further back reports a lower bound, and says
       so rather than quietly returning a smaller number.
     </p>
+  </section>
+
+  <section id="journal" class="view" hidden>
+    <h2>Open help requests</h2>
+    <p class="hint">
+      An agent that quietly cannot do what it was asked is worse than one that crashes. This is
+      where it says so. In practice most requests are permission failures.
+    </p>
+    <table id="help-table">
+      <thead>
+        <tr>
+          <th>Raised</th><th>Agent</th><th>Kind</th>
+          <th>What is in the way</th><th>Stopped it?</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <p id="help-empty" class="empty" hidden></p>
+
+    <h2 class="spaced">Learnings</h2>
+    <p class="hint">
+      Applied as soon as they are proposed, and they lapse unless later runs arrive at them
+      independently. Three independent rediscoveries make one permanent — repeating advice an
+      agent was just shown does not count.
+    </p>
+    <table id="learn-table">
+      <thead>
+        <tr>
+          <th>Agent</th><th>Learning</th><th>Standing</th>
+          <th class="num">Found</th><th class="num">Runs left</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <p id="learn-empty" class="empty" hidden></p>
   </section>
 </main>
 

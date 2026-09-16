@@ -4,7 +4,7 @@
 //! regenerates this file and fails if the result differs, so an edit here is reverted
 //! rather than kept. Change the specification instead.
 //!
-//! Source: Layover Tower API v0.4.0
+//! Source: Layover Tower API v0.5.0
 
 #![allow(clippy::too_many_lines)]
 
@@ -56,6 +56,30 @@ pub struct AgentList {
     pub agents: Vec<Agent>,
     /// The route map.
     pub routes: Vec<Route>,
+}
+
+/// What kind of thing an agent is stuck on. Coarse on purpose: the point is to make "half my
+/// runs are stuck on credentials" visible at a glance, with the detail in the prose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Blocker {
+    /// `access`
+    #[serde(rename = "access")]
+    Access,
+    /// `tooling`
+    #[serde(rename = "tooling")]
+    Tooling,
+    /// `ambiguity`
+    #[serde(rename = "ambiguity")]
+    Ambiguity,
+    /// `environment`
+    #[serde(rename = "environment")]
+    Environment,
+    /// `decision`
+    #[serde(rename = "decision")]
+    Decision,
+    /// `other`
+    #[serde(rename = "other")]
+    Other,
 }
 
 /// One named slice of spend, such as an agent or a model.
@@ -196,6 +220,56 @@ pub struct Health {
     pub version: String,
 }
 
+/// Matching help requests, most recent first.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HelpList {
+    /// How many of them nobody has dealt with.
+    pub open: i32,
+    /// The requests.
+    pub requests: Vec<HelpRequest>,
+}
+
+/// One agent asking a human for something.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HelpRequest {
+    /// Who is asking.
+    pub agent: String,
+    /// When it was raised.
+    pub at: String,
+    /// What kind of thing is in the way.
+    pub blocker: Blocker,
+    /// What was tried, what happened, and what is needed.
+    pub detail: String,
+    /// Whether this stopped the work or merely limited it. An agent can finish its task and
+    /// still have been unable to check something; that is worth reporting and is not an
+    /// outage.
+    pub fatal: bool,
+    /// The chain it belonged to.
+    pub itinerary_id: String,
+    /// When a human marked it dealt with. Null while it is still open.
+    #[serde(default)]
+    pub resolved_at: Option<String>,
+    /// The run that raised it.
+    pub run_id: String,
+    /// One line, for a list.
+    pub summary: String,
+}
+
+/// How much applying a learning would change a future run. Self-assessed, and therefore used
+/// for display and triage only — never to decide whether a learning applies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Impact {
+    /// `low`
+    #[serde(rename = "low")]
+    Low,
+    /// `medium`
+    #[serde(rename = "medium")]
+    Medium,
+    /// `high`
+    #[serde(rename = "high")]
+    High,
+}
+
 /// The condition under which a rendezvous barrier releases.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Join {
@@ -205,6 +279,59 @@ pub enum Join {
     /// `any`
     #[serde(rename = "any")]
     Any,
+}
+
+/// Something an agent worked out, with its history.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Learning {
+    /// The agent this applies to. Learnings do not cross agents.
+    pub agent: String,
+    /// When it was first proposed.
+    pub first_at: String,
+    /// Identifier.
+    pub id: String,
+    /// The agent's own rating, for triage.
+    pub impact: Impact,
+    /// When it was most recently proposed.
+    pub last_at: String,
+    /// How many times it has been independently rediscovered, including the first proposal.
+    /// Repeating advice the agent was just shown does not count — an echo is not evidence.
+    pub proposals: i32,
+    /// Runs before it lapses. Meaningless unless `provisional`.
+    pub runs_left: i32,
+    /// Where it is in its life.
+    pub state: LearningState,
+    /// The insight.
+    pub text: String,
+}
+
+/// Matching learnings.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LearningList {
+    /// How many of them are currently given to runs.
+    pub active: i32,
+    /// The learnings.
+    pub learnings: Vec<Learning>,
+}
+
+/// Where a learning is in its life. `provisional` applies now and will lapse unless
+/// rediscovered; `confirmed` has been rediscovered enough times to be treated as real;
+/// `lapsed` is remembered only so a later rediscovery can be recognised as one; `rejected`
+/// was refused by a human and never counts again.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LearningState {
+    /// `provisional`
+    #[serde(rename = "provisional")]
+    Provisional,
+    /// `confirmed`
+    #[serde(rename = "confirmed")]
+    Confirmed,
+    /// `lapsed`
+    #[serde(rename = "lapsed")]
+    Lapsed,
+    /// `rejected`
+    #[serde(rename = "rejected")]
+    Rejected,
 }
 
 /// A named entry point into the mesh.
@@ -293,6 +420,11 @@ pub struct RouteMap {
 pub struct Run {
     /// Which agent was run.
     pub agent: String,
+    /// What the run could not get past, when it asked for help. Independent of `status`: an
+    /// agent can finish its task and still have been unable to check something. Without it a
+    /// blocked run looks exactly like a clean one on a list.
+    #[serde(default)]
+    pub blocked_on: Option<String>,
     /// Where `cost_usd` came from.
     pub cost_source: CostSource,
     /// Null when the runner reported no cost, which the Tower logs loudly.
@@ -473,6 +605,34 @@ pub struct GetCostsQuery {
     pub window: Option<CostWindow>,
 }
 
+/// query parameters for `listHelp`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ListHelpQuery {
+    /// Only requests from this agent.
+    #[serde(default)]
+    pub agent: Option<String>,
+    /// Only requests of this kind.
+    #[serde(default)]
+    pub blocker: Option<Blocker>,
+    /// Only requests nobody has dealt with yet.
+    #[serde(default)]
+    pub open: Option<bool>,
+    /// How far back to look. Defaults to the last 30 days.
+    #[serde(default)]
+    pub window: Option<CostWindow>,
+}
+
+/// query parameters for `listLearnings`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ListLearningsQuery {
+    /// Only learnings belonging to this agent.
+    #[serde(default)]
+    pub agent: Option<String>,
+    /// Only learnings in this state.
+    #[serde(default)]
+    pub state: Option<LearningState>,
+}
+
 /// query parameters for `listRuns`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListRunsQuery {
@@ -580,6 +740,34 @@ pub trait Api: Send + Sync + 'static {
     ///
     /// `GET /health`
     fn get_health(&self) -> impl core::future::Future<Output = Result<Health, Problem>> + Send;
+    /// What agents are stuck on.
+    ///
+    /// A lights-out factory's worst failure is not a crash — a crash is loud. It is an agent that
+    /// quietly cannot do what it was asked, produces something plausible anyway, and passes it
+    /// downstream. This is the channel that stops that being invisible.
+    ///
+    /// Measured against a working prototype, five of six requests were permission or access
+    /// failures, so `access` is worth filtering for first.
+    ///
+    /// `GET /help`
+    fn list_help(
+        &self,
+        query: ListHelpQuery,
+    ) -> impl core::future::Future<Output = Result<HelpList, Problem>> + Send;
+    /// What agents have worked out, and how well established it is.
+    ///
+    /// A learning applies as soon as it is proposed and expires unless later runs arrive at it
+    /// independently. There is no approval queue, deliberately: a sibling project built one and
+    /// after 22 days held 88 learnings, none ever approved, so not one had ever reached a run.
+    ///
+    /// A learning becomes permanent through independent rediscovery, which is evidence, rather
+    /// than through its `impact` rating, which is the agent's own claim about its own work.
+    ///
+    /// `GET /learnings`
+    fn list_learnings(
+        &self,
+        query: ListLearningsQuery,
+    ) -> impl core::future::Future<Output = Result<LearningList, Problem>> + Send;
     /// Every declared pipeline, its trigger and the flags it accepts.
     ///
     /// `GET /pipelines`
@@ -625,6 +813,8 @@ pub fn router<A: Api>(api: std::sync::Arc<A>) -> axum::Router {
                 .delete(handle_release_ground_stop::<A>),
         )
         .route("/health", axum::routing::get(handle_get_health::<A>))
+        .route("/help", axum::routing::get(handle_list_help::<A>))
+        .route("/learnings", axum::routing::get(handle_list_learnings::<A>))
         .route("/pipelines", axum::routing::get(handle_list_pipelines::<A>))
         .route("/runs", axum::routing::get(handle_list_runs::<A>))
         .route("/runs/{run_id}", axum::routing::get(handle_get_run::<A>))
@@ -700,6 +890,26 @@ async fn handle_get_health<A: Api>(
     }
 }
 
+async fn handle_list_help<A: Api>(
+    axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
+    axum::extract::Query(query): axum::extract::Query<ListHelpQuery>,
+) -> axum::response::Response {
+    match api.list_help(query).await {
+        Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
+        Err(problem) => problem.into_response(),
+    }
+}
+
+async fn handle_list_learnings<A: Api>(
+    axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
+    axum::extract::Query(query): axum::extract::Query<ListLearningsQuery>,
+) -> axum::response::Response {
+    match api.list_learnings(query).await {
+        Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
+        Err(problem) => problem.into_response(),
+    }
+}
+
 async fn handle_list_pipelines<A: Api>(
     axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
 ) -> axum::response::Response {
@@ -742,7 +952,7 @@ async fn handle_stream_run<A: Api>(
 /// Every operation the specification declares, as (method, path, operationId).
 ///
 /// Exposed so tests can assert the router and the specification agree.
-pub const OPERATIONS: [(&str, &str, &str); 11] = [
+pub const OPERATIONS: [(&str, &str, &str); 13] = [
     ("GET", "/agents", "listAgents"),
     ("GET", "/costs", "getCosts"),
     ("POST", "/flights", "sendFlight"),
@@ -750,6 +960,8 @@ pub const OPERATIONS: [(&str, &str, &str); 11] = [
     ("POST", "/ground-stop", "engageGroundStop"),
     ("DELETE", "/ground-stop", "releaseGroundStop"),
     ("GET", "/health", "getHealth"),
+    ("GET", "/help", "listHelp"),
+    ("GET", "/learnings", "listLearnings"),
     ("GET", "/pipelines", "listPipelines"),
     ("GET", "/runs", "listRuns"),
     ("GET", "/runs/{run_id}", "getRun"),

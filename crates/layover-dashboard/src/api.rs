@@ -17,10 +17,11 @@ use layover_core::diagram::{Layout, Live, render_svg};
 use layover_core::run::Outcome;
 use layover_http::{
     AgentList, Api, CostBucket, CostReport, CostWindow, EventStream, FlightAccepted, GetCostsQuery,
-    GetRunPath, GroundStop, Health, ListRunsQuery, PipelineList, Problem, ReserveState, RouteMap,
-    Run, RunList, RunStatus, SendFlightRequest, Status, StreamRunPath,
+    GetRunPath, GroundStop, Health, HelpList, LearningList, ListHelpQuery, ListLearningsQuery,
+    ListRunsQuery, PipelineList, Problem, ReserveState, RouteMap, Run, RunList, RunStatus,
+    SendFlightRequest, Status, StreamRunPath,
 };
-use layover_store::{History, RunFilter};
+use layover_store::{HelpFilter, History, Journal, RunFilter};
 
 use crate::view;
 
@@ -31,6 +32,8 @@ pub struct DashboardState {
     pub config_path: PathBuf,
     /// The run history.
     pub history: History,
+    /// Help requests and learnings.
+    pub journal: Journal,
 }
 
 /// The dashboard's implementation of the Tower API.
@@ -186,6 +189,58 @@ impl Api for Dashboard {
         })?;
 
         Ok(report(&span, &ledger, self.config().ok().as_ref()))
+    }
+
+    async fn list_help(&self, query: ListHelpQuery) -> Result<HelpList, Problem> {
+        let span = self.span(query.window.or(Some(CostWindow::Last30d)));
+        let filter = HelpFilter {
+            agent: query.agent.as_deref().map(Into::into),
+            blocker: query.blocker.map(view::blocker_from),
+            open_only: query.open.unwrap_or(false),
+            fatal_only: false,
+        };
+
+        let requests = self.0.journal.help(&span, &filter).map_err(|error| {
+            Problem::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "the journal is unreadable",
+            )
+            .with_detail(error.to_string())
+        })?;
+
+        Ok(HelpList {
+            open: i32::try_from(requests.iter().filter(|r| r.is_open()).count())
+                .unwrap_or(i32::MAX),
+            requests: requests.iter().map(view::help).collect(),
+        })
+    }
+
+    async fn list_learnings(&self, query: ListLearningsQuery) -> Result<LearningList, Problem> {
+        let learnings = self.0.journal.learnings().map_err(|error| {
+            Problem::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "the journal is unreadable",
+            )
+            .with_detail(error.to_string())
+        })?;
+
+        let wanted = query.state.map(view::learning_state_from);
+        let matching: Vec<&layover_core::learning::Learning> = learnings
+            .all()
+            .filter(|learning| {
+                query
+                    .agent
+                    .as_deref()
+                    .is_none_or(|agent| learning.agent.as_str() == agent)
+                    && wanted.is_none_or(|state| learning.state == state)
+            })
+            .collect();
+
+        Ok(LearningList {
+            active: i32::try_from(matching.iter().filter(|l| l.is_active()).count())
+                .unwrap_or(i32::MAX),
+            learnings: matching.into_iter().map(view::learning).collect(),
+        })
     }
 
     async fn send_flight(&self, _: SendFlightRequest) -> Result<FlightAccepted, Problem> {
