@@ -22,6 +22,7 @@ a human is still watching.
 | `fuel_usd` | `5.00` | Shared cost budget for an itinerary. Bounds **breadth**. |
 | `max_runs` | `64` | Deterministic run cap; holds when a runner reports no cost. |
 | `timeout_sec` | `900` | Wall-clock limit for one run. |
+| `max_recovery_attempts` | `2` | How many times interrupted work may be [restarted](./recovery.md). |
 
 `max_hops` and `fuel_usd` are not interchangeable. A hop is spent per flight and branches *inherit*
 the remaining count rather than splitting it, so Hops says nothing about how wide a fan-out
@@ -102,6 +103,7 @@ prompt_file = "tester.md"
 | `resident` | `false` | Pin the agent resident rather than transient. Not in v0.1. |
 | `fuel_usd` | — | Fuel override for itineraries that *start* at this agent. |
 | `work_dir` | — | Work somewhere other than the shared `work_dir`. |
+| `recovery` | `automatic` | `manual` if repeating this agent's work would do damage. See [Recovery](./recovery.md). |
 
 ### MCP servers
 
