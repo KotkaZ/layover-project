@@ -47,7 +47,7 @@ pub use diagram::{Activity, Layout, Live, render_svg, route_map};
 pub use flight::{Flight, FlightId, ItineraryId, Origin, RunId};
 pub use graph::RouteGraph;
 pub use handover::{
-    Cause, Handover, Interruption, Recovery, RecoveryDenied, RecoveryPolicy, Steer,
+    Cause, ChildState, Handover, Interruption, Recovery, RecoveryDenied, RecoveryPolicy, Steer,
 };
 pub use itinerary::{Denial, Itinerary};
 pub use mcp::{McpServer, McpTransport};

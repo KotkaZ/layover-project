@@ -107,11 +107,38 @@ pub struct McpWiring {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Runner {
-    /// Command and arguments; `{prompt}` is substituted at spawn time.
+    /// Command and arguments.
+    ///
+    /// `{prompt}` substitutes the **path** to the agent's composed instructions, which the Tower
+    /// writes into the run's Hangar before spawning. It is not the instructions themselves.
+    ///
+    /// That distinction is the whole design. A prompt is passed on **stdin**, never on the
+    /// command line: Windows caps a command line at 32,767 characters, and real agent prompts go
+    /// well past it — a sibling project's review agent composes to roughly 98 KB, three times
+    /// over, and its ordinary developer agent to 34 KB. Inlining the prompt would work in every
+    /// test written against a small fixture and fail on the first agent worth running.
+    ///
+    /// So most runners need no placeholder at all. It exists for CLIs that accept a file of
+    /// instructions as a flag; those that do not get the instructions prepended to stdin.
     pub command: Vec<String>,
     /// How this runner is told where Layover's MCP server is.
     #[serde(default)]
     pub mcp: Option<McpWiring>,
+}
+
+impl Runner {
+    /// The placeholder substituted with the path to the composed instructions.
+    pub const PROMPT_PATH: &'static str = "{prompt}";
+
+    /// Returns `true` when this runner wants the instructions as a file it is handed.
+    ///
+    /// When `false`, the Tower prepends them to the stdin payload instead.
+    #[must_use]
+    pub fn takes_prompt_path(&self) -> bool {
+        self.command
+            .iter()
+            .any(|arg| arg.contains(Self::PROMPT_PATH))
+    }
 }
 
 /// A bound on what the whole factory may spend, across every itinerary.

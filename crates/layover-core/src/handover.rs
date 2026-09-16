@@ -38,6 +38,13 @@ use crate::flight::{Flight, RunId};
 pub enum Interruption {
     /// The Tower went away — a restart, a crash, a reboot — while the run was live.
     TowerRestart,
+    /// The Tower stayed up but lost contact with the child: its pipes closed unexpectedly, or a
+    /// suspend and resume left the handle unusable.
+    ///
+    /// Deliberately distinct from [`Interruption::Crashed`], which is what the Tower reports when
+    /// it *watched* the process exit. Here it did not, and the difference is the whole question:
+    /// losing sight of a process is not the same as the process ending.
+    LostContact,
     /// The run exceeded `timeout_sec`.
     Timeout,
     /// The process exited non-zero.
@@ -58,12 +65,28 @@ impl Interruption {
     pub fn is_retryable(&self) -> bool {
         !matches!(self, Self::GroundStop)
     }
+
+    /// Returns `true` when the child process might still be running.
+    ///
+    /// This is the difference between an interruption the Tower *observed* and one it merely
+    /// *inferred*. A timeout or a non-zero exit means the Tower watched the process end. A Tower
+    /// restart or a lost pipe means only that the Tower stopped being able to see it — and on
+    /// Windows in particular a child routinely outlives the parent that spawned it.
+    ///
+    /// Recovering in that state is how one interrupted publisher becomes two open pull requests.
+    /// So these interruptions require the child to be confirmed gone before a new run is started;
+    /// see [`authorize_recovery`].
+    #[must_use]
+    pub fn child_may_still_be_running(&self) -> bool {
+        matches!(self, Self::TowerRestart | Self::LostContact)
+    }
 }
 
 impl fmt::Display for Interruption {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::TowerRestart => f.write_str("the Tower restarted while it was running"),
+            Self::LostContact => f.write_str("the Tower lost contact with the process"),
             Self::Timeout => f.write_str("it ran past its timeout"),
             Self::Crashed {
                 exit_code: Some(code),
@@ -253,20 +276,44 @@ impl Handover {
     }
 }
 
+/// Whether the child process from the interrupted run has been confirmed gone.
+///
+/// A separate type rather than a `bool` because the two values are not interchangeable at a call
+/// site: passing the wrong one silently authorises a duplicate run, which is the exact failure
+/// recovery is meant to avoid.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChildState {
+    /// The process is known to be gone: the Tower watched it exit, or checked and it was not
+    /// there.
+    Gone,
+    /// Nobody has checked, or the check was inconclusive.
+    Unknown,
+}
+
 /// Decides whether interrupted work may be restarted.
+///
+/// `child` is what the Tower currently knows about the previous run's process. For an
+/// interruption the Tower only *inferred* — a restart, a lost pipe — it must have checked before
+/// a new run is authorised, because recovering alongside a process that is still going duplicates
+/// whatever that process was doing.
 ///
 /// # Errors
 ///
-/// Returns [`RecoveryDenied`] when the policy forbids it, the interruption is not retryable, or
-/// the attempt limit is reached.
+/// Returns [`RecoveryDenied`] when the policy forbids it, the interruption is not retryable, the
+/// previous process cannot be confirmed gone, or the attempt limit is reached.
 pub fn authorize_recovery(
     policy: RecoveryPolicy,
     interruption: &Interruption,
+    child: ChildState,
     attempts_so_far: u32,
     max_attempts: u32,
 ) -> Result<(), RecoveryDenied> {
     if !interruption.is_retryable() {
         return Err(RecoveryDenied::NotRetryable);
+    }
+
+    if interruption.child_may_still_be_running() && child == ChildState::Unknown {
+        return Err(RecoveryDenied::ChildUnaccountedFor);
     }
 
     match policy {
@@ -288,6 +335,12 @@ pub enum RecoveryDenied {
     /// The interruption was not the kind you restart through.
     #[error("the interruption was not retryable")]
     NotRetryable,
+    /// The previous run's process has not been confirmed gone.
+    ///
+    /// Not a failure so much as an unanswered question. Starting a new run beside a process that
+    /// is still going duplicates its work, so the Tower has to look before it restarts.
+    #[error("the previous run's process has not been confirmed gone")]
+    ChildUnaccountedFor,
     /// The agent is configured never to restart.
     #[error("this agent's `recovery` policy is `never`")]
     PolicyForbids,
@@ -409,7 +462,13 @@ mod tests {
         // A factory that restarts through its own kill switch is not one anybody can stop.
         assert!(!Interruption::GroundStop.is_retryable());
         assert_eq!(
-            authorize_recovery(RecoveryPolicy::Automatic, &Interruption::GroundStop, 0, 3),
+            authorize_recovery(
+                RecoveryPolicy::Automatic,
+                &Interruption::GroundStop,
+                ChildState::Gone,
+                0,
+                3
+            ),
             Err(RecoveryDenied::NotRetryable)
         );
     }
@@ -418,13 +477,64 @@ mod tests {
     fn ordinary_interruptions_are_retryable() {
         for interruption in [
             Interruption::TowerRestart,
+            Interruption::LostContact,
             Interruption::Timeout,
             Interruption::Crashed { exit_code: Some(1) },
             Interruption::Crashed { exit_code: None },
         ] {
             assert!(interruption.is_retryable(), "{interruption}");
             assert_eq!(
-                authorize_recovery(RecoveryPolicy::Automatic, &interruption, 0, 3),
+                authorize_recovery(
+                    RecoveryPolicy::Automatic,
+                    &interruption,
+                    ChildState::Gone,
+                    0,
+                    3
+                ),
+                Ok(())
+            );
+        }
+    }
+
+    #[test]
+    fn a_process_that_might_still_be_running_is_not_recovered_over() {
+        // Losing sight of a process is not the same as the process ending. On Windows a child
+        // routinely outlives the parent that spawned it, so a Tower that restarts and finds a
+        // record still marked `running` cannot assume the work stopped. Recovering anyway is how
+        // one interrupted publisher becomes two open pull requests.
+        for interruption in [Interruption::TowerRestart, Interruption::LostContact] {
+            assert!(interruption.child_may_still_be_running(), "{interruption}");
+            assert_eq!(
+                authorize_recovery(
+                    RecoveryPolicy::Automatic,
+                    &interruption,
+                    ChildState::Unknown,
+                    0,
+                    3
+                ),
+                Err(RecoveryDenied::ChildUnaccountedFor),
+                "{interruption} must be checked before it is restarted"
+            );
+        }
+    }
+
+    #[test]
+    fn an_interruption_the_tower_watched_needs_no_liveness_check() {
+        // A timeout or a non-zero exit means the Tower saw the process end. Demanding a check it
+        // has already effectively done would strand work for no benefit.
+        for interruption in [
+            Interruption::Timeout,
+            Interruption::Crashed { exit_code: Some(1) },
+        ] {
+            assert!(!interruption.child_may_still_be_running(), "{interruption}");
+            assert_eq!(
+                authorize_recovery(
+                    RecoveryPolicy::Automatic,
+                    &interruption,
+                    ChildState::Unknown,
+                    0,
+                    3
+                ),
                 Ok(())
             );
         }
@@ -433,11 +543,23 @@ mod tests {
     #[test]
     fn a_crash_loop_is_bounded() {
         assert_eq!(
-            authorize_recovery(RecoveryPolicy::Automatic, &Interruption::Timeout, 3, 3),
+            authorize_recovery(
+                RecoveryPolicy::Automatic,
+                &Interruption::Timeout,
+                ChildState::Gone,
+                3,
+                3
+            ),
             Err(RecoveryDenied::OutOfAttempts { max_attempts: 3 })
         );
         assert_eq!(
-            authorize_recovery(RecoveryPolicy::Automatic, &Interruption::Timeout, 2, 3),
+            authorize_recovery(
+                RecoveryPolicy::Automatic,
+                &Interruption::Timeout,
+                ChildState::Gone,
+                2,
+                3
+            ),
             Ok(())
         );
     }
@@ -445,11 +567,23 @@ mod tests {
     #[test]
     fn a_policy_of_never_or_manual_stops_automatic_restarts() {
         assert_eq!(
-            authorize_recovery(RecoveryPolicy::Never, &Interruption::Timeout, 0, 3),
+            authorize_recovery(
+                RecoveryPolicy::Never,
+                &Interruption::Timeout,
+                ChildState::Gone,
+                0,
+                3
+            ),
             Err(RecoveryDenied::PolicyForbids)
         );
         assert_eq!(
-            authorize_recovery(RecoveryPolicy::Manual, &Interruption::Timeout, 0, 3),
+            authorize_recovery(
+                RecoveryPolicy::Manual,
+                &Interruption::Timeout,
+                ChildState::Gone,
+                0,
+                3
+            ),
             Err(RecoveryDenied::NeedsAHuman)
         );
         assert!(RecoveryPolicy::Automatic.is_automatic());
@@ -459,7 +593,13 @@ mod tests {
     #[test]
     fn a_zero_attempt_limit_disables_automatic_restarts_entirely() {
         assert_eq!(
-            authorize_recovery(RecoveryPolicy::Automatic, &Interruption::Timeout, 0, 0),
+            authorize_recovery(
+                RecoveryPolicy::Automatic,
+                &Interruption::Timeout,
+                ChildState::Gone,
+                0,
+                0
+            ),
             Err(RecoveryDenied::OutOfAttempts { max_attempts: 0 })
         );
     }

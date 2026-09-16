@@ -68,12 +68,21 @@ in as a measurement — see [Cost](./cost.md) for why that distinction is load-b
 
 ```toml
 [runners.claude]
-command = ["claude", "-p", "{prompt}", "--output-format", "stream-json"]
+command = ["claude", "-p", "--output-format", "stream-json"]
 mcp     = { flag = "--mcp-config", format = "claude_json" }
 ```
 
-`{prompt}` is substituted at spawn time. `mcp` says how this runner is told where Layover's MCP
-server is.
+The prompt goes to the process's **stdin**, never onto its command line, and this is not a style
+preference. Windows caps a command line at 32,767 characters. Real agent prompts go well past it:
+in a sibling project the review agent's prompt tree composes to roughly 98 KB and its ordinary
+developer agent to 34 KB. Inlining the prompt passes every test written against a small fixture
+and then fails on the first agent worth running.
+
+`{prompt}` is therefore a **path**, not the text — the file the Tower writes the composed
+instructions to before spawning. Include it only for CLIs that accept a file of instructions as a
+flag; runners without it have the instructions prepended to the stdin payload instead.
+
+`mcp` says how this runner is told where Layover's MCP server is.
 
 ## `[agents.*]` — who exists
 

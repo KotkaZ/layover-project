@@ -127,6 +127,17 @@ pub struct RunRecord {
     /// Why it ended, for the outcomes where that is not obvious.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
+    /// The operating system process id, while the run is live.
+    ///
+    /// Recorded so that a Tower coming back from a restart can *check* whether the process is
+    /// still there rather than assume. A child routinely outlives the parent that spawned it on
+    /// Windows, and recovering beside a process that never stopped duplicates its work — see
+    /// [`crate::handover::ChildState`].
+    ///
+    /// A recycled process id can make a dead run look alive, which fails towards refusing to
+    /// recover. That is the safe direction: stalled work is visible, duplicated work is not.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pid: Option<u32>,
 }
 
 impl RunRecord {
@@ -151,6 +162,7 @@ impl RunRecord {
             source: CostSource::Unreported,
             usage: TokenUsage::default(),
             detail: None,
+            pid: None,
         }
     }
 
@@ -189,6 +201,13 @@ impl RunRecord {
     #[must_use]
     pub fn because(mut self, detail: impl Into<String>) -> Self {
         self.detail = Some(detail.into());
+        self
+    }
+
+    /// Notes the process id, so a later Tower can check whether it is still running.
+    #[must_use]
+    pub fn with_pid(mut self, pid: u32) -> Self {
+        self.pid = Some(pid);
         self
     }
 
@@ -324,6 +343,19 @@ mod tests {
 
         assert!(!line.contains("null"), "{line}");
         assert!(!line.contains("finished_at"), "{line}");
+    }
+
+    #[test]
+    fn a_live_run_records_the_process_it_is_waiting_on() {
+        // Without this a Tower coming back from a restart has nothing to check, and must either
+        // assume the child died -- which duplicates work when it did not -- or never recover.
+        let spawned = record().with_pid(4242);
+
+        let line = serde_json::to_string(&spawned).expect("serialises");
+        assert!(line.contains(r#""pid":4242"#), "{line}");
+
+        let closed = spawned.finished(Outcome::Succeeded, at("2026-09-16T10:01:00Z"));
+        assert_eq!(closed.pid, Some(4242), "the id survives the run ending");
     }
 
     #[test]

@@ -618,3 +618,23 @@ streaming a run and engaging a Ground Stop all need a supervisor that does not e
 they answer `501` rather than returning something plausible. A control that silently does nothing
 is worse than a control that is not there: it is trusted once, and then relied upon at the moment
 it matters.
+
+**Why the prompt is written to stdin and never onto the command line.** The runner template
+originally inlined it as `command = ["claude", "-p", "{prompt}", ...]`. Windows caps a command
+line at 32,767 characters, and real agent prompts are nowhere near small enough: measured against
+a sibling project's prompt trees, its review agent composes to roughly 98 KB — three times over
+the limit — and its ordinary developer agent to 34 KB. Two of that project's six agents would not
+have started. It is a failure mode that passes every test written against a small fixture and
+appears on the first agent worth running, which is the worst shape a bug can have. That project
+had already found it the hard way; its runner carries the comment "never `-p` / a shell pipe".
+`{prompt}` now substitutes the *path* to the composed instructions, for CLIs that accept one.
+
+**Why recovery requires the previous process to be confirmed gone.** `Interruption` distinguishes
+what the Tower *watched* from what it merely *inferred*. A timeout or a non-zero exit means it saw
+the process end. A Tower restart or a lost pipe means only that it stopped being able to see one —
+and on Windows a child routinely outlives the parent that spawned it. Recovering in that state
+starts a second run beside a first that never stopped, which for a publisher means two pull
+requests. So those interruptions carry `ChildState::Unknown` until something checks, and
+`authorize_recovery` refuses them; the run record keeps the process id so there is something to
+check. A recycled process id can make a dead run look alive, which fails towards refusing to
+recover — the safe direction, because stalled work is visible and duplicated work is not.

@@ -107,7 +107,7 @@ Agents should ask rather than guess on any of these.
 
 ### Run bootstrap — blocks implementation
 
-1. **What does a run actually receive?** How do the agent's configured `prompt`, the incoming
+1. **How do the instructions, the handover and the flight body order themselves within that stdin payload?** The transport is settled; the composition is not. How do the agent's configured `prompt`, the incoming
    flight `body`, and the agent's `memory.md` combine into a single CLI invocation? Nothing
    specifies the composition or its order.
 2. **Is memory injected or fetched?** Either the Tower splices `memory.md` into the prompt, or the
@@ -217,6 +217,7 @@ recovery and steering use the one mechanism — see
 - **What does the UI look like?** *Server-rendered HTML with an SVG route map, embedded in the binary.* No npm, no framework, no build step, and the graph layout is a pure function with unit tests rather than a 2.5 MB JavaScript dependency. Reversible: the page only consumes the HTTP API.
 - **How far back does history go, and where does it live?** *Ninety days, as one JSON Lines file per UTC day under `.layover/history`.* Retention is deleting whole files.
 - **What time zone does a cron expression fire in?** *The Tower's local zone, recorded alongside the schedule.* Same rule as calendar cost windows: a calendar thing is reckoned locally and says which zone it used. `0 3 * * *` means three in the morning where the operator is, which is what whoever wrote it meant.
+- **How does a run receive its prompt?** *On stdin.* Never on the command line: Windows caps one at 32,767 characters and real prompts run to tens of kilobytes. `{prompt}` in a runner command is a *path* to the composed instructions, for CLIs that take one.
 
 ---
 
