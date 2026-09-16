@@ -24,9 +24,9 @@
 //! question 1 in `docs/roadmap.md`, and is still open. This produces the block; something else
 //! decides where it goes.
 
+use jiff::Timestamp;
 use std::fmt;
 use std::fmt::Write as _;
-use std::time::SystemTime;
 
 use serde::{Deserialize, Serialize};
 
@@ -118,7 +118,7 @@ pub struct Steer {
     /// What the human said to do differently.
     pub note: String,
     /// When they said it.
-    pub at: SystemTime,
+    pub at: Timestamp,
 }
 
 /// Why a run is being started.
@@ -377,7 +377,7 @@ mod tests {
             Steer {
                 previous: RunId::from("run_01XYZ"),
                 note: "  Use the existing retry helper, do not write a new one.  ".to_owned(),
-                at: SystemTime::now(),
+                at: Timestamp::now(),
             },
             vec![flight()],
         )
@@ -398,7 +398,7 @@ mod tests {
             Cause::Steered(Steer {
                 previous: RunId::from("run_1"),
                 note: "stop".into(),
-                at: SystemTime::now(),
+                at: Timestamp::now(),
             })
             .repeats_earlier_work()
         );

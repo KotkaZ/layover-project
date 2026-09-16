@@ -16,25 +16,49 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt as _;
 use layover_http::{
-    Access, Agent, AgentList, Api, CostBucket, CostReport, CostSource, CostSummary, EventStream,
-    FlightAccepted, GetCostsQuery, GetRunPath, GroundStop, Health, ListRunsQuery, OPERATIONS,
-    Pipeline, PipelineList, Problem, ReserveState, Run, RunList, RunStatus, SendFlightRequest,
-    Status, StreamRunPath, TokenUsage, Trigger, TriggerKind, router,
+    Access, Agent, AgentList, Api, CostBucket, CostReport, CostSource, CostSummary, CostWindow,
+    EventStream, FlightAccepted, GetCostsQuery, GetRunPath, GroundStop, Health, ListRunsQuery,
+    OPERATIONS, Pipeline, PipelineList, Problem, ReserveState, RouteMap, Run, RunList, RunStatus,
+    SendFlightRequest, Status, StreamRunPath, TokenUsage, Trigger, TriggerKind, WindowSpan, router,
 };
 use tower::ServiceExt as _;
 
 /// A minimal implementation that returns fixed values.
 struct Stub;
+
+/// A resolved window, as the Tower would report one.
+///
+/// Spelled out here rather than computed so the contract test stays a test of the *shape* of the
+/// response. Whether the arithmetic is right is `layover-core`'s problem, and it has its own
+/// tests for it.
+fn span(window: CostWindow) -> WindowSpan {
+    let calendar = matches!(window, CostWindow::Today | CostWindow::MonthToDate);
+    WindowSpan {
+        window,
+        label: "Last 30 days".to_owned(),
+        calendar,
+        start: Some("2026-08-17T12:00:00Z".to_owned()),
+        end: "2026-09-16T12:00:00Z".to_owned(),
+        zone: calendar.then(|| "Europe/Tallinn".to_owned()),
+        truncated: false,
+    }
+}
+
 fn sample_run() -> Run {
     Run {
         run_id: "run_1".to_owned(),
         itinerary_id: "itn_1".to_owned(),
         agent: "analyst".to_owned(),
-        status: RunStatus::Stalled,
+        pipeline: Some("development".to_owned()),
+        model: None,
+        status: RunStatus::Interrupted,
         started_at: "2026-09-15T12:00:00Z".to_owned(),
         finished_at: None,
+        duration_sec: None,
         exit_code: None,
         cost_usd: None,
+        cost_source: CostSource::Unreported,
+        detail: Some("the Tower went away mid-run".to_owned()),
         hops_remaining: Some(21),
     }
 }
@@ -96,7 +120,7 @@ impl Api for Stub {
 
     async fn list_runs(&self, query: ListRunsQuery) -> Result<RunList, Problem> {
         let runs = match query.status {
-            Some(RunStatus::Stalled) | None => vec![sample_run()],
+            Some(RunStatus::Interrupted) | None => vec![sample_run()],
             Some(_) => Vec::new(),
         };
         Ok(RunList { runs })
@@ -143,7 +167,8 @@ impl Api for Stub {
         };
 
         Ok(CostReport {
-            total: if query.window_hours.is_some() {
+            span: span(query.window.unwrap_or(CostWindow::Last30d)),
+            total: if query.window.is_some() {
                 measured.clone()
             } else {
                 mixed
@@ -163,6 +188,14 @@ impl Api for Stub {
                 window_hours: 24,
                 exhausted: false,
             },
+        })
+    }
+
+    async fn get_graph(&self) -> Result<RouteMap, Problem> {
+        Ok(RouteMap {
+            mermaid: "flowchart LR\n  a_analyst --> a_developer\n".to_owned(),
+            generated_at: "2026-09-16T12:00:00Z".to_owned(),
+            config_path: Some("layover.toml".to_owned()),
         })
     }
 
@@ -220,7 +253,7 @@ fn json(body: &str) -> serde_json::Value {
 
 #[test]
 fn every_specified_operation_is_routed() {
-    assert_eq!(OPERATIONS.len(), 10);
+    assert_eq!(OPERATIONS.len(), 11);
 
     for (method, path, operation) in OPERATIONS {
         assert!(path.starts_with('/'), "`{operation}` has an odd path");
@@ -304,8 +337,8 @@ async fn a_path_parameter_reaches_the_implementation() {
     let value = json(&body);
     assert_eq!(value["run_id"], "run_1");
     assert_eq!(
-        value["status"], "stalled",
-        "stalled must be visible as its own outcome"
+        value["status"], "interrupted",
+        "an interrupted run must be visible as its own outcome"
     );
 }
 

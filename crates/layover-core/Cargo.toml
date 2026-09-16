@@ -13,6 +13,10 @@ toml = { workspace = true }
 thiserror = { workspace = true }
 ulid = { workspace = true }
 croner = { version = "4", default-features = false }
+jiff = { workspace = true, features = ["serde"] }
+
+[dev-dependencies]
+serde_json = { workspace = true }
 
 [lints]
 workspace = true

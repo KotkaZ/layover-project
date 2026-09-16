@@ -62,6 +62,32 @@ enum Command {
         flags: Vec<String>,
     },
 
+    /// Print the factory's route map as a diagram.
+    ///
+    /// Mermaid by default, which is for *portability*: paste it into a README and GitHub draws
+    /// it. `--svg` prints the same graph as the dashboard draws it, laid out here rather than by
+    /// a JavaScript library.
+    Graph {
+        /// Emit SVG instead of Mermaid source.
+        #[arg(long)]
+        svg: bool,
+    },
+
+    /// Serve the monitoring dashboard.
+    ///
+    /// Read-only: the route map as configured right now, what has run, and what it cost. It
+    /// needs no Tower, which is the point — history outlives the process that wrote it, so the
+    /// dashboard answers for a factory that is not currently running.
+    Serve {
+        /// Address to listen on.
+        #[arg(long, default_value = "127.0.0.1:7878")]
+        addr: String,
+
+        /// Where run history lives. Defaults to `.layover/history` beside the configuration.
+        #[arg(long, value_name = "DIR")]
+        history: Option<PathBuf>,
+    },
+
     /// Write the file that starts Layover when you log in.
     ///
     /// A lights-out factory that stops at every reboot is not lights-out. This generates the
@@ -85,6 +111,7 @@ fn main() -> ExitCode {
     let result = match cli.command {
         Command::Validate { strict } => commands::validate_config(&cli.config, strict),
         Command::Explain => commands::explain(&cli.config),
+        Command::Graph { svg } => commands::graph(&cli.config, svg),
         Command::Prompt {
             agent,
             pipeline,
@@ -93,6 +120,7 @@ fn main() -> ExitCode {
         Command::Autostart { output, show } => {
             commands::autostart(&cli.config, output.as_deref(), show)
         }
+        Command::Serve { addr, history } => commands::serve(&cli.config, &addr, history.as_deref()),
     };
 
     match result {

@@ -121,6 +121,15 @@ pub enum Trigger {
     Scheduled(Schedule),
 }
 
+impl fmt::Display for Trigger {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Manual => f.write_str("manual"),
+            Self::Scheduled(schedule) => write!(f, "{schedule}"),
+        }
+    }
+}
+
 impl Trigger {
     /// Returns the schedule, if this trigger has one.
     #[must_use]

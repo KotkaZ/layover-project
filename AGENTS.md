@@ -23,7 +23,9 @@ What exists and is fully tested:
   graph, load-time validation, itinerary accounting (Hops, Fuel, run cap) and rendezvous barriers.
 - `crates/layover-http` — the HTTP surface, **generated** from `api/openapi.yaml`. Types, the
   `Api` trait and the axum router. Nothing implements `Api` yet.
-- `crates/layover-cli` — the `layover` binary: `validate`, `explain`, `prompt`.
+- `crates/layover-store` — on-disk run history: day-segmented JSON Lines, 90-day retention.
+- `crates/layover-dashboard` — the read-only monitoring page, served over the generated API.
+- `crates/layover-cli` — the `layover` binary: `validate`, `explain`, `graph`, `prompt`, `serve`.
 
 **Nothing that spawns a process exists yet** — no process supervision, no MCP server, no Tower,
 no UI. Those are blocked on the run-bootstrap questions in `docs/roadmap.md`, which are
@@ -73,6 +75,7 @@ repository is meant to be worked on by agents.
 | MCP servers, workspaces or autostart | `book/src/configuration.md`, `book/src/pipelines.md`, `book/src/install.md` |
 | Any diagram | Use Mermaid, not ASCII — GitHub and the book both render it |
 | Recovery, steering or the handover | `book/src/recovery.md`, `docs/architecture.md` §13 |
+| The dashboard, history or cost windows | `book/src/dashboard.md`, `book/src/cost.md` |
 | The CLI's commands or flags | `crates/layover-cli/README.md`, `book/src/install.md` |
 | How Layover is installed or released | `dist-workspace.toml` then `dist generate`, `book/src/install.md`, both READMEs |
 
@@ -137,5 +140,7 @@ type names, API fields and prose alike.
 | `examples/workitem-factory/` | The reference v0.1 factory, with its sizing arithmetic |
 | `crates/layover-core` | Domain types: config, agents, routes, pipelines, prompts, graph, validation, itinerary, barriers |
 | `crates/layover-http` | The generated HTTP surface and the `Api` trait |
+| `crates/layover-store` | On-disk run history and retention |
+| `crates/layover-dashboard` | The monitoring dashboard: route map, runs, cost |
 | `crates/layover-cli` | The `layover` binary |
 | `xtask/` | `verify`, `generate-api` and `docs` |

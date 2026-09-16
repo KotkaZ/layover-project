@@ -577,3 +577,44 @@ single trigger. Only a shared per-itinerary budget bounds that, so Fuel moved fr
 "required". The follow-on consequence is that Fuel may not depend on runners voluntarily
 reporting cost; it needs a deterministic fallback, or the single breadth rail can vanish silently
 while still appearing to be enforced.
+
+**Why history is a directory of text files rather than a database.** History is append-only,
+written once and read in whole windows — the one shape a query planner is least needed for. The
+cost would have been real: `rusqlite` bundles a C library, which means a C cross-compiler for
+each of the five targets Layover releases to, trading the musl and aarch64 builds for indexing
+that a few megabytes of JSON does not need. Segmenting by day buys three further properties a
+single growing file would not: retention becomes deleting files rather than rewriting one, a
+window opens only the days inside it, and a partial write — which is what a power cut leaves —
+costs one line instead of the file.
+
+**Why the segments are UTC days while the reports are local.** Reporting windows are local
+because "this month" is a local question, but a local-day *filename* shifts when the machine
+changes zone or the clocks go back: two days would want the same name, or one day would be split
+across two files. UTC has no such day. Reading a local window therefore opens one extra segment at
+each end and filters by instant — cheap, and it cannot be wrong.
+
+**Why a window is either rolling or calendar, in the type.** "The last 7 days" and "this month"
+are asked in the same breath and are not the same kind of question: the first is 168 hours
+everywhere on earth, the second begins at a midnight that depends on where the Tower is standing.
+Collapsing them is how a factory spends one day's money twice — a sibling project gated on a UTC
+boundary while reporting in local time, and for the hours between the two midnights the gate and
+the display described different days. So `Window` distinguishes them and every resolved `Span`
+carries the zone it was reckoned in, or `None` when there was nothing to reckon. The absence is as
+informative as the name.
+
+**Why the dashboard draws its own graph instead of using Mermaid.** Mermaid stays for
+`layover graph`, where the output is pasted into a README and portability is the whole point. It
+was rejected for the dashboard on weight: the runtime is 2.5 MB of JavaScript that would have to
+be vendored into the repository and embedded in the binary to keep the page working offline. A
+layered layout for twenty nodes is a few hundred lines that can be unit-tested, where asserting
+on a JavaScript library's rendering could not be. Layers come from breadth-first distance rather
+than longest path, because route maps are routinely cyclic — the review loop is the point of the
+reference factory — and longest-path layering does not terminate on a cycle. Reusing the distance
+the validator already computes also means the diagram's columns and the hop arithmetic can never
+disagree.
+
+**Why the dashboard refuses control operations instead of hiding them.** Sending a flight,
+streaming a run and engaging a Ground Stop all need a supervisor that does not exist yet, and
+they answer `501` rather than returning something plausible. A control that silently does nothing
+is worse than a control that is not there: it is trusted once, and then relied upon at the moment
+it matters.

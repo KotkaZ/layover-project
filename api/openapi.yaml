@@ -14,7 +14,7 @@ openapi: 3.2.0
 
 info:
   title: Layover Tower API
-  version: 0.3.0
+  version: 0.4.0
   summary: Control surface for a local-first agent factory.
   description: |
     The UI is purely a client of this API, so this document bounds what the UI can ever do.
@@ -134,6 +134,26 @@ paths:
           description: Return only runs belonging to this itinerary.
           schema:
             type: string
+        - name: agent
+          in: query
+          required: false
+          description: Return only runs of this agent.
+          schema:
+            type: string
+        - name: pipeline
+          in: query
+          required: false
+          description: Return only runs whose chain was started by this pipeline.
+          schema:
+            type: string
+        - name: window
+          in: query
+          required: false
+          description: |
+            How far back to look. Defaults to the last 24 hours, because a dashboard opening on
+            ninety days of history is answering a question nobody asked.
+          schema:
+            $ref: "#/components/schemas/CostWindow"
         - name: limit
           in: query
           required: false
@@ -148,6 +168,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RunList"
+
+  /graph:
+    get:
+      operationId: getGraph
+      summary: The route map as a diagram, with what is happening drawn on it.
+      description: |
+        Mermaid source, generated from the configuration as it is on disk right now. Edit
+        `layover.toml` and reload; the diagram changes with it, because nothing here is baked at
+        build time.
+
+        Agents currently running, waiting at a barrier, or freshly failed are coloured. An edge
+        into a joined agent from a sender the barrier does not name is drawn as bypassing it,
+        which is what actually happens.
+      tags: [structure]
+      responses:
+        "200":
+          description: The diagram.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RouteMap"
 
   /runs/{run_id}:
     get:
@@ -215,13 +256,18 @@ paths:
         measured, so any estimated or unreported run downgrades the whole figure.
       tags: [work]
       parameters:
-        - name: window_hours
+        - name: window
           in: query
           required: false
-          description: Only count runs that finished within this many hours. Omit for all time.
+          description: |
+            The period to total over. Defaults to the last 30 days.
+
+            Note that `today` and `month_to_date` are *calendar* windows and the rest are *rolling* ones.
+            A rolling window is the same length everywhere; a calendar one begins at local
+            midnight and therefore depends on where the Tower is standing. The response says
+            which zone was used, so the figure can be read without having to guess.
           schema:
-            type: integer
-            format: int32
+            $ref: "#/components/schemas/CostWindow"
       responses:
         "200":
           description: The cost breakdown.
@@ -475,15 +521,21 @@ components:
     RunStatus:
       type: string
       description: |
-        How a run ended, or that it has not. `stalled` is deliberately distinct from `failed`: a
-        factory that quietly parks work forever is worse than one that crashes, so it has to be
-        visible as its own outcome.
-      enum: [running, succeeded, failed, stalled, cancelled]
+        How a run ended, or that it has not.
+
+        `halted` is deliberately distinct from `failed`: a rail stopping work — Hops, Fuel, the
+        run cap or the Reserve — is the system doing its job, and colouring it like a crash
+        teaches people to ignore the colour. `interrupted` means the run was alive when the Tower
+        went away; it is recoverable, and recovery starts a new run rather than resuming this one.
+
+        There is no `stalled` here. Stalling is something an *itinerary* does when it parks at a
+        barrier that never releases; a run either finishes or does not.
+      enum: [running, succeeded, failed, timed_out, halted, interrupted]
 
     Run:
       type: object
       description: One supervised CLI execution.
-      required: [run_id, itinerary_id, agent, status, started_at]
+      required: [run_id, itinerary_id, agent, status, started_at, cost_source]
       properties:
         run_id:
           type: string
@@ -494,6 +546,12 @@ components:
         agent:
           type: string
           description: Which agent was run.
+        pipeline:
+          type: [string, "null"]
+          description: The pipeline that started this run's chain, when one did.
+        model:
+          type: [string, "null"]
+          description: Which model the runner used, when it said.
         status:
           $ref: "#/components/schemas/RunStatus"
           description: How it ended, or that it has not.
@@ -505,6 +563,13 @@ components:
           type: [string, "null"]
           format: date-time
           description: When the process exited; null while it is still running.
+        duration_sec:
+          type: [integer, "null"]
+          format: int64
+          description: |
+            How long the run took. Null while it is still going, and also null if the clock moved
+            backwards between the two readings — a negative duration on a dashboard is worse than
+            an absent one, because somebody will average it.
         exit_code:
           type: [integer, "null"]
           format: int32
@@ -513,6 +578,12 @@ components:
           type: [number, "null"]
           format: double
           description: Null when the runner reported no cost, which the Tower logs loudly.
+        cost_source:
+          $ref: "#/components/schemas/CostSource"
+          description: Where `cost_usd` came from.
+        detail:
+          type: [string, "null"]
+          description: Why the run ended, for the outcomes where that is not self-evident.
         hops_remaining:
           type: [integer, "null"]
           format: int32
@@ -594,6 +665,69 @@ components:
           format: double
           description: Fraction of runs whose cost the runner actually reported, 0.0 to 1.0.
 
+    CostWindow:
+      type: string
+      description: |
+        A period to report over.
+
+        Two kinds, and the difference matters. `today` and `month_to_date` are **calendar** windows: they
+        begin at local midnight, so which instant that is depends on the Tower's time zone. The
+        rest are **rolling**: a fixed number of hours ending now, identical everywhere.
+
+        Conflating the two is not theoretical. Gating spend on a UTC day boundary while reporting
+        the ledger in local time lets a factory spend one day's money twice, and the bug is
+        invisible until it matters.
+      enum: [today, last_24h, last_7d, last_30d, month_to_date, last_90d, all_time]
+
+    WindowSpan:
+      type: object
+      description: A resolved window, and an honest account of how it was arrived at.
+      required: [window, label, calendar, end, truncated]
+      properties:
+        window:
+          $ref: "#/components/schemas/CostWindow"
+          description: Which window this is.
+        label:
+          type: string
+          description: A human label, such as "Last 30 days".
+        calendar:
+          type: boolean
+          description: True when the start was reckoned against a local midnight.
+        start:
+          type: [string, "null"]
+          format: date-time
+          description: When the period begins. Null means from the beginning of what is kept.
+        end:
+          type: string
+          format: date-time
+          description: When the period ends, which is the moment it was resolved.
+        zone:
+          type: [string, "null"]
+          description: |
+            The IANA zone the start was reckoned in, or null for a rolling window. The absence is
+            the point: nobody should have to wonder which zone "last 7 days" used.
+        truncated:
+          type: boolean
+          description: |
+            True when the period reaches further back than retention keeps, which makes the
+            totals a lower bound rather than a total.
+
+    RouteMap:
+      type: object
+      description: The factory drawn as a graph.
+      required: [mermaid, generated_at]
+      properties:
+        mermaid:
+          type: string
+          description: Mermaid `flowchart` source, ready to render.
+        generated_at:
+          type: string
+          format: date-time
+          description: When the configuration was read.
+        config_path:
+          type: [string, "null"]
+          description: Which file it was generated from.
+
     CostBucket:
       type: object
       description: One named slice of spend, such as an agent or a model.
@@ -637,8 +771,13 @@ components:
     CostReport:
       type: object
       description: Where the factory's money went.
-      required: [total, by_agent, by_model, reserve]
+      required: [span, total, by_agent, by_model, reserve]
       properties:
+        span:
+          $ref: "#/components/schemas/WindowSpan"
+          description: |
+            The period these totals cover, including the zone it was reckoned in and whether it
+            outruns retention. Part of the number, not decoration.
         total:
           $ref: "#/components/schemas/CostSummary"
           description: Totals across every run in scope.

@@ -19,7 +19,9 @@
 //! 24 hours" is both stricter and easier to reason about than "at most $50 per calendar day".
 
 use std::collections::VecDeque;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
+
+use jiff::{SignedDuration, Timestamp};
 
 use crate::itinerary::Denial;
 
@@ -43,7 +45,7 @@ pub struct ReserveState {
 pub struct Reserve {
     cap_usd: Option<f64>,
     window: Duration,
-    entries: VecDeque<(SystemTime, f64)>,
+    entries: VecDeque<(Timestamp, f64)>,
 }
 
 impl Reserve {
@@ -82,26 +84,26 @@ impl Reserve {
     ///
     /// Non-finite and negative figures are ignored, as they are for Fuel: the number comes from
     /// parsing a child process's output, and one `NaN` would make the rail unenforceable forever.
-    pub fn record(&mut self, at: SystemTime, usd: f64) {
+    pub fn record(&mut self, at: Timestamp, usd: f64) {
         if usd.is_finite() && usd > 0.0 {
             self.entries.push_back((at, usd));
         }
     }
 
     /// Spend within the window ending at `now`, discarding anything older.
-    pub fn spent(&mut self, now: SystemTime) -> f64 {
+    pub fn spent(&mut self, now: Timestamp) -> f64 {
         self.expire(now);
         self.entries.iter().map(|(_, usd)| usd).sum()
     }
 
     /// What is left before the Reserve refuses new work.
-    pub fn remaining(&mut self, now: SystemTime) -> Option<f64> {
+    pub fn remaining(&mut self, now: Timestamp) -> Option<f64> {
         let cap = self.cap_usd?;
         Some((cap - self.spent(now)).max(0.0))
     }
 
     /// Returns `true` once the window's spend has reached the cap.
-    pub fn is_exhausted(&mut self, now: SystemTime) -> bool {
+    pub fn is_exhausted(&mut self, now: Timestamp) -> bool {
         match self.cap_usd {
             None => false,
             Some(cap) => self.spent(now) >= cap,
@@ -115,7 +117,7 @@ impl Reserve {
     /// Returns [`Denial::ReserveExhausted`] once the window's spend has reached the cap. This is
     /// checked *before* an itinerary is minted, because refusing to start is cheap and stopping
     /// half way through leaves work stranded.
-    pub fn authorize(&mut self, now: SystemTime) -> Result<(), Denial> {
+    pub fn authorize(&mut self, now: Timestamp) -> Result<(), Denial> {
         if self.is_exhausted(now) {
             return Err(Denial::ReserveExhausted);
         }
@@ -123,7 +125,7 @@ impl Reserve {
     }
 
     /// Returns a snapshot for display.
-    pub fn state(&mut self, now: SystemTime) -> ReserveState {
+    pub fn state(&mut self, now: Timestamp) -> ReserveState {
         ReserveState {
             cap_usd: self.cap_usd,
             spent_usd: self.spent(now),
@@ -134,8 +136,15 @@ impl Reserve {
     }
 
     /// Drops entries that have fallen out of the window.
-    fn expire(&mut self, now: SystemTime) {
-        let Some(cutoff) = now.checked_sub(self.window) else {
+    ///
+    /// A window that cannot be represented as an instant offset leaves the queue alone: expiring
+    /// nothing overstates spend, which refuses work that might have been affordable. Expiring
+    /// everything would understate it, and a spend rail must fail towards not spending.
+    fn expire(&mut self, now: Timestamp) {
+        let Ok(window) = SignedDuration::try_from(self.window) else {
+            return;
+        };
+        let Ok(cutoff) = now.checked_sub(window) else {
             return;
         };
         while let Some((at, _)) = self.entries.front() {
@@ -162,7 +171,7 @@ mod tests {
     #[test]
     fn spend_accumulates_across_itineraries() {
         // The whole point: each of these is a separate chain, each within its own Fuel budget.
-        let now = SystemTime::now();
+        let now = Timestamp::now();
         let mut reserve = reserve();
 
         for _ in 0..3 {
@@ -176,7 +185,7 @@ mod tests {
 
     #[test]
     fn work_is_refused_once_the_cap_is_reached() {
-        let now = SystemTime::now();
+        let now = Timestamp::now();
         let mut reserve = reserve();
         reserve.record(now, 50.0);
 
@@ -187,7 +196,7 @@ mod tests {
 
     #[test]
     fn spend_falls_out_of_the_window_as_it_ages() {
-        let now = SystemTime::now();
+        let now = Timestamp::now();
         let mut reserve = reserve();
         reserve.record(now - DAY - HOUR, 40.0);
         reserve.record(now, 10.0);
@@ -202,7 +211,7 @@ mod tests {
     fn a_rolling_window_cannot_be_doubled_across_a_boundary() {
         // The failure a calendar-day cap has: spend it all just before midnight, then again just
         // after, and a "$50 a day" limit has permitted $100 in two minutes.
-        let now = SystemTime::now();
+        let now = Timestamp::now();
         let mut reserve = reserve();
 
         reserve.record(now - Duration::from_secs(60), 50.0);
@@ -223,7 +232,7 @@ mod tests {
 
     #[test]
     fn an_unlimited_reserve_never_refuses() {
-        let now = SystemTime::now();
+        let now = Timestamp::now();
         let mut reserve = Reserve::unlimited();
         reserve.record(now, 1_000_000.0);
 
@@ -247,7 +256,7 @@ mod tests {
 
     #[test]
     fn implausible_spend_reports_are_ignored() {
-        let now = SystemTime::now();
+        let now = Timestamp::now();
         let mut reserve = reserve();
 
         reserve.record(now, f64::NAN);
@@ -263,7 +272,7 @@ mod tests {
 
     #[test]
     fn the_state_snapshot_reports_the_whole_picture() {
-        let now = SystemTime::now();
+        let now = Timestamp::now();
         let mut reserve = reserve();
         reserve.record(now, 20.0);
 

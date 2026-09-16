@@ -8,8 +8,8 @@
 //! it. A figure that is 90% measured and 10% estimated reports as an estimate, because that is
 //! what it is.
 
+use jiff::Timestamp;
 use std::collections::BTreeMap;
-use std::time::SystemTime;
 
 use super::{CostSource, RunCost, TokenUsage};
 use crate::agent::AgentName;
@@ -142,7 +142,7 @@ impl Ledger {
 
     /// Totals for runs that finished at or after `since`.
     #[must_use]
-    pub fn since(&self, since: SystemTime) -> Summary {
+    pub fn since(&self, since: Timestamp) -> Summary {
         self.summarise(|cost| cost.at >= since)
     }
 
@@ -189,7 +189,7 @@ impl Ledger {
     /// Drops entries older than `before`, returning how many were removed.
     ///
     /// The ledger grows without bound otherwise, and an unattended factory runs for weeks.
-    pub fn prune(&mut self, before: SystemTime) -> usize {
+    pub fn prune(&mut self, before: Timestamp) -> usize {
         let was = self.entries.len();
         self.entries.retain(|cost| cost.at >= before);
         was - self.entries.len()
@@ -346,7 +346,7 @@ mod tests {
 
     #[test]
     fn old_entries_can_be_pruned() {
-        let now = SystemTime::now();
+        let now = Timestamp::now();
         let mut ledger = Ledger::new();
         ledger.record(reported("old", "codex-mini", 1.00).at(now - Duration::from_secs(7_200)));
         ledger.record(reported("new", "codex-mini", 2.00).at(now));

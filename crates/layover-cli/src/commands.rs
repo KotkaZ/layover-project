@@ -7,6 +7,9 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
+use layover_dashboard::{Dashboard, DashboardState};
+use layover_store::History;
+
 use layover_core::agent::PromptSpec;
 use layover_core::prompt::resolve;
 use layover_core::{
@@ -98,6 +101,81 @@ fn render(diagnostic: &Diagnostic) -> String {
 /// # Errors
 ///
 /// Returns a message when the definition cannot be loaded.
+/// Prints the factory's route map, as Mermaid source or as SVG.
+///
+/// No live state: the CLI is not talking to a running Tower, so this is the topology alone. The
+/// dashboard renders the same functions with the current activity overlaid.
+///
+/// # Errors
+///
+/// Returns [`Failure`] if the configuration cannot be loaded.
+pub fn graph(path: &Path, svg: bool) -> Result<String, Failure> {
+    let (config, _) = load(path)?;
+    let live = layover_core::diagram::Live::default();
+
+    Ok(if svg {
+        layover_core::diagram::render_svg(&layover_core::diagram::Layout::build(&config, &live))
+    } else {
+        layover_core::diagram::route_map(&config, &live)
+    })
+}
+
+/// Serves the monitoring dashboard until interrupted.
+///
+/// Binds before printing the address, so the line it prints is a fact rather than a hope. The
+/// configuration is validated first: a dashboard whose route map cannot be drawn is a confusing
+/// way to find out the factory definition is broken.
+///
+/// # Errors
+///
+/// Returns [`Failure`] if the configuration is invalid, the history directory cannot be opened,
+/// or the address is already in use.
+pub fn serve(path: &Path, addr: &str, history: Option<&Path>) -> Result<String, Failure> {
+    // Load once up front purely to fail early. A dashboard whose route map cannot be drawn is a
+    // confusing way to discover the factory definition is broken.
+    load(path)?;
+
+    let history_dir = history.map_or_else(
+        || {
+            path.parent()
+                .unwrap_or_else(|| Path::new("."))
+                .join(".layover")
+                .join("history")
+        },
+        Path::to_path_buf,
+    );
+
+    let store = History::open(&history_dir).map_err(|error| error.to_string())?;
+    let dashboard = Dashboard::new(DashboardState {
+        config_path: path.to_path_buf(),
+        history: store,
+    });
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|error| error.to_string())?;
+
+    runtime.block_on(async move {
+        // Bind before announcing, so the address printed is a fact rather than a hope.
+        let listener = tokio::net::TcpListener::bind(addr)
+            .await
+            .map_err(|error| format!("could not listen on {addr}: {error}"))?;
+        let bound = listener.local_addr().map_err(|error| error.to_string())?;
+
+        println!("Layover dashboard on http://{bound}");
+        println!("Reading {}", path.display());
+        println!("History in {}", history_dir.display());
+        println!("Press Ctrl+C to stop.");
+
+        axum::serve(listener, layover_dashboard::router(dashboard))
+            .await
+            .map_err(|error| error.to_string())
+    })?;
+
+    Ok(String::new())
+}
+
 pub fn explain(path: &Path) -> Result<String, Failure> {
     let (config, _) = load(path)?;
     let mut out = String::new();

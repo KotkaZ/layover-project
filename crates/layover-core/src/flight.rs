@@ -1,6 +1,6 @@
 //! The Flight envelope, and the identifiers that track work through the Tower.
 
-use std::time::SystemTime;
+use jiff::Timestamp;
 
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
@@ -123,7 +123,7 @@ pub struct Flight {
     /// Legs remaining before the chain is cut.
     pub hops_remaining: u32,
     /// When the Tower accepted it.
-    pub sent_at: SystemTime,
+    pub sent_at: Timestamp,
 }
 
 impl Flight {
@@ -143,7 +143,7 @@ impl Flight {
             to,
             body: body.into(),
             hops_remaining,
-            sent_at: SystemTime::now(),
+            sent_at: Timestamp::now(),
         }
     }
 }

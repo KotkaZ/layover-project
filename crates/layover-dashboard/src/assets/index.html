@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Layover</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1>Layover</h1>
+  <nav>
+    <button class="tab" data-view="map" aria-current="true">Route map</button>
+    <button class="tab" data-view="runs">Runs</button>
+    <button class="tab" data-view="cost">Cost</button>
+  </nav>
+  <span id="health" class="pill"></span>
+</header>
+
+<main>
+  <section id="map" class="view">
+    <div class="bar">
+      <p class="hint">
+        Generated from <code id="config-path">layover.toml</code> each time this page loads.
+        Edit the file and reload.
+      </p>
+      <button id="refresh">Refresh</button>
+    </div>
+    <div id="routemap" class="canvas"></div>
+    <ul class="legend">
+      <li><span class="swatch pipeline"></span>way in</li>
+      <li><span class="swatch gate"></span>rendezvous barrier</li>
+      <li><span class="swatch running"></span>running</li>
+      <li><span class="swatch failed"></span>failed</li>
+      <li><span class="swatch line joined"></span>waits at the barrier</li>
+      <li><span class="swatch line bypass"></span>bypasses it</li>
+    </ul>
+  </section>
+
+  <section id="runs" class="view" hidden>
+    <div class="bar">
+      <label>Window <select id="runs-window"></select></label>
+      <label>Outcome
+        <select id="runs-status">
+          <option value="">any</option>
+          <option value="running">running</option>
+          <option value="succeeded">succeeded</option>
+          <option value="failed">failed</option>
+          <option value="timed_out">timed out</option>
+          <option value="halted">halted</option>
+          <option value="interrupted">interrupted</option>
+        </select>
+      </label>
+      <label>Agent <input id="runs-agent" type="search" placeholder="any" list="agent-names"></label>
+      <datalist id="agent-names"></datalist>
+    </div>
+    <table id="runs-table">
+      <thead>
+        <tr>
+          <th>Finished</th><th>Agent</th><th>Pipeline</th><th>Outcome</th>
+          <th class="num">Took</th><th class="num">Cost</th><th>Chain</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <p id="runs-empty" class="empty" hidden></p>
+  </section>
+
+  <section id="cost" class="view" hidden>
+    <div class="cards" id="cost-cards"></div>
+    <p id="cost-caveat" class="caveat" hidden></p>
+    <div class="split">
+      <div>
+        <h2>By agent</h2>
+        <table id="cost-agents"><thead><tr><th>Agent</th><th class="num">Runs</th><th class="num">Spend</th></tr></thead><tbody></tbody></table>
+      </div>
+      <div>
+        <h2>By model</h2>
+        <table id="cost-models"><thead><tr><th>Model</th><th class="num">Runs</th><th class="num">Spend</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+    <p class="hint">
+      History is kept for 90 days. A window reaching further back reports a lower bound, and says
+      so rather than quietly returning a smaller number.
+    </p>
+  </section>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>

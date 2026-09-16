@@ -178,18 +178,17 @@ recovery and steering use the one mechanism — see
     through a single lock.
 21. **Observability** — structured logs, or OpenTelemetry traces where an Itinerary is a trace and
     each Run a span? The latter would visualise a stalled barrier.
-22. **UI stack** — plain HTML with SSE, or a framework. Reversible; it only consumes the HTTP API.
-23. **Is the aviation terminology confirmed?** Adopted provisionally throughout. Now that code
+22. **Is the aviation terminology confirmed?** Adopted provisionally throughout. Now that code
     exists it is no longer free to strip, but it is still only names.
-24. **Does a scheduled pipeline skip a tick it is still working on, or start a second run?**
+23. **Does a scheduled pipeline skip a tick it is still working on, or start a second run?**
     Runs are reentrant, so today it would start a second. Validation warns when the firing gap is
     shorter than `timeout_sec`, which is a smell test rather than an answer. An independent review
     argued the safe default for unattended spending is to *skip* the tick and require
     `overlap = "allow"` to opt in; that is probably right and is a Tower behaviour, so it is
     recorded here rather than guessed at.
-25. **What time zone does a cron expression mean?** Local to the Tower is the obvious answer and
+24. **What time zone does a cron expression mean?** Local to the Tower is the obvious answer and
     the obvious source of a 1am surprise twice a year.
-26. **Should `entry = true` survive at all?** A review argued it is two ways to do one thing, and
+25. **Should `entry = true` survive at all?** A review argued it is two ways to do one thing, and
     that a pipeline with no flags expresses the same intent. The counter-argument is in the
     decision log. The deciding evidence would be whether anyone actually uses a bare entry agent
     once pipelines exist; nobody has used either yet.
@@ -217,6 +216,8 @@ recovery and steering use the one mechanism — see
 - **Can several instances of one pipeline run at once?** *Yes.* Each trigger already mints its own itinerary, barriers and flags; `workspace = "per-itinerary"` adds the missing piece by giving each a git worktree of its own.
 - **What happens to work that was in flight when the Tower died?** *A new run is started and handed the old one's state — never a resumed process.* Recovery is bounded by `max_recovery_attempts` on top of Hops, Fuel and the run cap, and a Ground Stop is never restarted through.
 - **Can a human steer a run that is already going?** *Yes, by starting a new run carrying their instruction and the prior run's state.* Same mechanism as recovery, which is why neither needed resident agents.
+- **What does the UI look like?** *Server-rendered HTML with an SVG route map, embedded in the binary.* No npm, no framework, no build step, and the graph layout is a pure function with unit tests rather than a 2.5 MB JavaScript dependency. Reversible: the page only consumes the HTTP API.
+- **How far back does history go, and where does it live?** *Ninety days, as one JSON Lines file per UTC day under `.layover/history`.* Retention is deleting whole files.
 
 ---
 

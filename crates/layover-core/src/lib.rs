@@ -24,6 +24,7 @@ pub mod autostart;
 pub mod barrier;
 pub mod config;
 pub mod cost;
+pub mod diagram;
 pub mod flight;
 pub mod graph;
 pub mod handover;
@@ -32,6 +33,7 @@ pub mod mcp;
 pub mod pipeline;
 pub mod prompt;
 pub mod route;
+pub mod run;
 pub mod validate;
 
 pub use agent::{Access, Agent, AgentName, PromptSpec, PromptSpecError};
@@ -41,6 +43,7 @@ pub use config::{Config, ConfigError, Defaults, McpWiring, Paths, ReserveConfig,
 pub use cost::{
     CostSource, Ledger, ModelRates, RateCard, Reserve, ReserveState, RunCost, Summary, TokenUsage,
 };
+pub use diagram::{Activity, Layout, Live, render_svg, route_map};
 pub use flight::{Flight, FlightId, ItineraryId, Origin, RunId};
 pub use graph::RouteGraph;
 pub use handover::{
@@ -53,4 +56,5 @@ pub use pipeline::{
 };
 pub use prompt::{PromptDir, PromptError, PromptMap, PromptSource};
 pub use route::{Join, Mode, Route};
+pub use run::{Outcome, RunRecord};
 pub use validate::{Diagnostic, Severity, validate, validate_prompts};

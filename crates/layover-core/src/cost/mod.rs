@@ -21,8 +21,9 @@
 pub mod ledger;
 pub mod rates;
 pub mod reserve;
+pub mod window;
 
-use std::time::SystemTime;
+use jiff::Timestamp;
 
 use serde::{Deserialize, Serialize};
 
@@ -32,6 +33,7 @@ use crate::flight::{ItineraryId, RunId};
 pub use ledger::{Ledger, Summary};
 pub use rates::{ModelRates, RateCard};
 pub use reserve::{Reserve, ReserveState};
+pub use window::{RETENTION_DAYS, Span, Window};
 
 /// Tokens consumed by one run.
 ///
@@ -118,7 +120,7 @@ pub struct RunCost {
     /// Where `usd` came from.
     pub source: CostSource,
     /// When the run finished.
-    pub at: SystemTime,
+    pub at: Timestamp,
 }
 
 impl RunCost {
@@ -150,7 +152,7 @@ impl RunCost {
             usage,
             usd,
             source,
-            at: SystemTime::now(),
+            at: Timestamp::now(),
         }
     }
 
@@ -170,13 +172,13 @@ impl RunCost {
             usage: TokenUsage::default(),
             usd: 0.0,
             source: CostSource::Unreported,
-            at: SystemTime::now(),
+            at: Timestamp::now(),
         }
     }
 
     /// Overrides when the run finished, for tests and for replaying a persisted ledger.
     #[must_use]
-    pub fn at(mut self, at: SystemTime) -> Self {
+    pub fn at(mut self, at: Timestamp) -> Self {
         self.at = at;
         self
     }

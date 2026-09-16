@@ -4,7 +4,7 @@
 //! regenerates this file and fails if the result differs, so an edit here is reverted
 //! rather than kept. Change the specification instead.
 //!
-//! Source: Layover Tower API v0.3.0
+//! Source: Layover Tower API v0.4.0
 
 #![allow(clippy::too_many_lines)]
 
@@ -76,6 +76,9 @@ pub struct CostReport {
     pub by_model: Vec<CostBucket>,
     /// The factory-wide ceiling and what is left of it.
     pub reserve: ReserveState,
+    /// The period these totals cover, including the zone it was reckoned in and whether it
+    /// outruns retention. Part of the number, not decoration.
+    pub span: WindowSpan,
     /// Totals across every run in scope.
     pub total: CostSummary,
 }
@@ -113,6 +116,40 @@ pub struct CostSummary {
     pub usage: TokenUsage,
     /// Total cost in US dollars.
     pub usd: f64,
+}
+
+/// A period to report over.
+///
+/// Two kinds, and the difference matters. `today` and `month_to_date` are **calendar** windows: they
+/// begin at local midnight, so which instant that is depends on the Tower's time zone. The
+/// rest are **rolling**: a fixed number of hours ending now, identical everywhere.
+///
+/// Conflating the two is not theoretical. Gating spend on a UTC day boundary while reporting
+/// the ledger in local time lets a factory spend one day's money twice, and the bug is
+/// invisible until it matters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CostWindow {
+    /// `today`
+    #[serde(rename = "today")]
+    Today,
+    /// `last_24h`
+    #[serde(rename = "last_24h")]
+    Last24h,
+    /// `last_7d`
+    #[serde(rename = "last_7d")]
+    Last7d,
+    /// `last_30d`
+    #[serde(rename = "last_30d")]
+    Last30d,
+    /// `month_to_date`
+    #[serde(rename = "month_to_date")]
+    MonthToDate,
+    /// `last_90d`
+    #[serde(rename = "last_90d")]
+    Last90d,
+    /// `all_time`
+    #[serde(rename = "all_time")]
+    AllTime,
 }
 
 /// A boolean parameter a pipeline accepts at trigger time.
@@ -239,14 +276,36 @@ pub struct Route {
     pub to: Vec<String>,
 }
 
+/// The factory drawn as a graph.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RouteMap {
+    /// Which file it was generated from.
+    #[serde(default)]
+    pub config_path: Option<String>,
+    /// When the configuration was read.
+    pub generated_at: String,
+    /// Mermaid `flowchart` source, ready to render.
+    pub mermaid: String,
+}
+
 /// One supervised CLI execution.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Run {
     /// Which agent was run.
     pub agent: String,
+    /// Where `cost_usd` came from.
+    pub cost_source: CostSource,
     /// Null when the runner reported no cost, which the Tower logs loudly.
     #[serde(default)]
     pub cost_usd: Option<f64>,
+    /// Why the run ended, for the outcomes where that is not self-evident.
+    #[serde(default)]
+    pub detail: Option<String>,
+    /// How long the run took. Null while it is still going, and also null if the clock moved
+    /// backwards between the two readings — a negative duration on a dashboard is worse than
+    /// an absent one, because somebody will average it.
+    #[serde(default)]
+    pub duration_sec: Option<i64>,
     /// Process exit code, when there was one.
     #[serde(default)]
     pub exit_code: Option<i32>,
@@ -258,6 +317,12 @@ pub struct Run {
     pub hops_remaining: Option<i32>,
     /// The chain this run belongs to.
     pub itinerary_id: String,
+    /// Which model the runner used, when it said.
+    #[serde(default)]
+    pub model: Option<String>,
+    /// The pipeline that started this run's chain, when one did.
+    #[serde(default)]
+    pub pipeline: Option<String>,
     /// Identifier of this run.
     pub run_id: String,
     /// When the process was spawned.
@@ -273,9 +338,15 @@ pub struct RunList {
     pub runs: Vec<Run>,
 }
 
-/// How a run ended, or that it has not. `stalled` is deliberately distinct from `failed`: a
-/// factory that quietly parks work forever is worse than one that crashes, so it has to be
-/// visible as its own outcome.
+/// How a run ended, or that it has not.
+///
+/// `halted` is deliberately distinct from `failed`: a rail stopping work — Hops, Fuel, the
+/// run cap or the Reserve — is the system doing its job, and colouring it like a crash
+/// teaches people to ignore the colour. `interrupted` means the run was alive when the Tower
+/// went away; it is recoverable, and recovery starts a new run rather than resuming this one.
+///
+/// There is no `stalled` here. Stalling is something an *itinerary* does when it parks at a
+/// barrier that never releases; a run either finishes or does not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RunStatus {
     /// `running`
@@ -287,12 +358,15 @@ pub enum RunStatus {
     /// `failed`
     #[serde(rename = "failed")]
     Failed,
-    /// `stalled`
-    #[serde(rename = "stalled")]
-    Stalled,
-    /// `cancelled`
-    #[serde(rename = "cancelled")]
-    Cancelled,
+    /// `timed_out`
+    #[serde(rename = "timed_out")]
+    TimedOut,
+    /// `halted`
+    #[serde(rename = "halted")]
+    Halted,
+    /// `interrupted`
+    #[serde(rename = "interrupted")]
+    Interrupted,
 }
 
 /// Exactly one of `pipeline` and `to` must be given, and flags are only accepted alongside a
@@ -363,12 +437,40 @@ pub enum TriggerKind {
     Scheduled,
 }
 
+/// A resolved window, and an honest account of how it was arrived at.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WindowSpan {
+    /// True when the start was reckoned against a local midnight.
+    pub calendar: bool,
+    /// When the period ends, which is the moment it was resolved.
+    pub end: String,
+    /// A human label, such as "Last 30 days".
+    pub label: String,
+    /// When the period begins. Null means from the beginning of what is kept.
+    #[serde(default)]
+    pub start: Option<String>,
+    /// True when the period reaches further back than retention keeps, which makes the
+    /// totals a lower bound rather than a total.
+    pub truncated: bool,
+    /// Which window this is.
+    pub window: CostWindow,
+    /// The IANA zone the start was reckoned in, or null for a rolling window. The absence is
+    /// the point: nobody should have to wonder which zone "last 7 days" used.
+    #[serde(default)]
+    pub zone: Option<String>,
+}
+
 /// query parameters for `getCosts`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GetCostsQuery {
-    /// Only count runs that finished within this many hours. Omit for all time.
+    /// The period to total over. Defaults to the last 30 days.
+    ///
+    /// Note that `today` and `month_to_date` are *calendar* windows and the rest are *rolling* ones.
+    /// A rolling window is the same length everywhere; a calendar one begins at local
+    /// midnight and therefore depends on where the Tower is standing. The response says
+    /// which zone was used, so the figure can be read without having to guess.
     #[serde(default)]
-    pub window_hours: Option<i32>,
+    pub window: Option<CostWindow>,
 }
 
 /// query parameters for `listRuns`.
@@ -380,6 +482,16 @@ pub struct ListRunsQuery {
     /// Return only runs belonging to this itinerary.
     #[serde(default)]
     pub itinerary_id: Option<String>,
+    /// Return only runs of this agent.
+    #[serde(default)]
+    pub agent: Option<String>,
+    /// Return only runs whose chain was started by this pipeline.
+    #[serde(default)]
+    pub pipeline: Option<String>,
+    /// How far back to look. Defaults to the last 24 hours, because a dashboard opening on
+    /// ninety days of history is answering a question nobody asked.
+    #[serde(default)]
+    pub window: Option<CostWindow>,
     /// Maximum number of runs to return, newest first.
     #[serde(default)]
     pub limit: Option<i32>,
@@ -437,6 +549,18 @@ pub trait Api: Send + Sync + 'static {
         &self,
         body: SendFlightRequest,
     ) -> impl core::future::Future<Output = Result<FlightAccepted, Problem>> + Send;
+    /// The route map as a diagram, with what is happening drawn on it.
+    ///
+    /// Mermaid source, generated from the configuration as it is on disk right now. Edit
+    /// `layover.toml` and reload; the diagram changes with it, because nothing here is baked at
+    /// build time.
+    ///
+    /// Agents currently running, waiting at a barrier, or freshly failed are coloured. An edge
+    /// into a joined agent from a sender the barrier does not name is drawn as bypassing it,
+    /// which is what actually happens.
+    ///
+    /// `GET /graph`
+    fn get_graph(&self) -> impl core::future::Future<Output = Result<RouteMap, Problem>> + Send;
     /// Halt everything.
     ///
     /// Ground Stop is a file on disk rather than in-memory state, so it survives a Tower crash
@@ -494,6 +618,7 @@ pub fn router<A: Api>(api: std::sync::Arc<A>) -> axum::Router {
         .route("/agents", axum::routing::get(handle_list_agents::<A>))
         .route("/costs", axum::routing::get(handle_get_costs::<A>))
         .route("/flights", axum::routing::post(handle_send_flight::<A>))
+        .route("/graph", axum::routing::get(handle_get_graph::<A>))
         .route(
             "/ground-stop",
             axum::routing::post(handle_engage_ground_stop::<A>)
@@ -535,6 +660,15 @@ async fn handle_send_flight<A: Api>(
 ) -> axum::response::Response {
     match api.send_flight(body).await {
         Ok(value) => (axum::http::StatusCode::ACCEPTED, axum::Json(value)).into_response(),
+        Err(problem) => problem.into_response(),
+    }
+}
+
+async fn handle_get_graph<A: Api>(
+    axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
+) -> axum::response::Response {
+    match api.get_graph().await {
+        Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
         Err(problem) => problem.into_response(),
     }
 }
@@ -608,10 +742,11 @@ async fn handle_stream_run<A: Api>(
 /// Every operation the specification declares, as (method, path, operationId).
 ///
 /// Exposed so tests can assert the router and the specification agree.
-pub const OPERATIONS: [(&str, &str, &str); 10] = [
+pub const OPERATIONS: [(&str, &str, &str); 11] = [
     ("GET", "/agents", "listAgents"),
     ("GET", "/costs", "getCosts"),
     ("POST", "/flights", "sendFlight"),
+    ("GET", "/graph", "getGraph"),
     ("POST", "/ground-stop", "engageGroundStop"),
     ("DELETE", "/ground-stop", "releaseGroundStop"),
     ("GET", "/health", "getHealth"),

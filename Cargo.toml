@@ -1,9 +1,9 @@
 [workspace]
 resolver = "3"
-members = ["crates/layover-cli", "crates/layover-core", "crates/layover-http", "xtask"]
+members = ["crates/layover-cli", "crates/layover-core", "crates/layover-dashboard", "crates/layover-http", "crates/layover-store", "xtask"]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.85"
 license = "Apache-2.0"
@@ -13,7 +13,9 @@ repository = "https://github.com/KotkaZ/layover-project"
 axum = "0.8"
 clap = "4"
 tokio = "1"
+jiff = "0.2"
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 toml = "0.9"
 thiserror = "2"
 ulid = "1"

@@ -1,6 +1,6 @@
 [package]
-name = "layover-http"
-description = "The Layover Tower HTTP surface, generated from api/openapi.yaml."
+name = "layover-dashboard"
+description = "The Layover monitoring dashboard: route map, run history and cost, served from the Tower."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,8 +8,11 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+layover-core = { path = "../layover-core", version = "0.4.0" }
+layover-http = { path = "../layover-http", version = "0.4.0" }
+layover-store = { path = "../layover-store", version = "0.4.0" }
 axum = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
+jiff = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }

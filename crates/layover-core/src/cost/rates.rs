@@ -4,8 +4,8 @@
 //! [`CostSource::RateCard`] so it can never be mistaken for a measured figure — see the module
 //! documentation on [`crate::cost`] for why that distinction is load-bearing.
 
+use jiff::Timestamp;
 use std::collections::BTreeMap;
-use std::time::SystemTime;
 
 use serde::{Deserialize, Serialize};
 
@@ -140,7 +140,7 @@ impl RateCard {
             usage,
             usd,
             source,
-            at: SystemTime::now(),
+            at: Timestamp::now(),
         }
     }
 }

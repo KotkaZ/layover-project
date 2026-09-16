@@ -23,6 +23,7 @@
 //!     }
 //!     # async fn list_agents(&self) -> Result<layover_http::AgentList, Problem> { todo!() }
 //!     # async fn list_pipelines(&self) -> Result<layover_http::PipelineList, Problem> { todo!() }
+//!     # async fn get_graph(&self) -> Result<layover_http::RouteMap, Problem> { todo!() }
 //!     # async fn get_costs(&self, _: layover_http::GetCostsQuery) -> Result<layover_http::CostReport, Problem> { todo!() }
 //!     # async fn send_flight(&self, _: layover_http::SendFlightRequest) -> Result<layover_http::FlightAccepted, Problem> { todo!() }
 //!     # async fn list_runs(&self, _: layover_http::ListRunsQuery) -> Result<layover_http::RunList, Problem> { todo!() }
