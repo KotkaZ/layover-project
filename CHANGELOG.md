@@ -1,0 +1,91 @@
+# Changelog
+
+Notable changes per release. Format follows [Keep a Changelog](https://keepachangelog.com/1.1.0/).
+
+**Pre-1.0: a minor bump may break things.** Crate versions track releases of what is built; the
+*first runnable release* — the milestone where a factory actually runs — has not happened yet.
+See [project status](README.md#project-status).
+
+## [Unreleased]
+
+## [0.8.0] — 2026-09-17
+
+### Added
+
+- **A logo, status badges and a download table** in the README and on the documentation site,
+  with a dark-mode variant and a favicon. [`assets/logo-prep.ps1`](assets/logo-prep.ps1)
+  regenerates them from the source artwork.
+- **`CONTRIBUTING.md`, `SECURITY.md`, this changelog, a Dependabot configuration and an issue
+  template.** The contributor contract already existed in `AGENTS.md`; it was not reachable from
+  anywhere a human would look, and there was no private channel for reporting a vulnerability.
+- **Redaction on help requests.** `summary` and `detail` are written by an agent explaining why
+  something failed, and the commonest reason is a credential — so they are now capped and stripped
+  of token-shaped text before they reach disk, the API or the dashboard.
+- **A warning when `layover serve` binds off loopback**, since the API has no authentication and
+  will queue work for a future supervisor.
+- **Trigger a workflow from the dashboard.** A pipeline picker, a prompt, and a switch per
+  declared flag. The flight is queued durably and says so — nothing dispatches it until a
+  supervisor exists, and a Ground Stop refuses it.
+- **Agent reports.** Every run can carry what the agent concluded; the dashboard shows it when a
+  run is opened. Capped and trimmed rather than rejected, and a trimmed report says so.
+- **One workflow at a time.** A selector scopes the route map, runs, costs and help requests to a
+  single pipeline. The Reserve and learnings deliberately do not narrow.
+- **The Reserve is now drawn.** It was specified, documented and returned by the API, but never
+  shown.
+- **A per-workflow activity strip** above each diagram: runs, spend, failures and open help.
+- **A CLI reference page** and an `examples/` index.
+
+### Fixed
+
+- **`layover autostart` generated a service that ran `layover run`** — a subcommand that does not
+  exist — so it would have failed at every logon while the documentation promised it could not.
+  It now generates `serve`, and a test asserts the emitted command parses against the real parser.
+- **The Reserve was metered over the window being browsed**, so the default view compared thirty
+  days of spend against a twenty-four hour cap.
+- **A queued trigger discarded its flags and its pipeline.**
+- **`join = "any"` woke its agent once per upstream** rather than exactly once.
+- **`[reserve] fuel_usd` accepted negative and NaN values** and silently became unlimited.
+- **A claim and its negation counted as the same learning.**
+- **A `$0` cost alongside real tokens** was treated as a measurement rather than as silence.
+- **`.gitignore` did not cover runtime state outside the repository root**, so running an example
+  and staging everything would have committed run history, queued flight bodies and help requests.
+- **The install guide claimed both installers verify a checksum.** The shell one skips
+  verification when `sha256sum` is absent — which is stock macOS — and the PowerShell one does not
+  verify at all. The page now says so and gives a fail-closed alternative.
+
+### Changed
+
+- **`docs/roadmap.md` is gone.** Its open questions moved to `docs/decisions.md`, which also took
+  the decision log out of an oversized `docs/architecture.md`.
+- **Project status is stated once, in the README.** Three places used to claim different things.
+- **The milestone is named rather than numbered.** "v0.1" meant the release where a factory first
+  runs, while the crates were at 0.8.0; a goal spelled like a version gets read as one.
+- **`rust-version` now matches the pinned toolchain**, because that is the only one tested.
+- **CI and Pages pin every action to a commit**, declare least-privilege permissions, and build
+  with `--locked`.
+- Documentation corrections throughout: the install page claimed nothing was released, offered a
+  `cargo install` that 404s, and several figures disagreed with the code.
+
+## [0.7.0] — 2026-09-17
+
+### Added
+
+- **A diagram per workflow**, each showing the trigger, Hops, Fuel, workspace and resume policy
+  that bound a chain started there.
+- **Cost broken down by workflow**, and a `pipeline` parameter on the graph endpoint.
+
+### Fixed
+
+- **Overlapping edges in the route map.** Layers ignored scope, every edge met a node at its
+  centre, and all returns to one agent shared a gutter.
+
+## [0.3.0] — 2026-09-16
+
+### Added
+
+- First tagged release: installers and archives for five targets.
+
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/KotkaZ/layover-project/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/KotkaZ/layover-project/compare/v0.3.0...v0.7.0
+[0.3.0]: https://github.com/KotkaZ/layover-project/releases/tag/v0.3.0

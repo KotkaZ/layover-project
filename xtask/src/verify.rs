@@ -17,6 +17,7 @@ pub fn run(root: &Path) -> ExitCode {
         Err(error) => {
             eprintln!("{error}");
             eprintln!("\nverify failed at `generated`");
+            eprintln!("run `cargo xtask generate-api` to regenerate it from api/openapi.yaml");
             return ExitCode::FAILURE;
         }
     }
@@ -27,16 +28,22 @@ pub fn run(root: &Path) -> ExitCode {
         Err(error) => {
             eprintln!("{error}");
             eprintln!("\nverify failed at `docs`");
+            eprintln!(
+                "a link no longer resolves, or a version disagrees; the report above says which"
+            );
             return ExitCode::FAILURE;
         }
     }
 
+    // `--locked` throughout: without it a manifest change can quietly update Cargo.lock in CI's
+    // own checkout and pass, leaving the lockfile the release is built from uncommitted.
     let steps: [(&str, &[&str]); 4] = [
         ("format", &["fmt", "--all", "--check"]),
         (
             "lint",
             &[
                 "clippy",
+                "--locked",
                 "--workspace",
                 "--all-targets",
                 "--",
@@ -44,8 +51,8 @@ pub fn run(root: &Path) -> ExitCode {
                 "warnings",
             ],
         ),
-        ("test", &["test", "--workspace"]),
-        ("doc", &["doc", "--workspace", "--no-deps"]),
+        ("test", &["test", "--locked", "--workspace"]),
+        ("doc", &["doc", "--locked", "--workspace", "--no-deps"]),
     ];
 
     for (name, args) in steps {
@@ -61,6 +68,9 @@ pub fn run(root: &Path) -> ExitCode {
             Ok(status) if status.success() => {}
             Ok(status) => {
                 eprintln!("\nverify failed at `{name}` ({status})");
+                if name == "format" {
+                    eprintln!("run `cargo fmt --all` to fix it");
+                }
                 return ExitCode::FAILURE;
             }
             Err(error) => {

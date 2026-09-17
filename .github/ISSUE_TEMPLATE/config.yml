@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/KotkaZ/layover-project/security/advisories/new
+    about: Report privately. Please do not open a public issue for anything exploitable.
+  - name: Documentation
+    url: https://kotkaz.github.io/layover-project/
+    about: Install, configuration, the dashboard, the HTTP API and the design.
+  - name: Open design questions
+    url: https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md
+    about: Why things are the way they are, and what is still undecided. Arguments welcome.

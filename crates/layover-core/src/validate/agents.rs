@@ -96,13 +96,13 @@ pub(super) fn check_fuel_is_usable(config: &Config, found: &mut Vec<Diagnostic>)
     }
 
     for (name, agent) in &config.agents {
-        if let Some(fuel) = agent.fuel_usd {
-            if fuel <= 0.0 || fuel.is_nan() {
-                found.push(Diagnostic::error(format!(
-                    "agent `{name}` sets `fuel_usd = {fuel}`, so any itinerary starting there is \
-                     out of Fuel before its first run"
-                )));
-            }
+        if let Some(fuel) = agent.fuel_usd
+            && (fuel <= 0.0 || fuel.is_nan())
+        {
+            found.push(Diagnostic::error(format!(
+                "agent `{name}` sets `fuel_usd = {fuel}`, so any itinerary starting there is \
+                 out of Fuel before its first run"
+            )));
         }
     }
 }

@@ -12,12 +12,22 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
 
+# Read-only by default. The repository setting happens to default workflow tokens to read-only
+# today, but a setting is not a guarantee: stating it here means a change to that setting cannot
+# quietly widen what a build script or proc macro in this job could do.
+permissions:
+  contents: read
+
 jobs:
   verify:
     name: cargo xtask verify
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Every action is pinned to a commit. A version tag is mutable, so `@v4` is a promise from
+      # whoever can move that tag rather than a description of what will run.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:

@@ -29,8 +29,8 @@ CLIs for free. The cost is that agents become opaque processes, which is what fo
 
 **Why MCP is the control channel.** All three target CLIs speak MCP natively, so agents gain the
 ability to message each other with no adapter code and no bespoke protocol. This also answered the
-open interop question: Layover does not need to pick between A2A, ACP or a greenfield protocol for
-v0.1, because the control channel and the integration standard turned out to be the same problem.
+open interop question: Layover does not need to pick between A2A, ACP or a greenfield protocol,
+because the control channel and the integration standard turned out to be the same problem.
 
 **Why sending a message is what starts an agent.** Two operations — spawn and send — would need
 two permission models over the same graph, and would allow the incoherent state of an agent
@@ -195,6 +195,28 @@ agent* to check whether the earlier run already did the thing, which is the only
 actually look; and `recovery = "manual"` stops the restart outright for the steps where checking
 is not good enough. The reference factory sets it on exactly one agent.
 
+**Why Apache-2.0 alone rather than the Rust-typical `MIT OR Apache-2.0`.** Rust libraries dual
+licence so that GPLv2-only projects can consume them, since Apache-2.0 is incompatible with
+GPLv2. That reasoning is about libraries, and Layover is an application: people run the binary,
+they do not link `layover-core` into something else. What Apache-2.0 adds over MIT is an explicit
+patent grant, which is worth more here than compatibility with a licence nobody consuming a
+supervisor is likely to be bound by. Revisit if `layover-core` is ever published as a crate meant
+to be depended on — at that point the dual licence becomes the right default again.
+
+**Why the milestone is named rather than numbered.** "v0.1" used to mean the release where a
+factory first actually runs, while the crates were already at 0.8.0 — so the project appeared to
+be both far behind and far ahead of itself, and a stranger could not tell which. Crate versions
+now track what is built and the milestone has a name instead of a number. A goal spelled like a
+version will be read as a version.
+
+**Why the declared MSRV is the pinned toolchain.** `rust-version` said 1.85 while
+`rust-toolchain.toml` pinned 1.98.1, which is the only compiler CI ever runs — so the older
+number was an untested claim, and thirteen minor versions is a long way to be wrong. The choice
+was to test the claim or to stop making it. Testing it means a second CI job and a second
+toolchain download on every push to protect users nobody has yet; stating the version that is
+actually exercised costs nothing and is true. If somebody turns up needing an older compiler,
+that is the moment to find out how far back it really builds.
+
 **Why documentation upkeep is in `AGENTS.md` rather than in review.** `docs/` is normative and
 hand-maintained, and an agent that trusts a stale document makes confident wrong changes. Review
 catches that only if a human remembers to look. So the standing instruction is that every change
@@ -234,7 +256,7 @@ that the gap is now *countable* rather than a boolean: an itinerary records how 
 went unmetered, so "three of forty" and "all forty" are distinguishable. The first is a gap; the
 second means the cost rail is not running at all.
 
-**Why Fuel is required in v0.1 rather than deferred.** Hops was originally assumed to be the
+**Why Fuel is required from the first runnable release rather than deferred.** Hops was originally assumed to be the
 anti-fork-bomb rail. It is not. A hop is spent per flight and branches inherit the remaining
 count, so Hops caps how *deep* a chain runs and says nothing about how *wide* it spreads — a
 branching factor of 3 at `max_hops = 8` permits thousands of real, paid CLI invocations from a
@@ -517,7 +539,7 @@ recovery and steering use the one mechanism — see
 
 ---
 
-## Beyond v0.1
+## Beyond the first runnable release
 
 Rough ordering, not commitments.
 

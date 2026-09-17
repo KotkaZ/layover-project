@@ -184,6 +184,19 @@ pub fn serve(path: &Path, addr: &str, history: Option<&Path>) -> Result<String, 
         println!("Layover dashboard on http://{bound}");
         println!("Reading {}", path.display());
         println!("History in {}", history_dir.display());
+
+        // Nothing authenticates this surface. On loopback that is a reasonable trade; off it,
+        // anyone who can reach the port can read the factory's history, its agents' reports and
+        // its help requests — which is where an agent describes a credential failure — and can
+        // queue work for a future supervisor to pick up. Saying so at the moment it happens is
+        // cheaper than a warning in a document nobody reads twice.
+        if !bound.ip().is_loopback() {
+            eprintln!();
+            eprintln!("warning: {bound} is not loopback, and this API has no authentication.");
+            eprintln!("         Anyone who can reach it can read run history, reports and help");
+            eprintln!("         requests, and queue work. Put something in front of it.");
+        }
+
         println!("Press Ctrl+C to stop.");
 
         axum::serve(listener, layover_dashboard::router(dashboard))

@@ -111,7 +111,7 @@ prompt_file = "tester.md"
 | `prompt_file` | one of | Instructions from a file, which may [compose others](./prompts.md). |
 | `access` | `read-write` | `read-only` agents get a git worktree snapshot, not the live tree. |
 | `entry` | `false` | Whether a human may send flights straight here. |
-| `resident` | `false` | Pin the agent resident rather than transient. Not in v0.1. |
+| `resident` | `false` | Pin the agent resident rather than transient. Not built. |
 | `fuel_usd` | — | Fuel override for itineraries that *start* at this agent. |
 | `work_dir` | — | Work somewhere other than the shared `work_dir`. |
 | `recovery` | `automatic` | `manual` if repeating this agent's work would do damage. See [Recovery](./recovery.md). |

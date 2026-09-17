@@ -11,6 +11,13 @@
 //! needs to survive the run, be findable without knowing which run produced it, and carry enough
 //! to act on. That makes it a record, not a message.
 //!
+//! # The text is not trusted
+//!
+//! `summary` and `detail` are written by an agent explaining why something did not work, and the
+//! commonest reason is a credential. They are therefore redacted and capped on the way in — see
+//! [`redact`] — because from here they go to disk, to an unauthenticated HTTP API and to a
+//! dashboard, and none of those can take it back.
+//!
 //! # What the shape is for
 //!
 //! Every field here exists to answer a question somebody asks when they open the dashboard and
@@ -20,6 +27,8 @@
 //! five of six entries were permission or access failures — a denied tool guard, a denied git
 //! read, an HTTP 422, a TLS handshake. [`Blocker::Access`] is the common case by a wide margin,
 //! and it is worth being able to filter for it.
+
+pub mod redact;
 
 use std::fmt;
 
@@ -144,8 +153,8 @@ impl HelpRequest {
             run,
             itinerary,
             blocker,
-            summary: summary.into(),
-            detail: detail.into(),
+            summary: redact::detail(&summary.into()),
+            detail: redact::detail(&detail.into()),
             fatal: false,
             at,
             resolved_at: None,

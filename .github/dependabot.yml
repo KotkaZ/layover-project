@@ -1,0 +1,31 @@
+# Keeps dependencies and workflow actions current without anyone remembering to look.
+#
+# Worth having here specifically: Layover ships signed-for-nothing binaries that people install
+# with a one-line pipe, and it exists to run other programs. A stale transitive dependency in a
+# released binary is not a theoretical problem.
+version: 2
+
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+      include: scope
+    groups:
+      # One pull request for the routine churn. Separate ones only where a bump is likely to
+      # need thought.
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions:
+        patterns: ["*"]

@@ -10,11 +10,15 @@
 /book/mermaid.min.js
 /book/mermaid-init.js
 
-# Layover runtime state
-/.layover/state/
-/.layover/logbook.md
-/.layover/ground-stop
-/workspace/
+# Layover runtime state.
+#
+# Every directory, not just the repository root: `layover serve` writes `.layover/` next to
+# whichever `layover.toml` it was pointed at, so running an example leaves state under
+# `examples/…/.layover/`. That state is not inert — the journal holds queued flight bodies and
+# help requests, and a help request is where an agent describes an authentication failure. A
+# rooted pattern left all of it stageable by `git add -A`.
+**/.layover/
+**/workspace/
 
 # Environment and secrets
 .env

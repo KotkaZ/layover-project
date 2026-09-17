@@ -1,6 +1,24 @@
-# Layover
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.png">
+  <img src="assets/logo.png" alt="Layover" width="440">
+</picture>
 
 **A local-first framework for running a lights-out agent factory.**
+
+[![CI](https://github.com/KotkaZ/layover-project/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/KotkaZ/layover-project/actions/workflows/ci.yml)
+[![Pages](https://github.com/KotkaZ/layover-project/actions/workflows/pages.yml/badge.svg?branch=main)](https://github.com/KotkaZ/layover-project/actions/workflows/pages.yml)
+[![Release](https://github.com/KotkaZ/layover-project/actions/workflows/release.yml/badge.svg)](https://github.com/KotkaZ/layover-project/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/KotkaZ/layover-project?label=download&color=1f6feb)](https://github.com/KotkaZ/layover-project/releases/latest)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
+[Documentation](https://kotkaz.github.io/layover-project/) ·
+[Install](#install) ·
+[Design](docs/architecture.md) ·
+[Decisions and open questions](docs/decisions.md)
+
+</div>
 
 > **Status: early implementation.** Everything up to the moment a process would be spawned is
 > built and tested — a factory loads, validates, composes its prompts, and the dashboard serves
@@ -8,9 +26,8 @@
 > process yet**, so a factory is something you can define, inspect and cost, not yet something
 > that runs. Detail in [what works today](#what-works-today).
 >
-> Documentation: [kotkaz.github.io/layover-project](https://kotkaz.github.io/layover-project/) ·
-> design: [`docs/architecture.md`](docs/architecture.md) · reasoning and open questions:
-> [`docs/decisions.md`](docs/decisions.md).
+> Pre-1.0 and maintained by one person: expect breaking changes on a minor bump. See
+> [project status](#project-status).
 
 Layover does not call LLMs. It is a *supervisor*: it spawns headless agent CLIs, gives them a way
 to talk to one another, persists what they learn, and stops them from running away.
@@ -38,7 +55,21 @@ npm i -g https://github.com/KotkaZ/layover-project/releases/latest/download/layo
 > called `layover`. Layover is not on crates.io yet; use an installer above or
 > `cargo install --path crates/layover-cli` from a clone.
 
-Other options — direct download, building from source — are in
+### Download a build
+
+Every release publishes all five targets, plus a `sha256.sum` covering every artifact.
+
+| Platform | Archive |
+|---|---|
+| Linux x86-64 | [`layover-cli-x86_64-unknown-linux-gnu.tar.xz`](https://github.com/KotkaZ/layover-project/releases/latest/download/layover-cli-x86_64-unknown-linux-gnu.tar.xz) |
+| Linux ARM64 | [`layover-cli-aarch64-unknown-linux-gnu.tar.xz`](https://github.com/KotkaZ/layover-project/releases/latest/download/layover-cli-aarch64-unknown-linux-gnu.tar.xz) |
+| macOS Apple silicon | [`layover-cli-aarch64-apple-darwin.tar.xz`](https://github.com/KotkaZ/layover-project/releases/latest/download/layover-cli-aarch64-apple-darwin.tar.xz) |
+| macOS Intel | [`layover-cli-x86_64-apple-darwin.tar.xz`](https://github.com/KotkaZ/layover-project/releases/latest/download/layover-cli-x86_64-apple-darwin.tar.xz) |
+| Windows x86-64 | [`layover-cli-x86_64-pc-windows-msvc.zip`](https://github.com/KotkaZ/layover-project/releases/latest/download/layover-cli-x86_64-pc-windows-msvc.zip) |
+
+All releases: [github.com/KotkaZ/layover-project/releases](https://github.com/KotkaZ/layover-project/releases)
+
+Other options — building from source — are in
 [the install guide](https://kotkaz.github.io/layover-project/install.html).
 
 ```sh
@@ -85,16 +116,31 @@ flowchart LR
 - **Runaway swarms are bounded by construction** — every itinerary burns Hops and Fuel, and the
   Tower, not the agent, holds the counters.
 
+## Project status
+
+Maintained by [@KotkaZ](https://github.com/KotkaZ). Contributions welcome — see
+[`CONTRIBUTING.md`](CONTRIBUTING.md); vulnerabilities go through
+[`SECURITY.md`](SECURITY.md), not the issue tracker.
+
+| | |
+|---|---|
+| **Stability** | Pre-1.0. A minor bump may break things, and the changelog says when it does. |
+| **Versions** | Crate versions track releases of *what is built*. The **first runnable release** — the milestone where a factory actually runs — has not happened yet, and is a goal rather than a version number. |
+| **MSRV** | Whatever [`rust-toolchain.toml`](rust-toolchain.toml) pins, currently 1.98. It is the only toolchain tested, so claiming an older one would be a guess. Raised in a minor release. |
+| **Platforms** | Developed on Windows, CI on Linux, released for both plus macOS. |
+| **Changes** | [`CHANGELOG.md`](CHANGELOG.md) |
+
 ## Scope
 
-v0.1 targets Claude Code, GitHub Copilot CLI and OpenAI Codex CLI, on a single machine.
-See [`docs/decisions.md`](docs/decisions.md) for the reasoning, what is still open, and what is
-explicitly out of scope.
+The first runnable release targets Claude Code, GitHub Copilot CLI and OpenAI Codex CLI, on a
+single machine. See [`docs/decisions.md`](docs/decisions.md) for the reasoning, what is still
+open, and what is explicitly out of scope.
 
 ## Examples
 
 Four factories, smallest first — start at [`examples/`](examples/README.md). `planner.toml` is
-three agents in one screen; `workitem-factory/` is the scenario v0.1 is sized against.
+three agents in one screen; `workitem-factory/` is the scenario the first runnable release is
+sized against.
 
 ## The reference factory
 
@@ -155,21 +201,29 @@ test and doc build, with warnings denied. CI runs the same command, unchanged.
 The missing half is blocked on the run-bootstrap questions in
 [`docs/decisions.md`](docs/decisions.md). Do not guess at them.
 
-## This repository is itself agentic-first
+## Contributing
 
-Layover is not only *for* agent factories — this repo is built to be worked on by agents.
+Contributions are welcome from humans and from agents, and the rules are the same for both:
+[`CONTRIBUTING.md`](CONTRIBUTING.md) is the short version, [`AGENTS.md`](AGENTS.md) the full one.
+Vulnerabilities go through [`SECURITY.md`](SECURITY.md) rather than the issue tracker.
 
-The governing principle: **verification, not generation, is the bottleneck.** A lights-out
-factory does not stall because an agent cannot write code; it stalls because an agent cannot tell
-whether its code is correct without asking a human. So the repository's most important artifact
-is a single command that returns a binary verdict:
+### Why the gate matters more than the process
+
+**Verification, not generation, is the bottleneck.** A lights-out factory does not stall because
+an agent cannot write code; it stalls because nobody — agent or human — can tell whether the code
+is correct without asking someone else. So the repository's most important artifact is a single
+command that returns a binary verdict:
 
 ```
 cargo xtask verify
 ```
 
-CI runs that exact command, unchanged. Contributor rules — human or agent — live in
-[`AGENTS.md`](AGENTS.md).
+CI runs that exact command and nothing else, so a local pass is a CI pass. That is worth having
+whoever is typing: it means a first-time contributor can know their change is acceptable before
+opening a pull request, rather than finding out from a review comment three days later.
+
+The same property is what lets this repository be worked on unattended, which it is. Neither use
+is at the other's expense.
 
 ## License
 

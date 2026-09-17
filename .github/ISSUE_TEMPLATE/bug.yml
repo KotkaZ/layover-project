@@ -1,0 +1,54 @@
+name: Bug report
+description: Something does not behave as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For anything exploitable, please use
+        [private reporting](https://github.com/KotkaZ/layover-project/security/advisories/new)
+        instead — see [SECURITY.md](https://github.com/KotkaZ/layover-project/blob/main/SECURITY.md).
+
+        Note that **nothing spawns a process yet**. If the report is that a factory did not run,
+        that is the current state of the project rather than a bug.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `layover --version`.
+      placeholder: layover 0.8.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [Windows, macOS, Linux, Other]
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: The smallest factory that shows it
+      description: >
+        A `layover.toml` that reproduces this. Redact anything private — and please check it
+        carries no credentials, since `env_from` names variables rather than holding values.
+      render: toml
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Command output
+      description: "`layover validate --strict` and `layover explain` are usually the useful ones."
+      render: shell

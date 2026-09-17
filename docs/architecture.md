@@ -36,7 +36,7 @@ carries budget across a causal chain, and *Ground Stop* says exactly what a kill
 | Language | Rust |
 | Deployment | Local-first, single machine |
 | Agent execution | Wrap and supervise external headless CLIs |
-| Target CLIs (v0.1) | Claude Code, GitHub Copilot CLI, OpenAI Codex CLI |
+| Target CLIs | Claude Code, GitHub Copilot CLI, OpenAI Codex CLI |
 | Lifecycle | Hybrid — transient per flight, optionally pinned resident |
 | Continuity | **Fresh** — every run is a clean slate; nothing is ever resumed |
 | Recovery | A new run seeded with a **handover**, never a resumed process |
@@ -53,12 +53,12 @@ carries budget across a causal chain, and *Ground Stop* says exactly what a kill
 | Agent identity | Name (the table key), a one-line `description`, and a longer `purpose` |
 | Per-agent state | Transcript, session ID, self-edited memory, inbox/outbox, run history, artifacts |
 | Shared memory | One Markdown **Logbook**; all writes serialized by the Tower |
-| Workspace | One shared working directory; contention deliberately unmediated in v0.1 |
+| Workspace | One shared working directory; contention deliberately unmediated in the first runnable release |
 | Outside surface | HTTP API with SSE, **generated from `api/openapi.yaml`**; the UI is purely a client |
 | Distribution | `dist`-generated installers: shell, PowerShell, npm and prebuilt archives; `cargo install` for those who have it; documentation on GitHub Pages |
 | Safety rails | Hops (TTL), Fuel (chain budget), Reserve (factory budget), Ground Stop |
 | Hops semantics | One hop per flight; branches inherit the remaining count, so Hops bounds **depth** only |
-| Breadth bound | Fuel — required in v0.1, with a deterministic fallback when runners cannot report cost |
+| Breadth bound | Fuel — required from the first runnable release, with a deterministic fallback when runners cannot report cost |
 | Total bound | **Reserve** — a rolling-window ceiling across every itinerary, because Fuel resets per chain |
 | Cost provenance | Every figure is `reported`, `rate_card` or `unreported`; totals carry the weakest of them |
 | License | Apache-2.0 |
@@ -69,7 +69,7 @@ carries budget across a causal chain, and *Ground Stop* says exactly what a kill
 | Failure routing | An ordinary edge; the agent decides, the Tower does not evaluate conditions |
 | Join scope | A barrier constrains the upstreams it names; any other permitted sender bypasses it |
 | Workspace access | Per-agent `read-only` / `read-write`; read-only agents get a worktree snapshot |
-| Reference scenario | [`examples/workitem-factory/`](../examples/workitem-factory/README.md) — the shape v0.1 is sized against |
+| Reference scenario | [`examples/workitem-factory/`](../examples/workitem-factory/README.md) — the shape the first runnable release is sized against |
 
 ## 4. Two central insights
 
@@ -191,7 +191,7 @@ from = "reviewer"
 to   = "planner"
 ```
 
-`mode` may be given explicitly, but `async` is the only value v0.1 accepts; blocking
+`mode` may be given explicitly, but `async` is the only value accepted today; blocking
 request/response was superseded by rendezvous joins.
 
 An edge absent from `[[routes]]` means the flight is refused. Direction is explicit:
@@ -206,7 +206,7 @@ Edges also carry fan-out, rendezvous joins and failure paths. Those semantics ar
 A factory exercising all of it — intake, a rendezvous back onto the entry agent, a test/review
 loop that turns until two agents agree, and a publishing step — is in
 [`examples/workitem-factory/`](../examples/workitem-factory/README.md). That is the reference
-scenario for v0.1 and the shape the rails are sized against.
+reference scenario and the shape the rails are sized against.
 
 ## 7. Disk layout
 
@@ -228,7 +228,7 @@ scenario for v0.1 and the shape the rails are sized against.
                 ├── stdout.log
                 ├── stderr.log
                 └── artifacts/
-workspace/                       # shared working dir — deliberately unmediated in v0.1
+workspace/                       # shared working dir — deliberately unmediated in the first runnable release
 ```
 
 Ground Stop is a file rather than in-memory state so that it survives a Tower crash and can be

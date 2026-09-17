@@ -1,6 +1,17 @@
-# Layover
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/logo-dark.png">
+  <img src="./assets/logo.png" alt="Layover" width="420">
+</picture>
 
 **A local-first framework for running a lights-out agent factory.**
+
+[![CI](https://github.com/KotkaZ/layover-project/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/KotkaZ/layover-project/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/KotkaZ/layover-project?label=download&color=1f6feb)](https://github.com/KotkaZ/layover-project/releases/latest)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/KotkaZ/layover-project/blob/main/LICENSE)
+
+</div>
 
 Layover does not call LLMs. It is a *supervisor*: it spawns headless agent CLIs, gives them a way
 to talk to one another, persists what they learn, and stops them from running away.
@@ -55,7 +66,13 @@ not-built list, kept in one place so the two cannot disagree.
 
 ## Where to start
 
-- [Install](./install.md)
+- [Install](./install.md) — a single binary, no toolchain needed
 - [Your first factory](./first-factory.md) — three agents, and the commands that work today
 - [The dashboard](./dashboard.md) — `layover serve`, the most useful thing here right now
-- [The reference factory](./reference-factory.md) — the shape v0.1 is sized against
+- [The reference factory](./reference-factory.md) — the shape the first runnable release is sized against
+
+## Download
+
+The [latest release](https://github.com/KotkaZ/layover-project/releases/latest) carries builds for
+Linux x86-64 and ARM64, macOS Intel and Apple silicon, and Windows x86-64, with a `sha256.sum`
+covering every artifact. The [install page](./install.md) has the one-line installers.

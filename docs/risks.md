@@ -43,7 +43,7 @@ A `request_response` chain of depth N would keep N CLI processes alive and idle,
 memory and possibly a provider session. Hops was the only bound on depth.
 
 *Resolved:* rendezvous joins provide fan-in without blocking anyone, so `request_response` is not
-needed for v0.1 and is deferred indefinitely. The Tower parks flights instead of parking
+needed and is deferred indefinitely. The Tower parks flights instead of parking
 processes. This also removed the pressure behind risk 1.
 
 ### 4. Fuel accounting depends on the CLI reporting cost
@@ -100,7 +100,7 @@ targets this repo.
 
 **Severity: low.**
 
-v0.1 can stream a live run but has no endpoint to read a finished one, despite storing full
+The design can stream a live run but has no endpoint to read a finished one, despite storing full
 transcripts and run metadata. Post-incident review would mean reading files by hand.
 
 *Mitigation:* add `GET /runs/:id` and `GET /runs/:id/transcript` when the UI needs them.
@@ -248,3 +248,59 @@ work, and doing half of it would be worse than none.
 **Mitigation until then.** `recovery = "manual"` on the one irreversible agent in the reference
 factory, and the handover text telling a resumed run to check whether the earlier one already did
 the thing. Both rely on the agent looking, which is weaker than a key.
+
+### 18. A runner that under-reports its cost defeats both money rails
+
+**What could happen.** Fuel and the Reserve are debited from a figure the child CLI prints about
+itself. Negative, `NaN` and infinite values are already ignored, and `$0` alongside real tokens is
+treated as silence rather than as a measurement — but a runner that reports a plausible-looking
+`$0.01` for a `$4` run is believed. Both money rails then under-count by the same factor, and the
+only rail left is `max_runs`, which counts invocations rather than money.
+
+Spawn compounds it: each spawned itinerary is minted with fresh Fuel and a fresh run cap, so
+generation depth bounds how deep spawning goes and nothing bounds how wide. The Reserve is meant
+to be the factory-wide backstop, and it reads the same untrusted number.
+
+**Why it is not fixed.** Nothing reports a cost yet, because nothing spawns a process. Deciding
+what to do about an implausible figure — clamp to a rate card, treat as unreported, refuse the
+runner — is a Tower behaviour and depends on what the CLIs actually emit.
+
+**Mitigation until then.** `max_runs` needs no cooperation from the child and is the honest rail.
+`CostSource` records where every figure came from and the weakest source wins, so a total that is
+partly unmeasured says so rather than looking precise.
+
+### 19. A learning is a standing instruction that no human approved
+
+**What could happen.** A learning is injected into the next twenty runs of an agent as soon as it
+is proposed. The text comes from an agent whose input may include a work item, a pull request
+comment or a sibling's flight body — none of which are trusted. An instruction that survives
+twenty runs, and can be re-proposed toward permanence, is a more durable foothold than any single
+prompt injection.
+
+`Impact` is already not trusted — the agent proposes it and the ledger recomputes it — but the
+text is.
+
+**Why it is not fixed.** The alternative is an approval queue, which the decision log rejects for
+good reasons: it puts a human in a loop the factory exists to keep them out of, and unapproved
+learnings are simply lost. Expiry plus rediscovery was the answer to that.
+
+**Mitigation until then.** Expiry bounds the blast radius to twenty runs; an echo does not count
+as rediscovery, so a learning cannot confirm itself. When the composer is built, a learning must
+be injected in a clearly delimited untrusted block rather than as a system-level instruction, and
+text mentioning tools, URLs, credentials or overriding earlier instructions is worth refusing
+outright.
+
+### 20. The prompt sandbox is lexical, so a symlink leaves it
+
+**What could happen.** `@include` confines paths by resolving `..` lexically and refusing absolute
+paths, drive prefixes and UNC paths. It does not canonicalise, so a symlink *inside* the prompt
+directory pointing at `~/.ssh/id_rsa` or a `.env` is followed, and its contents are composed into
+the prompt handed to a child CLI.
+
+**Why it is not fixed.** Today prompt files are reviewed repository content, and anyone who can
+add a symlink to them can also set `runners.*.command` — so this is not a boundary yet. It becomes
+one the moment agents write their own prompts, which is a stated goal.
+
+**Mitigation until then.** Canonicalising both root and target and requiring the target to remain
+under the root is a small change, and it should land before anything can write a prompt file that
+was not reviewed.

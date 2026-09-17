@@ -4,7 +4,7 @@ A request arrives. It is investigated, built, tested, reviewed until two indepen
 and then published as a pull request in Azure DevOps — unattended. A second pipeline does the same
 for pull requests that already exist, once an hour, with nobody starting it.
 
-This is the reference factory for v0.1. It is the shape the design is sized against, and it is
+This is the reference factory. It is the shape the design is sized against, and it is
 parsed, validated and exercised by
 [`workitem_factory.rs`](../../crates/layover-core/tests/workitem_factory.rs) and
 [`workitem_factory_runtime.rs`](../../crates/layover-core/tests/workitem_factory_runtime.rs), so

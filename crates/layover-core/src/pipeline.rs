@@ -537,9 +537,9 @@ mod tests {
     #[test]
     fn every_unit_is_understood() {
         assert_eq!(parse_duration("90s"), Ok(Duration::from_secs(90)));
-        assert_eq!(parse_duration("15m"), Ok(Duration::from_secs(900)));
+        assert_eq!(parse_duration("15m"), Ok(Duration::from_mins(15)));
         assert_eq!(parse_duration("2h"), Ok(Duration::from_secs(7_200)));
-        assert_eq!(parse_duration("1d"), Ok(Duration::from_secs(86_400)));
+        assert_eq!(parse_duration("1d"), Ok(Duration::from_hours(24)));
     }
 
     #[test]

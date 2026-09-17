@@ -69,7 +69,7 @@ impl Reserve {
     pub fn unlimited() -> Self {
         Self {
             cap_usd: None,
-            window: Duration::from_secs(24 * 60 * 60),
+            window: Duration::from_hours(24),
             entries: VecDeque::new(),
         }
     }
@@ -162,7 +162,7 @@ mod tests {
     use super::*;
 
     const HOUR: Duration = Duration::from_secs(3_600);
-    const DAY: Duration = Duration::from_secs(24 * 60 * 60);
+    const DAY: Duration = Duration::from_hours(24);
 
     fn reserve() -> Reserve {
         Reserve::new(50.0, DAY)
