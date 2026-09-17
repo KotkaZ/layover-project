@@ -217,6 +217,7 @@ impl Api for Stub {
                 agent: "publisher".to_owned(),
                 run_id: "run_1".to_owned(),
                 itinerary_id: "itn_1".to_owned(),
+                pipeline: Some("development".to_owned()),
                 blocker: Blocker::Access,
                 summary: "the ADO token expired".to_owned(),
                 detail: "tried to push, got 401, needs a fresh token".to_owned(),

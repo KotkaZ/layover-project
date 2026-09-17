@@ -15,6 +15,28 @@ History in .layover/history
 Press Ctrl+C to stop.
 ```
 
+## One workflow at a time
+
+A factory holds several pipelines, and they are separate workflows that happen to share agents. A
+page that totals them together answers a question nobody asked: "is the build healthy" is about one
+of them, and reading it off a combined figure means doing the separation by eye.
+
+The **Workflow** selector in the header scopes the whole page — the route map, runs, cost totals and
+breakdowns, and help requests. It defaults to *All workflows*, and it is hidden entirely when a
+factory declares only one.
+
+Two things deliberately do not narrow:
+
+| | Why |
+|---|---|
+| **The Reserve** | It caps the factory. Charging one workflow's spend against a ceiling that covers all of them would report a rail that does not exist. |
+| **Learnings** | A learning belongs to an *agent*, and an agent can appear in several workflows. Filtering them by workflow would invent an attribution the model does not have. |
+
+Help requests carry a workflow even though they do not store one: a request records the itinerary
+that raised it, an itinerary belongs to exactly one pipeline, and the runs already in the window
+supply the mapping. Where retention has taken the run but not the request, the workflow reads as
+`—` rather than being guessed at.
+
 ## Triggering a workflow
 
 **Trigger a workflow** opens a window with the pipeline, a prompt box, and a switch for every flag
@@ -83,7 +105,12 @@ target and an ordinary destination.
 
 A factory usually holds several pipelines, and they are genuinely separate workflows. Drawn
 together they read as one very confused process, so each gets its own diagram, stacked down the
-page. The Runs and Cost pages narrow the same way.
+page — or just the selected one, when the header narrows the page to it.
+
+Above each diagram is what that workflow has actually been doing: runs and spend over the last
+seven days, failures, and open help requests. The diagram says what *may* happen; the strip says
+what did, and both questions get asked at the same moment by someone who has just opened the page
+wondering whether anything is wrong.
 
 Each carries the rails that bound a chain started there:
 
@@ -153,6 +180,22 @@ Every total carries its provenance, shown next to the figure rather than tucked 
 
 The weakest source wins. A figure that is 90% measured is still not measured, and saying so is the
 entire point of tracking where a number came from.
+
+### The Reserve
+
+Below the window cards is the Reserve: the factory's own ceiling, over its own rolling window.
+
+It is drawn apart from those cards because it answers a different question over a different
+period and a different scope. The cards say what something *cost*, over the window you picked,
+for the workflow you picked. The Reserve says what may *still be spent*, over the hours
+`[reserve] window_hours` names, across every workflow at once.
+
+Putting it among figures that narrow would invite reading it as one of them — and a spending rail
+misread as covering less than it does is worse than one not shown at all. It says on its face that
+it is not narrowed.
+
+A factory with no `[reserve] fuel_usd`, or one set to `0`, has no ceiling, and the meter is hidden
+rather than drawn empty.
 
 ## Retention
 

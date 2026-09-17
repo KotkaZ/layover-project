@@ -201,11 +201,12 @@ fn window(window: Window) -> CostWindow {
 }
 
 /// Describes one help request.
-pub fn help(request: &layover_core::help::HelpRequest) -> HelpRequest {
+pub fn help(request: &layover_core::help::HelpRequest, pipeline: Option<String>) -> HelpRequest {
     HelpRequest {
         agent: request.agent.to_string(),
         run_id: request.run.to_string(),
         itinerary_id: request.itinerary.as_str().to_owned(),
+        pipeline,
         blocker: blocker(request.blocker),
         summary: request.summary.clone(),
         detail: request.detail.clone(),

@@ -329,6 +329,16 @@ paths:
             which zone was used, so the figure can be read without having to guess.
           schema:
             $ref: "#/components/schemas/CostWindow"
+        - name: pipeline
+          in: query
+          required: false
+          description: |
+            Narrow the totals, the per-agent and the per-model breakdowns to one workflow.
+
+            `reserve` is deliberately unaffected. The Reserve caps the whole factory, so reporting
+            it against one workflow's spend would describe a rail that does not exist.
+          schema:
+            type: string
       responses:
         "200":
           description: The cost breakdown.
@@ -354,6 +364,12 @@ paths:
           in: query
           required: false
           description: Only requests from this agent.
+          schema:
+            type: string
+        - name: pipeline
+          in: query
+          required: false
+          description: Only requests raised by a run of this workflow.
           schema:
             type: string
         - name: blocker
@@ -879,6 +895,12 @@ components:
         itinerary_id:
           type: string
           description: The chain it belonged to.
+        pipeline:
+          type: [string, "null"]
+          description: |
+            The workflow whose run raised it, derived from the itinerary rather than stored on the
+            request. Null when no run for that itinerary is still in history, which retention can
+            cause at the far edge of the window.
         blocker:
           $ref: "#/components/schemas/Blocker"
           description: What kind of thing is in the way.

@@ -36,8 +36,8 @@ Point any OpenAPI tool at the file to get a client, a mock server or rendered do
 | `GET` | `/runs` | `status`, `itinerary_id`, `agent`, `pipeline`, `window`, `limit` | Runs, live and historical. |
 | `GET` | `/runs/{run_id}` | | One run, including how it ended. |
 | `GET` | `/runs/{run_id}/report` | | What that agent wrote about its own run. |
-| `GET` | `/costs` | `window` | What the factory has spent, and how much of it is measured. |
-| `GET` | `/help` | `agent`, `blocker`, `open`, `window` | Help requests agents have raised. |
+| `GET` | `/costs` | `window`, `pipeline` | What the factory has spent, and how much of it is measured. |
+| `GET` | `/help` | `agent`, `pipeline`, `blocker`, `open`, `window` | Help requests agents have raised. |
 | `GET` | `/learnings` | `agent`, `state` | Learnings agents have proposed. |
 | `GET` | `/runs/{run_id}/stream` | | Live output as server-sent events — **`501`**. |
 | `POST` | `/ground-stop` | | Halt everything — **`501`**. |

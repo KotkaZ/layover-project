@@ -228,3 +228,90 @@ dialog button.primary { background: var(--accent); border-color: var(--accent); 
 #report-artifacts code { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; }
 tr.readable { cursor: pointer; }
 tr.readable:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+
+/* ── Per-workflow activity ──────────────────────────────────────────────────
+   A route map says what may happen. This says what did, for the same workflow,
+   at the moment somebody is looking at the drawing and wondering. */
+.summary {
+  display: flex;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 0 0 0.9rem;
+}
+
+.summary .stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.55rem 0.75rem;
+  background: var(--panel);
+}
+
+.summary .figure {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.summary .label {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.summary .bad .figure { color: var(--bad); }
+.summary .warn .figure { color: var(--warn); }
+
+#scope-label {
+  margin-left: auto;
+  font-size: 0.85rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+#scope-label select { font-size: 0.85rem; }
+
+/* ── The Reserve ────────────────────────────────────────────────────────────
+   Drawn apart from the window cards on purpose: it meters a different period
+   and a different scope, and sitting among figures that narrow by workflow
+   would invite reading it as one of them. */
+.reserve {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 0.85rem 1rem;
+  margin: 0 0 1rem;
+}
+
+.reserve-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-bottom: 0.55rem;
+}
+
+.reserve-head h2 { margin: 0; }
+
+.meter {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.meter span {
+  display: block;
+  height: 100%;
+  background: var(--ok);
+  transition: width 0.2s;
+}
+
+.meter span.warn { background: var(--warn); }
+.meter span.bad { background: var(--bad); }
+
+.reserve p { margin: 0.45rem 0 0; }

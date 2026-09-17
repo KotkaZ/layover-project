@@ -15,6 +15,7 @@
     <button class="tab" data-view="cost">Cost</button>
     <button class="tab" data-view="journal">Help &amp; learnings<span id="help-badge" class="badge" hidden></span></button>
   </nav>
+  <label id="scope-label">Workflow <select id="scope"></select></label>
   <span id="health" class="pill"></span>
 </header>
 
@@ -22,8 +23,8 @@
   <section id="map" class="view">
     <div class="bar">
       <p class="hint">
-        One diagram per workflow, generated from <code id="config-path">layover.toml</code> each
-        time this page loads. Edit the file and reload.
+        Generated from <code id="config-path">layover.toml</code> each time this page loads.
+        Edit the file and reload.
       </p>
       <button id="trigger-open">Trigger a workflow</button>
       <button id="refresh">Refresh</button>
@@ -55,7 +56,6 @@
           <option value="interrupted">interrupted</option>
         </select>
       </label>
-      <label>Workflow <select id="runs-pipeline"></select></label>
       <label>Agent <input id="runs-agent" type="search" placeholder="any" list="agent-names"></label>
       <datalist id="agent-names"></datalist>
     </div>
@@ -72,7 +72,16 @@
   </section>
 
   <section id="cost" class="view" hidden>
+    <p id="cost-scope" class="hint" hidden></p>
     <div class="cards" id="cost-cards"></div>
+    <div id="reserve" class="reserve" hidden>
+      <div class="reserve-head">
+        <h2>Reserve</h2>
+        <span class="hint" id="reserve-what"></span>
+      </div>
+      <div class="meter"><span id="reserve-fill"></span></div>
+      <p class="hint" id="reserve-detail"></p>
+    </div>
     <p id="cost-caveat" class="caveat" hidden></p>
     <div class="split">
       <div>
@@ -106,7 +115,7 @@
     <table id="help-table">
       <thead>
         <tr>
-          <th>Raised</th><th>Agent</th><th>Kind</th>
+          <th>Raised</th><th>Agent</th><th>Workflow</th><th>Kind</th>
           <th>What is in the way</th><th>Stopped it?</th>
         </tr>
       </thead>
@@ -119,6 +128,10 @@
       Applied as soon as they are proposed, and they lapse unless later runs arrive at them
       independently. Three independent rediscoveries make one permanent — repeating advice an
       agent was just shown does not count.
+    </p>
+    <p id="learn-scope" class="hint" hidden>
+      A learning belongs to an <em>agent</em>, not a workflow — the same agent can appear in
+      several — so this list is not narrowed by the workflow above.
     </p>
     <table id="learn-table">
       <thead>

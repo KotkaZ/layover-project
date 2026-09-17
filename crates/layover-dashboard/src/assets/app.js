@@ -112,6 +112,54 @@ function describeTrigger(trigger) {
   return "scheduled";
 }
 
+/// A workflow's activity in the last seven days, so the diagram is not the only thing on the page.
+///
+/// A route map shows what *may* happen. This shows what did — and the two questions are asked at
+/// the same moment, by someone who has just opened the page wondering whether anything is wrong.
+function summaryStrip(name, stats) {
+  const strip = el("div", "summary");
+  const cell = (label, value, className) => {
+    const box = el("div", `stat ${className || ""}`);
+    box.append(el("span", "figure", value), el("span", "label", label));
+    return box;
+  };
+
+  strip.append(
+    cell("runs, 7d", `${stats.runs}`),
+    cell("spend, 7d", money(stats.usd)),
+    cell("failed", `${stats.failed}`, stats.failed > 0 ? "bad" : ""),
+    cell("open help", `${stats.help}`, stats.help > 0 ? "warn" : ""),
+  );
+  strip.dataset.workflow = name;
+  return strip;
+}
+
+/// Counts recent activity per workflow in three requests, not three per workflow.
+async function activityByWorkflow() {
+  const stats = new Map();
+  const bump = (name, field, by = 1) => {
+    if (!name) return;
+    const row = stats.get(name) ?? { runs: 0, usd: 0, failed: 0, help: 0 };
+    row[field] += by;
+    stats.set(name, row);
+  };
+
+  const [costs, runs, help] = await Promise.all([
+    get("/costs?window=last_7d").catch(() => null),
+    get("/runs?window=last_7d&status=failed&limit=500").catch(() => null),
+    get("/help?open=true&window=last_90d").catch(() => null),
+  ]);
+
+  for (const bucket of costs?.by_pipeline ?? []) {
+    bump(bucket.name, "runs", bucket.summary.runs);
+    bump(bucket.name, "usd", bucket.summary.usd);
+  }
+  for (const run of runs?.runs ?? []) bump(run.pipeline, "failed");
+  for (const request of help?.requests ?? []) bump(request.pipeline, "help");
+
+  return stats;
+}
+
 async function loadMap() {
   const host = $("#workflows");
 
@@ -124,7 +172,10 @@ async function loadMap() {
       return;
     }
 
-    for (const pipeline of pipelines) {
+    const showing = scope() ? pipelines.filter((p) => p.name === scope()) : pipelines;
+    const activity = await activityByWorkflow();
+
+    for (const pipeline of showing) {
       const section = el("section", "workflow");
       const header = el("header");
       header.append(el("h2", "", pipeline.name));
@@ -143,6 +194,12 @@ async function loadMap() {
       if (pipeline.resumes) rails.append(rail("", "", "resumes layovers"));
       header.append(rails);
       section.append(header);
+      section.append(
+        summaryStrip(
+          pipeline.name,
+          activity.get(pipeline.name) ?? { runs: 0, usd: 0, failed: 0, help: 0 },
+        ),
+      );
 
       const canvas = el("div", "canvas");
       canvas.append(el("p", "empty", "drawing\u2026"));
@@ -169,7 +226,7 @@ async function loadRuns() {
   const params = new URLSearchParams({ window: $("#runs-window").value, limit: "200" });
   if ($("#runs-status").value) params.set("status", $("#runs-status").value);
   if ($("#runs-agent").value.trim()) params.set("agent", $("#runs-agent").value.trim());
-  if ($("#runs-pipeline").value) params.set("pipeline", $("#runs-pipeline").value);
+  scoped(params);
 
   try {
     const { runs } = await get(`/runs?${params}`);
@@ -242,13 +299,48 @@ function costRows(table, buckets) {
   }
 }
 
+/// Draws the Reserve: the factory's own spending ceiling over its own rolling window.
+///
+/// Deliberately outside the window cards and outside the workflow scope. The cards answer "what
+/// did this cost"; the Reserve answers "what may still be spent", over hours it chose rather than
+/// the period being browsed, across every workflow rather than the selected one. Drawing it
+/// alongside figures that narrow would invite reading it as though it narrowed too.
+function showReserve(reserve) {
+  const host = $("#reserve");
+  if (!reserve || reserve.cap_usd === null || reserve.cap_usd === undefined) {
+    // No cap configured means unlimited, and a meter with no ceiling is a decoration.
+    host.hidden = true;
+    return;
+  }
+
+  const spent = reserve.spent_usd;
+  const cap = reserve.cap_usd;
+  const share = cap > 0 ? Math.min(spent / cap, 1) : 0;
+
+  $("#reserve-what").textContent =
+    `the whole factory, rolling ${reserve.window_hours}h \u2014 not narrowed by workflow`;
+  const fill = $("#reserve-fill");
+  fill.style.width = `${(share * 100).toFixed(1)}%`;
+  fill.className = reserve.exhausted ? "bad" : share > 0.8 ? "warn" : "";
+
+  $("#reserve-detail").textContent = reserve.exhausted
+    ? `${money(spent)} of ${money(cap)} spent. Exhausted \u2014 new work is refused until the window rolls forward.`
+    : `${money(spent)} of ${money(cap)} spent, ${money(reserve.remaining_usd ?? 0)} left before work is refused.`;
+
+  host.hidden = false;
+}
+
 async function loadCost(selected = "last_30d") {
   const cards = $("#cost-cards");
   const caveat = $("#cost-caveat");
+  const note = $("#cost-scope");
 
   try {
     const reports = await Promise.all(
-      HEADLINES.map(async (window) => [window, await get(`/costs?window=${window}`)]),
+      HEADLINES.map(async (window) => [
+        window,
+        await get(`/costs?${scoped(new URLSearchParams({ window }))}`),
+      ]),
     );
 
     cards.replaceChildren();
@@ -258,14 +350,20 @@ async function loadCost(selected = "last_30d") {
     }
 
     const detail = reports.find(([window]) => window === selected)?.[1]
-      ?? (await get(`/costs?window=${selected}`));
+      ?? (await get(`/costs?${scoped(new URLSearchParams({ window: selected }))}`));
 
     costRows($("#cost-agents"), detail.by_agent);
     costRows($("#cost-models"), detail.by_model);
     costRows($("#cost-pipelines"), detail.by_pipeline);
 
-    // A calendar window's start depends on where the Tower is standing, so the zone is part of
-    // the number rather than a footnote. A window that outruns retention is a lower bound.
+    // The Reserve caps the factory, not a workflow. Narrowing the page must not quietly change
+    // what the Reserve is comparing, so it is drawn separately and says which it is showing.
+    showReserve(detail.reserve);
+    note.textContent = scope()
+      ? `Totals and breakdowns are for ${scope()}.`
+      : "";
+    note.hidden = !scope();
+
     const notes = [];
     if (detail.span.calendar && detail.span.zone) {
       notes.push(`"${detail.span.label}" begins at midnight in ${detail.span.zone}.`);
@@ -278,6 +376,7 @@ async function loadCost(selected = "last_30d") {
   } catch (error) {
     cards.replaceChildren(el("p", "empty", `Could not read costs: ${error.message}`));
     caveat.hidden = true;
+    note.hidden = true;
   }
 }
 
@@ -418,14 +517,21 @@ async function loadJournal() {
   const helpEmpty = $("#help-empty");
 
   try {
-    const { requests } = await get("/help?open=true&window=last_90d");
+    const { requests } = await get(
+      `/help?${scoped(new URLSearchParams({ open: "true", window: "last_90d" }))}`,
+    );
     helpBody.replaceChildren();
 
     for (const request of requests) {
       const row = el("tr");
       const kind = el("td");
       kind.append(el("span", `kind ${request.blocker}`, request.blocker));
-      row.append(el("td", "", when(request.at)), el("td", "", request.agent), kind);
+      row.append(
+        el("td", "", when(request.at)),
+        el("td", "", request.agent),
+        el("td", "", request.pipeline || "\u2014"),
+        kind,
+      );
       const what = el("td", "wide", request.summary);
       what.title = request.detail;
       row.append(what, el("td", "", request.fatal ? "stopped the run" : "limited it"));
@@ -434,7 +540,9 @@ async function loadJournal() {
 
     $("#help-table").hidden = requests.length === 0;
     helpEmpty.hidden = requests.length > 0;
-    helpEmpty.textContent = "Nothing is stuck.";
+    helpEmpty.textContent = scope()
+      ? `Nothing is stuck in ${scope()}.`
+      : "Nothing is stuck.";
   } catch (error) {
     $("#help-table").hidden = true;
     helpEmpty.hidden = false;
@@ -480,7 +588,9 @@ async function loadJournal() {
 async function loadHelpBadge() {
   const badge = $("#help-badge");
   try {
-    const { open } = await get("/help?open=true&window=last_90d");
+    const { open } = await get(
+      `/help?${scoped(new URLSearchParams({ open: "true", window: "last_90d" }))}`,
+    );
     badge.textContent = `${open}`;
     badge.hidden = open === 0;
   } catch {
@@ -488,27 +598,43 @@ async function loadHelpBadge() {
   }
 }
 
-// A factory holds several pipelines and they are separate workflows. Every view can be narrowed
-// to one, because drawn or totalled together they read as a single very confused process.
+// A factory holds several pipelines and they are separate workflows. One selector in the header
+// scopes the whole page, because a workflow is the unit people actually think in — "is the build
+// healthy" is a question about one of them, and answering it from a page that totals all three
+// means doing the separation by eye.
+//
+// Learnings are the deliberate exception: a learning belongs to an agent, and an agent can appear
+// in several workflows. Narrowing them by workflow would invent an attribution the model does not
+// have.
+const scope = () => $("#scope").value;
+
+/// Appends `pipeline=` when a workflow is selected, and nothing when it is not.
+function scoped(params) {
+  if (scope()) params.set("pipeline", scope());
+  return params;
+}
+
 async function loadPipelines() {
   try {
     const { pipelines } = await get("/pipelines");
     pipelinesByName = new Map(pipelines.map((pipeline) => [pipeline.name, pipeline]));
-    for (const id of ["#runs-pipeline"]) {
-      const select = $(id);
-      const any = el("option", "", "any");
-      any.value = "";
-      select.replaceChildren(
-        any,
-        ...pipelines.map((pipeline) => {
-          const option = el("option", "", pipeline.name);
-          option.value = pipeline.name;
-          return option;
-        }),
-      );
-    }
+
+    const select = $("#scope");
+    const previous = select.value;
+    const all = el("option", "", "All workflows");
+    all.value = "";
+    select.replaceChildren(
+      all,
+      ...pipelines.map((pipeline) => {
+        const option = el("option", "", pipeline.name);
+        option.value = pipeline.name;
+        return option;
+      }),
+    );
+    if (previous) select.value = previous;
+    $("#scope-label").hidden = pipelines.length < 2;
   } catch {
-    // Without the list both selectors still work as "everything"; nothing needs saying.
+    // Without the list the selector still reads as "everything"; nothing needs saying.
   }
 }
 
@@ -544,9 +670,19 @@ function start() {
   $("#trigger-open").addEventListener("click", openTrigger);
   $("#trigger-pipeline").addEventListener("change", (e) => showFlags(e.target.value));
   $("#trigger-send").addEventListener("click", submitTrigger);
-  $("#runs-pipeline").addEventListener("change", loadRuns);
   ["#runs-window", "#runs-status"].forEach((id) => $(id).addEventListener("change", loadRuns));
   $("#runs-agent").addEventListener("input", loadRuns);
+
+  // One selector, so every view has to be told. Redrawing only the visible one would leave the
+  // others showing another workflow's numbers under this workflow's name the moment you switch.
+  $("#scope").addEventListener("change", () => {
+    $("#learn-scope").hidden = !scope();
+    loadMap();
+    loadRuns();
+    loadCost();
+    loadJournal();
+    loadHelpBadge();
+  });
 
   loadHealth();
   loadHelpBadge();

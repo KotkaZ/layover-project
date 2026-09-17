@@ -173,9 +173,22 @@ impl History {
     ///
     /// Returns [`StoreError::Io`] if a segment cannot be read.
     pub fn ledger(&self, span: &Span) -> Result<Ledger, StoreError> {
+        self.ledger_for(span, &RunFilter::default())
+    }
+
+    /// Bills the runs in `span` that pass `filter`.
+    ///
+    /// Narrowing to one pipeline answers "what does this workflow cost", which is a different
+    /// question from what the factory costs. The Reserve is deliberately *not* asked this way:
+    /// it caps the factory, so scoping it to a workflow would report a rail that does not exist.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Io`] if a segment cannot be read.
+    pub fn ledger_for(&self, span: &Span, filter: &RunFilter) -> Result<Ledger, StoreError> {
         let mut ledger = Ledger::new();
 
-        for record in self.runs(span, &RunFilter::default())? {
+        for record in self.runs(span, filter)? {
             // A run still going has not been billed yet; counting it would make the total move
             // backwards when the real figure arrives.
             if record.outcome.is_live() {

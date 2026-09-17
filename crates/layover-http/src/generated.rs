@@ -259,6 +259,11 @@ pub struct HelpRequest {
     pub fatal: bool,
     /// The chain it belonged to.
     pub itinerary_id: String,
+    /// The workflow whose run raised it, derived from the itinerary rather than stored on the
+    /// request. Null when no run for that itinerary is still in history, which retention can
+    /// cause at the far edge of the window.
+    #[serde(default)]
+    pub pipeline: Option<String>,
     /// When a human marked it dealt with. Null while it is still open.
     #[serde(default)]
     pub resolved_at: Option<String>,
@@ -701,6 +706,12 @@ pub struct GetCostsQuery {
     /// which zone was used, so the figure can be read without having to guess.
     #[serde(default)]
     pub window: Option<CostWindow>,
+    /// Narrow the totals, the per-agent and the per-model breakdowns to one workflow.
+    ///
+    /// `reserve` is deliberately unaffected. The Reserve caps the whole factory, so reporting
+    /// it against one workflow's spend would describe a rail that does not exist.
+    #[serde(default)]
+    pub pipeline: Option<String>,
 }
 
 /// query parameters for `getGraph`.
@@ -722,6 +733,9 @@ pub struct ListHelpQuery {
     /// Only requests from this agent.
     #[serde(default)]
     pub agent: Option<String>,
+    /// Only requests raised by a run of this workflow.
+    #[serde(default)]
+    pub pipeline: Option<String>,
     /// Only requests of this kind.
     #[serde(default)]
     pub blocker: Option<Blocker>,

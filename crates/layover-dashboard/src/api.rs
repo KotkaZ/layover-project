@@ -89,6 +89,26 @@ impl Dashboard {
         self.0.history.resolve(to_window(window))
     }
 
+    /// Maps each itinerary in `span` to the workflow that started it.
+    ///
+    /// An itinerary has exactly one pipeline, so this is a lookup rather than a guess. Records
+    /// that carry no pipeline — a bare `entry = true` trigger — are simply absent.
+    fn pipelines_by_itinerary(
+        &self,
+        span: &Span,
+    ) -> Result<std::collections::HashMap<String, String>, Problem> {
+        let runs = self.runs(span, &RunFilter::default())?;
+
+        Ok(runs
+            .into_iter()
+            .filter_map(|record| {
+                record
+                    .pipeline
+                    .map(|pipeline| (record.itinerary.as_str().to_owned(), pipeline.to_string()))
+            })
+            .collect())
+    }
+
     /// Reads runs, turning a store failure into a problem rather than a panic.
     fn runs(
         &self,
@@ -210,7 +230,11 @@ impl Api for Dashboard {
 
     async fn get_costs(&self, query: GetCostsQuery) -> Result<CostReport, Problem> {
         let span = self.span(query.window.or(Some(CostWindow::Last30d)));
-        let ledger = self.0.history.ledger(&span).map_err(|error| {
+        let scope = RunFilter {
+            pipeline: query.pipeline.as_deref().map(PipelineName::new),
+            ..RunFilter::default()
+        };
+        let ledger = self.0.history.ledger_for(&span, &scope).map_err(|error| {
             Problem::new(StatusCode::INTERNAL_SERVER_ERROR, "history is unreadable")
                 .with_detail(error.to_string())
         })?;
@@ -219,6 +243,9 @@ impl Api for Dashboard {
         // answer different questions — "show me last month" against "what may I still spend
         // today" — and using one ledger for both compared thirty days of spend against a
         // twenty-four hour cap, which is a rail reporting a number that is not true.
+        //
+        // It is also never narrowed to a workflow. The Reserve caps the factory, so charging one
+        // workflow's spend against it would report a rail that does not exist.
         let config = self.config().ok();
         let reserve_hours = config
             .as_ref()
@@ -249,10 +276,33 @@ impl Api for Dashboard {
             .with_detail(error.to_string())
         })?;
 
+        // A help request records the itinerary it came from, not the workflow. An itinerary
+        // belongs to exactly one pipeline, so the runs already in the window supply the mapping
+        // and nothing has to be stored twice.
+        let pipelines = self.pipelines_by_itinerary(&span)?;
+        let wanted = query.pipeline.as_deref();
+
+        let matching: Vec<_> = requests
+            .into_iter()
+            .filter(|request| {
+                wanted.is_none_or(|name| {
+                    pipelines
+                        .get(request.itinerary.as_str())
+                        .map(String::as_str)
+                        == Some(name)
+                })
+            })
+            .collect();
+
         Ok(HelpList {
-            open: i32::try_from(requests.iter().filter(|r| r.is_open()).count())
+            open: i32::try_from(matching.iter().filter(|r| r.is_open()).count())
                 .unwrap_or(i32::MAX),
-            requests: requests.iter().map(view::help).collect(),
+            requests: matching
+                .iter()
+                .map(|request| {
+                    view::help(request, pipelines.get(request.itinerary.as_str()).cloned())
+                })
+                .collect(),
         })
     }
 

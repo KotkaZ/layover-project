@@ -114,5 +114,9 @@ is a **lower bound**, and whichever runner is silent needs looking at.
 | `ReserveExhausted` | The **factory** spent its window budget. This itinerary may have Fuel to spare. |
 | `SpawnDepthReached` | A `mode = "spawn"` route tried to open a new itinerary beyond `max_spawn_generations`. |
 
+`GET /costs?pipeline=` narrows the totals and the per-agent and per-model breakdowns to one
+workflow. It deliberately leaves `reserve` alone: the Reserve caps the factory, so charging one
+workflow's spend against it would report a rail that does not exist.
+
 Ground Stop is separate and absolute: it is a file on disk, so it survives a Tower crash and can
 be set by hand when nothing else is responding.

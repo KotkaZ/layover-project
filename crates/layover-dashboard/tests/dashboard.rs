@@ -67,6 +67,44 @@ impl Factory {
         fs::write(path, existing).expect("writes history");
     }
 
+    /// Writes a run of `pipeline`, in an itinerary named after it, an hour ago.
+    fn write_run_in(&self, pipeline: &str, run: &str, usd: f64) {
+        let at = jiff::Timestamp::now()
+            .checked_sub(jiff::SignedDuration::from_hours(1))
+            .expect("in range");
+        let day = at.to_string().chars().take(10).collect::<String>();
+        let path = self.0.join("history").join(format!("runs-{day}.jsonl"));
+
+        let line = format!(
+            r#"{{"run":"{run}","itinerary":"itn_{pipeline}","agent":"analyst","pipeline":"{pipeline}","outcome":"succeeded","started_at":"{at}","finished_at":"{at}","usd":{usd},"source":"reported"}}"#
+        );
+
+        let mut existing = fs::read_to_string(&path).unwrap_or_default();
+        existing.push_str(&line);
+        existing.push('\n');
+        fs::write(path, existing).expect("writes history");
+    }
+
+    /// Raises an open help request against `itinerary`, an hour ago.
+    fn write_help(&self, itinerary: &str, agent: &str, summary: &str) {
+        let at = jiff::Timestamp::now()
+            .checked_sub(jiff::SignedDuration::from_hours(1))
+            .expect("in range");
+        let day = at.to_string().chars().take(10).collect::<String>();
+        let dir = self.0.join("journal");
+        fs::create_dir_all(&dir).expect("journal dir");
+        let path = dir.join(format!("help-{day}.jsonl"));
+
+        let line = format!(
+            r#"{{"agent":"{agent}","run":"run_h","itinerary":"{itinerary}","blocker":"access","summary":"{summary}","detail":"d","fatal":true,"at":"{at}"}}"#
+        );
+
+        let mut existing = fs::read_to_string(&path).unwrap_or_default();
+        existing.push_str(&line);
+        existing.push('\n');
+        fs::write(path, existing).expect("writes help");
+    }
+
     fn router(&self) -> Router {
         router(Dashboard::new(DashboardState {
             config_path: self.0.join("layover.toml"),
@@ -581,5 +619,90 @@ entry = true
     assert_eq!(
         report["reserve"]["exhausted"], false,
         "$53 over thirty days must not exhaust a cap that only meters one day: {body}"
+    );
+}
+
+#[tokio::test]
+async fn costs_narrow_to_one_workflow_but_the_reserve_does_not() {
+    // "What does the build cost" and "what may the factory still spend" are different questions.
+    // Narrowing the page must not narrow the Reserve, or a workflow's own spend gets compared
+    // against a cap that covers every workflow together.
+    let factory = Factory::new("cost-scope");
+    factory.write_config(
+        r#"
+[layover]
+work_dir = "work"
+
+[defaults]
+runner = "claude"
+
+[reserve]
+fuel_usd = 100.0
+window_hours = 24
+
+[runners.claude]
+command = ["claude", "-p"]
+
+[agents.analyst]
+prompt = "analyse"
+entry = true
+"#,
+    );
+
+    factory.write_run_in("build", "run_b", 3.0);
+    factory.write_run_in("sweep", "run_s", 7.0);
+
+    let (_, all) = call(factory.router(), "/costs?window=last_7d").await;
+    assert_eq!(json(&all)["total"]["usd"], 10.0, "{all}");
+
+    let (_, build) = call(factory.router(), "/costs?window=last_7d&pipeline=build").await;
+    let report = json(&build);
+
+    assert_eq!(
+        report["total"]["usd"], 3.0,
+        "only the build's runs: {build}"
+    );
+    assert_eq!(
+        report["by_agent"].as_array().map(Vec::len),
+        Some(1),
+        "the breakdown narrows with the total: {build}"
+    );
+    assert_eq!(
+        report["reserve"]["spent_usd"], 10.0,
+        "the Reserve caps the factory and must keep reporting the factory: {build}"
+    );
+}
+
+#[tokio::test]
+async fn help_is_attributed_to_the_workflow_that_raised_it() {
+    // A help request records its itinerary, not its workflow. The runs in the window supply the
+    // mapping, so nothing has to be stored twice and nothing has to be guessed.
+    let factory = Factory::new("help-scope");
+    factory.write_config(TWO_AGENTS);
+    factory.write_run_in("build", "run_b", 1.0);
+    factory.write_help("itn_build", "analyst", "the token expired");
+
+    let (_, all) = call(factory.router(), "/help?open=true&window=last_7d").await;
+    assert_eq!(json(&all)["requests"][0]["pipeline"], "build", "{all}");
+
+    let (_, matching) = call(
+        factory.router(),
+        "/help?open=true&window=last_7d&pipeline=build",
+    )
+    .await;
+    assert_eq!(
+        json(&matching)["requests"].as_array().map(Vec::len),
+        Some(1)
+    );
+
+    let (_, other) = call(
+        factory.router(),
+        "/help?open=true&window=last_7d&pipeline=sweep",
+    )
+    .await;
+    assert_eq!(
+        json(&other)["requests"].as_array().map(Vec::len),
+        Some(0),
+        "another workflow's help must not appear here: {other}"
     );
 }
