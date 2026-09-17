@@ -13,7 +13,7 @@ use layover_core::run::{Outcome, RunRecord};
 use layover_http::{
     Access, Agent, AgentList, Blocker, CostSource, CostSummary, CostWindow, Flag, HelpRequest,
     Impact, Join, Learning, LearningState, Pipeline, PipelineList, Route, Run, RunStatus,
-    TokenUsage, Trigger, TriggerKind, WindowSpan,
+    TokenUsage, Trigger, TriggerKind, WindowSpan, Workspace,
 };
 
 /// Describes the factory's agents and the edges between them.
@@ -63,6 +63,19 @@ pub fn pipelines(config: &Config) -> PipelineList {
                 description: pipeline.description.clone(),
                 entry: pipeline.entry.to_string(),
                 trigger: trigger(&pipeline.trigger),
+                max_hops: i32::try_from(config.defaults.max_hops).unwrap_or(i32::MAX),
+                // The entry agent's own budget wins where it sets one, because Fuel belongs to
+                // the itinerary and an itinerary starting here starts at that agent.
+                fuel_usd: config
+                    .agents
+                    .get(&pipeline.entry)
+                    .and_then(|agent| agent.fuel_usd)
+                    .unwrap_or(config.defaults.fuel_usd),
+                workspace: match pipeline.workspace {
+                    layover_core::pipeline::Workspace::Shared => Workspace::Shared,
+                    layover_core::pipeline::Workspace::PerItinerary => Workspace::PerItinerary,
+                },
+                resumes: pipeline.resumes,
                 flags: pipeline
                     .flags
                     .iter()

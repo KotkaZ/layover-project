@@ -50,11 +50,23 @@ the reference factory the analyst's work item reaches the developer that way, wh
 and the reviewer's verdicts queue at the barrier — which is what lets one agent be both a join
 target and an ordinary destination.
 
-### One workflow at a time
+### One diagram per workflow
 
 A factory usually holds several pipelines, and they are genuinely separate workflows. Drawn
-together they read as one very confused process, so the **Workflow** selector narrows the map to
-what a single pipeline sets in motion — and the Runs and Cost pages narrow the same way.
+together they read as one very confused process, so each gets its own diagram, stacked down the
+page. The Runs and Cost pages narrow the same way.
+
+Each carries the rails that bound a chain started there:
+
+| Rail | What it bounds |
+|---|---|
+| **hops** | **Depth.** Flights before the chain is cut. Branches inherit the count rather than splitting it, so it says nothing about width. |
+| **fuel** | **Breadth.** The shared budget, honouring the entry agent''s own `fuel_usd` where it sets one. |
+| **workspace** | Whether two instances share a working directory or get one each. |
+
+Both rails are shown together deliberately. Seeing Hops alone invites the assumption that it caps
+spending, and it does not — a branching factor of three at `max_hops = 8` permits thousands of
+paid invocations while every hop count stays legal.
 
 An agent belonging to two workflows appears in both. That is the honest answer: the developer
 really is in the triage pipeline and the follow-up pipeline, and hiding it from one would

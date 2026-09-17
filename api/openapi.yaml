@@ -14,7 +14,7 @@ openapi: 3.2.0
 
 info:
   title: Layover Tower API
-  version: 0.6.0
+  version: 0.7.0
   summary: Control surface for a local-first agent factory.
   description: |
     The UI is purely a client of this API, so this document bounds what the UI can ever do.
@@ -533,10 +533,18 @@ components:
           type: boolean
           description: Value used when the trigger does not set the flag.
 
+    Workspace:
+      type: string
+      description: |
+        Whether instances of one pipeline share a working directory or get one each. A schedule
+        fires whether or not the last instance finished, so anything reaching a read-write agent
+        wants its own.
+      enum: [shared, per-itinerary]
+
     Pipeline:
       type: object
       description: A named entry point into the mesh.
-      required: [name, entry, trigger, flags]
+      required: [name, entry, trigger, flags, max_hops, fuel_usd, workspace, resumes]
       properties:
         name:
           type: string
@@ -550,6 +558,30 @@ components:
         trigger:
           $ref: "#/components/schemas/Trigger"
           description: What starts it.
+        max_hops:
+          type: integer
+          format: int32
+          description: |
+            Flights a chain started here may make before it is cut. Bounds **depth**: branches
+            inherit the remaining count rather than splitting it, so this says nothing about how
+            wide a fan-out spreads.
+        fuel_usd:
+          type: number
+          format: double
+          description: |
+            Shared budget for a chain started here, honouring the entry agent's own `fuel_usd`
+            where it sets one. Bounds **breadth**, which is the dimension Hops cannot see.
+        workspace:
+          $ref: "#/components/schemas/Workspace"
+          description: |
+            Whether instances of this pipeline share a working directory or get one each. A
+            schedule fires whether or not the last instance finished, so anything reaching a
+            read-write agent wants its own.
+        resumes:
+          type: boolean
+          description: |
+            True when this pipeline picks up booked layovers rather than starting fresh work. A
+            tick that finds nothing due costs nothing.
         flags:
           type: array
           description: The boolean parameters this pipeline accepts.

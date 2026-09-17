@@ -4,7 +4,7 @@
 //! regenerates this file and fails if the result differs, so an edit here is reverted
 //! rather than kept. Change the specification instead.
 //!
-//! Source: Layover Tower API v0.6.0
+//! Source: Layover Tower API v0.7.0
 
 #![allow(clippy::too_many_lines)]
 
@@ -348,10 +348,24 @@ pub struct Pipeline {
     pub entry: String,
     /// The boolean parameters this pipeline accepts.
     pub flags: Vec<Flag>,
+    /// Shared budget for a chain started here, honouring the entry agent's own `fuel_usd`
+    /// where it sets one. Bounds **breadth**, which is the dimension Hops cannot see.
+    pub fuel_usd: f64,
+    /// Flights a chain started here may make before it is cut. Bounds **depth**: branches
+    /// inherit the remaining count rather than splitting it, so this says nothing about how
+    /// wide a fan-out spreads.
+    pub max_hops: i32,
     /// The key the pipeline is declared under.
     pub name: String,
+    /// True when this pipeline picks up booked layovers rather than starting fresh work. A
+    /// tick that finds nothing due costs nothing.
+    pub resumes: bool,
     /// What starts it.
     pub trigger: Trigger,
+    /// Whether instances of this pipeline share a working directory or get one each. A
+    /// schedule fires whether or not the last instance finished, so anything reaching a
+    /// read-write agent wants its own.
+    pub workspace: Workspace,
 }
 
 /// Every declared pipeline.
@@ -594,6 +608,19 @@ pub struct WindowSpan {
     /// the point: nobody should have to wonder which zone "last 7 days" used.
     #[serde(default)]
     pub zone: Option<String>,
+}
+
+/// Whether instances of one pipeline share a working directory or get one each. A schedule
+/// fires whether or not the last instance finished, so anything reaching a read-write agent
+/// wants its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Workspace {
+    /// `shared`
+    #[serde(rename = "shared")]
+    Shared,
+    /// `per-itinerary`
+    #[serde(rename = "per-itinerary")]
+    PerItinerary,
 }
 
 /// query parameters for `getCosts`.

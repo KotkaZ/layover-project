@@ -21,7 +21,7 @@ use layover_http::{
     Health, HelpList, HelpRequest, Impact, Learning, LearningList, LearningState, ListHelpQuery,
     ListLearningsQuery, ListRunsQuery, OPERATIONS, Pipeline, PipelineList, Problem, ReserveState,
     RouteMap, Run, RunList, RunStatus, SendFlightRequest, Status, StreamRunPath, TokenUsage,
-    Trigger, TriggerKind, WindowSpan, router,
+    Trigger, TriggerKind, WindowSpan, Workspace, router,
 };
 use tower::ServiceExt as _;
 
@@ -103,6 +103,10 @@ impl Api for Stub {
                     every_seconds: Some(3_600),
                     cron: None,
                 },
+                max_hops: 22,
+                fuel_usd: 12.0,
+                workspace: Workspace::PerItinerary,
+                resumes: false,
                 flags: Vec::new(),
             }],
         })

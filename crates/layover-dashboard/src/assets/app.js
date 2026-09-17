@@ -94,15 +94,72 @@ async function loadHealth() {
   }
 }
 
+// One diagram per workflow. Drawn together they read as a single very confused process, and a
+// selector still only lets you see one at a time without being able to compare them.
+function rail(kind, label, value) {
+  const node = el("span", `rail ${kind}`);
+  node.append(document.createTextNode(`${label} `), el("b", "", value));
+  return node;
+}
+
+function describeTrigger(trigger) {
+  if (trigger.kind === "manual") return "manual";
+  if (trigger.cron) return `cron ${trigger.cron}`;
+  if (trigger.every_seconds) {
+    const s = trigger.every_seconds;
+    return s % 3600 === 0 ? `every ${s / 3600}h` : `every ${Math.round(s / 60)}m`;
+  }
+  return "scheduled";
+}
+
 async function loadMap() {
-  const canvas = $("#routemap");
-  const wanted = $("#graph-pipeline").value;
+  const host = $("#workflows");
+
   try {
-    const map = await get(wanted ? `/graph?pipeline=${encodeURIComponent(wanted)}` : "/graph");
-    canvas.innerHTML = map.mermaid;
-    if (map.config_path) $("#config-path").textContent = map.config_path;
+    const { pipelines } = await get("/pipelines");
+    host.replaceChildren();
+
+    if (pipelines.length === 0) {
+      host.append(el("p", "empty", "No pipelines are declared, so nothing can be triggered."));
+      return;
+    }
+
+    for (const pipeline of pipelines) {
+      const section = el("section", "workflow");
+      const header = el("header");
+      header.append(el("h2", "", pipeline.name));
+      if (pipeline.description) header.append(el("span", "what", pipeline.description));
+
+      const rails = el("div", "rails");
+      rails.append(
+        rail("trigger", "", describeTrigger(pipeline.trigger)),
+        // The two rails that bound a chain, and they bound different things: Hops is depth,
+        // Fuel is breadth. Showing one without the other invites the assumption that Hops caps
+        // spending, which it does not.
+        rail("hops", "hops", `${pipeline.max_hops}`),
+        rail("fuel", "fuel", money(pipeline.fuel_usd)),
+        rail("", "workspace", pipeline.workspace),
+      );
+      if (pipeline.resumes) rails.append(rail("", "", "resumes layovers"));
+      header.append(rails);
+      section.append(header);
+
+      const canvas = el("div", "canvas");
+      canvas.append(el("p", "empty", "drawing\u2026"));
+      section.append(canvas);
+      host.append(section);
+
+      get(`/graph?pipeline=${encodeURIComponent(pipeline.name)}`)
+        .then((map) => {
+          canvas.innerHTML = map.mermaid;
+          if (map.config_path) $("#config-path").textContent = map.config_path;
+        })
+        .catch((error) => {
+          canvas.replaceChildren(el("p", "empty", `Could not draw it: ${error.message}`));
+        });
+    }
   } catch (error) {
-    canvas.replaceChildren(el("p", "empty", `Could not draw the route map: ${error.message}`));
+    host.replaceChildren(el("p", "empty", `Could not read the pipelines: ${error.message}`));
   }
 }
 
@@ -301,9 +358,9 @@ async function loadHelpBadge() {
 async function loadPipelines() {
   try {
     const { pipelines } = await get("/pipelines");
-    for (const id of ["#graph-pipeline", "#runs-pipeline"]) {
+    for (const id of ["#runs-pipeline"]) {
       const select = $(id);
-      const any = el("option", "", id === "#graph-pipeline" ? "everything" : "any");
+      const any = el("option", "", "any");
       any.value = "";
       select.replaceChildren(
         any,
@@ -348,7 +405,6 @@ function start() {
     tab.addEventListener("click", () => showView(tab.dataset.view));
   });
   $("#refresh").addEventListener("click", loadMap);
-  $("#graph-pipeline").addEventListener("change", loadMap);
   $("#runs-pipeline").addEventListener("change", loadRuns);
   ["#runs-window", "#runs-status"].forEach((id) => $(id).addEventListener("change", loadRuns));
   $("#runs-agent").addEventListener("input", loadRuns);

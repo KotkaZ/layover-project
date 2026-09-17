@@ -21,14 +21,13 @@
 <main>
   <section id="map" class="view">
     <div class="bar">
-      <label>Workflow <select id="graph-pipeline"></select></label>
       <p class="hint">
-        Generated from <code id="config-path">layover.toml</code> each time this page loads.
-        Edit the file and reload.
+        One diagram per workflow, generated from <code id="config-path">layover.toml</code> each
+        time this page loads. Edit the file and reload.
       </p>
       <button id="refresh">Refresh</button>
     </div>
-    <div id="routemap" class="canvas"></div>
+    <div id="workflows"></div>
     <ul class="legend">
       <li><span class="swatch pipeline"></span>way in</li>
       <li><span class="swatch gate"></span>rendezvous barrier</li>

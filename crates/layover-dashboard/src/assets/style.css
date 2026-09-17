@@ -190,3 +190,17 @@ tr:last-child td { border-bottom: 0; }
 h2.spaced { margin-top: 30px; }
 .edge.spawn { stroke: var(--ok); stroke-dasharray: 2 5; opacity: 1; }
 .swatch.line.spawn { border-top: 2px dotted var(--ok); }
+
+/* One section per workflow. Separate diagrams rather than one selector over a shared canvas:
+   several pipelines drawn together read as a single very confused process, and a dropdown still
+   makes you look at them one at a time without being able to compare. */
+.workflow { margin-bottom: 26px; }
+.workflow > header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; padding: 0 2px 8px; border: 0; background: none; position: static; }
+.workflow h2 { margin: 0; font-size: 15px; text-transform: none; letter-spacing: -0.01em; color: var(--ink); font-weight: 650; }
+.workflow .what { font-size: 13px; color: var(--muted); }
+.rails { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+.rail { font-size: 12px; padding: 3px 9px; border-radius: 7px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); font-variant-numeric: tabular-nums; }
+.rail b { color: var(--ink); font-weight: 650; }
+.rail.trigger { border-color: var(--accent); color: var(--accent); }
+.rail.hops { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.rail.fuel { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
