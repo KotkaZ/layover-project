@@ -96,8 +96,9 @@ async function loadHealth() {
 
 async function loadMap() {
   const canvas = $("#routemap");
+  const wanted = $("#graph-pipeline").value;
   try {
-    const map = await get("/graph");
+    const map = await get(wanted ? `/graph?pipeline=${encodeURIComponent(wanted)}` : "/graph");
     canvas.innerHTML = map.mermaid;
     if (map.config_path) $("#config-path").textContent = map.config_path;
   } catch (error) {
@@ -111,6 +112,7 @@ async function loadRuns() {
   const params = new URLSearchParams({ window: $("#runs-window").value, limit: "200" });
   if ($("#runs-status").value) params.set("status", $("#runs-status").value);
   if ($("#runs-agent").value.trim()) params.set("agent", $("#runs-agent").value.trim());
+  if ($("#runs-pipeline").value) params.set("pipeline", $("#runs-pipeline").value);
 
   try {
     const { runs } = await get(`/runs?${params}`);
@@ -200,6 +202,7 @@ async function loadCost(selected = "last_30d") {
 
     costRows($("#cost-agents"), detail.by_agent);
     costRows($("#cost-models"), detail.by_model);
+    costRows($("#cost-pipelines"), detail.by_pipeline);
 
     // A calendar window's start depends on where the Tower is standing, so the zone is part of
     // the number rather than a footnote. A window that outruns retention is a lower bound.
@@ -293,6 +296,29 @@ async function loadHelpBadge() {
   }
 }
 
+// A factory holds several pipelines and they are separate workflows. Every view can be narrowed
+// to one, because drawn or totalled together they read as a single very confused process.
+async function loadPipelines() {
+  try {
+    const { pipelines } = await get("/pipelines");
+    for (const id of ["#graph-pipeline", "#runs-pipeline"]) {
+      const select = $(id);
+      const any = el("option", "", id === "#graph-pipeline" ? "everything" : "any");
+      any.value = "";
+      select.replaceChildren(
+        any,
+        ...pipelines.map((pipeline) => {
+          const option = el("option", "", pipeline.name);
+          option.value = pipeline.name;
+          return option;
+        }),
+      );
+    }
+  } catch {
+    // Without the list both selectors still work as "everything"; nothing needs saying.
+  }
+}
+
 async function loadAgentNames() {
   try {
     const { agents } = await get("/agents");
@@ -322,13 +348,18 @@ function start() {
     tab.addEventListener("click", () => showView(tab.dataset.view));
   });
   $("#refresh").addEventListener("click", loadMap);
+  $("#graph-pipeline").addEventListener("change", loadMap);
+  $("#runs-pipeline").addEventListener("change", loadRuns);
   ["#runs-window", "#runs-status"].forEach((id) => $(id).addEventListener("change", loadRuns));
   $("#runs-agent").addEventListener("input", loadRuns);
 
   loadHealth();
-  loadAgentNames();
   loadHelpBadge();
-  showView("map");
+  // The pipeline list has to exist before the first draw, or the selector is empty on load.
+  loadPipelines().then(() => {
+    loadAgentNames();
+    showView("map");
+  });
 }
 
 start();

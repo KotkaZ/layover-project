@@ -50,6 +50,19 @@ the reference factory the analyst's work item reaches the developer that way, wh
 and the reviewer's verdicts queue at the barrier — which is what lets one agent be both a join
 target and an ordinary destination.
 
+### One workflow at a time
+
+A factory usually holds several pipelines, and they are genuinely separate workflows. Drawn
+together they read as one very confused process, so the **Workflow** selector narrows the map to
+what a single pipeline sets in motion — and the Runs and Cost pages narrow the same way.
+
+An agent belonging to two workflows appears in both. That is the honest answer: the developer
+really is in the triage pipeline and the follow-up pipeline, and hiding it from one would
+misrepresent the factory to make a tidier picture.
+
+Cost gains a **By workflow** table for the same reason. Per-agent totals cannot answer "what does
+the nightly sweep cost me" once an agent belongs to more than one.
+
 The diagram is generated per request, so editing `layover.toml` and reloading the page is enough
 to see the change. `layover graph` prints the same graph without a server: Mermaid by default for
 pasting into a README, `--svg` for the version the dashboard draws.

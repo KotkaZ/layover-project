@@ -21,6 +21,7 @@
 <main>
   <section id="map" class="view">
     <div class="bar">
+      <label>Workflow <select id="graph-pipeline"></select></label>
       <p class="hint">
         Generated from <code id="config-path">layover.toml</code> each time this page loads.
         Edit the file and reload.
@@ -53,6 +54,7 @@
           <option value="interrupted">interrupted</option>
         </select>
       </label>
+      <label>Workflow <select id="runs-pipeline"></select></label>
       <label>Agent <input id="runs-agent" type="search" placeholder="any" list="agent-names"></label>
       <datalist id="agent-names"></datalist>
     </div>
@@ -80,6 +82,13 @@
         <h2>By model</h2>
         <table id="cost-models"><thead><tr><th>Model</th><th class="num">Runs</th><th class="num">Spend</th></tr></thead><tbody></tbody></table>
       </div>
+    </div>
+    <div class="split">
+      <div>
+        <h2>By workflow</h2>
+        <table id="cost-pipelines"><thead><tr><th>Workflow</th><th class="num">Runs</th><th class="num">Spend</th></tr></thead><tbody></tbody></table>
+      </div>
+      <div></div>
     </div>
     <p class="hint">
       History is kept for 90 days. A window reaching further back reports a lower bound, and says

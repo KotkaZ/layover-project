@@ -18,11 +18,11 @@
 //!
 //! Edges that point backwards or sideways are then drawn as return paths, which is what they are.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::agent::{Access, AgentName};
 use crate::config::Config;
-use crate::diagram::{Activity, Live};
+use crate::diagram::{Activity, Live, Scope};
 use crate::graph::RouteGraph;
 use crate::pipeline::PipelineName;
 use crate::route::Join;
@@ -162,15 +162,27 @@ impl Layout {
         self.nodes.iter().find(|node| node.id == id)
     }
 
-    /// Lays out a factory.
+    /// Lays out a whole factory.
     #[must_use]
     pub fn build(config: &Config, live: &Live) -> Self {
+        Self::scoped(config, live, &Scope::Everything)
+    }
+
+    /// Lays out one workflow, or the whole factory.
+    #[must_use]
+    pub fn scoped(config: &Config, live: &Live, scope: &Scope) -> Self {
         let graph = RouteGraph::from_config(config);
+        let members = scope.pipeline().and_then(|name| {
+            config
+                .pipelines
+                .get(name)
+                .map(|pipeline| graph.workflow_from(&pipeline.entry))
+        });
         let layers = assign_layers(config, &graph);
 
         let mut layout = Self::default();
-        layout.place(config, live, &graph, &layers);
-        layout.connect(config, &graph);
+        layout.place(config, live, &graph, &layers, scope, members.as_ref());
+        layout.connect(config, &graph, members.as_ref());
         layout.order_by_barycentre();
         layout.size();
         layout
@@ -183,10 +195,15 @@ impl Layout {
         live: &Live,
         graph: &RouteGraph,
         layers: &BTreeMap<AgentName, usize>,
+        scope: &Scope,
+        members: Option<&BTreeSet<AgentName>>,
     ) {
         let mut columns: BTreeMap<usize, Vec<Node>> = BTreeMap::new();
 
         for (name, pipeline) in &config.pipelines {
+            if scope.pipeline().is_some_and(|wanted| wanted != name) {
+                continue;
+            }
             columns.entry(0).or_default().push(Node {
                 id: pipeline_id(name),
                 label: name.as_str().to_owned(),
@@ -203,6 +220,9 @@ impl Layout {
         }
 
         for (name, agent) in &config.agents {
+            if members.is_some_and(|members| !members.contains(name)) {
+                continue;
+            }
             // Agents no pipeline can reach still have to appear — an unreachable agent is
             // precisely the thing somebody opened the diagram to find.
             let layer = layers.get(name).copied().unwrap_or(0) + 1;
@@ -236,8 +256,16 @@ impl Layout {
     }
 
     /// Adds the edges, classifying each one.
-    fn connect(&mut self, config: &Config, graph: &RouteGraph) {
+    fn connect(
+        &mut self,
+        config: &Config,
+        graph: &RouteGraph,
+        members: Option<&BTreeSet<AgentName>>,
+    ) {
         for (name, pipeline) in &config.pipelines {
+            if self.node(&pipeline_id(name)).is_none() {
+                continue;
+            }
             self.edges.push(Edge {
                 from: pipeline_id(name),
                 to: agent_id(&pipeline.entry),
@@ -252,6 +280,11 @@ impl Layout {
         for route in &config.routes {
             for from in &route.from {
                 for to in &route.to {
+                    if members
+                        .is_some_and(|members| !members.contains(from) || !members.contains(to))
+                    {
+                        continue;
+                    }
                     let pair = (agent_id(from), agent_id(to));
                     if drawn.contains(&pair) {
                         continue;
@@ -744,6 +777,95 @@ mod tests {
             (floors[1] - floors[0]).abs() > 1.0,
             "the two loops share a lane: {floors:?}"
         );
+    }
+
+    #[test]
+    fn a_workflow_can_be_drawn_on_its_own() {
+        // A factory holds several pipelines and they are genuinely separate workflows. Drawing
+        // them together produces one tangle that reads as a single very confused process, which
+        // is exactly what a reader concludes from it.
+        let config = two_workflows();
+        let sweep = Layout::scoped(&config, &Live::default(), &Scope::Pipeline("sweep".into()));
+
+        assert!(sweep.node("p_sweep").is_some());
+        assert!(sweep.node("a_sweeper").is_some());
+        assert!(
+            sweep.node("a_pr_reviewer").is_some(),
+            "a spawned reviewer is part of the sweep"
+        );
+        assert!(sweep.node("p_build").is_none(), "the other way in is not");
+        assert!(sweep.node("a_developer").is_none());
+    }
+
+    #[test]
+    fn an_agent_in_two_workflows_appears_in_both() {
+        // The honest answer. The developer really is in both pipelines, and hiding it from one
+        // would misrepresent the factory to make a tidier picture.
+        let config = two_workflows();
+
+        for pipeline in ["build", "release"] {
+            let drawn =
+                Layout::scoped(&config, &Live::default(), &Scope::Pipeline(pipeline.into()));
+            assert!(
+                drawn.node("a_developer").is_some(),
+                "developer missing from {pipeline}"
+            );
+        }
+    }
+
+    #[test]
+    fn drawing_everything_is_still_the_default() {
+        let config = two_workflows();
+        let all = Layout::build(&config, &Live::default());
+
+        assert!(all.node("p_sweep").is_some());
+        assert!(all.node("p_build").is_some());
+        assert!(all.node("a_pr_reviewer").is_some());
+    }
+
+    fn two_workflows() -> Config {
+        config(
+            r#"
+            [layover]
+            work_dir = "work"
+
+            [defaults]
+            runner = "claude"
+
+            [runners.claude]
+            command = ["claude", "-p"]
+
+            [agents.sweeper]
+            prompt = "sweep"
+
+            [agents.pr_reviewer]
+            prompt = "review one"
+
+            [agents.developer]
+            prompt = "develop"
+
+            [agents.publisher]
+            prompt = "publish"
+
+            [pipelines.sweep]
+            entry = "sweeper"
+
+            [pipelines.build]
+            entry = "developer"
+
+            [pipelines.release]
+            entry = "developer"
+
+            [[routes]]
+            from = "sweeper"
+            to = "pr_reviewer"
+            mode = "spawn"
+
+            [[routes]]
+            from = "developer"
+            to = "publisher"
+            "#,
+        )
     }
 
     #[test]

@@ -105,6 +105,32 @@ impl RouteGraph {
         self.spawns.values().flatten()
     }
 
+    /// Every agent belonging to the workflow that starts at `entry`.
+    ///
+    /// Unlike [`RouteGraph::reachable_from`] this **does** cross spawn edges. The two questions
+    /// are different: reachability asks what could still deliver into *this* itinerary, and a
+    /// spawned chain never can. Workflow membership asks what this way in sets in motion, and a
+    /// reviewer spawned by a sweep is unarguably part of the sweep.
+    ///
+    /// Agents shared between workflows appear in both, which is the honest answer — the
+    /// developer really is in the triage pipeline and the follow-up pipeline.
+    #[must_use]
+    pub fn workflow_from(&self, entry: &AgentName) -> BTreeSet<AgentName> {
+        let mut seen: BTreeSet<AgentName> = BTreeSet::new();
+        let mut queue = VecDeque::from([entry.clone()]);
+        seen.insert(entry.clone());
+
+        while let Some(current) = queue.pop_front() {
+            for next in self.successors(&current) {
+                if seen.insert(next.clone()) {
+                    queue.push_back(next.clone());
+                }
+            }
+        }
+
+        seen
+    }
+
     /// Every spawn edge, as a sender/receiver pair.
     pub fn spawn_edges(&self) -> impl Iterator<Item = (&AgentName, &AgentName)> {
         self.spawns

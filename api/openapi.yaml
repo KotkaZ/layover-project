@@ -182,6 +182,19 @@ paths:
         into a joined agent from a sender the barrier does not name is drawn as bypassing it,
         which is what actually happens.
       tags: [structure]
+      parameters:
+        - name: pipeline
+          in: query
+          required: false
+          description: |
+            Draw only what this pipeline sets in motion. Omit for the whole factory.
+
+            A factory holds several pipelines and they are genuinely separate workflows — a
+            nightly sweep has nothing to do with taking a work item to a pull request. Drawn
+            together they read as one very confused process. An agent belonging to two workflows
+            appears in both, which is the honest answer.
+          schema:
+            type: string
       responses:
         "200":
           description: The diagram.
@@ -985,7 +998,7 @@ components:
     CostReport:
       type: object
       description: Where the factory's money went.
-      required: [span, total, by_agent, by_model, reserve]
+      required: [span, total, by_agent, by_model, by_pipeline, reserve]
       properties:
         span:
           $ref: "#/components/schemas/WindowSpan"
@@ -1003,6 +1016,14 @@ components:
         by_model:
           type: array
           description: Spend per model, most expensive first. Runs with no reported model are omitted.
+          items:
+            $ref: "#/components/schemas/CostBucket"
+        by_pipeline:
+          type: array
+          description: |
+            Spend per workflow, most expensive first. The breakdown a factory with several
+            pipelines actually needs: per-agent totals cannot answer "what does the nightly sweep
+            cost" once an agent belongs to more than one workflow, and most of them do.
           items:
             $ref: "#/components/schemas/CostBucket"
         reserve:

@@ -136,6 +136,7 @@ impl RateCard {
             run,
             itinerary,
             agent,
+            pipeline: None,
             model,
             usage,
             usd,

@@ -17,8 +17,8 @@ use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt as _;
 use layover_http::{
     Access, Agent, AgentList, Api, Blocker, CostBucket, CostReport, CostSource, CostSummary,
-    CostWindow, EventStream, FlightAccepted, GetCostsQuery, GetRunPath, GroundStop, Health,
-    HelpList, HelpRequest, Impact, Learning, LearningList, LearningState, ListHelpQuery,
+    CostWindow, EventStream, FlightAccepted, GetCostsQuery, GetGraphQuery, GetRunPath, GroundStop,
+    Health, HelpList, HelpRequest, Impact, Learning, LearningList, LearningState, ListHelpQuery,
     ListLearningsQuery, ListRunsQuery, OPERATIONS, Pipeline, PipelineList, Problem, ReserveState,
     RouteMap, Run, RunList, RunStatus, SendFlightRequest, Status, StreamRunPath, TokenUsage,
     Trigger, TriggerKind, WindowSpan, router,
@@ -182,6 +182,10 @@ impl Api for Stub {
             }],
             by_model: vec![CostBucket {
                 name: "claude-opus-5".to_owned(),
+                summary: measured.clone(),
+            }],
+            by_pipeline: vec![CostBucket {
+                name: "development".to_owned(),
                 summary: measured,
             }],
             reserve: ReserveState {
@@ -194,7 +198,7 @@ impl Api for Stub {
         })
     }
 
-    async fn get_graph(&self) -> Result<RouteMap, Problem> {
+    async fn get_graph(&self, _: GetGraphQuery) -> Result<RouteMap, Problem> {
         Ok(RouteMap {
             mermaid: "flowchart LR\n  a_analyst --> a_developer\n".to_owned(),
             generated_at: "2026-09-16T12:00:00Z".to_owned(),

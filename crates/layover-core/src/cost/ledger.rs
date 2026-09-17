@@ -14,6 +14,7 @@ use std::collections::BTreeMap;
 use super::{CostSource, RunCost, TokenUsage};
 use crate::agent::AgentName;
 use crate::flight::ItineraryId;
+use crate::pipeline::PipelineName;
 
 /// Totals over some set of runs.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -166,6 +167,22 @@ impl Ledger {
         for cost in &self.entries {
             if let Some(model) = &cost.model {
                 grouped.entry(model.clone()).or_default().add(cost);
+            }
+        }
+        grouped
+    }
+
+    /// Totals per workflow, skipping runs no pipeline began.
+    ///
+    /// The breakdown a factory with several pipelines actually needs. Per-agent totals cannot
+    /// answer "what does the nightly sweep cost" once an agent belongs to more than one workflow,
+    /// and in a real factory most of them do.
+    #[must_use]
+    pub fn by_pipeline(&self) -> BTreeMap<PipelineName, Summary> {
+        let mut grouped: BTreeMap<PipelineName, Summary> = BTreeMap::new();
+        for cost in &self.entries {
+            if let Some(pipeline) = &cost.pipeline {
+                grouped.entry(pipeline.clone()).or_default().add(cost);
             }
         }
         grouped

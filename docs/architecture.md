@@ -715,3 +715,20 @@ answer recovery and steering reached, for the same reason: what the later run ne
 one's context, not its process. Checks back off and eventually expire, because something waiting
 on a human who has moved on must stop costing money, and the difference between waiting patiently
 and leaking is a count.
+
+**Why a workflow is a view over pipelines rather than a new concept.** A factory with three
+pipelines was drawn as one graph, and a reader looking at it reasonably concluded that Layover
+models a single, very confused process. The pipelines were always separate workflows — a nightly
+sweep has nothing to do with taking a work item to a pull request — but every surface flattened
+them: the route map drew every route, cost broke down by agent and by model but never by pipeline,
+and `RunCost` did not even carry the pipeline that a `RunRecord` already recorded. Nothing new was
+needed in the model; what was missing was that the boundary the model already had was invisible
+everywhere it mattered. Scoping is a view concern, so `Scope` lives in the diagram module rather
+than becoming a fourth thing to configure.
+
+**Why workflow membership crosses spawn edges when reachability does not.** The two ask different
+questions. `reachable_from` asks what could still deliver into *this* itinerary, and a spawned
+chain never can — that is what stops a dead barrier being kept alive by an agent that could not
+possibly satisfy it. Workflow membership asks what a way in sets in motion, and a reviewer spawned
+by a sweep is unarguably part of the sweep. An agent belonging to two workflows appears in both,
+which is the honest answer rather than the tidy one.

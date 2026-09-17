@@ -111,6 +111,14 @@ pub struct RunCost {
     pub itinerary: ItineraryId,
     /// Which agent was run.
     pub agent: AgentName,
+    /// The pipeline whose trigger began this chain, when one did.
+    ///
+    /// Carried here rather than only on the run record so that spend can be attributed to the
+    /// *workflow* that caused it. "What does the nightly sweep cost me" is the first question a
+    /// factory with several pipelines raises, and per-agent totals cannot answer it when an agent
+    /// belongs to more than one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pipeline: Option<crate::pipeline::PipelineName>,
     /// Which model, when the runner said.
     pub model: Option<String>,
     /// Tokens consumed, as far as they are known.
@@ -158,6 +166,7 @@ impl RunCost {
             run,
             itinerary,
             agent,
+            pipeline: None,
             model,
             usage,
             usd,
@@ -178,12 +187,20 @@ impl RunCost {
             run,
             itinerary,
             agent,
+            pipeline: None,
             model,
             usage: TokenUsage::default(),
             usd: 0.0,
             source: CostSource::Unreported,
             at: Timestamp::now(),
         }
+    }
+
+    /// Attributes the cost to the workflow that caused it.
+    #[must_use]
+    pub fn from_pipeline(mut self, pipeline: crate::pipeline::PipelineName) -> Self {
+        self.pipeline = Some(pipeline);
+        self
     }
 
     /// Overrides when the run finished, for tests and for replaying a persisted ledger.

@@ -186,6 +186,7 @@ impl History {
                 run: record.run,
                 itinerary: record.itinerary,
                 agent: record.agent,
+                pipeline: record.pipeline,
                 model: record.model,
                 usage: record.usage,
                 usd: record.usd,

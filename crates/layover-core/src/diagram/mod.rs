@@ -25,6 +25,31 @@ pub use layout::{Edge, EdgeStyle, Layout, Node, NodeKind, Shape};
 pub use mermaid::route_map;
 pub use svg::render as render_svg;
 
+/// Which workflow to draw.
+///
+/// A factory holds several pipelines and they are genuinely separate workflows: a nightly sweep
+/// has nothing to do with taking a work item to a pull request. Drawing them together produces one
+/// tangle that reads as a single, very confused process — which is what a reader concludes.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum Scope {
+    /// Every pipeline and every route in the factory.
+    #[default]
+    Everything,
+    /// Only what this pipeline sets in motion.
+    Pipeline(crate::pipeline::PipelineName),
+}
+
+impl Scope {
+    /// The pipeline being drawn, or `None` for the whole factory.
+    #[must_use]
+    pub fn pipeline(&self) -> Option<&crate::pipeline::PipelineName> {
+        match self {
+            Self::Everything => None,
+            Self::Pipeline(name) => Some(name),
+        }
+    }
+}
+
 /// What an agent is doing right now, for colouring a diagram.
 ///
 /// Absent from the map means idle. Idle is the overwhelmingly common state, so storing it would

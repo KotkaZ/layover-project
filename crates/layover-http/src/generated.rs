@@ -98,6 +98,10 @@ pub struct CostReport {
     pub by_agent: Vec<CostBucket>,
     /// Spend per model, most expensive first. Runs with no reported model are omitted.
     pub by_model: Vec<CostBucket>,
+    /// Spend per workflow, most expensive first. The breakdown a factory with several
+    /// pipelines actually needs: per-agent totals cannot answer "what does the nightly sweep
+    /// cost" once an agent belongs to more than one workflow, and most of them do.
+    pub by_pipeline: Vec<CostBucket>,
     /// The factory-wide ceiling and what is left of it.
     pub reserve: ReserveState,
     /// The period these totals cover, including the zone it was reckoned in and whether it
@@ -605,6 +609,19 @@ pub struct GetCostsQuery {
     pub window: Option<CostWindow>,
 }
 
+/// query parameters for `getGraph`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GetGraphQuery {
+    /// Draw only what this pipeline sets in motion. Omit for the whole factory.
+    ///
+    /// A factory holds several pipelines and they are genuinely separate workflows — a
+    /// nightly sweep has nothing to do with taking a work item to a pull request. Drawn
+    /// together they read as one very confused process. An agent belonging to two workflows
+    /// appears in both, which is the honest answer.
+    #[serde(default)]
+    pub pipeline: Option<String>,
+}
+
 /// query parameters for `listHelp`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListHelpQuery {
@@ -720,7 +737,10 @@ pub trait Api: Send + Sync + 'static {
     /// which is what actually happens.
     ///
     /// `GET /graph`
-    fn get_graph(&self) -> impl core::future::Future<Output = Result<RouteMap, Problem>> + Send;
+    fn get_graph(
+        &self,
+        query: GetGraphQuery,
+    ) -> impl core::future::Future<Output = Result<RouteMap, Problem>> + Send;
     /// Halt everything.
     ///
     /// Ground Stop is a file on disk rather than in-memory state, so it survives a Tower crash
@@ -856,8 +876,9 @@ async fn handle_send_flight<A: Api>(
 
 async fn handle_get_graph<A: Api>(
     axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
+    axum::extract::Query(query): axum::extract::Query<GetGraphQuery>,
 ) -> axum::response::Response {
-    match api.get_graph().await {
+    match api.get_graph(query).await {
         Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
         Err(problem) => problem.into_response(),
     }

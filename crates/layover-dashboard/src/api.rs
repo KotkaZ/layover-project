@@ -13,13 +13,13 @@ use axum::http::StatusCode;
 use jiff::Timestamp;
 use layover_core::config::Config;
 use layover_core::cost::{Ledger, Span, Window};
-use layover_core::diagram::{Layout, Live, render_svg};
+use layover_core::diagram::{Layout, Live, Scope, render_svg};
 use layover_core::run::Outcome;
 use layover_http::{
     AgentList, Api, CostBucket, CostReport, CostWindow, EventStream, FlightAccepted, GetCostsQuery,
-    GetRunPath, GroundStop, Health, HelpList, LearningList, ListHelpQuery, ListLearningsQuery,
-    ListRunsQuery, PipelineList, Problem, ReserveState, RouteMap, Run, RunList, RunStatus,
-    SendFlightRequest, Status, StreamRunPath,
+    GetGraphQuery, GetRunPath, GroundStop, Health, HelpList, LearningList, ListHelpQuery,
+    ListLearningsQuery, ListRunsQuery, PipelineList, Problem, ReserveState, RouteMap, Run, RunList,
+    RunStatus, SendFlightRequest, Status, StreamRunPath,
 };
 use layover_store::{HelpFilter, History, Journal, RunFilter};
 
@@ -150,9 +150,21 @@ impl Api for Dashboard {
         Ok(view::pipelines(&self.config()?))
     }
 
-    async fn get_graph(&self) -> Result<RouteMap, Problem> {
+    async fn get_graph(&self, query: GetGraphQuery) -> Result<RouteMap, Problem> {
         let config = self.config()?;
-        let layout = Layout::build(&config, &self.live());
+
+        let scope = match query.pipeline.as_deref() {
+            None => Scope::Everything,
+            Some(name) if config.pipelines.contains_key(&name.into()) => {
+                Scope::Pipeline(name.into())
+            }
+            Some(name) => {
+                return Err(Problem::new(StatusCode::NOT_FOUND, "no such pipeline")
+                    .with_detail(format!("`{name}` is not a pipeline in this factory")));
+            }
+        };
+
+        let layout = Layout::scoped(&config, &self.live(), &scope);
 
         Ok(RouteMap {
             mermaid: render_svg(&layout),
@@ -324,6 +336,13 @@ fn report(span: &Span, ledger: &Ledger, config: Option<&Config>) -> CostReport {
             })
             .collect(),
         by_model: ranked(ledger.by_model()),
+        by_pipeline: ranked(
+            ledger
+                .by_pipeline()
+                .into_iter()
+                .map(|(name, summary)| (name.to_string(), summary))
+                .collect(),
+        ),
         reserve: ReserveState {
             cap_usd: reserve
                 .map(|reserve| reserve.fuel_usd)
