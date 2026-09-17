@@ -40,7 +40,7 @@ Early. What works today is everything before the first spawn — loading a facto
 checking it, and showing what it would do. Process supervision, the MCP server and the HTTP API
 are not built yet.
 
-See [the roadmap](https://github.com/KotkaZ/layover-project/blob/main/docs/roadmap.md).
+See [the open questions](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md).
 
 ## License
 

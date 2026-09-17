@@ -59,6 +59,7 @@ the wrong instructions:
 | A missing include target | The author believed that text was there. |
 | A cycle | Two files including each other. |
 | Nesting more than 8 deep | A prompt nobody can reason about. |
+| More than 1,000 expansions in one prompt | Shallow includes can still multiply: eight levels of ten files each is millions of reads. The depth cap alone does not bound the total. |
 | A path leaving the prompt directory | `../../etc/passwd` is not a prompt. |
 | A malformed directive | `@include` with nothing after it. |
 

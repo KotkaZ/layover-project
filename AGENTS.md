@@ -22,13 +22,14 @@ What exists and is fully tested:
 - `crates/layover-core` — configuration, agents, routes, pipelines, prompt composition, the route
   graph, load-time validation, itinerary accounting (Hops, Fuel, run cap) and rendezvous barriers.
 - `crates/layover-http` — the HTTP surface, **generated** from `api/openapi.yaml`. Types, the
-  `Api` trait and the axum router. Nothing implements `Api` yet.
+  `Api` trait and the axum router.
 - `crates/layover-store` — on-disk run history: day-segmented JSON Lines, 90-day retention.
-- `crates/layover-dashboard` — the read-only monitoring page, served over the generated API.
-- `crates/layover-cli` — the `layover` binary: `validate`, `explain`, `graph`, `prompt`, `serve`.
+- `crates/layover-dashboard` — the monitoring page and the `Api` implementation behind it.
+- `crates/layover-cli` — the `layover` binary: `validate`, `explain`, `graph`, `prompt`, `serve`,
+  `autostart`.
 
-**Nothing that spawns a process exists yet** — no process supervision, no MCP server, no Tower,
-no UI. Those are blocked on the run-bootstrap questions in `docs/roadmap.md`, which are
+**Nothing that spawns a process exists yet** — no process supervision, no MCP server, no Tower.
+Those are blocked on the run-bootstrap questions in `docs/decisions.md`, which are
 unanswered. Do not guess at them; ask.
 
 `layover run` is deliberately absent rather than stubbed. A command that pretends to start a
@@ -69,14 +70,14 @@ repository is meant to be worked on by agents.
 | Prompt composition | `book/src/prompts.md` |
 | The HTTP surface | `api/openapi.yaml` (the contract — never edit `generated.rs`), `book/src/http-api.md` |
 | A safety rail: Hops, Fuel, run cap, Ground Stop | `docs/architecture.md`, `docs/risks.md`, and the arithmetic in `examples/workitem-factory/README.md` |
-| A decision that was not obvious | The decision log in `docs/architecture.md` §13 — *why*, not what |
-| Anything listed as open in `docs/roadmap.md` | Move it to **Resolved** with the answer and the reasoning |
+| A decision that was not obvious | The decision log in `docs/decisions.md` — *why*, not what |
+| Anything listed as open in `docs/decisions.md` | Answer it in the decision log above it, with the reasoning, and delete the question |
 | A new known hazard | `docs/risks.md` |
 | MCP servers, workspaces or autostart | `book/src/configuration.md`, `book/src/pipelines.md`, `book/src/install.md` |
 | Any diagram | Use Mermaid, not ASCII — GitHub and the book both render it |
-| Recovery, steering or the handover | `book/src/recovery.md`, `docs/architecture.md` §13 |
+| Recovery, steering or the handover | `book/src/recovery.md`, `docs/decisions.md` |
 | The dashboard, history or cost windows | `book/src/dashboard.md`, `book/src/cost.md` |
-| Help requests or learnings | `book/src/learning.md`, `docs/architecture.md` §13 |
+| Help requests or learnings | `book/src/learning.md`, `docs/decisions.md` |
 | The CLI's commands or flags | `crates/layover-cli/README.md`, `book/src/install.md` |
 | How Layover is installed or released | `dist-workspace.toml` then `dist generate`, `book/src/install.md`, both READMEs |
 
@@ -125,7 +126,7 @@ type names, API fields and prose alike.
 3. **Never trust a child agent's claims about its own identity or budget.** Those come from the
    Tower's per-run token. See `docs/architecture.md`.
 4. **Never point a factory at this repository's own source.** Explicitly out of scope.
-5. **Ask rather than guess** on anything listed as open in `docs/roadmap.md`.
+5. **Ask rather than guess** on anything listed as open in `docs/decisions.md`.
 
 ## Where things live
 
@@ -134,9 +135,10 @@ type names, API fields and prose alike.
 | `api/openapi.yaml` | **The HTTP contract.** Edit this, never `generated.rs`. |
 | `dist-workspace.toml` | **Release configuration.** Edit this, never `.github/workflows/release.yml`. |
 | `book/` | The published documentation site (mdBook → GitHub Pages) |
-| `docs/architecture.md` | System design and the decision log |
+| `docs/architecture.md` | System design |
+| `docs/decisions.md` | Why each choice was made, and what is still open |
 | `docs/routing.md` | Route map semantics, joins, failure paths |
-| `docs/roadmap.md` | v0.1 scope and open questions |
+
 | `docs/risks.md` | Known risks and mitigations |
 | `examples/workitem-factory/` | The reference v0.1 factory, with its sizing arithmetic |
 | `crates/layover-core` | Domain types: config, agents, routes, pipelines, prompts, graph, validation, itinerary, barriers |

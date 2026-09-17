@@ -77,8 +77,12 @@ days, because an hourly pipeline and a manual one should not share a clock.
 
 A wrong learning therefore decays instead of compounding, and you review by exception rather than
 by queue. That is only defensible because [run history](./dashboard.md) records what was live
-when, so *"what was it told when it did that?"* is an answerable question, and revoking is one
-press.
+when, so *"what was it told when it did that?"* is an answerable question.
+
+> **Revoking is not yet one press.** `confirm` and `reject` exist in the domain model and are what
+> the diagram above describes, but nothing exposes them — no endpoint, no dashboard control. Until
+> something does, a learning can be removed only by editing `learnings.jsonl`, and the argument
+> above is weaker than it reads: decay still works, but the human override it leans on is manual.
 
 ### Rediscovery is the confirmation signal
 

@@ -31,6 +31,29 @@ turn the permission mesh into a pipeline engine.
 | `trigger = { every = "1h" }` | Fires on a fixed interval: `s`, `m`, `h`, `d`. |
 | `trigger = { cron = "0 9 * * 1-5" }` | Fires on a five-field cron expression, in local time. |
 
+## Resuming booked work
+
+```toml
+[pipelines.follow_up]
+description = "Pick up pull requests that asked to be looked at again"
+entry       = "follower"
+trigger     = { every = "45m" }
+resumes     = true
+```
+
+`resumes` is an optional boolean, `false` by default. A pipeline with `resumes = true` does not
+start fresh work when it fires: it looks for **Layovers** that have come due — work a previous
+chain deliberately set down to pick up later — and opens one itinerary per Layover, seeded with
+the handover its author wrote.
+
+This is how a chain follows something up days later without anything being kept alive in between.
+The publisher opens a pull request, books a Layover for "when there are comments", and exits; the
+resuming pipeline is what brings that work back. See [Recovery and steering](./recovery.md).
+
+A resuming pipeline that finds nothing due does nothing, which is the ordinary case. It still
+declares `entry` — the agent a resumed itinerary is handed to — and it may declare flags like any
+other pipeline.
+
 ## Running several instances at once
 
 One pipeline, many instances — one per pull request, say. Each trigger mints its own itinerary

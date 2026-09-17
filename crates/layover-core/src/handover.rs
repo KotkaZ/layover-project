@@ -21,7 +21,7 @@
 //!
 //! [`Handover::brief`] renders a block of text *about* the previous run. How that block combines
 //! with the agent's own prompt, the incoming flight body and `memory.md` is run-bootstrap
-//! question 1 in `docs/roadmap.md`, and is still open. This produces the block; something else
+//! question 1 in `docs/decisions.md`, and is still open. This produces the block; something else
 //! decides where it goes.
 
 use jiff::Timestamp;

@@ -16,7 +16,9 @@ file, so a factory can be run from anywhere.
 `fuel_usd` and `max_runs` bound how *wide* it can spread. They are not interchangeable — see
 [Pipelines and triggers](./pipelines.md#sizing-the-rails).
 
-**`[runners.*]`** says how to invoke each CLI. `{prompt}` is substituted at spawn time.
+**`[runners.*]`** says how to invoke each CLI. The composed instructions reach the process on
+**stdin**, not on the command line — see [Configuration](./configuration.md#runners). A `{prompt}`
+placeholder, where a runner needs one, is a *path* to that text rather than the text itself.
 
 **`[agents.*]`** declares an agent. The table key is its name. `description` is what peers see
 when they ask Layover who they can reach, so write it for another agent to read.
@@ -32,7 +34,12 @@ directions are written out. An edge that is not listed means the flight is refus
 layover validate --config examples/planner.toml --strict
 layover explain --config examples/planner.toml
 layover prompt planner --config examples/planner.toml
+layover serve --config examples/planner.toml     # the dashboard, on http://127.0.0.1:7878
 ```
+
+> **There is no `layover run`.** Nothing spawns a process yet, so this is the whole loop: define a
+> factory, check it, read the prompts it would send, and watch the dashboard. A trigger from the
+> dashboard is queued and waits. See [Status](./index.md#status).
 
 ## What it does not say
 

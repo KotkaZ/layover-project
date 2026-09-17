@@ -112,6 +112,7 @@ is a **lower bound**, and whichever runner is silent needs looking at.
 | `FuelExhausted` | This itinerary spent its budget. |
 | `RunCapReached` | This itinerary hit `max_runs` — the backstop that holds when cost reporting does not. |
 | `ReserveExhausted` | The **factory** spent its window budget. This itinerary may have Fuel to spare. |
+| `SpawnDepthReached` | A `mode = "spawn"` route tried to open a new itinerary beyond `max_spawn_generations`. |
 
 Ground Stop is separate and absolute: it is a file on disk, so it survives a Tower crash and can
 be set by hand when nothing else is responding.

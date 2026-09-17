@@ -11,7 +11,7 @@ a human is still watching.
 | `work_dir` | `workspace` | The shared working directory agents operate in. |
 | `logbook` | `.layover/logbook.md` | Shared memory. All writes serialised by the Tower. |
 | `prompt_dir` | `prompts` | What `prompt_file` paths resolve against, relative to this file. |
-| `http_addr` | `127.0.0.1:7878` | Where the API binds. Loopback by default, deliberately. |
+| `http_addr` | `127.0.0.1:7878` | Where the API binds. Loopback by default, deliberately. **Not yet honoured** — `layover serve --addr` sets the bind address today. |
 
 ## `[defaults]` — the safety rails
 
@@ -28,8 +28,8 @@ a human is still watching.
 
 `max_hops` and `fuel_usd` are not interchangeable. A hop is spent per flight and branches *inherit*
 the remaining count rather than splitting it, so Hops says nothing about how wide a fan-out
-spreads. At `max_hops = 8` with a branching factor of 3, one trigger permits roughly 6,500 real,
-paid CLI invocations. Fuel is what stops that, and `max_runs` is what stops it when the runner
+spreads. At `max_hops = 8` with a branching factor of 3, one trigger permits **3,279** real, paid
+CLI invocations. Fuel is what stops that, and `max_runs` is what stops it when the runner
 does not report its cost.
 
 Nor does Fuel bound the *factory* — it resets with every new itinerary. See `[reserve]` below.
@@ -44,7 +44,7 @@ window_hours = 24       # ...in any rolling 24 hours
 
 | Key | Default | Meaning |
 |---|---|---|
-| `fuel_usd` | `100.00` | Ceiling for the window. `0` means unlimited. |
+| `fuel_usd` | `100.00` | Ceiling for the window. `0` means unlimited; anything else must be a positive number, and a negative or `nan` value is refused rather than quietly disabling the cap. |
 | `window_hours` | `24` | How far back the rolling window reaches. |
 
 A scheduled pipeline mints a fresh itinerary — and a fresh Fuel budget — on every tick, so an
@@ -206,7 +206,7 @@ timeout_sec = 3600
 |---|---|
 | `from` | Sending agents. A bare string or a list. |
 | `to` | Receiving agents. A bare string or a list. |
-| `mode` | `async` only. `request_response` was superseded by joins. |
+| `mode` | `async` (default) or `spawn`, which opens a fresh itinerary per flight. `request_response` was superseded by joins. |
 | `join` | `all` or `any`. Parks flights until the condition is met. |
 | `timeout_sec` | Backstop for a barrier that never completes. |
 

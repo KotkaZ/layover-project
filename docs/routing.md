@@ -37,7 +37,7 @@ Nothing about this is special — it is two ordinary flights.
 count rather than splitting it, so Hops bounds *depth* only. With `max_hops = 8` and a branching
 factor of 3, one trigger permits up to 3⁸ ≈ 6,500 runs. **Fuel is what bounds breadth**, which is
 why it is a v0.1 requirement rather than a later refinement — see
-[`roadmap.md`](roadmap.md#why-fuel-is-not-optional).
+[`decisions.md`](decisions.md#why-fuel-is-not-optional).
 
 ## 3. Rendezvous joins
 
@@ -121,7 +121,7 @@ for an agent gathering help: dispatch to one specialist, or two, depending on wh
 Skip a dispatch and the barrier waits for an agent that was never asked, until reachability
 analysis abandons it and the itinerary is marked stalled. The happy path becomes a failure.
 
-Until dispatch-aware barriers exist — see [`roadmap.md`](roadmap.md) — **optionality belongs in
+Until dispatch-aware barriers exist — see [`decisions.md`](decisions.md) — **optionality belongs in
 prompts, not in the route map.** Dispatch every upstream every time, and let a specialist with
 nothing to contribute reply *"nothing to add, here is why"*. That reply is not waste: it is what
 releases the rendezvous, and it records the fact that the question was asked and answered.
@@ -213,4 +213,4 @@ you, because nothing can know how many times a loop will turn.
 
 Getting it wrong is not a clean failure. Hops running out mid-repair leaves half-finished work in
 the shared workspace and no run alive to clean it up — see open question 11 in
-[`roadmap.md`](roadmap.md). Do the arithmetic; the example above shows it worked through.
+[`decisions.md`](decisions.md). Do the arithmetic; the example above shows it worked through.

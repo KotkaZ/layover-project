@@ -10,6 +10,7 @@
 
 # Reference
 
+- [The `layover` command](./cli.md)
 - [Configuration](./configuration.md)
 - [Pipelines and triggers](./pipelines.md)
 - [Prompts](./prompts.md)

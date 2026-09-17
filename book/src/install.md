@@ -2,9 +2,6 @@
 
 Layover is a single binary called `layover`. It needs no runtime — not Rust, not Node.
 
-> **Nothing is released yet.** The commands below work from the first `v*` tag onwards; until
-> then, use [from source](#from-source). See [Cutting a release](#cutting-a-release).
-
 ## macOS and Linux
 
 ```sh
@@ -53,11 +50,15 @@ attached to the release too.
 
 ## With Cargo
 
-If you already have a Rust toolchain:
+Layover is **not on crates.io yet**, so install it from a clone:
 
 ```sh
-cargo install layover-cli
+cargo install --path crates/layover-cli   # from a checkout
 ```
+
+> **Do not run `cargo install layover`.** That name belongs to an unrelated SSH tunnelling crate
+> whose binary is *also* called `layover`, so the mistake is silent: the install succeeds, the
+> command exists, and nothing on your `PATH` is the tool you wanted.
 
 The binary is called `layover`, not `layover-cli`.
 
@@ -105,7 +106,11 @@ macOS, a systemd user unit on Linux — and prints the single command that regis
 It also refuses to write anything if the factory does not load, because a service that fails at
 every logon is worse than no service.
 
-All three run as **you**, never elevated and never machine-wide. The Tower spawns agents that use
+What it starts is **`layover serve`**: the dashboard, on the factory you pointed it at. Not the
+factory itself — there is no `layover run` yet — so this gets you a monitoring page at login, and
+becomes the real thing when the Tower does.
+
+All three run as **you**, never elevated and never machine-wide. Layover spawns agents that use
 your provider credentials, your git identity and your workspace; a system service would have none
 of them, or would run as root with all of them.
 
@@ -128,17 +133,17 @@ is a local-first supervisor; run it locally.
 
 ## Cutting a release
 
-Releases are built by [`dist`](https://opensource.axo.dev/cargo-dist/), configured in
+Releases are built by [`dist`](https://axodotdev.github.io/cargo-dist/), configured in
 `dist-workspace.toml`. Tagging is the whole process:
 
 ```sh
-git tag v0.2.0
-git push origin v0.2.0
+git tag vX.Y.Z      # must match the workspace version in Cargo.toml
+git push origin vX.Y.Z
 ```
 
 That builds all five targets, generates the installers, checksums everything and publishes a
 GitHub Release. `.github/workflows/release.yml` is **generated** — change `dist-workspace.toml`
-and run `dist generate`, never edit the workflow by hand.
+and run `dist init`, never edit the workflow by hand.
 
 Check the configuration without releasing anything:
 

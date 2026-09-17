@@ -106,4 +106,4 @@ The reference factory sets `recovery = "manual"` on its publisher, and nothing e
 
 The domain model, its rails and the handover text are built and tested. Actually detecting an
 interruption and starting the replacement needs the Tower, which does not exist yet — see
-[the roadmap](https://github.com/KotkaZ/layover-project/blob/main/docs/roadmap.md).
+[the open questions](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md).

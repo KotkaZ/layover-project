@@ -41,25 +41,33 @@ flowchart TD
 
     developer -->|"both approved"| publisher["publisher"]
 
+    publisher -.->|"books a Layover"| layover[["Layover · due later"]]
+    clock2([clock · 45m]) --> follower["follower"]
+    layover -.-> follower
+    follower -->|"comments to address"| developer
+
     classDef ro fill:#eaf2fb,stroke:#3f6fa3,color:#12263a
     classDef rw fill:#fff1e0,stroke:#c07400,color:#3a2200
     classDef jn fill:#f2e9fd,stroke:#7a44b0,color:#2a1240
     classDef ev fill:#eef0f2,stroke:#7a828a,color:#1b1f23
-    class scanner,analyst,investigator,kusto,tester,reviewer ro
+    classDef lay fill:#e8f6ee,stroke:#2f7d4f,color:#0f2e1c
+    class scanner,analyst,investigator,kusto,tester,reviewer,follower ro
     class developer,publisher rw
     class joinA,joinB jn
-    class human,clock ev
+    class human,clock,clock2 ev
+    class layover lay
 ```
 
-Blue agents are `read-only` and get a worktree snapshot; orange ones are `read-write` and share
-the live workspace. The two purple nodes are rendezvous barriers, not agents — nothing runs there.
+Blue agents are `read-only` and get a worktree snapshot; orange ones are `read-write`. The two
+purple nodes are rendezvous barriers, not agents — nothing runs there. The green node is not an
+agent either: it is work **set down**, waiting for a resuming pipeline to pick it up.
 
 Both barriers land on an agent that ordinary edges also reach — see §5.2 for why that works. The
 loop is `developer → tester/reviewer → developer`, turning until both approve. Nothing in Layover
 enforces that sequence: the route map says these edges are *permitted*, and the developer decides
 at runtime whether to loop or to publish.
 
-## 2. Two ways in
+## 2. Three ways in
 
 ```toml
 [pipelines.development]
@@ -69,6 +77,11 @@ trigger = "manual"
 [pipelines.review-bot]
 entry   = "pr_scanner"
 trigger = { every = "1h" }
+
+[pipelines.follow_up]
+entry   = "follower"
+trigger = { every = "45m" }
+resumes = true
 ```
 
 A clock should not decide that a feature ought to be built, and nobody should have to remember to
@@ -78,6 +91,15 @@ share every agent downstream of the analyst.
 `pr_scanner` reports only pull requests that have **changed** since it last looked, which it knows
 only because it wrote that down. A scheduled agent that forgets what it already reported will
 report it again every hour forever.
+
+**`follow_up` is the third, and it is a different kind of way in.** `resumes = true` means it does
+not start fresh work: it picks up Layovers that have come due. When the publisher opens a pull
+request it books one — "come back when there are comments" — and exits. Nothing is kept alive in
+between; forty-five minutes later the follower is handed that chain's handover and decides whether
+there is anything to send back to the developer.
+
+That is the whole reason a chain can wait days for a human without holding a process open, and it
+is what the project is named after.
 
 ## 3. Walking one itinerary
 
@@ -162,7 +184,7 @@ instead of in the route map. Both are read-only and cheap, so the wasted run is 
 a barrier that can always be satisfied.
 
 The alternative — a barrier over only the upstreams that were actually dispatched — is a genuine
-feature, and it is deferred rather than dismissed. See [`docs/roadmap.md`](../../docs/roadmap.md).
+feature, and it is deferred rather than dismissed. See [`docs/decisions.md`](../../docs/decisions.md).
 
 ### 5.2 A join guards its upstreams, not the agent
 
@@ -244,10 +266,11 @@ are shared, so the same `@include(run_e2e)` line is read by whichever pipeline r
 
 Honest gaps, so nobody discovers them at runtime:
 
-- **The Kusto agent needs a Kusto MCP server**, the scanner and publisher need Azure DevOps
-  credentials. Layover's `[runners]` block wires up *Layover's own* MCP endpoint and nothing else,
-  so both come from the CLI's own configuration and environment today. Per-agent MCP servers and
-  per-run credential injection are open questions in [`docs/roadmap.md`](../../docs/roadmap.md).
+- **The Kusto agent's MCP server and the publisher's Azure DevOps credentials are declared, not
+  provided.** `[agents.kusto.mcp.kusto]` and `[agents.publisher.mcp.ado]` wire up the servers, and
+  `env_from` names the variables that authenticate them — but naming is all config does. The
+  variables have to exist in the environment Layover runs in, and nothing checks that they do
+  until the agent tries to use them.
 - **Nothing keeps the publisher and the developer apart.** They are both `read-write` and the
   handoff is fire-and-forget, so the developer's process may still be alive when the publisher
   starts committing. In practice the developer sends and exits; the load-time check does not cover

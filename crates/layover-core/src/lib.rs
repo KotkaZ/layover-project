@@ -36,6 +36,7 @@ pub mod learning;
 pub mod mcp;
 pub mod pipeline;
 pub mod prompt;
+pub mod queue;
 pub mod report;
 pub mod route;
 pub mod run;

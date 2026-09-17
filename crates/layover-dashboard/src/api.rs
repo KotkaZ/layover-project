@@ -16,6 +16,7 @@ use layover_core::cost::{Ledger, Span, Window};
 use layover_core::diagram::{Layout, Live, Scope, render_svg};
 use layover_core::flight::{Flight, ItineraryId, Origin};
 use layover_core::pipeline::{FlagError, Pipeline as CorePipeline, PipelineName};
+use layover_core::queue::Queued;
 use layover_core::run::Outcome;
 use layover_http::{
     AgentList, Api, CostBucket, CostReport, CostWindow, EventStream, FlightAccepted, GetCostsQuery,
@@ -214,7 +215,21 @@ impl Api for Dashboard {
                 .with_detail(error.to_string())
         })?;
 
-        Ok(report(&span, &ledger, self.config().ok().as_ref()))
+        // The Reserve is metered over its own rolling window, never the one being browsed. They
+        // answer different questions — "show me last month" against "what may I still spend
+        // today" — and using one ledger for both compared thirty days of spend against a
+        // twenty-four hour cap, which is a rail reporting a number that is not true.
+        let config = self.config().ok();
+        let reserve_hours = config
+            .as_ref()
+            .map_or(24, |config| config.reserve.window_hours);
+        let reserve_span = rolling_back_from(&span, reserve_hours);
+        let reserve_ledger = self.0.history.ledger(&reserve_span).map_err(|error| {
+            Problem::new(StatusCode::INTERNAL_SERVER_ERROR, "history is unreadable")
+                .with_detail(error.to_string())
+        })?;
+
+        Ok(report(&span, &ledger, &reserve_ledger, config.as_ref()))
     }
 
     async fn list_help(&self, query: ListHelpQuery) -> Result<HelpList, Problem> {
@@ -292,13 +307,13 @@ impl Api for Dashboard {
         );
         let flight_id = flight.id.as_str().to_owned();
 
-        self.0.journal.queue(flight).map_err(|error| {
-            Problem::new(StatusCode::INTERNAL_SERVER_ERROR, "the queue is unwritable")
-                .with_detail(error.to_string())
-        })?;
-
-        // Record the flags alongside so the queue survives a restart with the run it describes.
-        let _ = flags;
+        self.0
+            .journal
+            .queue(Queued::new(flight, pipeline, flags))
+            .map_err(|error| {
+                Problem::new(StatusCode::INTERNAL_SERVER_ERROR, "the queue is unwritable")
+                    .with_detail(error.to_string())
+            })?;
 
         Ok(FlightAccepted {
             flight_id,
@@ -475,8 +490,14 @@ fn from_status(status: RunStatus) -> Outcome {
 }
 
 /// Builds the cost report for a window.
-fn report(span: &Span, ledger: &Ledger, config: Option<&Config>) -> CostReport {
+fn report(
+    span: &Span,
+    ledger: &Ledger,
+    reserve_ledger: &Ledger,
+    config: Option<&Config>,
+) -> CostReport {
     let reserve = config.map(|config| &config.reserve);
+    let reserve_spent = reserve_ledger.total().usd;
 
     CostReport {
         span: view::span(span),
@@ -501,18 +522,35 @@ fn report(span: &Span, ledger: &Ledger, config: Option<&Config>) -> CostReport {
             cap_usd: reserve
                 .map(|reserve| reserve.fuel_usd)
                 .filter(|cap| *cap > 0.0),
-            spent_usd: ledger.total().usd,
+            spent_usd: reserve_spent,
             remaining_usd: reserve
                 .map(|reserve| reserve.fuel_usd)
                 .filter(|cap| *cap > 0.0)
-                .map(|cap| (cap - ledger.total().usd).max(0.0)),
+                .map(|cap| (cap - reserve_spent).max(0.0)),
             window_hours: reserve.map_or(24, |reserve| {
                 i64::try_from(reserve.window_hours).unwrap_or(24)
             }),
-            exhausted: reserve.is_some_and(|reserve| {
-                reserve.fuel_usd > 0.0 && ledger.total().usd >= reserve.fuel_usd
-            }),
+            exhausted: reserve
+                .is_some_and(|reserve| reserve.fuel_usd > 0.0 && reserve_spent >= reserve.fuel_usd),
         },
+    }
+}
+
+/// Narrows `span` to the `hours` immediately before it ends.
+///
+/// The Reserve is configured in hours and has no matching [`Window`] variant, so its period is
+/// derived rather than resolved. Only the total is read from the resulting ledger; the span itself
+/// is never reported, which is why carrying the browsing window's label here is harmless.
+fn rolling_back_from(span: &Span, hours: u64) -> Span {
+    let hours = i64::try_from(hours).unwrap_or(i64::MAX).min(1_000_000);
+    let start = span
+        .end
+        .checked_sub(jiff::SignedDuration::from_hours(hours))
+        .unwrap_or(Timestamp::MIN);
+
+    Span {
+        start: Some(start),
+        ..span.clone()
     }
 }
 

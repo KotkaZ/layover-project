@@ -11,9 +11,9 @@ use layover_core::pipeline::{Schedule, Trigger as CoreTrigger};
 use layover_core::route::Join as CoreJoin;
 use layover_core::run::{Outcome, RunRecord};
 use layover_http::{
-    Access, Agent, AgentList, Blocker, CostSource, CostSummary, CostWindow, Flag, HelpRequest,
-    Impact, Join, Learning, LearningState, PendingFlight, Pipeline, PipelineList, Report, Route,
-    Run, RunStatus, TokenUsage, Trigger, TriggerKind, WindowSpan, Workspace,
+    Access, Agent, AgentList, Blocker, CostSource, CostSummary, CostWindow, Flag, FlagValue,
+    HelpRequest, Impact, Join, Learning, LearningState, PendingFlight, Pipeline, PipelineList,
+    Report, Route, Run, RunStatus, TokenUsage, Trigger, TriggerKind, WindowSpan, Workspace,
 };
 
 /// Describes the factory's agents and the edges between them.
@@ -283,14 +283,25 @@ pub fn learning_state_from(state: LearningState) -> layover_core::learning::Stat
 }
 
 /// Describes a queued flight.
-pub fn pending(flight: &layover_core::flight::Flight) -> PendingFlight {
+pub fn pending(queued: &layover_core::queue::Queued) -> PendingFlight {
+    let flight = &queued.flight;
+
     PendingFlight {
         flight_id: flight.id.as_str().to_owned(),
         itinerary_id: flight.itinerary.as_str().to_owned(),
         to: flight.to.to_string(),
-        pipeline: None,
+        pipeline: queued.pipeline.as_ref().map(ToString::to_string),
         body: flight.body.clone(),
-        flags: None,
+        flags: Some(
+            queued
+                .flags
+                .iter()
+                .map(|(name, value)| FlagValue {
+                    name: name.clone(),
+                    value: *value,
+                })
+                .collect(),
+        ),
         queued_at: flight.sent_at.to_string(),
     }
 }

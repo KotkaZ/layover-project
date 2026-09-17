@@ -192,6 +192,15 @@ pub struct Flag {
     pub name: String,
 }
 
+/// A flag resolved to the value one run will see. Distinct from `Flag`, which declares what a pipeline accepts: a declaration carries a default, and reporting that default back as though it were the operator's choice would hide the difference between a flag left alone and a flag deliberately set to the same value.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FlagValue {
+    /// The name a prompt tests with `@include(name)`.
+    pub name: String,
+    /// The value this run will see.
+    pub value: bool,
+}
+
 /// Confirmation that work has been started.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FlightAccepted {
@@ -345,7 +354,7 @@ pub struct PendingFlight {
     pub body: String,
     /// The flags set for this run.
     #[serde(default)]
-    pub flags: Option<Vec<Flag>>,
+    pub flags: Option<Vec<FlagValue>>,
     /// Identifier of the queued flight.
     pub flight_id: String,
     /// The chain it will begin.

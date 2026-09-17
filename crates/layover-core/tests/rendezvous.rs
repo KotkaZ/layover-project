@@ -1,7 +1,7 @@
 //! End-to-end behaviour of the v0.1 rendezvous design, exercised through the public API.
 //!
 //! These tests are the executable form of `docs/routing.md`. Each one corresponds to a v0.1
-//! done-criterion in `docs/roadmap.md`.
+//! done-criterion in `docs/decisions.md`.
 
 use std::collections::BTreeSet;
 

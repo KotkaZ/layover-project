@@ -39,7 +39,8 @@ conclusion also makes it decide what its conclusion was.
 
 Reports are capped and trimmed rather than refused — a report is the only account of a run that has
 already cost money — and a trimmed one says so, so you know to look further rather than assuming
-the agent stopped there.
+the agent stopped there. The caps are a 160-character headline, a 12,000-character body and 32
+artifacts; a learning is capped at 400 characters, and at most 25 are injected into any one run.
 
 Everything else here is read-only. The operations that genuinely need a running supervisor — streaming a run, engaging a Ground Stop — answer `501` rather than pretending. A control that silently does nothing is worse
 than a control that is not there, because it gets trusted once and then relied upon.
@@ -68,6 +69,9 @@ Read it as: pipelines on the left, work flowing right, one column per hop.
 | Blue arrow labelled `all` or `any` | An upstream the barrier waits for |
 | Dashed violet arrow | A permitted sender the barrier *does not* name |
 | Green, amber, red fill | Running, waiting at a barrier, last run failed |
+
+Amber needs the supervisor: nothing records a parked barrier yet, so today the map shows running
+and recently-failed agents only.
 
 That dashed arrow is the one worth dwelling on. A barrier constrains only the upstreams it names;
 any other permitted sender wakes the agent directly and leaves the parked flights untouched. In
@@ -153,6 +157,10 @@ entire point of tracking where a number came from.
 ## Retention
 
 History is kept for **90 days**, in `.layover/history`, as one JSON Lines file per UTC day.
+
+Retention is applied when `layover serve` starts, not on a timer. A process left running for
+months therefore keeps more than ninety days until it is next restarted — the horizon is a floor
+on what is kept, not a ceiling.
 
 Deleting is therefore deleting whole files — no rewriting, no compaction, and no window where
 history is half-pruned because the process died in the middle of it. A window reaching further

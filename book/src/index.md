@@ -15,7 +15,9 @@ Picture an airport grid.
 Each **agent** is an airport. A message is a **Flight**. A chain of flights originating from one
 trigger is an **Itinerary**, and it carries the two things that keep the network sane: **Hops**
 (how many legs remain) and **Fuel** (how much budget remains). The **Tower** is air traffic
-control. When everything needs to stop, you call a **Ground Stop**.
+control. One supervised CLI execution is a **Run**; each agent keeps its own notes in its
+**Hangar** and shares what everyone should know in the **Logbook**. Work an agent sets down to
+pick up later is a **Layover**. When everything needs to stop, you call a **Ground Stop**.
 
 ## How it works
 
@@ -40,15 +42,20 @@ flowchart LR
 
 ## Status
 
-Early. What works today is everything that happens *before* the first process is spawned: loading
-a factory definition, validating it, and composing prompts. Process supervision, the MCP server
-and the HTTP API are specified but not built.
+Early. Everything up to the moment a process would be spawned works: a factory loads, validates
+and composes its prompts, and `layover serve` puts a dashboard on it — route map, run history,
+cost and the Reserve, help requests, learnings and each agent's report.
 
-`layover validate` is useful right now, and the [reference factory](./reference-factory.md) is
-worth reading even if you never run it.
+**Nothing spawns a process yet.** There is no `layover run`, and no MCP server for agents to talk
+to, so a factory is something you can define, inspect and cost rather than something that runs.
+A trigger from the dashboard is queued durably and waits.
+
+The [README](https://github.com/KotkaZ/layover-project#what-works-today) carries the built and
+not-built list, kept in one place so the two cannot disagree.
 
 ## Where to start
 
 - [Install](./install.md)
-- [Your first factory](./first-factory.md)
+- [Your first factory](./first-factory.md) — three agents, and the commands that work today
+- [The dashboard](./dashboard.md) — `layover serve`, the most useful thing here right now
 - [The reference factory](./reference-factory.md) — the shape v0.1 is sized against

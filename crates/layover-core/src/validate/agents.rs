@@ -58,6 +58,23 @@ pub(super) fn check_reserve_window_is_usable(config: &Config, found: &mut Vec<Di
     }
 }
 
+/// The Reserve cap must be unlimited on purpose, not by accident.
+///
+/// [`ReserveConfig::is_unlimited`] is `!(finite && > 0.0)`, so `0` — the documented sentinel —
+/// disables the cap, and so do `-1`, `nan` and `inf`. Only one of those is a decision. The others
+/// are a typo that removes the factory's outermost spending rail while the configuration still
+/// reads as though it has one, which is the worst way for a rail to fail.
+pub(super) fn check_reserve_cap_is_deliberate(config: &Config, found: &mut Vec<Diagnostic>) {
+    let cap = config.reserve.fuel_usd;
+
+    if cap != 0.0 && !(cap.is_finite() && cap > 0.0) {
+        found.push(Diagnostic::error(format!(
+            "`[reserve] fuel_usd` is {cap}, which disables the Reserve entirely. Set a positive \
+             ceiling, or write `0` if unlimited is what you meant"
+        )));
+    }
+}
+
 /// Fuel must be a usable positive number.
 ///
 /// `Itinerary::fuel_exhausted` is `spent >= budget`, so a budget of zero is exhausted before the
@@ -230,5 +247,69 @@ mod tests {
         );
 
         assert!(warnings(&config).is_empty(), "{:?}", warnings(&config));
+    }
+}
+
+#[cfg(test)]
+mod reserve_cap_tests {
+    use crate::config::Config;
+
+    fn config_with(cap: &str) -> String {
+        format!(
+            r#"
+[layover]
+work_dir = "work"
+
+[defaults]
+runner = "claude"
+
+[reserve]
+fuel_usd = {cap}
+
+[runners.claude]
+command = ["claude", "-p"]
+
+[agents.analyst]
+prompt = "analyse"
+entry = true
+"#
+        )
+    }
+
+    #[test]
+    fn zero_is_the_documented_way_to_say_unlimited() {
+        let config: Config = toml::from_str(&config_with("0")).expect("parses");
+        assert!(
+            crate::validate::validate(&config)
+                .iter()
+                .all(|d| d.severity != crate::validate::Severity::Error),
+            "0 is the sentinel and must stay accepted"
+        );
+    }
+
+    #[test]
+    fn a_negative_cap_is_refused_rather_than_silently_unlimited() {
+        // `is_unlimited` is `!(finite && > 0)`, so this disables the Reserve. A factory whose
+        // outermost spending rail is off because of a stray minus sign should not start.
+        let config: Config = toml::from_str(&config_with("-1.0")).expect("parses");
+        let errors: Vec<_> = crate::validate::validate(&config)
+            .iter()
+            .map(|d| d.message.clone())
+            .collect();
+
+        assert!(
+            errors.iter().any(|e| e.contains("disables the Reserve")),
+            "{errors:?}"
+        );
+    }
+
+    #[test]
+    fn a_nan_cap_is_refused() {
+        let config: Config = toml::from_str(&config_with("nan")).expect("parses");
+        assert!(
+            crate::validate::validate(&config)
+                .iter()
+                .any(|d| d.message.contains("disables the Reserve"))
+        );
     }
 }

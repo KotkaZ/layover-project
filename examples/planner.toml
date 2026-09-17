@@ -21,16 +21,19 @@ max_runs    = 64
 timeout_sec = 900
 
 # ── How to invoke each supported CLI ───────────────────────────────
+# The composed instructions go to the process on **stdin**, never on the command line: Windows
+# caps one at 32,767 characters and real prompts run to tens of kilobytes. A `{prompt}` placeholder
+# would be a *path* to that text, for CLIs that take a file — none of these three do.
 [runners.claude]
-command = ["claude", "-p", "{prompt}", "--output-format", "stream-json"]
+command = ["claude", "-p", "--output-format", "stream-json"]
 mcp     = { flag = "--mcp-config", format = "claude_json" }
 
 [runners.copilot]
-command = ["copilot", "-p", "{prompt}", "--allow-all-tools"]
+command = ["copilot", "--allow-all-tools"]
 mcp     = { flag = "--mcp-config", format = "claude_json" }
 
 [runners.codex]
-command = ["codex", "exec", "{prompt}"]
+command = ["codex", "exec", "-"]
 mcp     = { flag = "-c", format = "codex_toml" }
 
 # ── Agents ─────────────────────────────────────────────────────────

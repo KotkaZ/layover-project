@@ -2,10 +2,15 @@
 
 **A local-first framework for running a lights-out agent factory.**
 
-> **Status: early implementation.** The domain core, the generated HTTP surface and the CLI are
-> built and tested; nothing spawns a process yet. Documentation:
-> [kotkaz.github.io/layover-project](https://kotkaz.github.io/layover-project/) · design:
-> [`docs/architecture.md`](docs/architecture.md).
+> **Status: early implementation.** Everything up to the moment a process would be spawned is
+> built and tested — a factory loads, validates, composes its prompts, and the dashboard serves
+> its route map, run history, costs, help requests, learnings and reports. **Nothing spawns a
+> process yet**, so a factory is something you can define, inspect and cost, not yet something
+> that runs. Detail in [what works today](#what-works-today).
+>
+> Documentation: [kotkaz.github.io/layover-project](https://kotkaz.github.io/layover-project/) ·
+> design: [`docs/architecture.md`](docs/architecture.md) · reasoning and open questions:
+> [`docs/decisions.md`](docs/decisions.md).
 
 Layover does not call LLMs. It is a *supervisor*: it spawns headless agent CLIs, gives them a way
 to talk to one another, persists what they learn, and stops them from running away.
@@ -27,10 +32,11 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/KotkaZ/layover-pro
 
 # ...or, since you probably already have Node for the agent CLIs
 npm i -g https://github.com/KotkaZ/layover-project/releases/latest/download/layover-cli-npm-package.tar.gz
-
-# ...or with Cargo, if you have it
-cargo install layover-cli
 ```
+
+> **Not `cargo install layover`.** That is an unrelated SSH tunnelling crate whose binary is also
+> called `layover`. Layover is not on crates.io yet; use an installer above or
+> `cargo install --path crates/layover-cli` from a clone.
 
 Other options — direct download, building from source — are in
 [the install guide](https://kotkaz.github.io/layover-project/install.html).
@@ -48,7 +54,9 @@ Picture an airport grid.
 Each **agent** is an airport. A message is a **Flight**. A chain of flights originating from one
 trigger is an **Itinerary**, and it carries the two things that keep the network sane: **Hops**
 (how many legs remain) and **Fuel** (how much budget remains). The **Tower** is air traffic
-control. When everything needs to stop, you call a **Ground Stop**.
+control. One supervised CLI execution is a **Run**; each agent keeps its own notes in its
+**Hangar** and shares what everyone should know in the **Logbook**. Work an agent sets down to
+pick up later is a **Layover**. When everything needs to stop, you call a **Ground Stop**.
 
 ## How it works
 
@@ -80,12 +88,18 @@ flowchart LR
 ## Scope
 
 v0.1 targets Claude Code, GitHub Copilot CLI and OpenAI Codex CLI, on a single machine.
-See [`docs/roadmap.md`](docs/roadmap.md) for what is in and out.
+See [`docs/decisions.md`](docs/decisions.md) for the reasoning, what is still open, and what is
+explicitly out of scope.
+
+## Examples
+
+Four factories, smallest first — start at [`examples/`](examples/README.md). `planner.toml` is
+three agents in one screen; `workitem-factory/` is the scenario v0.1 is sized against.
 
 ## The reference factory
 
-[`examples/workitem-factory/`](examples/workitem-factory/README.md) is the scenario v0.1 is sized
-against, and the best place to start reading:
+[`examples/workitem-factory/`](examples/workitem-factory/README.md) is the largest of them, and
+the one worth reading once the format is familiar:
 
 ```mermaid
 flowchart LR
@@ -95,16 +109,21 @@ flowchart LR
     analyst -->|work item| developer
     developer --> tester & reviewer --> joinB{{join = all}} --> developer
     developer -->|both approved| publisher
+    publisher -.->|books a Layover| later[["due later"]] -.-> follower
+    clock2([clock · 45m]) --> follower --> developer
 
     classDef jn fill:#f2e9fd,stroke:#7a44b0,color:#2a1240
+    classDef lay fill:#e8f6ee,stroke:#2f7d4f,color:#0f2e1c
     class joinA,joinB jn
+    class later lay
 ```
 
 A request is investigated and backed with telemetry, turned into a work item, implemented, then
 tested and reviewed in a loop that turns until both agents approve — after which a pull request is
-opened. A second, scheduled pipeline reviews open pull requests hourly. It exercises concurrent
-fan-out, two rendezvous joins, a loop of unknown length, conditional prompts, and the hop
-arithmetic that makes the loop survivable.
+opened. A second, scheduled pipeline reviews open pull requests hourly; a third picks up work the
+publisher set down, so a chain can wait days for review comments without holding a process open.
+It exercises concurrent fan-out, two rendezvous joins, a loop of unknown length, conditional
+prompts, and the hop arithmetic that makes the loop survivable.
 
 ## Building
 
@@ -119,10 +138,22 @@ test and doc build, with warnings denied. CI runs the same command, unchanged.
 |---|---|
 | `layover-core` | Config, agents, routes, pipelines, prompts, the route graph, validation, itinerary accounting, barriers |
 | `layover-http` | The HTTP surface, **generated** from [`api/openapi.yaml`](api/openapi.yaml) |
+| `layover-store` | On-disk history and journal: day-segmented JSON Lines, 90-day retention |
+| `layover-dashboard` | The monitoring page and the API implementation behind it |
 | `layover-cli` | The `layover` binary |
 
-Process supervision, the MCP server and the UI are not built yet; they are blocked on open
-questions in [`docs/roadmap.md`](docs/roadmap.md).
+## What works today
+
+| Built | Not built |
+|---|---|
+| `validate`, `explain`, `prompt`, `graph` | `layover run` — the Tower, and anything that spawns a process |
+| `serve`: the dashboard and the read endpoints behind it | The MCP server agents would talk to |
+| Run history, costs, the Reserve, help requests, learnings, reports | Live run streaming and Ground Stop, which answer `501` |
+| `POST /flights`, which **queues** a trigger durably | Anything that would dispatch that queue |
+| `autostart`, which registers `layover serve` at login | |
+
+The missing half is blocked on the run-bootstrap questions in
+[`docs/decisions.md`](docs/decisions.md). Do not guess at them.
 
 ## This repository is itself agentic-first
 

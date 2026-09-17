@@ -581,6 +581,22 @@ components:
           type: boolean
           description: Value used when the trigger does not set the flag.
 
+    FlagValue:
+      type: object
+      description: >
+        A flag resolved to the value one run will see. Distinct from `Flag`, which declares what
+        a pipeline accepts: a declaration carries a default, and reporting that default back as
+        though it were the operator's choice would hide the difference between a flag left alone
+        and a flag deliberately set to the same value.
+      required: [name, value]
+      properties:
+        name:
+          type: string
+          description: The name a prompt tests with `@include(name)`.
+        value:
+          type: boolean
+          description: The value this run will see.
+
     Workspace:
       type: string
       description: |
@@ -1043,7 +1059,7 @@ components:
           type: array
           description: The flags set for this run.
           items:
-            $ref: "#/components/schemas/Flag"
+            $ref: "#/components/schemas/FlagValue"
         queued_at:
           type: string
           format: date-time

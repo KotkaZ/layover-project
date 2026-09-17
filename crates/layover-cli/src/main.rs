@@ -134,3 +134,34 @@ fn main() -> ExitCode {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory;
+    use layover_core::Autostart;
+
+    /// The autostart entry invokes a subcommand by name, from a crate that cannot see this
+    /// parser. Nothing else connects the two, so a rename here leaves a generated service that
+    /// fails at every logon, reporting only to a Windows event log nobody reads.
+    ///
+    /// This asserts the actual property that matters: the command we tell the operating system to
+    /// run is a command this binary accepts.
+    #[test]
+    fn the_autostart_command_is_one_the_cli_accepts() {
+        let parsed = Cli::try_parse_from(["layover", Autostart::COMMAND, "--config", "f.toml"]);
+
+        assert!(
+            parsed.is_ok(),
+            "`layover {}` is what every generated autostart entry runs, and this binary rejects \
+             it: {}",
+            Autostart::COMMAND,
+            parsed.unwrap_err()
+        );
+    }
+
+    #[test]
+    fn the_parser_itself_is_valid() {
+        Cli::command().debug_assert();
+    }
+}

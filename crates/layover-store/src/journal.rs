@@ -20,10 +20,11 @@ use jiff::Timestamp;
 use jiff::tz::TimeZone;
 use layover_core::agent::AgentName;
 use layover_core::cost::Span;
-use layover_core::flight::{Flight, FlightId};
+use layover_core::flight::FlightId;
 use layover_core::help::{Blocker, HelpRequest};
 use layover_core::layover::{Layover, LayoverId, Standing};
 use layover_core::learning::{Learning, Learnings};
+use layover_core::queue::Queued;
 use layover_core::report::Report;
 
 use crate::history::StoreError;
@@ -341,9 +342,9 @@ impl Journal {
     /// # Errors
     ///
     /// Returns [`StoreError::Io`] if the queue cannot be read back or written.
-    pub fn queue(&self, flight: Flight) -> Result<(), StoreError> {
+    pub fn queue(&self, queued: Queued) -> Result<(), StoreError> {
         let mut pending = self.pending()?;
-        pending.push(flight);
+        pending.push(queued);
         crate::segment::write_document(&self.pending_path(), &pending)
     }
 
@@ -352,7 +353,7 @@ impl Journal {
     /// # Errors
     ///
     /// Returns [`StoreError::Io`] if the queue cannot be read.
-    pub fn pending(&self) -> Result<Vec<Flight>, StoreError> {
+    pub fn pending(&self) -> Result<Vec<Queued>, StoreError> {
         crate::segment::read_document(&self.pending_path())
     }
 
@@ -366,9 +367,9 @@ impl Journal {
     /// Returns [`StoreError::Io`] if the queue cannot be read or written.
     pub fn unqueue(&self, id: &FlightId) -> Result<bool, StoreError> {
         let pending = self.pending()?;
-        let kept: Vec<Flight> = pending
+        let kept: Vec<Queued> = pending
             .into_iter()
-            .filter(|flight| flight.id != *id)
+            .filter(|queued| queued.flight.id != *id)
             .collect();
 
         let removed = kept.len() != self.pending()?.len();

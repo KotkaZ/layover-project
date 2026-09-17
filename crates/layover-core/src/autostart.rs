@@ -1,8 +1,19 @@
-//! Starting the Tower when the computer starts.
+//! Starting Layover when the computer starts.
 //!
 //! A lights-out factory that stops at every reboot is not lights-out. This module generates the
 //! platform's own autostart artefact — a Scheduled Task on Windows, a launchd agent on macOS, a
 //! systemd user unit on Linux — rather than inventing a daemon of its own.
+//!
+//! # What it starts
+//!
+//! [`Autostart::COMMAND`] — today, `serve`. Not `run`: the Tower does not exist, and an autostart
+//! entry that invokes a subcommand the binary does not have fails at every logon, reporting
+//! nothing anybody reads. The generated entry therefore starts the thing that *does* exist and is
+//! worth having at login, which is the dashboard.
+//!
+//! When the Tower lands this becomes `run`, and
+//! `layover-cli`'s `the_autostart_command_is_one_the_cli_accepts` is what stops it from becoming
+//! a command that does not.
 //!
 //! Generating rather than installing is deliberate for the part that can be: the text is
 //! inspectable, diffable and testable on any platform, so what gets written is decided by code
@@ -94,6 +105,12 @@ pub struct Autostart {
 }
 
 impl Autostart {
+    /// The subcommand every generated artefact invokes.
+    ///
+    /// Exposed so the CLI can assert its own parser accepts it. See the module documentation for
+    /// why this is `serve` rather than `run`.
+    pub const COMMAND: &'static str = "serve";
+
     /// Describes an autostart entry.
     #[must_use]
     pub fn new(binary: impl Into<PathBuf>, config: impl Into<PathBuf>) -> Self {
@@ -123,11 +140,12 @@ impl Autostart {
 
     /// A Scheduled Task registered at logon.
     ///
-    /// `RunLevel` is `LeastPrivilege` on purpose: the Tower must run as the logged-in user, with
+    /// `RunLevel` is `LeastPrivilege` on purpose: Layover must run as the logged-in user, with
     /// that user's credentials and git identity, and nothing it does wants administrator rights.
     fn scheduled_task(&self) -> String {
         let binary = xml_escape(&self.binary());
         let config = xml_escape(&self.config());
+        let command = Self::COMMAND;
         let work_dir = xml_escape(
             &self
                 .config
@@ -141,7 +159,7 @@ impl Autostart {
             r#"<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
-    <Description>Layover — runs the agent factory defined in {config}.</Description>
+    <Description>Layover — serves the dashboard for the factory defined in {config}.</Description>
     <URI>\Layover</URI>
   </RegistrationInfo>
   <Triggers>
@@ -170,7 +188,7 @@ impl Autostart {
   <Actions Context="Author">
     <Exec>
       <Command>{binary}</Command>
-      <Arguments>run --config "{config}"</Arguments>
+      <Arguments>{command} --config "{config}"</Arguments>
       <WorkingDirectory>{work_dir}</WorkingDirectory>
     </Exec>
   </Actions>
@@ -183,6 +201,7 @@ impl Autostart {
     fn launch_agent(&self) -> String {
         let binary = xml_escape(&self.binary());
         let config = xml_escape(&self.config());
+        let command = Self::COMMAND;
 
         format!(
             r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -194,7 +213,7 @@ impl Autostart {
   <key>ProgramArguments</key>
   <array>
     <string>{binary}</string>
-    <string>run</string>
+    <string>{command}</string>
     <string>--config</string>
     <string>{config}</string>
   </array>
@@ -220,20 +239,21 @@ impl Autostart {
     fn systemd_unit(&self) -> String {
         format!(
             "[Unit]\n\
-             Description=Layover — runs the agent factory defined in {config}\n\
+             Description=Layover — serves the dashboard for the factory defined in {config}\n\
              After=network-online.target\n\
              Wants=network-online.target\n\
              \n\
              [Service]\n\
              Type=simple\n\
-             ExecStart={binary} run --config {config}\n\
+             ExecStart={binary} {command} --config {config}\n\
              Restart=on-failure\n\
              RestartSec=60\n\
              \n\
              [Install]\n\
              WantedBy=default.target\n",
             binary = self.binary(),
-            config = self.config()
+            config = self.config(),
+            command = Self::COMMAND
         )
     }
 }
@@ -301,7 +321,10 @@ mod tests {
         let unit = Autostart::new("/usr/local/bin/layover", "/home/ada/factory/layover.toml")
             .render(Platform::Linux);
 
-        assert!(unit.contains("ExecStart=/usr/local/bin/layover run --config"));
+        assert!(unit.contains(&format!(
+            "ExecStart=/usr/local/bin/layover {} --config",
+            Autostart::COMMAND
+        )));
         assert!(
             unit.contains("WantedBy=default.target"),
             "a user unit starts with the session that owns the credentials"

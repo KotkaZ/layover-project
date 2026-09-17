@@ -7,7 +7,7 @@ describe, so that a change and its rationale land in the same commit.
 |---|---|
 | [Architecture](https://github.com/KotkaZ/layover-project/blob/main/docs/architecture.md) | The system design, the locked decisions, and a log of *why* each one was taken. |
 | [Routing](https://github.com/KotkaZ/layover-project/blob/main/docs/routing.md) | Route map semantics, fan-out, rendezvous joins, failure paths. |
-| [Roadmap](https://github.com/KotkaZ/layover-project/blob/main/docs/roadmap.md) | What v0.1 is, and the open questions nobody should guess at. |
+| [Decisions](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md) | Why each choice was made, and the open questions nobody should guess at. |
 | [Risks](https://github.com/KotkaZ/layover-project/blob/main/docs/risks.md) | Known hazards and what we intend to do about them. |
 | [AGENTS.md](https://github.com/KotkaZ/layover-project/blob/main/AGENTS.md) | The contributor contract, for humans and agents alike. |
 

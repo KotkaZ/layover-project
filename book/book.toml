@@ -14,6 +14,9 @@ command = "mdbook-mermaid"
 [output.html]
 default-theme = "ayu"
 preferred-dark-theme = "ayu"
+# Without this, mdBook writes `<base href="/">` into 404.html, so every asset on it resolves at
+# the domain root rather than under the project path — an unstyled, unnavigable 404.
+site-url = "/layover-project/"
 git-repository-url = "https://github.com/KotkaZ/layover-project"
 edit-url-template = "https://github.com/KotkaZ/layover-project/edit/main/book/{path}"
 additional-js = ["mermaid.min.js", "mermaid-init.js"]

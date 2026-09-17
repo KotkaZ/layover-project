@@ -46,6 +46,27 @@ impl Factory {
         fs::write(path, existing).expect("writes history");
     }
 
+    /// Writes a run `hours_ago`, into the segment for the day it actually happened.
+    ///
+    /// History is stored one file per UTC day and read by picking the files a span covers, so a
+    /// run's timestamp and the file it lives in have to agree or it is simply not found.
+    fn write_run_ago(&self, run: &str, hours_ago: i64, usd: f64) {
+        let at = jiff::Timestamp::now()
+            .checked_sub(jiff::SignedDuration::from_hours(hours_ago))
+            .expect("in range");
+        let day = at.to_string().chars().take(10).collect::<String>();
+
+        let path = self.0.join("history").join(format!("runs-{day}.jsonl"));
+        let line = format!(
+            r#"{{"run":"{run}","itinerary":"itn_r","agent":"analyst","outcome":"succeeded","started_at":"{at}","finished_at":"{at}","usd":{usd},"source":"reported"}}"#
+        );
+
+        let mut existing = fs::read_to_string(&path).unwrap_or_default();
+        existing.push_str(&line);
+        existing.push('\n');
+        fs::write(path, existing).expect("writes history");
+    }
+
     fn router(&self) -> Router {
         router(Dashboard::new(DashboardState {
             config_path: self.0.join("layover.toml"),
@@ -84,6 +105,9 @@ prompt = "develop"
 
 [pipelines.triage]
 entry = "analyst"
+
+[pipelines.triage.flags]
+deep = { default = false, description = "Investigate before writing anything." }
 
 [[routes]]
 from = "analyst"
@@ -425,6 +449,38 @@ async fn a_queued_trigger_survives_a_restart() {
 }
 
 #[tokio::test]
+async fn a_queued_trigger_keeps_the_flags_and_pipeline_it_was_asked_for() {
+    // The flags are the whole point of the trigger dialog, and they are consumed at prompt
+    // composition time — which, for queued work, has not happened yet and may be after a restart.
+    // Accepting them and storing only the flight made the dialog report success while the run it
+    // booked would have been composed as though the operator had set nothing.
+    let factory = Factory::new("trigger-flags-kept");
+
+    let (status, _) = send(
+        factory.router(),
+        r#"{"pipeline":"triage","body":"work item 42","flags":{"deep":true}}"#,
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+
+    let (_, queue) = call(factory.router(), "/flights").await;
+    let queued = &json(&queue)["pending"][0];
+
+    assert_eq!(
+        queued["pipeline"], "triage",
+        "a queued flight must remember how it was triggered: {queue}"
+    );
+
+    let flags = queued["flags"].as_array().expect("flags are reported");
+    let deep = flags
+        .iter()
+        .find(|flag| flag["name"] == "deep")
+        .unwrap_or_else(|| panic!("`deep` is missing from {queue}"));
+
+    assert_eq!(deep["value"], true, "the operator set this: {queue}");
+}
+
+#[tokio::test]
 async fn a_flag_the_pipeline_does_not_declare_is_refused() {
     // Silently dropping it would let a typo change nothing while appearing to work, which is the
     // same failure the per-entry-point flag check exists to prevent at load time.
@@ -474,4 +530,56 @@ async fn a_run_with_no_report_says_so_rather_than_failing_oddly() {
 
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert!(json(&body)["detail"].as_str().unwrap().contains("run_nope"));
+}
+
+#[tokio::test]
+async fn the_reserve_is_metered_over_its_own_window_not_the_one_being_browsed() {
+    // The Reserve caps spending per rolling window; the cost page shows whatever period the
+    // operator picked. Computing both from one ledger compared thirty days of spend against a
+    // twenty-four hour cap, so the rail reported itself exhausted on money it was never meant to
+    // count — and a rail that reports a number which is not true is not a rail.
+    let factory = Factory::new("reserve-window");
+    factory.write_config(
+        r#"
+[layover]
+work_dir = "work"
+
+[defaults]
+runner = "claude"
+
+[reserve]
+fuel_usd = 10.0
+window_hours = 24
+
+[runners.claude]
+command = ["claude", "-p"]
+
+[agents.analyst]
+prompt = "analyse"
+entry = true
+"#,
+    );
+
+    factory.write_run_ago("run_recent", 2, 3.0);
+    factory.write_run_ago("run_old", 72, 50.0);
+
+    let (_, body) = call(factory.router(), "/costs?window=last_30d").await;
+    let report = json(&body);
+
+    assert_eq!(
+        report["total"]["usd"], 53.0,
+        "the browsing window still shows everything in the last thirty days: {body}"
+    );
+    assert_eq!(
+        report["reserve"]["spent_usd"], 3.0,
+        "only the last 24 hours count against a 24-hour cap: {body}"
+    );
+    assert_eq!(
+        report["reserve"]["remaining_usd"], 7.0,
+        "$10 cap less the $3 spent inside the window: {body}"
+    );
+    assert_eq!(
+        report["reserve"]["exhausted"], false,
+        "$53 over thirty days must not exhaust a cap that only meters one day: {body}"
+    );
 }

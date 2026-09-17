@@ -17,7 +17,7 @@
 //!
 //! Resolution produces the agent's *standing instructions* and nothing else. How those combine
 //! with the incoming flight body and the agent's `memory.md` is a run-bootstrap question that is
-//! still open — see `docs/roadmap.md`. Do not add that here without settling it first.
+//! still open — see `docs/decisions.md`. Do not add that here without settling it first.
 
 use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
