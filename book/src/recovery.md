@@ -1,12 +1,10 @@
 # Recovery and steering
 
-Two problems that turned out to be one.
+A run can stop before it finishes — the machine restarts, or Layover is shut down while a child
+process is still working. And a run going the wrong way sometimes needs a human to redirect it.
 
-A run dies when the machine restarts. A human watching a run go the wrong way wants to redirect it.
-Both look like they need a process kept alive — resume the conversation, pipe input into the child
-— and Layover does neither.
-
-**Instead it starts a new run and hands it what the old one had.**
+Both are handled the same way: **Layover starts a new run and hands it what the old one had.**
+Nothing is resumed, and no process is kept alive to be talked to.
 
 ```mermaid
 flowchart LR
@@ -18,10 +16,8 @@ flowchart LR
     class h jn
 ```
 
-Nothing is resumed. No session is held open. Every run is still a clean slate *process* — which
-keeps the most opinionated decision in the project intact and keeps resident agents, and the
-reentrancy hazard they bring, out of scope. What changes is only how much context a new run
-**opens** with.
+Every run is therefore still a clean slate *process*, exactly as an ordinary one is. What a
+handover changes is only how much context the new run **opens** with.
 
 ## What a handover carries
 
