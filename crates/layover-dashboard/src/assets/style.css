@@ -204,3 +204,27 @@ h2.spaced { margin-top: 30px; }
 .rail.trigger { border-color: var(--accent); color: var(--accent); }
 .rail.hops { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .rail.fuel { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+
+/* Trigger and report windows. */
+dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--ink); padding: 0; max-width: 680px; width: 92vw; box-shadow: 0 24px 60px rgba(0,0,0,0.25); }
+dialog::backdrop { background: rgba(2, 6, 23, 0.45); }
+dialog form { padding: 22px 24px 18px; }
+dialog h2 { margin: 0 0 4px; font-size: 17px; text-transform: none; letter-spacing: -0.01em; color: var(--ink); }
+.field { display: block; margin: 16px 0; font-size: 13px; color: var(--muted); }
+.field select, .field textarea { display: block; width: 100%; margin-top: 6px; font: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); color: var(--ink); }
+.field textarea { resize: vertical; min-height: 96px; font-family: inherit; }
+fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 16px 0; }
+legend { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; padding: 0 6px; }
+.flag { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0; }
+.flag input { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--accent); }
+.flag .n { font-size: 13px; font-weight: 600; }
+.flag .d { font-size: 12px; color: var(--muted); }
+dialog menu { display: flex; justify-content: flex-end; gap: 10px; padding: 0; margin: 18px 0 0; }
+dialog button { font: inherit; font-size: 13px; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+dialog button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+#trigger-open { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; cursor: pointer; margin-left: auto; }
+#report-body { white-space: pre-wrap; font: inherit; font-size: 13px; line-height: 1.6; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; max-height: 48vh; overflow: auto; }
+#report-artifacts { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+#report-artifacts code { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; }
+tr.readable { cursor: pointer; }
+tr.readable:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); }

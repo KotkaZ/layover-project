@@ -20,9 +20,11 @@ use jiff::Timestamp;
 use jiff::tz::TimeZone;
 use layover_core::agent::AgentName;
 use layover_core::cost::Span;
+use layover_core::flight::{Flight, FlightId};
 use layover_core::help::{Blocker, HelpRequest};
 use layover_core::layover::{Layover, LayoverId, Standing};
 use layover_core::learning::{Learning, Learnings};
+use layover_core::report::Report;
 
 use crate::history::StoreError;
 
@@ -145,7 +147,9 @@ impl Journal {
     ///
     /// Returns [`StoreError::Io`] if the directory cannot be listed or a file cannot be removed.
     pub fn prune(&self, horizon: Timestamp) -> Result<usize, StoreError> {
-        crate::segment::prune_segments(&self.root, "help", horizon)
+        let help = crate::segment::prune_segments(&self.root, "help", horizon)?;
+        let reports = crate::segment::prune_segments(&self.root, "reports", horizon)?;
+        Ok(help + reports)
     }
 
     /// Reads the learnings.
@@ -283,5 +287,99 @@ impl Journal {
     /// Where the layovers live.
     fn layovers_path(&self) -> PathBuf {
         self.root.join("layovers.jsonl")
+    }
+}
+
+impl Journal {
+    /// Files an agent's report on its own run.
+    ///
+    /// Segmented by day like help requests, because a report is an event: it describes one run at
+    /// one moment and never changes afterwards.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Io`] if it cannot be written, or [`StoreError::Serialise`] if it
+    /// cannot be encoded.
+    pub fn file(&self, report: &Report) -> Result<(), StoreError> {
+        let path = crate::segment::segment_for(&self.root, "reports", report.at);
+        crate::segment::append_line(&path, &serde_json::to_string(report)?)
+    }
+
+    /// Reads the reports written inside `span`, most recent first.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Io`] if a segment exists but cannot be read.
+    pub fn reports(&self, span: &Span) -> Result<Vec<Report>, StoreError> {
+        let mut found: Vec<Report> = crate::segment::read_segments(&self.root, "reports", span)?
+            .into_iter()
+            .filter(|report: &Report| span.contains(report.at))
+            .collect();
+
+        found.sort_by_key(|report| std::cmp::Reverse(report.at));
+        Ok(found)
+    }
+
+    /// The report for one run, if it wrote one.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Io`] if a segment cannot be read.
+    pub fn report_for(&self, span: &Span, run: &str) -> Result<Option<Report>, StoreError> {
+        Ok(self
+            .reports(span)?
+            .into_iter()
+            .find(|report| report.run.as_str() == run))
+    }
+
+    /// Queues a flight a human asked for.
+    ///
+    /// Deliberately not a new concept. A manual trigger is a flight that has not been dispatched
+    /// yet, so it is stored as one; inventing a separate "request" would add a noun to a
+    /// vocabulary that already has more than anybody can hold.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Io`] if the queue cannot be read back or written.
+    pub fn queue(&self, flight: Flight) -> Result<(), StoreError> {
+        let mut pending = self.pending()?;
+        pending.push(flight);
+        crate::segment::write_document(&self.pending_path(), &pending)
+    }
+
+    /// Flights waiting for something to dispatch them, oldest first.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Io`] if the queue cannot be read.
+    pub fn pending(&self) -> Result<Vec<Flight>, StoreError> {
+        crate::segment::read_document(&self.pending_path())
+    }
+
+    /// Removes a queued flight, reporting whether it was there.
+    ///
+    /// The Tower will call this as it picks work up. Until one exists it is how a human cancels
+    /// something they queued by mistake.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Io`] if the queue cannot be read or written.
+    pub fn unqueue(&self, id: &FlightId) -> Result<bool, StoreError> {
+        let pending = self.pending()?;
+        let kept: Vec<Flight> = pending
+            .into_iter()
+            .filter(|flight| flight.id != *id)
+            .collect();
+
+        let removed = kept.len() != self.pending()?.len();
+        if removed {
+            crate::segment::write_document(&self.pending_path(), &kept)?;
+        }
+        Ok(removed)
+    }
+
+    /// Where queued flights live.
+    fn pending_path(&self) -> PathBuf {
+        self.root.join("pending.jsonl")
     }
 }

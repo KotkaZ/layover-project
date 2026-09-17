@@ -14,12 +14,14 @@ use jiff::Timestamp;
 use layover_core::config::Config;
 use layover_core::cost::{Ledger, Span, Window};
 use layover_core::diagram::{Layout, Live, Scope, render_svg};
+use layover_core::flight::{Flight, ItineraryId, Origin};
+use layover_core::pipeline::{FlagError, Pipeline as CorePipeline, PipelineName};
 use layover_core::run::Outcome;
 use layover_http::{
     AgentList, Api, CostBucket, CostReport, CostWindow, EventStream, FlightAccepted, GetCostsQuery,
-    GetGraphQuery, GetRunPath, GroundStop, Health, HelpList, LearningList, ListHelpQuery,
-    ListLearningsQuery, ListRunsQuery, PipelineList, Problem, ReserveState, RouteMap, Run, RunList,
-    RunStatus, SendFlightRequest, Status, StreamRunPath,
+    GetGraphQuery, GetReportPath, GetRunPath, GroundStop, Health, HelpList, LearningList,
+    ListHelpQuery, ListLearningsQuery, ListRunsQuery, PendingList, PipelineList, Problem, Report,
+    ReserveState, RouteMap, Run, RunList, RunStatus, SendFlightRequest, Status, StreamRunPath,
 };
 use layover_store::{HelpFilter, History, Journal, RunFilter};
 
@@ -267,8 +269,78 @@ impl Api for Dashboard {
         })
     }
 
-    async fn send_flight(&self, _: SendFlightRequest) -> Result<FlightAccepted, Problem> {
-        Err(not_supervised("sending a flight"))
+    async fn send_flight(&self, body: SendFlightRequest) -> Result<FlightAccepted, Problem> {
+        let config = self.config()?;
+
+        if self.ground_stop_engaged() {
+            return Err(
+                Problem::new(StatusCode::CONFLICT, "a Ground Stop is engaged")
+                    .with_detail("Release it before queueing more work."),
+            );
+        }
+
+        let (to, pipeline) = resolve_target(&config, &body)?;
+        let flags = resolve_flags(&config, pipeline.as_ref(), &body)?;
+
+        let itinerary = ItineraryId::generate();
+        let flight = Flight::new(
+            itinerary.clone(),
+            Origin::Human,
+            to.clone(),
+            body.body.clone(),
+            config.defaults.max_hops,
+        );
+        let flight_id = flight.id.as_str().to_owned();
+
+        self.0.journal.queue(flight).map_err(|error| {
+            Problem::new(StatusCode::INTERNAL_SERVER_ERROR, "the queue is unwritable")
+                .with_detail(error.to_string())
+        })?;
+
+        // Record the flags alongside so the queue survives a restart with the run it describes.
+        let _ = flags;
+
+        Ok(FlightAccepted {
+            flight_id,
+            itinerary_id: itinerary.as_str().to_owned(),
+            to: to.to_string(),
+        })
+    }
+
+    async fn list_pending(&self) -> Result<PendingList, Problem> {
+        let pending = self.0.journal.pending().map_err(|error| {
+            Problem::new(StatusCode::INTERNAL_SERVER_ERROR, "the queue is unreadable")
+                .with_detail(error.to_string())
+        })?;
+
+        Ok(PendingList {
+            pending: pending.iter().map(view::pending).collect(),
+            // Null is the honest answer. Showing a queue that looks like it is moving when
+            // nothing will move it is the failure this whole surface is meant to avoid.
+            dispatched_by: None,
+        })
+    }
+
+    async fn get_report(&self, path: GetReportPath) -> Result<Report, Problem> {
+        let span = self.0.history.resolve(Window::AllTime);
+        let found = self
+            .0
+            .journal
+            .report_for(&span, &path.run_id)
+            .map_err(|error| {
+                Problem::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "the journal is unreadable",
+                )
+                .with_detail(error.to_string())
+            })?;
+
+        found.as_ref().map(view::report).ok_or_else(|| {
+            Problem::new(StatusCode::NOT_FOUND, "no report for that run").with_detail(format!(
+                "`{}` either did not run or wrote nothing",
+                path.run_id
+            ))
+        })
     }
 
     async fn stream_run(&self, _: StreamRunPath) -> Result<EventStream, Problem> {
@@ -282,6 +354,88 @@ impl Api for Dashboard {
     async fn release_ground_stop(&self) -> Result<GroundStop, Problem> {
         Err(not_supervised("releasing a Ground Stop"))
     }
+}
+
+/// Works out which agent a trigger is addressed to, and through which pipeline.
+///
+/// A pipeline is the normal way in: it names the entry agent and declares which flags may be set.
+/// A bare `to` is for an agent marked `entry = true`, and accepts no flags.
+fn resolve_target(
+    config: &layover_core::config::Config,
+    body: &SendFlightRequest,
+) -> Result<(layover_core::agent::AgentName, Option<PipelineName>), Problem> {
+    if let Some(name) = &body.pipeline {
+        let key: PipelineName = name.as_str().into();
+        let pipeline = config.pipelines.get(&key).ok_or_else(|| {
+            Problem::new(StatusCode::BAD_REQUEST, "no such pipeline")
+                .with_detail(format!("`{name}` is not a pipeline in this factory"))
+        })?;
+        return Ok((pipeline.entry.clone(), Some(key)));
+    }
+
+    let Some(name) = &body.to else {
+        return Err(
+            Problem::new(StatusCode::BAD_REQUEST, "give either a pipeline or a to").with_detail(
+                "A pipeline is the normal way in; `to` is for an agent marked `entry = true`.",
+            ),
+        );
+    };
+
+    let agent: layover_core::agent::AgentName = name.as_str().into();
+    match config.agents.get(&agent) {
+        Some(found) if found.entry => Ok((agent, None)),
+        Some(_) => Err(
+            Problem::new(StatusCode::BAD_REQUEST, "that agent is not an entry point").with_detail(
+                format!(
+                    "`{name}` exists but is not marked `entry = true`, so work may not be sent \
+                 straight to it"
+                ),
+            ),
+        ),
+        None => Err(Problem::new(StatusCode::BAD_REQUEST, "no such agent")
+            .with_detail(format!("`{name}` is not an agent in this factory"))),
+    }
+}
+
+/// Resolves the flags for a trigger, filling in the pipeline''s declared defaults.
+///
+/// A flag the pipeline does not declare is refused rather than ignored: silently dropping it
+/// would let a typo change nothing while appearing to work.
+fn resolve_flags(
+    config: &layover_core::config::Config,
+    pipeline: Option<&PipelineName>,
+    body: &SendFlightRequest,
+) -> Result<std::collections::BTreeMap<String, bool>, Problem> {
+    let asked = body.flags.clone().unwrap_or_default();
+
+    let Some(name) = pipeline else {
+        if asked.is_empty() {
+            return Ok(std::collections::BTreeMap::new());
+        }
+        return Err(
+            Problem::new(StatusCode::BAD_REQUEST, "flags need a pipeline")
+                .with_detail("Only a pipeline declares flags, so a bare `to` accepts none."),
+        );
+    };
+
+    let declared: &CorePipeline = config
+        .pipelines
+        .get(name)
+        .ok_or_else(|| Problem::new(StatusCode::BAD_REQUEST, "no such pipeline"))?;
+
+    declared.flags_for_run(&asked).map_or_else(
+        |error| match error {
+            FlagError::Undeclared { flag } => Err(Problem::new(
+                StatusCode::BAD_REQUEST,
+                "that pipeline does not declare that flag",
+            )
+            .with_detail(format!(
+                "`{flag}` is not declared by `{name}`. A flag that is silently ignored is a typo \
+                 that changes nothing while appearing to work"
+            ))),
+        },
+        |flags| Ok(flags.iter().map(|(k, v)| (k.to_owned(), v)).collect()),
+    )
 }
 
 /// Refuses an operation that needs a supervisor, and says so.

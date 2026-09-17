@@ -4,7 +4,7 @@
 //! regenerates this file and fails if the result differs, so an edit here is reverted
 //! rather than kept. Change the specification instead.
 //!
-//! Source: Layover Tower API v0.7.0
+//! Source: Layover Tower API v0.8.0
 
 #![allow(clippy::too_many_lines)]
 
@@ -338,6 +338,39 @@ pub enum LearningState {
     Rejected,
 }
 
+/// A flight that has been asked for and not yet dispatched.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PendingFlight {
+    /// The prompt the run will be given.
+    pub body: String,
+    /// The flags set for this run.
+    #[serde(default)]
+    pub flags: Option<Vec<Flag>>,
+    /// Identifier of the queued flight.
+    pub flight_id: String,
+    /// The chain it will begin.
+    pub itinerary_id: String,
+    /// The pipeline it was triggered through, when one was named.
+    #[serde(default)]
+    pub pipeline: Option<String>,
+    /// When it was asked for.
+    pub queued_at: String,
+    /// The agent it is addressed to.
+    pub to: String,
+}
+
+/// Work waiting to start.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PendingList {
+    /// What will pick this work up, or null when nothing will. Null is the honest answer
+    /// until the supervisor exists, and the dashboard says so rather than showing a queue
+    /// that looks like it is moving.
+    #[serde(default)]
+    pub dispatched_by: Option<String>,
+    /// Queued flights, oldest first.
+    pub pending: Vec<PendingFlight>,
+}
+
 /// A named entry point into the mesh.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Pipeline {
@@ -385,6 +418,31 @@ pub struct Problem {
     pub status: i32,
     /// A short, human-readable summary of the problem.
     pub title: String,
+}
+
+/// What an agent wrote about its own run.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Report {
+    /// Which agent wrote it.
+    pub agent: String,
+    /// What the run produced or changed — paths, branch names, pull request identifiers.
+    /// Separate from the body so output can be found without reading the prose.
+    #[serde(default)]
+    pub artifacts: Option<Vec<String>>,
+    /// When it was written.
+    pub at: String,
+    /// The report itself, as the agent wrote it.
+    pub body: String,
+    /// One line, for a list. What happened, not what was attempted.
+    pub headline: String,
+    /// The chain it belonged to.
+    pub itinerary_id: String,
+    /// The run this describes.
+    pub run_id: String,
+    /// True when the report was longer than the cap and was cut. Worth knowing: otherwise it
+    /// reads as though the agent simply stopped there.
+    #[serde(default)]
+    pub trimmed: Option<bool>,
 }
 
 /// The factory-wide spend ceiling. Distinct from Fuel, which bounds one itinerary: a
@@ -708,6 +766,13 @@ pub struct GetRunPath {
     pub run_id: String,
 }
 
+/// path parameters for `getReport`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GetReportPath {
+    /// Identifier of the run.
+    pub run_id: String,
+}
+
 /// path parameters for `streamRun`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StreamRunPath {
@@ -742,11 +807,24 @@ pub trait Api: Send + Sync + 'static {
         &self,
         query: GetCostsQuery,
     ) -> impl core::future::Future<Output = Result<CostReport, Problem>> + Send;
+    /// Flights waiting for something to dispatch them.
+    ///
+    /// Work that has been asked for and not yet started. Until the supervisor exists this is
+    /// everything anybody has triggered; afterwards it is the backlog.
+    ///
+    /// `GET /flights`
+    fn list_pending(
+        &self,
+    ) -> impl core::future::Future<Output = Result<PendingList, Problem>> + Send;
     /// Start work by sending the first flight of a new itinerary.
     ///
     /// Give either a `pipeline` or a `to`. A pipeline is the normal way in: it names the entry
     /// agent and declares which flags may be set. A bare `to` sends to an agent marked
     /// `entry = true` and accepts no flags.
+    ///
+    /// **The flight is queued, not run.** Dispatching it needs the supervisor, which is not part
+    /// of this release, so `202` means the work is booked and durable — it will start when there
+    /// is something to start it. `GET /flights` shows what is waiting.
     ///
     /// `POST /flights`
     fn send_flight(
@@ -835,6 +913,17 @@ pub trait Api: Send + Sync + 'static {
         &self,
         path: GetRunPath,
     ) -> impl core::future::Future<Output = Result<Run, Problem>> + Send;
+    /// What the agent wrote about this run.
+    ///
+    /// A transcript is not a report: it contains every approach the agent abandoned, and reading
+    /// one to find out what happened is slower than doing the work again. This is the agent''s own
+    /// account of what it concluded.
+    ///
+    /// `GET /runs/{run_id}/report`
+    fn get_report(
+        &self,
+        path: GetReportPath,
+    ) -> impl core::future::Future<Output = Result<Report, Problem>> + Send;
     /// Live output from a run, as server-sent events.
     ///
     /// `GET /runs/{run_id}/stream`
@@ -852,7 +941,10 @@ pub fn router<A: Api>(api: std::sync::Arc<A>) -> axum::Router {
     axum::Router::new()
         .route("/agents", axum::routing::get(handle_list_agents::<A>))
         .route("/costs", axum::routing::get(handle_get_costs::<A>))
-        .route("/flights", axum::routing::post(handle_send_flight::<A>))
+        .route(
+            "/flights",
+            axum::routing::get(handle_list_pending::<A>).post(handle_send_flight::<A>),
+        )
         .route("/graph", axum::routing::get(handle_get_graph::<A>))
         .route(
             "/ground-stop",
@@ -865,6 +957,10 @@ pub fn router<A: Api>(api: std::sync::Arc<A>) -> axum::Router {
         .route("/pipelines", axum::routing::get(handle_list_pipelines::<A>))
         .route("/runs", axum::routing::get(handle_list_runs::<A>))
         .route("/runs/{run_id}", axum::routing::get(handle_get_run::<A>))
+        .route(
+            "/runs/{run_id}/report",
+            axum::routing::get(handle_get_report::<A>),
+        )
         .route(
             "/runs/{run_id}/stream",
             axum::routing::get(handle_stream_run::<A>),
@@ -886,6 +982,15 @@ async fn handle_get_costs<A: Api>(
     axum::extract::Query(query): axum::extract::Query<GetCostsQuery>,
 ) -> axum::response::Response {
     match api.get_costs(query).await {
+        Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
+        Err(problem) => problem.into_response(),
+    }
+}
+
+async fn handle_list_pending<A: Api>(
+    axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
+) -> axum::response::Response {
+    match api.list_pending().await {
         Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
         Err(problem) => problem.into_response(),
     }
@@ -987,6 +1092,16 @@ async fn handle_get_run<A: Api>(
     }
 }
 
+async fn handle_get_report<A: Api>(
+    axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
+    axum::extract::Path(path): axum::extract::Path<GetReportPath>,
+) -> axum::response::Response {
+    match api.get_report(path).await {
+        Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
+        Err(problem) => problem.into_response(),
+    }
+}
+
 async fn handle_stream_run<A: Api>(
     axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
     axum::extract::Path(path): axum::extract::Path<StreamRunPath>,
@@ -1000,9 +1115,10 @@ async fn handle_stream_run<A: Api>(
 /// Every operation the specification declares, as (method, path, operationId).
 ///
 /// Exposed so tests can assert the router and the specification agree.
-pub const OPERATIONS: [(&str, &str, &str); 13] = [
+pub const OPERATIONS: [(&str, &str, &str); 15] = [
     ("GET", "/agents", "listAgents"),
     ("GET", "/costs", "getCosts"),
+    ("GET", "/flights", "listPending"),
     ("POST", "/flights", "sendFlight"),
     ("GET", "/graph", "getGraph"),
     ("POST", "/ground-stop", "engageGroundStop"),
@@ -1013,5 +1129,6 @@ pub const OPERATIONS: [(&str, &str, &str); 13] = [
     ("GET", "/pipelines", "listPipelines"),
     ("GET", "/runs", "listRuns"),
     ("GET", "/runs/{run_id}", "getRun"),
+    ("GET", "/runs/{run_id}/report", "getReport"),
     ("GET", "/runs/{run_id}/stream", "streamRun"),
 ];

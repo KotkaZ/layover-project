@@ -14,7 +14,7 @@ openapi: 3.2.0
 
 info:
   title: Layover Tower API
-  version: 0.7.0
+  version: 0.8.0
   summary: Control surface for a local-first agent factory.
   description: |
     The UI is purely a client of this API, so this document bounds what the UI can ever do.
@@ -81,6 +81,20 @@ paths:
                 $ref: "#/components/schemas/PipelineList"
 
   /flights:
+    get:
+      operationId: listPending
+      summary: Flights waiting for something to dispatch them.
+      description: |
+        Work that has been asked for and not yet started. Until the supervisor exists this is
+        everything anybody has triggered; afterwards it is the backlog.
+      tags: [work]
+      responses:
+        "200":
+          description: Queued flights, oldest first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PendingList"
     post:
       operationId: sendFlight
       summary: Start work by sending the first flight of a new itinerary.
@@ -88,6 +102,10 @@ paths:
         Give either a `pipeline` or a `to`. A pipeline is the normal way in: it names the entry
         agent and declares which flags may be set. A bare `to` sends to an agent marked
         `entry = true` and accepts no flags.
+
+        **The flight is queued, not run.** Dispatching it needs the supervisor, which is not part
+        of this release, so `202` means the work is booked and durable — it will start when there
+        is something to start it. `GET /flights` shows what is waiting.
       tags: [work]
       requestBody:
         required: true
@@ -98,7 +116,7 @@ paths:
               $ref: "#/components/schemas/SendFlightRequest"
       responses:
         "202":
-          description: The flight was accepted and a run is being started.
+          description: The flight was accepted and queued.
           content:
             application/json:
               schema:
@@ -224,6 +242,36 @@ paths:
                 $ref: "#/components/schemas/Run"
         "404":
           description: No such run.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /runs/{run_id}/report:
+    get:
+      operationId: getReport
+      summary: What the agent wrote about this run.
+      description: |
+        A transcript is not a report: it contains every approach the agent abandoned, and reading
+        one to find out what happened is slower than doing the work again. This is the agent''s own
+        account of what it concluded.
+      tags: [work]
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          description: Identifier of the run.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The report.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+        "404":
+          description: No such run, or it wrote no report.
           content:
             application/json:
               schema:
@@ -970,6 +1018,90 @@ components:
           description: |
             True when the period reaches further back than retention keeps, which makes the
             totals a lower bound rather than a total.
+
+    PendingFlight:
+      type: object
+      description: A flight that has been asked for and not yet dispatched.
+      required: [flight_id, itinerary_id, to, body, queued_at]
+      properties:
+        flight_id:
+          type: string
+          description: Identifier of the queued flight.
+        itinerary_id:
+          type: string
+          description: The chain it will begin.
+        to:
+          type: string
+          description: The agent it is addressed to.
+        pipeline:
+          type: [string, "null"]
+          description: The pipeline it was triggered through, when one was named.
+        body:
+          type: string
+          description: The prompt the run will be given.
+        flags:
+          type: array
+          description: The flags set for this run.
+          items:
+            $ref: "#/components/schemas/Flag"
+        queued_at:
+          type: string
+          format: date-time
+          description: When it was asked for.
+
+    PendingList:
+      type: object
+      description: Work waiting to start.
+      required: [pending, dispatched_by]
+      properties:
+        pending:
+          type: array
+          description: Queued flights, oldest first.
+          items:
+            $ref: "#/components/schemas/PendingFlight"
+        dispatched_by:
+          type: [string, "null"]
+          description: |
+            What will pick this work up, or null when nothing will. Null is the honest answer
+            until the supervisor exists, and the dashboard says so rather than showing a queue
+            that looks like it is moving.
+
+    Report:
+      type: object
+      description: What an agent wrote about its own run.
+      required: [run_id, agent, itinerary_id, headline, body, at]
+      properties:
+        run_id:
+          type: string
+          description: The run this describes.
+        agent:
+          type: string
+          description: Which agent wrote it.
+        itinerary_id:
+          type: string
+          description: The chain it belonged to.
+        headline:
+          type: string
+          description: One line, for a list. What happened, not what was attempted.
+        body:
+          type: string
+          description: The report itself, as the agent wrote it.
+        artifacts:
+          type: array
+          description: |
+            What the run produced or changed — paths, branch names, pull request identifiers.
+            Separate from the body so output can be found without reading the prose.
+          items:
+            type: string
+        trimmed:
+          type: boolean
+          description: |
+            True when the report was longer than the cap and was cut. Worth knowing: otherwise it
+            reads as though the agent simply stopped there.
+        at:
+          type: string
+          format: date-time
+          description: When it was written.
 
     RouteMap:
       type: object

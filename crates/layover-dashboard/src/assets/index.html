@@ -25,8 +25,10 @@
         One diagram per workflow, generated from <code id="config-path">layover.toml</code> each
         time this page loads. Edit the file and reload.
       </p>
+      <button id="trigger-open">Trigger a workflow</button>
       <button id="refresh">Refresh</button>
     </div>
+    <p id="queued" class="caveat" hidden></p>
     <div id="workflows"></div>
     <ul class="legend">
       <li><span class="swatch pipeline"></span>way in</li>
@@ -130,6 +132,43 @@
     <p id="learn-empty" class="empty" hidden></p>
   </section>
 </main>
+
+<dialog id="trigger">
+  <form method="dialog">
+    <h2>Trigger a workflow</h2>
+    <p class="hint" id="trigger-note"></p>
+
+    <label class="field">Workflow
+      <select id="trigger-pipeline"></select>
+    </label>
+
+    <label class="field">Prompt
+      <textarea id="trigger-body" rows="7" placeholder="A work item id, a bug report, or whatever the entry agent should start from."></textarea>
+    </label>
+
+    <fieldset id="trigger-flags">
+      <legend>Flags</legend>
+      <p class="hint" id="trigger-noflags" hidden>This workflow declares no flags.</p>
+    </fieldset>
+
+    <p id="trigger-error" class="caveat" hidden></p>
+
+    <menu>
+      <button value="cancel">Cancel</button>
+      <button id="trigger-send" value="send" class="primary">Queue it</button>
+    </menu>
+  </form>
+</dialog>
+
+<dialog id="report">
+  <form method="dialog">
+    <h2 id="report-headline"></h2>
+    <p class="hint" id="report-meta"></p>
+    <pre id="report-body"></pre>
+    <div id="report-artifacts"></div>
+    <menu><button value="close">Close</button></menu>
+  </form>
+</dialog>
 
 <script src="/app.js"></script>
 </body>

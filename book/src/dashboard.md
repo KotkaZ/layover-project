@@ -15,8 +15,33 @@ History in .layover/history
 Press Ctrl+C to stop.
 ```
 
-It is **read-only**. Nothing here starts, stops or steers work; the operations that would need a
-supervisor answer `501` rather than pretending. A control that silently does nothing is worse
+## Triggering a workflow
+
+**Trigger a workflow** opens a window with the pipeline, a prompt box, and a switch for every flag
+that pipeline declares — each starting from its declared default, so the window shows what would
+happen if you changed nothing. A flag the pipeline does not declare is refused rather than ignored:
+silently dropping it would let a typo change nothing while appearing to work.
+
+**The work is queued, not started.** Dispatching needs the supervisor, which is not part of this
+release, so the flight is persisted and waits. The window says so, and `dispatched_by` is reported
+as `null` rather than a plausible name, so a queue never looks like it is moving when nothing is
+moving it. A Ground Stop refuses the trigger outright — a kill switch that halts running work while
+letting more be booked is not a kill switch.
+
+## Reading what an agent did
+
+Every row on **Runs** opens the report that agent wrote about its own run: a headline, the body,
+and the artifacts it produced.
+
+A report is not a transcript. A transcript contains every approach the agent abandoned, and reading
+one to find out what happened is slower than doing the work again. Asking the agent to state its
+conclusion also makes it decide what its conclusion was.
+
+Reports are capped and trimmed rather than refused — a report is the only account of a run that has
+already cost money — and a trimmed one says so, so you know to look further rather than assuming
+the agent stopped there.
+
+Everything else here is read-only. The operations that genuinely need a running supervisor — streaming a run, engaging a Ground Stop — answer `501` rather than pretending. A control that silently does nothing is worse
 than a control that is not there, because it gets trusted once and then relied upon.
 
 It also needs no Tower at all. History outlives the process that wrote it, so the dashboard

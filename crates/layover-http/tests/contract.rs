@@ -17,11 +17,12 @@ use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt as _;
 use layover_http::{
     Access, Agent, AgentList, Api, Blocker, CostBucket, CostReport, CostSource, CostSummary,
-    CostWindow, EventStream, FlightAccepted, GetCostsQuery, GetGraphQuery, GetRunPath, GroundStop,
-    Health, HelpList, HelpRequest, Impact, Learning, LearningList, LearningState, ListHelpQuery,
-    ListLearningsQuery, ListRunsQuery, OPERATIONS, Pipeline, PipelineList, Problem, ReserveState,
-    RouteMap, Run, RunList, RunStatus, SendFlightRequest, Status, StreamRunPath, TokenUsage,
-    Trigger, TriggerKind, WindowSpan, Workspace, router,
+    CostWindow, EventStream, FlightAccepted, GetCostsQuery, GetGraphQuery, GetReportPath,
+    GetRunPath, GroundStop, Health, HelpList, HelpRequest, Impact, Learning, LearningList,
+    LearningState, ListHelpQuery, ListLearningsQuery, ListRunsQuery, OPERATIONS, PendingFlight,
+    PendingList, Pipeline, PipelineList, Problem, Report, ReserveState, RouteMap, Run, RunList,
+    RunStatus, SendFlightRequest, Status, StreamRunPath, TokenUsage, Trigger, TriggerKind,
+    WindowSpan, Workspace, router,
 };
 use tower::ServiceExt as _;
 
@@ -244,6 +245,40 @@ impl Api for Stub {
         })
     }
 
+    async fn list_pending(&self) -> Result<PendingList, Problem> {
+        Ok(PendingList {
+            pending: vec![PendingFlight {
+                flight_id: "flt_1".to_owned(),
+                itinerary_id: "itn_1".to_owned(),
+                to: "analyst".to_owned(),
+                pipeline: Some("development".to_owned()),
+                body: "work item 1543477".to_owned(),
+                flags: None,
+                queued_at: "2026-09-17T10:00:00Z".to_owned(),
+            }],
+            dispatched_by: None,
+        })
+    }
+
+    async fn get_report(&self, path: GetReportPath) -> Result<Report, Problem> {
+        if path.run_id != "run_1" {
+            return Err(Problem::new(
+                StatusCode::NOT_FOUND,
+                "no report for that run",
+            ));
+        }
+        Ok(Report {
+            run_id: "run_1".to_owned(),
+            agent: "analyst".to_owned(),
+            itinerary_id: "itn_1".to_owned(),
+            headline: "Turned the work item into acceptance criteria".to_owned(),
+            body: "The reported symptom was a timeout; the cause is a retry loop.".to_owned(),
+            artifacts: Some(vec!["workitem-1543477.md".to_owned()]),
+            trimmed: Some(false),
+            at: "2026-09-17T10:00:00Z".to_owned(),
+        })
+    }
+
     async fn engage_ground_stop(&self) -> Result<GroundStop, Problem> {
         Ok(GroundStop {
             engaged: true,
@@ -298,7 +333,7 @@ fn json(body: &str) -> serde_json::Value {
 
 #[test]
 fn every_specified_operation_is_routed() {
-    assert_eq!(OPERATIONS.len(), 13);
+    assert_eq!(OPERATIONS.len(), 15);
 
     for (method, path, operation) in OPERATIONS {
         assert!(path.starts_with('/'), "`{operation}` has an odd path");

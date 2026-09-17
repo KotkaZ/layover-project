@@ -12,8 +12,8 @@ use layover_core::route::Join as CoreJoin;
 use layover_core::run::{Outcome, RunRecord};
 use layover_http::{
     Access, Agent, AgentList, Blocker, CostSource, CostSummary, CostWindow, Flag, HelpRequest,
-    Impact, Join, Learning, LearningState, Pipeline, PipelineList, Route, Run, RunStatus,
-    TokenUsage, Trigger, TriggerKind, WindowSpan, Workspace,
+    Impact, Join, Learning, LearningState, PendingFlight, Pipeline, PipelineList, Report, Route,
+    Run, RunStatus, TokenUsage, Trigger, TriggerKind, WindowSpan, Workspace,
 };
 
 /// Describes the factory's agents and the edges between them.
@@ -279,5 +279,32 @@ pub fn learning_state_from(state: LearningState) -> layover_core::learning::Stat
         LearningState::Confirmed => Core::Confirmed,
         LearningState::Lapsed => Core::Lapsed,
         LearningState::Rejected => Core::Rejected,
+    }
+}
+
+/// Describes a queued flight.
+pub fn pending(flight: &layover_core::flight::Flight) -> PendingFlight {
+    PendingFlight {
+        flight_id: flight.id.as_str().to_owned(),
+        itinerary_id: flight.itinerary.as_str().to_owned(),
+        to: flight.to.to_string(),
+        pipeline: None,
+        body: flight.body.clone(),
+        flags: None,
+        queued_at: flight.sent_at.to_string(),
+    }
+}
+
+/// Describes an agent's report on its own run.
+pub fn report(report: &layover_core::report::Report) -> Report {
+    Report {
+        run_id: report.run.to_string(),
+        agent: report.agent.to_string(),
+        itinerary_id: report.itinerary.as_str().to_owned(),
+        headline: report.headline.clone(),
+        body: report.body.clone(),
+        artifacts: Some(report.artifacts.clone()),
+        trimmed: Some(report.was_trimmed()),
+        at: report.at.to_string(),
     }
 }

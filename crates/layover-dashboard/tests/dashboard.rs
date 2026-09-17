@@ -356,3 +356,122 @@ async fn health_reports_a_ground_stop_that_was_engaged_by_hand() {
     let (_, after) = call(factory.router(), "/health").await;
     assert_eq!(json(&after)["ground_stop"], true);
 }
+
+async fn send(app: Router, payload: &str) -> (StatusCode, String) {
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/flights")
+                .header("content-type", "application/json")
+                .body(Body::from(payload.to_owned()))
+                .expect("request builds"),
+        )
+        .await
+        .expect("router responds");
+
+    let status = response.status();
+    let bytes = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body collects")
+        .to_bytes();
+    (status, String::from_utf8_lossy(&bytes).into_owned())
+}
+
+#[tokio::test]
+async fn a_trigger_is_queued_and_shows_up_as_waiting() {
+    // The dashboard is otherwise read-only. This one control writes, and what it writes is a
+    // *queued* flight: nothing dispatches it, because dispatching needs the supervisor.
+    let factory = Factory::new("trigger");
+
+    let (status, body) = send(
+        factory.router(),
+        r#"{"pipeline":"triage","body":"work item 42"}"#,
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+    assert_eq!(
+        json(&body)["to"],
+        "analyst",
+        "it is addressed to the entry agent"
+    );
+
+    let (_, queue) = call(factory.router(), "/flights").await;
+    let pending = json(&queue)["pending"].as_array().expect("pending").clone();
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0]["body"], "work item 42");
+    assert!(
+        json(&queue)["dispatched_by"].is_null(),
+        "null is the honest answer while nothing will pick it up"
+    );
+}
+
+#[tokio::test]
+async fn a_queued_trigger_survives_a_restart() {
+    // A queue held in memory would be a button that looks like it did something until the next
+    // time the dashboard is started.
+    let factory = Factory::new("trigger-durable");
+    send(
+        factory.router(),
+        r#"{"pipeline":"triage","body":"work item 42"}"#,
+    )
+    .await;
+
+    let (_, queue) = call(factory.router(), "/flights").await;
+
+    assert_eq!(json(&queue)["pending"].as_array().map(Vec::len), Some(1));
+}
+
+#[tokio::test]
+async fn a_flag_the_pipeline_does_not_declare_is_refused() {
+    // Silently dropping it would let a typo change nothing while appearing to work, which is the
+    // same failure the per-entry-point flag check exists to prevent at load time.
+    let factory = Factory::new("trigger-flag");
+
+    let (status, body) = send(
+        factory.router(),
+        r#"{"pipeline":"triage","body":"go","flags":{"nonsense":true}}"#,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        json(&body)["detail"].as_str().unwrap().contains("nonsense"),
+        "{body}"
+    );
+}
+
+#[tokio::test]
+async fn triggering_an_unknown_pipeline_is_refused() {
+    let factory = Factory::new("trigger-ghost");
+
+    let (status, body) = send(factory.router(), r#"{"pipeline":"nope","body":"go"}"#).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(json(&body)["detail"].as_str().unwrap().contains("nope"));
+}
+
+#[tokio::test]
+async fn nothing_is_queued_while_a_ground_stop_is_engaged() {
+    // A kill switch that stops running work but lets more be booked is not a kill switch.
+    let factory = Factory::new("trigger-halted");
+    fs::write(factory.path().join("ground-stop"), "halted").expect("writes");
+
+    let (status, _) = send(factory.router(), r#"{"pipeline":"triage","body":"go"}"#).await;
+
+    assert_eq!(status, StatusCode::CONFLICT);
+    let (_, queue) = call(factory.router(), "/flights").await;
+    assert_eq!(json(&queue)["pending"].as_array().map(Vec::len), Some(0));
+}
+
+#[tokio::test]
+async fn a_run_with_no_report_says_so_rather_than_failing_oddly() {
+    let factory = Factory::new("report-missing");
+
+    let (status, body) = call(factory.router(), "/runs/run_nope/report").await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert!(json(&body)["detail"].as_str().unwrap().contains("run_nope"));
+}

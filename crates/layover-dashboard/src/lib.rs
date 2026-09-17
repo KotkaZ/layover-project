@@ -21,10 +21,12 @@
 //!
 //! # What it deliberately does not do
 //!
-//! Nothing here starts, stops or steers anything. The dashboard is read-only, and the operations
+//! One control writes: a manual trigger queues a flight. What makes that honest is that the thing
+//! it produces is real and durable — the Tower will drain the queue when it exists — and the window
+//! says the work is queued rather than started. Everything else is read-only, and the operations
 //! that need a running supervisor answer [`layover_http::Problem`] with `501` rather than
-//! pretending. A monitoring page that silently does nothing when you press the button is worse
-//! than one with no button.
+//! pretending. A page that silently does nothing when you press the button is worse than one with
+//! no button.
 
 mod api;
 mod assets;

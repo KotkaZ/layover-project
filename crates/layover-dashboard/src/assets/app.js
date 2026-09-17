@@ -189,6 +189,9 @@ async function loadRuns() {
       chain.append(el("code", "", run.itinerary_id));
       row.append(chain);
       if (run.detail) row.title = run.detail;
+      // Every row opens whatever the agent wrote about itself.
+      row.classList.add("readable");
+      row.addEventListener("click", () => openReport(run.run_id));
       body.append(row);
     }
 
@@ -278,6 +281,138 @@ async function loadCost(selected = "last_30d") {
   }
 }
 
+// ── Triggering ───────────────────────────────────────────────────────────────
+//
+// The dashboard is otherwise read-only. This one control writes, and what it writes is a *queued*
+// flight: nothing dispatches it yet, because dispatching needs the supervisor. The window says so
+// rather than presenting a button that appears to start work and does not -- a control trusted
+// once and then relied upon is worse than one that was never offered.
+
+let pipelinesByName = new Map();
+
+async function post(path, payload) {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const value = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(value.detail || value.title || `${response.status}`);
+  return value;
+}
+
+function showFlags(name) {
+  const box = $("#trigger-flags");
+  const pipeline = pipelinesByName.get(name);
+  box.querySelectorAll(".flag").forEach((node) => node.remove());
+
+  const flags = pipeline?.flags ?? [];
+  $("#trigger-noflags").hidden = flags.length > 0;
+
+  for (const flag of flags) {
+    const row = el("label", "flag");
+    const box2 = document.createElement("input");
+    box2.type = "checkbox";
+    box2.dataset.flag = flag.name;
+    // Start from the declared default, so the window shows what would happen if you changed
+    // nothing rather than a set of switches that all read false.
+    box2.checked = flag.default;
+
+    const text = el("span");
+    text.append(el("span", "n", flag.name));
+    if (flag.description) text.append(document.createElement("br"), el("span", "d", flag.description));
+
+    row.append(box2, text);
+    box.append(row);
+  }
+}
+
+async function openTrigger() {
+  const select = $("#trigger-pipeline");
+  select.replaceChildren(
+    ...[...pipelinesByName.values()].map((pipeline) => {
+      const option = el("option", "", pipeline.name);
+      option.value = pipeline.name;
+      return option;
+    }),
+  );
+
+  $("#trigger-error").hidden = true;
+  $("#trigger-body").value = "";
+  showFlags(select.value);
+
+  const { dispatched_by: by } = await get("/flights").catch(() => ({ dispatched_by: null }));
+  $("#trigger-note").textContent = by
+    ? `Queued work is picked up by ${by}.`
+    : "This queues the work. Nothing dispatches it yet — the supervisor is not part of this release, so it will sit in the queue until there is something to run it.";
+
+  $("#trigger").showModal();
+}
+
+async function submitTrigger(event) {
+  const pipeline = $("#trigger-pipeline").value;
+  const body = $("#trigger-body").value.trim();
+
+  if (!body) {
+    event.preventDefault();
+    $("#trigger-error").hidden = false;
+    $("#trigger-error").textContent = "Give the entry agent something to start from.";
+    return;
+  }
+
+  const flags = {};
+  for (const box of $("#trigger-flags").querySelectorAll("input[type=checkbox]")) {
+    flags[box.dataset.flag] = box.checked;
+  }
+
+  event.preventDefault();
+  try {
+    await post("/flights", { pipeline, body, flags });
+    $("#trigger").close();
+    loadQueued();
+  } catch (error) {
+    $("#trigger-error").hidden = false;
+    $("#trigger-error").textContent = `Not queued: ${error.message}`;
+  }
+}
+
+async function loadQueued() {
+  const note = $("#queued");
+  try {
+    const { pending, dispatched_by: by } = await get("/flights");
+    note.hidden = pending.length === 0;
+    if (pending.length === 0) return;
+    note.textContent = by
+      ? `${pending.length} flight(s) queued, waiting on ${by}.`
+      : `${pending.length} flight(s) queued. Nothing will dispatch them until a supervisor exists.`;
+  } catch {
+    note.hidden = true;
+  }
+}
+
+async function openReport(runId) {
+  try {
+    const report = await get(`/runs/${encodeURIComponent(runId)}/report`);
+    $("#report-headline").textContent = report.headline;
+    $("#report-meta").textContent =
+      `${report.agent} · ${when(report.at)}${report.trimmed ? " · trimmed to fit" : ""}`;
+    $("#report-body").textContent = report.body || "(no body)";
+
+    const artifacts = $("#report-artifacts");
+    artifacts.replaceChildren();
+    for (const name of report.artifacts ?? []) artifacts.append(el("code", "", name));
+
+    $("#report").showModal();
+  } catch (error) {
+    $("#report-headline").textContent = "No report";
+    $("#report-meta").textContent = error.message;
+    $("#report-body").textContent =
+      "An agent writes a report when it finishes. This run either has not, or predates reports.";
+    $("#report-artifacts").replaceChildren();
+    $("#report").showModal();
+  }
+}
+
 async function loadJournal() {
   const helpBody = document.querySelector("#help-table tbody");
   const helpEmpty = $("#help-empty");
@@ -358,6 +493,7 @@ async function loadHelpBadge() {
 async function loadPipelines() {
   try {
     const { pipelines } = await get("/pipelines");
+    pipelinesByName = new Map(pipelines.map((pipeline) => [pipeline.name, pipeline]));
     for (const id of ["#runs-pipeline"]) {
       const select = $(id);
       const any = el("option", "", "any");
@@ -405,12 +541,16 @@ function start() {
     tab.addEventListener("click", () => showView(tab.dataset.view));
   });
   $("#refresh").addEventListener("click", loadMap);
+  $("#trigger-open").addEventListener("click", openTrigger);
+  $("#trigger-pipeline").addEventListener("change", (e) => showFlags(e.target.value));
+  $("#trigger-send").addEventListener("click", submitTrigger);
   $("#runs-pipeline").addEventListener("change", loadRuns);
   ["#runs-window", "#runs-status"].forEach((id) => $(id).addEventListener("change", loadRuns));
   $("#runs-agent").addEventListener("input", loadRuns);
 
   loadHealth();
   loadHelpBadge();
+  loadQueued();
   // The pipeline list has to exist before the first draw, or the selector is empty on load.
   loadPipelines().then(() => {
     loadAgentNames();

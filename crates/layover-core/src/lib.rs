@@ -36,6 +36,7 @@ pub mod learning;
 pub mod mcp;
 pub mod pipeline;
 pub mod prompt;
+pub mod report;
 pub mod route;
 pub mod run;
 pub mod slots;
@@ -64,6 +65,7 @@ pub use pipeline::{
     FlagError, FlagSpec, Flags, Pipeline, PipelineName, Schedule, Trigger, TriggerError, Workspace,
 };
 pub use prompt::{PromptDir, PromptError, PromptMap, PromptSource};
+pub use report::Report;
 pub use route::{Join, Mode, Route};
 pub use run::{Outcome, RunRecord};
 pub use slots::{Admission, Slots};

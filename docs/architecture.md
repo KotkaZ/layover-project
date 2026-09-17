@@ -732,3 +732,29 @@ chain never can — that is what stops a dead barrier being kept alive by an age
 possibly satisfy it. Workflow membership asks what a way in sets in motion, and a reviewer spawned
 by a sweep is unarguably part of the sweep. An agent belonging to two workflows appears in both,
 which is the honest answer rather than the tidy one.
+
+**Why a manual trigger queues rather than runs, and says so.** The dashboard was read-only on the
+grounds that a control which silently does nothing is worse than no control — it gets trusted once
+and then relied upon at the moment it matters. A trigger button that could not dispatch anything
+would be exactly that. What makes it honest is that the thing it produces is real: a durable,
+persisted flight, which the Tower will drain when it exists. The window says the work is queued and
+that nothing will pick it up yet, and `PendingList.dispatched_by` is `null` rather than a plausible
+name, so the queue never looks like it is moving when it is not. A Ground Stop refuses the trigger,
+because a kill switch that halts running work while letting more be booked is not a kill switch.
+
+**Why a queued trigger is a Flight and not a new noun.** The obvious modelling is a "request" or a
+"booking" that later becomes a flight. But a trigger that has not been dispatched *is* a flight
+that has not been dispatched, and the vocabulary already asks a reader to hold twenty-five terms —
+a count an independent design review called out as the single biggest comprehension cost in the
+project. Adding a twenty-sixth to describe a state of an existing one would be paying that cost for
+nothing.
+
+**Why an agent writes its own report rather than the Tower keeping the transcript.** A transcript
+is not a report: it contains every approach the agent abandoned, so reading one to find out what
+happened is slower than doing the work again. The Tower could store transcripts and separately ask
+for a summary, but requiring the agent to state its own conclusion has a second effect worth more
+than the storage — an agent that must write down what it concluded is an agent that has to decide
+what it concluded. Reports are capped and truncated rather than rejected, because a report is the
+only account of a run that has already happened and already cost money, and discarding it to punish
+a formatting mistake loses the thing entirely. A trimmed report says it was trimmed, so a reader
+knows to look further rather than assuming the agent stopped there.
