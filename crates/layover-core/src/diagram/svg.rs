@@ -9,12 +9,6 @@ use std::fmt::Write as _;
 
 use crate::diagram::layout::{Edge, EdgeStyle, Layout, Node, NodeKind, Shape};
 
-/// How far left of a node's column a return path climbs.
-const GUTTER_INSET: f64 = 44.0;
-/// Closest to the left edge of the canvas a gutter may be.
-const GUTTER_MIN: f64 = 12.0;
-/// How far into a node's underside a return path hooks, measured from its left edge.
-const CORNER_INSET: f64 = 26.0;
 /// How far below a node the hook begins.
 const HOOK: f64 = 26.0;
 /// How far above the lane an edge label sits.
@@ -150,9 +144,9 @@ fn render_edge(out: &mut String, layout: &Layout, edge: &Edge) {
     };
 
     let (path, label_at) = if edge.back {
-        return_path(from, to, edge.floor)
+        return_path(from, to, edge)
     } else {
-        forward_path(from, to)
+        forward_path(from, to, edge.from_y, edge.to_y)
     };
 
     let _ = writeln!(
@@ -172,9 +166,12 @@ fn render_edge(out: &mut String, layout: &Layout, edge: &Edge) {
 }
 
 /// A cubic curve rightwards, flattening into a straight line when the ends are level.
-fn forward_path(from: &Node, to: &Node) -> (String, (f64, f64)) {
-    let (x1, y1) = from.exit();
-    let (x2, y2) = to.entry();
+///
+/// The y of each end comes from the layout rather than the node centre, so several edges sharing
+/// a node leave and arrive at different points along its side instead of bunching.
+fn forward_path(from: &Node, to: &Node, from_y: f64, to_y: f64) -> (String, (f64, f64)) {
+    let (x1, y1) = (from.exit().0, from_y);
+    let (x2, y2) = (to.entry().0, to_y);
     let bend = ((x2 - x1) * 0.45).max(24.0);
 
     (
@@ -196,18 +193,21 @@ fn forward_path(from: &Node, to: &Node) -> (String, (f64, f64)) {
 ///
 /// The lane depth comes from the layout, which is what guarantees the curve stays inside the
 /// reported extent instead of being clipped off the bottom.
-fn return_path(from: &Node, to: &Node, floor: Option<f64>) -> (String, (f64, f64)) {
+fn return_path(from: &Node, to: &Node, edge: &Edge) -> (String, (f64, f64)) {
     let (fx, fy) = (f64::midpoint(from.x, from.x + from.w), from.y + from.h);
     let ty = to.y + to.h;
-    let floor = floor.unwrap_or(fy.max(ty) + 34.0);
+    let floor = edge.floor.unwrap_or(fy.max(ty) + 34.0);
 
-    // Climb in the gutter to the left of the target's column rather than straight up into its
-    // underside. Columns stack several agents, so a vertical segment on the column centre runs
-    // through whichever boxes sit below the target — and a line passing through a node reads as
-    // an edge touching it. The reference factory drew exactly that: a return path from the tester
-    // crossed the investigator and looked like a route that does not exist.
-    let gutter = (to.x - GUTTER_INSET).max(GUTTER_MIN);
-    let corner = to.x + CORNER_INSET;
+    // Climb in a gutter left of the target's column rather than straight up into its underside.
+    // Columns stack several agents, so a vertical segment on the column centre runs through
+    // whichever boxes sit below the target, and a line passing through a node reads as an edge
+    // touching it.
+    //
+    // The gutter and the hook are per edge, not per target. Several returns to one agent — which
+    // is the normal shape of a review loop — shared a single vertical line, so four curves
+    // overlapped for their whole climb and their labels stacked on top of one another.
+    let gutter = edge.gutter.unwrap_or_else(|| (to.x - 44.0).max(12.0));
+    let corner = edge.hook_x.unwrap_or(to.x + 26.0);
 
     (
         format!(
@@ -337,11 +337,7 @@ mod tests {
             .iter()
             .find(|edge| edge.back)
             .expect("the review loop exists");
-        let (path, _) = return_path(
-            tester,
-            layout.node("a_developer").expect("developer"),
-            back.floor,
-        );
+        let (path, _) = return_path(tester, layout.node("a_developer").expect("developer"), back);
 
         let floor: f64 = path
             .split_whitespace()
@@ -393,12 +389,20 @@ mod tests {
         let layout = Layout::build(&factory(), &Live::default());
         let developer = layout.node("a_developer").expect("developer");
         let tester = layout.node("a_tester").expect("tester");
-        let (path, _) = return_path(tester, developer, Some(400.0));
+        let back = layout
+            .edges
+            .iter()
+            .find(|edge| edge.back && edge.to == "a_developer")
+            .expect("the review loop exists");
+        let (path, _) = return_path(tester, developer, back);
 
+        let gutter = back.gutter.expect("a return path is given a gutter");
         assert!(
-            path.contains(&format!("{:.1}", developer.x - GUTTER_INSET)),
-            "the ascent should happen left of the target's column: {path}"
+            gutter < developer.x,
+            "the ascent should happen left of the target's column: {gutter} vs {}",
+            developer.x
         );
+        assert!(path.contains(&format!("{gutter:.1}")), "{path}");
         assert!(
             !path.contains(&format!("{:.1} {:.1}", developer.centre().0, 400.0)),
             "nothing should be routed up the column centre: {path}"
@@ -425,6 +429,10 @@ mod tests {
             label: None,
             style: EdgeStyle::Plain,
             back: false,
+            from_y: 0.0,
+            to_y: 0.0,
+            gutter: None,
+            hook_x: None,
             floor: None,
         });
 

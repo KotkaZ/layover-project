@@ -38,7 +38,15 @@ const ROW_GAP: f64 = 32.0;
 /// Margin around the whole drawing.
 const MARGIN: f64 = 32.0;
 /// Vertical spacing between the lanes that return paths are routed through.
-const RETURN_GAP: f64 = 26.0;
+const RETURN_GAP: f64 = 34.0;
+/// How far left of a node''s column the first return path climbs.
+const GUTTER_INSET: f64 = 44.0;
+/// How much further left each additional return to the same node climbs.
+const GUTTER_STEP: f64 = 18.0;
+/// Closest to the left edge of the canvas a gutter may be.
+const GUTTER_MIN: f64 = 12.0;
+/// Closest to a node''s right edge that a return path may hook in.
+const CORNER_MARGIN: f64 = 20.0;
 
 /// What a node represents.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -134,6 +142,22 @@ pub struct Edge {
     pub style: EdgeStyle,
     /// True when the edge points back towards the entry, which makes it a return path.
     pub back: bool,
+    /// Where on the source''s right edge this leaves, as an absolute y.
+    ///
+    /// Edges all left from the node''s centre, so several going to different places overlapped
+    /// for their first stretch and only separated once they had already crossed each other.
+    /// Spreading them down the edge, ordered by where they are going, means they never cross at
+    /// the node they share.
+    pub from_y: f64,
+    /// Where on the target''s left edge this arrives, as an absolute y.
+    pub to_y: f64,
+    /// For a return path, the x it climbs at. `None` for a forward edge.
+    ///
+    /// Distinct per edge even when several return to the same agent. Sharing one gutter put four
+    /// curves on the same vertical line with their labels stacked on top of each other.
+    pub gutter: Option<f64>,
+    /// For a return path, where it hooks into the target''s underside.
+    pub hook_x: Option<f64>,
     /// For a return path, the depth it dips to. `None` for a forward edge.
     ///
     /// Computed here rather than in the renderer because it decides how tall the drawing is, and
@@ -178,7 +202,7 @@ impl Layout {
                 .get(name)
                 .map(|pipeline| graph.workflow_from(&pipeline.entry))
         });
-        let layers = assign_layers(config, &graph);
+        let layers = assign_layers(config, &graph, scope);
 
         let mut layout = Self::default();
         layout.place(config, live, &graph, &layers, scope, members.as_ref());
@@ -272,6 +296,10 @@ impl Layout {
                 label: None,
                 style: EdgeStyle::Entry,
                 back: false,
+                from_y: 0.0,
+                to_y: 0.0,
+                gutter: None,
+                hook_x: None,
                 floor: None,
             });
         }
@@ -323,6 +351,10 @@ impl Layout {
                         label,
                         style,
                         back,
+                        from_y: 0.0,
+                        to_y: 0.0,
+                        gutter: None,
+                        hook_x: None,
                         floor: None,
                     });
                 }
@@ -404,6 +436,7 @@ impl Layout {
         }
 
         let deepest = self.route_returns(tallest);
+        self.assign_ports();
 
         self.width = self
             .nodes
@@ -412,6 +445,67 @@ impl Layout {
             .fold(0.0_f64, f64::max)
             + MARGIN;
         self.height = tallest.max(deepest) + MARGIN;
+    }
+
+    /// Spreads each node''s edges along its sides instead of bunching them at the centre.
+    ///
+    /// Ordered by where the other end sits, so two edges leaving the same node never cross each
+    /// other before they have gone anywhere. Only forward edges: a return path leaves from the
+    /// underside and is routed through its own lane already.
+    fn assign_ports(&mut self) {
+        let centres: BTreeMap<String, f64> = self
+            .nodes
+            .iter()
+            .map(|node| (node.id.clone(), node.centre().1))
+            .collect();
+        let boxes: BTreeMap<String, (f64, f64)> = self
+            .nodes
+            .iter()
+            .map(|node| (node.id.clone(), (node.y, node.h)))
+            .collect();
+
+        let mut leaving: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+        let mut arriving: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+        for (index, edge) in self.edges.iter().enumerate() {
+            if edge.back {
+                continue;
+            }
+            leaving.entry(edge.from.clone()).or_default().push(index);
+            arriving.entry(edge.to.clone()).or_default().push(index);
+        }
+
+        for (id, mut indices) in leaving {
+            indices.sort_by(|left, right| {
+                let a = centres.get(&self.edges[*left].to).copied().unwrap_or(0.0);
+                let b = centres.get(&self.edges[*right].to).copied().unwrap_or(0.0);
+                a.total_cmp(&b)
+            });
+            let Some(&(top, height)) = boxes.get(&id) else {
+                continue;
+            };
+            let count = indices.len();
+            for (slot, index) in indices.into_iter().enumerate() {
+                self.edges[index].from_y = port(top, height, slot, count);
+            }
+        }
+
+        for (id, mut indices) in arriving {
+            indices.sort_by(|left, right| {
+                let a = centres.get(&self.edges[*left].from).copied().unwrap_or(0.0);
+                let b = centres
+                    .get(&self.edges[*right].from)
+                    .copied()
+                    .unwrap_or(0.0);
+                a.total_cmp(&b)
+            });
+            let Some(&(top, height)) = boxes.get(&id) else {
+                continue;
+            };
+            let count = indices.len();
+            for (slot, index) in indices.into_iter().enumerate() {
+                self.edges[index].to_y = port(top, height, slot, count);
+            }
+        }
     }
 
     /// Gives each return path its own lane below the drawing, and reports the deepest one.
@@ -435,16 +529,37 @@ impl Layout {
             (span, from.clone(), to.clone())
         });
 
+        let boxes: BTreeMap<String, (f64, f64)> = self
+            .nodes
+            .iter()
+            .map(|node| (node.id.clone(), (node.x, node.w)))
+            .collect();
+
+        // How many returns already aim at each target, so edges sharing one can be fanned apart
+        // rather than stacked on a single vertical line.
+        let mut per_target: BTreeMap<String, usize> = BTreeMap::new();
+
         let mut deepest = floor_start;
         for (index, key) in lanes.iter().enumerate() {
             let depth = floor_start + RETURN_GAP * (precise(index) + 1.0);
             deepest = deepest.max(depth);
+
+            let seen = per_target.entry(key.1.clone()).or_insert(0);
+            let nth = *seen;
+            *seen += 1;
+
+            let (left, width) = boxes.get(&key.1).copied().unwrap_or((0.0, NODE_W));
+            let gutter = (left - GUTTER_INSET - GUTTER_STEP * precise(nth)).max(GUTTER_MIN);
+            let hook = left + width * 0.25 + width * 0.2 * precise(nth);
+
             if let Some(edge) = self
                 .edges
                 .iter_mut()
                 .find(|edge| edge.back && (edge.from.clone(), edge.to.clone()) == *key)
             {
                 edge.floor = Some(depth);
+                edge.gutter = Some(gutter);
+                edge.hook_x = Some(hook.min(left + width - CORNER_MARGIN));
             }
         }
         deepest
@@ -456,19 +571,32 @@ impl Layout {
 /// Agents nothing can reach are absent from the result, and the caller places them in the first
 /// column rather than dropping them: an unreachable agent is exactly what somebody opened the
 /// diagram to find, so hiding it would defeat the purpose.
-fn assign_layers(config: &Config, graph: &RouteGraph) -> BTreeMap<AgentName, usize> {
-    let sources: Vec<AgentName> = config
-        .pipelines
-        .values()
-        .map(|pipeline| pipeline.entry.clone())
-        .chain(
-            config
-                .agents
-                .iter()
-                .filter(|(_, agent)| agent.entry)
-                .map(|(name, _)| name.clone()),
-        )
-        .collect();
+///
+/// When one workflow is being drawn, distance is measured from *that* pipeline's entry and no
+/// other. Seeding every entry regardless of scope put agents that happen to be another pipeline's
+/// way in near the left edge of a diagram they are late in — the reference factory''s follower is
+/// reached through the publisher, but is also the follow-up pipeline''s entry, so it landed in
+/// column two with an edge sweeping back across the whole drawing.
+fn assign_layers(config: &Config, graph: &RouteGraph, scope: &Scope) -> BTreeMap<AgentName, usize> {
+    let sources: Vec<AgentName> = match scope.pipeline() {
+        Some(name) => config
+            .pipelines
+            .get(name)
+            .map(|pipeline| vec![pipeline.entry.clone()])
+            .unwrap_or_default(),
+        None => config
+            .pipelines
+            .values()
+            .map(|pipeline| pipeline.entry.clone())
+            .chain(
+                config
+                    .agents
+                    .iter()
+                    .filter(|(_, agent)| agent.entry)
+                    .map(|(name, _)| name.clone()),
+            )
+            .collect(),
+    };
 
     let mut layers: BTreeMap<AgentName, usize> = graph
         .distances_from(sources.iter())
@@ -492,6 +620,19 @@ fn assign_layers(config: &Config, graph: &RouteGraph) -> BTreeMap<AgentName, usi
     }
 
     layers
+}
+
+/// Where the `slot`-th of `count` edges should meet a node''s side.
+///
+/// Evenly spaced across the middle 70% of the height, so a single edge still meets the centre and
+/// several never reach the rounded corners.
+fn port(top: f64, height: f64, slot: usize, count: usize) -> f64 {
+    if count <= 1 {
+        return top + height / 2.0;
+    }
+    let usable = height * 0.7;
+    let step = usable / precise(count - 1);
+    top + (height - usable) / 2.0 + step * precise(slot)
 }
 
 /// Widens a count to a float for geometry.
@@ -726,6 +867,93 @@ mod tests {
     }
 
     #[test]
+    fn several_returns_to_one_agent_climb_at_different_points() {
+        // The normal shape of a review loop: a tester and a reviewer both report back to the
+        // developer. Sharing one gutter put both curves on the same vertical line and stacked
+        // their labels on top of each other, which is what the whole diagram looked like.
+        let layout = Layout::build(&review_loop(), &Live::default());
+        let returns: Vec<f64> = layout
+            .edges
+            .iter()
+            .filter(|edge| edge.back && edge.to == "a_dev")
+            .filter_map(|edge| edge.gutter)
+            .collect();
+
+        assert!(returns.len() >= 2, "the factory has a review loop");
+        for pair in returns.windows(2) {
+            assert!(
+                (pair[0] - pair[1]).abs() > 1.0,
+                "two returns share a gutter: {returns:?}"
+            );
+        }
+
+        let hooks: Vec<f64> = layout
+            .edges
+            .iter()
+            .filter(|edge| edge.back && edge.to == "a_dev")
+            .filter_map(|edge| edge.hook_x)
+            .collect();
+        for pair in hooks.windows(2) {
+            assert!(
+                (pair[0] - pair[1]).abs() > 1.0,
+                "two returns hook in at the same point: {hooks:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_return_path_hooks_inside_the_agent_it_returns_to() {
+        let layout = Layout::build(&review_loop(), &Live::default());
+        let developer = layout.node("a_dev").expect("dev");
+
+        for edge in layout.edges.iter().filter(|edge| edge.back) {
+            let hook = edge.hook_x.expect("a return path is given a hook");
+            assert!(
+                hook > developer.x && hook < developer.x + developer.w,
+                "the hook must land on the node, not beside it: {hook}"
+            );
+        }
+    }
+
+    /// A developer fanning out to a tester and a reviewer, both reporting back. The commonest
+    /// shape in a real factory and the one that exposed the shared-gutter problem.
+    fn review_loop() -> Config {
+        config(
+            r#"
+            [layover]
+            work_dir = "work"
+
+            [defaults]
+            runner = "claude"
+
+            [runners.claude]
+            command = ["claude", "-p"]
+
+            [agents.dev]
+            prompt = "develop"
+
+            [agents.tester]
+            prompt = "test"
+
+            [agents.reviewer]
+            prompt = "review"
+
+            [pipelines.go]
+            entry = "dev"
+
+            [[routes]]
+            from = "dev"
+            to = ["tester", "reviewer"]
+
+            [[routes]]
+            from = ["tester", "reviewer"]
+            to = "dev"
+            join = "all"
+            "#,
+        )
+    }
+
+    #[test]
     fn two_return_paths_are_given_lanes_of_their_own() {
         // Drawn at the same depth they would overlap, and a review loop is the structure on a
         // route map most worth being able to follow with a finger.
@@ -777,6 +1005,96 @@ mod tests {
             (floors[1] - floors[0]).abs() > 1.0,
             "the two loops share a lane: {floors:?}"
         );
+    }
+
+    #[test]
+    fn a_workflow_is_laid_out_from_its_own_entry_only() {
+        // Seeding every pipeline entry regardless of scope put agents that happen to be another
+        // pipeline's way in near the left edge of a diagram they are late in. In the reference
+        // factory the follower is reached through the publisher but is also the follow-up
+        // pipeline's entry, so it landed in column two with an edge sweeping back across the
+        // whole drawing.
+        let config = config(
+            r#"
+            [layover]
+            work_dir = "work"
+
+            [defaults]
+            runner = "claude"
+
+            [runners.claude]
+            command = ["claude", "-p"]
+
+            [agents.analyst]
+            prompt = "analyse"
+
+            [agents.publisher]
+            prompt = "publish"
+
+            [agents.follower]
+            prompt = "follow"
+
+            [pipelines.triage]
+            entry = "analyst"
+
+            [pipelines.follow_up]
+            entry = "follower"
+
+            [[routes]]
+            from = "analyst"
+            to = "publisher"
+
+            [[routes]]
+            from = "publisher"
+            to = "follower"
+            "#,
+        );
+
+        let triage = Layout::scoped(&config, &Live::default(), &Scope::Pipeline("triage".into()));
+        let publisher = triage.node("a_publisher").expect("publisher");
+        let follower = triage.node("a_follower").expect("follower");
+
+        assert!(
+            follower.layer > publisher.layer,
+            "the follower is reached through the publisher here, so it must come after it: \
+             publisher at {}, follower at {}",
+            publisher.layer,
+            follower.layer
+        );
+    }
+
+    #[test]
+    fn edges_leaving_one_node_meet_it_at_different_points() {
+        // They all left from the centre, so several going to different places overlapped for
+        // their first stretch and only separated after they had already crossed.
+        let layout = Layout::build(&factory(), &Live::default());
+        let leaving: Vec<f64> = layout
+            .edges
+            .iter()
+            .filter(|edge| edge.from == "a_developer" && !edge.back)
+            .map(|edge| edge.from_y)
+            .collect();
+
+        assert!(leaving.len() >= 2, "the developer fans out");
+        for pair in leaving.windows(2) {
+            assert!(
+                (pair[0] - pair[1]).abs() > 1.0,
+                "two edges share an exit point: {leaving:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_node_with_one_edge_still_meets_it_in_the_middle() {
+        let layout = Layout::build(&factory(), &Live::default());
+        let analyst = layout.node("a_analyst").expect("analyst");
+        let only = layout
+            .edges
+            .iter()
+            .find(|edge| edge.from == "a_analyst" && !edge.back)
+            .expect("analyst sends somewhere");
+
+        assert!((only.from_y - analyst.centre().1).abs() < 0.001);
     }
 
     #[test]
