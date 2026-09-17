@@ -105,6 +105,13 @@ impl RouteGraph {
         self.spawns.values().flatten()
     }
 
+    /// Every spawn edge, as a sender/receiver pair.
+    pub fn spawn_edges(&self) -> impl Iterator<Item = (&AgentName, &AgentName)> {
+        self.spawns
+            .iter()
+            .flat_map(|(from, tos)| tos.iter().map(move |to| (from, to)))
+    }
+
     /// Returns the rendezvous condition guarding `agent`, if any.
     #[must_use]
     pub fn join_for(&self, agent: &AgentName) -> Option<&JoinSpec> {

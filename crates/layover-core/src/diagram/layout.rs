@@ -437,11 +437,28 @@ fn assign_layers(config: &Config, graph: &RouteGraph) -> BTreeMap<AgentName, usi
         )
         .collect();
 
-    graph
+    let mut layers: BTreeMap<AgentName, usize> = graph
         .distances_from(sources.iter())
         .into_iter()
         .map(|(name, distance)| (name, distance as usize))
-        .collect()
+        .collect();
+
+    // Spawn targets are absent from the distances above, because breadth-first traversal stops at
+    // a spawn edge — correctly, since the receiver starts a fresh chain with fresh Hops and hop
+    // depth across chains is not a real distance.
+    //
+    // For *drawing*, though, that leaves them at column zero, sitting beside the agent that
+    // spawns them, and the edge between becomes a same-column loop that reads as a stray squiggle
+    // rather than a hand-off. Placing each one right of its spawner keeps the left-to-right flow
+    // that makes the diagram legible. Only the picture is affected: the hop check does its own
+    // seeding and still treats them as entry points.
+    for (from, to) in graph.spawn_edges() {
+        let placed = layers.get(from).copied().unwrap_or(0) + 1;
+        let entry = layers.entry(to.clone()).or_insert(placed);
+        *entry = (*entry).max(placed);
+    }
+
+    layers
 }
 
 /// Widens a count to a float for geometry.
@@ -727,6 +744,58 @@ mod tests {
             (floors[1] - floors[0]).abs() > 1.0,
             "the two loops share a lane: {floors:?}"
         );
+    }
+
+    #[test]
+    fn a_spawn_target_is_drawn_right_of_the_agent_that_spawns_it() {
+        // Breadth-first distance stops at a spawn edge, which is right for hop arithmetic and
+        // wrong for a picture: it left the target at column zero beside its spawner, and the edge
+        // between them became a same-column loop that read as a stray squiggle. Found by standing
+        // up a real factory and looking at the dashboard.
+        let config = config(
+            r#"
+            [layover]
+            work_dir = "work"
+
+            [defaults]
+            runner = "claude"
+
+            [runners.claude]
+            command = ["claude", "-p"]
+
+            [agents.sweeper]
+            prompt = "sweep"
+
+            [agents.pr_reviewer]
+            prompt = "review one"
+
+            [pipelines.sweep]
+            entry = "sweeper"
+
+            [[routes]]
+            from = "sweeper"
+            to = "pr_reviewer"
+            mode = "spawn"
+            "#,
+        );
+
+        let layout = Layout::build(&config, &Live::default());
+        let sweeper = layout.node("a_sweeper").expect("sweeper");
+        let reviewer = layout.node("a_pr_reviewer").expect("reviewer");
+
+        assert!(
+            reviewer.layer > sweeper.layer,
+            "a spawn should still flow rightwards: sweeper at {}, reviewer at {}",
+            sweeper.layer,
+            reviewer.layer
+        );
+
+        let edge = layout
+            .edges
+            .iter()
+            .find(|edge| edge.to == "a_pr_reviewer")
+            .expect("the spawn edge exists");
+        assert!(!edge.back, "and must not be drawn as a return path");
     }
 
     #[test]
