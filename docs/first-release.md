@@ -263,25 +263,30 @@ makes adding an OTel layer later a subscriber change rather than an instrumentat
 
 ### Shape
 
-**Why half the aviation vocabulary stays and half goes.** A design review named the vocabulary the
-single biggest comprehension cost for a newcomer, and it was right about the decorative half. The
-test applied was whether a term names something plain English has no word for. **Hops**, **Fuel**,
-**Ground Stop**, **Layover**, **Itinerary**, **Slots** and **Reserve** pass — "TTL" is wrong for
-Hops, "budget" misses that Fuel depletes as you travel, and "causal chain" is both clumsier and
-longer than Itinerary. **Tower**, **Hangar** and **Logbook** fail: they are a supervisor, a state
-directory and shared memory, and naming them otherwise makes a reader learn a word to understand a
-directory listing. Consistency has real value and a half-metaphor can read as indecision, which is
-the argument for keeping all of it; what settled it is that this was the last moment the choice was
-nearly free.
+**Why the whole aviation vocabulary stays.** *Reversed on 18 September 2026.* The original answer
+kept the terms that name something plain English has no word for — Hops, Fuel, Ground Stop,
+Layover, Itinerary, Slots, Reserve — and dropped Tower, Hangar and Logbook as decoration over a
+supervisor, a state directory and shared memory. A design review had named the vocabulary the
+single biggest comprehension cost for a newcomer, and that reasoning still holds.
 
-**Why `entry = true` is removed.** Two ways to say how work gets in is one too many. A pipeline
-with no flags expresses what `entry = true` expressed, in the place people already look for ways
-in, and removing it also removes the `to` field from `POST /flights`, a branch from flag
-resolution, and the question of what happens when a bare entry agent is triggered and its prompt
-tests a flag. The counter-argument is that the two mean subtly different things — `entry` is a
-permission, a pipeline is a named way in — and collapsing them loses the ability to say "you may
-poke this agent, but there is no blessed workflow for it". Nobody had used either, which was the
-only evidence available.
+It was reversed on a different axis: cost of churn against capability. Renaming touches config,
+the API, type names and every page of prose, and buys a week in which nothing the project does
+gets better. Set against a supervisor that does not yet exist, that is the wrong week to spend —
+and the comprehension cost, while real, is paid by readers who do not exist yet either.
+
+The consequence is accepted rather than argued away: the vocabulary is now load-bearing in the
+public API, so this stops being nearly free from here. Somebody will one day read `Hangar` and
+have to look it up.
+
+**Why `entry = true` stays.** *Reversed on 18 September 2026.* The original answer removed it —
+two ways to say how work gets in is one too many, and a pipeline with no flags says what
+`entry = true` says. Removing it would also have removed the `to` field from `POST /flights` and a
+branch from flag resolution.
+
+Same reasoning as the vocabulary: it is a simplification, not a capability, and it changes the
+config schema and the API for factories that already exist. The counter-argument recorded when it
+was first decided now carries the weight — `entry` is a *permission* and a pipeline is a *named way
+in*, and they are not quite the same statement.
 
 **Why a factory stays one file.** One file means the whole factory is readable at once, which is
 what makes `explain` and the route map comprehensible. The reference factory is 259 lines and that
@@ -347,9 +352,19 @@ nobody needs, and the installers already handle it.
 end is the criterion the design was sized against, and it is not sufficient. This project claims
 *lights-out*, and every interesting failure in the system is a failure of the second day: a stalled
 barrier, a schedule overlapping itself, a run interrupted by a laptop sleeping, a Reserve window
-rolling over. None of those appear in one successful pass. So the bar is seven days unattended with
-the operator only reading the dashboard, and any intervention resets the clock and becomes a bug.
-The cost is a slow, unglamorous gate; the alternative is shipping a claim that has been tested once.
+rolling over. None of those appear in one successful pass.
+
+**The bar is 48 hours unattended**, revised down from seven days on 18 September 2026, with the
+operator only reading the dashboard. Any intervention resets the clock and becomes a bug.
+
+Forty-eight hours is a compromise and worth naming as one. It catches the second-day failures —
+two nights, at least one of every schedule, a Reserve window rolling over more than once — and it
+does not catch the slow ones: a log or a journal growing without bound, a leak that takes a week
+to matter, a retention horizon being crossed. Those move from "proven" to "watched after release".
+
+The soak runs against a **throwaway sandbox repository with synthetic work items**, not anything
+real. A first unattended run pointed at a repository somebody cares about would mean the first
+thing the factory ever does unsupervised is the thing hardest to undo.
 
 **Why a generic runner moves into scope.** "We support these three CLIs" is the most likely reason
 somebody forks this instead of using it. A runner defined entirely by its command, its stdin

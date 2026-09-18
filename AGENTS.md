@@ -25,6 +25,8 @@ What exists and is fully tested:
   `Api` trait and the axum router.
 - `crates/layover-store` — on-disk run history: day-segmented JSON Lines, 90-day retention.
 - `crates/layover-dashboard` — the monitoring page and the `Api` implementation behind it.
+- `crates/layover-tower` — the supervisor. The only crate that starts a process, and the first
+  place in the project that can do something irreversible.
 - `crates/layover-cli` — the `layover` binary: `validate`, `explain`, `graph`, `prompt`, `serve`,
   `autostart`.
 

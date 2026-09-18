@@ -650,6 +650,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "layover-tower"
+version = "0.9.0"
+dependencies = [
+ "jiff",
+ "layover-core",
+ "serde",
+ "serde_json",
+ "toml",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.189"
 source = "registry+https://github.com/rust-lang/crates.io-index"

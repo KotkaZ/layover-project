@@ -186,6 +186,7 @@ test and doc build, with warnings denied. CI runs the same command, unchanged.
 | `layover-http` | The HTTP surface, **generated** from [`api/openapi.yaml`](api/openapi.yaml) |
 | `layover-store` | On-disk history and journal: day-segmented JSON Lines, 90-day retention |
 | `layover-dashboard` | The monitoring page and the API implementation behind it |
+| `layover-tower` | The supervisor — the only crate that starts a process |
 | `layover-cli` | The `layover` binary |
 
 ## What works today
