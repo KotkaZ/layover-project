@@ -25,6 +25,7 @@
 //! Recovery needs to say "this was running, and it is confirmed gone". Both halves come from the
 //! record written before the spawn.
 
+pub mod barriers;
 pub mod cost;
 pub mod dispatch;
 pub mod factory;
@@ -34,6 +35,7 @@ pub mod state;
 pub mod tokens;
 pub mod wait;
 
+pub use barriers::{Abandoned, Barriers};
 pub use cost::{Reported, from_transcript};
 pub use dispatch::{Authorised, Refusal, authorise};
 pub use factory::{Dispatched, Factory};

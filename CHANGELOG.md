@@ -8,6 +8,19 @@ See [project status](README.md#project-status).
 
 ## [Unreleased]
 
+### Added
+
+- **Barriers hold work while a factory runs.** A flight for a joined agent is parked rather than
+  run, and the agent wakes **once** when the last declared upstream arrives, with every parked
+  flight and each body labelled by who sent it. Two edges into one agent without a join fire it
+  twice; for a publisher that is two pull requests for one piece of work.
+- **A rendezvous nothing can complete is given up and named.** When a drain goes quiet with a
+  barrier still holding flights, no live run can deliver the rest, so it is abandoned and reported
+  with what was stranded. Silent permanent stalling is the worst outcome in this system: a failure
+  at least says something happened.
+- **`Dispatched` now distinguishes parked and superseded from ran, refused and failed**, so
+  `layover run` can say "waiting for reviewer" rather than counting a held flight as nothing.
+
 ## [0.13.0] — 2026-09-18
 
 Agents reach one another. A run is served an MCP endpoint it can call back into, and a chain is no

@@ -22,13 +22,15 @@
 //! or not this process survives to write it down, which is why the live mark goes first and comes
 //! off last.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
 use jiff::Timestamp;
 use layover_core::agent::AgentName;
+use layover_core::barrier::Delivery;
 use layover_core::config::Config;
 use layover_core::cost::CostSource;
 use layover_core::cost::TokenUsage;
@@ -39,6 +41,7 @@ use layover_core::payload::{Run, compose};
 use layover_core::queue::Queued;
 use layover_core::run::{Outcome, RunRecord};
 
+use crate::barriers::{Abandoned, Barriers};
 use crate::dispatch::{Refusal, authorise, declared_env, declared_values};
 use crate::runtime::Chains;
 use crate::spawn::{self, Plan};
@@ -60,8 +63,53 @@ pub enum Dispatched {
     },
     /// The flight was refused before anything started.
     Refused(Refusal),
+    /// The flight is waiting at a rendezvous for its siblings.
+    ///
+    /// Not a failure and not a run: the work is held, and the agent it was for stays asleep until
+    /// the rest of what it needs arrives.
+    Parked {
+        /// Upstreams still outstanding.
+        waiting_for: Vec<AgentName>,
+    },
+    /// The flight arrived after an `any` join had already woken its agent.
+    ///
+    /// Recorded rather than dropped. Releasing on the first arrival is the point of `any` — waking
+    /// a publisher once per straggler means one pull request per straggler — but work that
+    /// disappears without a record is indistinguishable from work nobody asked for.
+    Superseded,
     /// Something went wrong that is the factory's fault rather than the flight's.
     Failed(String),
+}
+
+impl std::fmt::Display for Dispatched {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Ran { outcome, usd, .. } => write!(f, "{outcome} ${usd:.2}"),
+            Self::Refused(refusal) => write!(f, "refused: {refusal}"),
+            Self::Parked { waiting_for } => {
+                let names = waiting_for
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(f, "waiting for {names}")
+            }
+            Self::Superseded => f.write_str("superseded: the join had already released"),
+            Self::Failed(why) => write!(f, "could not start: {why}"),
+        }
+    }
+}
+
+/// What a drain did.
+#[derive(Debug, Default)]
+pub struct Drained {
+    /// How many runs started and finished.
+    pub ran: usize,
+    /// Barriers given up because nothing could still satisfy them.
+    ///
+    /// Reported rather than counted, because each one is work somebody asked for that will not
+    /// happen, and a number does not say which.
+    pub abandoned: Vec<Abandoned>,
 }
 
 /// A running factory.
@@ -72,6 +120,7 @@ pub struct Factory {
     live: Ledger,
     tokens: Arc<Tokens>,
     chains: Chains,
+    barriers: Barriers,
     endpoint: Option<String>,
 }
 
@@ -93,6 +142,7 @@ impl Factory {
             live,
             tokens: Arc::new(Tokens::new()),
             chains: Chains::new(),
+            barriers: Barriers::new(),
             endpoint: None,
         })
     }
@@ -492,22 +542,18 @@ impl Factory {
         pending: Vec<Queued>,
         mut unqueue: impl FnMut(&Flight),
         mut report: impl FnMut(&Flight, &Dispatched),
-    ) -> usize {
+    ) -> Drained {
         self.drain_with(pending, &mut unqueue, &mut report, |_| Vec::new())
     }
 
     /// Drains, asking `refill` for newly queued work after each pass.
-    ///
-    /// # Panics
-    ///
-    /// Never; the itinerary lock is only held inside this function.
     pub fn drain_with(
         &self,
         pending: Vec<Queued>,
         unqueue: &mut impl FnMut(&Flight),
         report: &mut impl FnMut(&Flight, &Dispatched),
         mut refill: impl FnMut(&[Flight]) -> Vec<Queued>,
-    ) -> usize {
+    ) -> Drained {
         let mut ran = 0;
         let mut batch = pending;
         let mut done: Vec<Flight> = Vec::new();
@@ -517,25 +563,33 @@ impl Factory {
 
             for queued in std::mem::take(&mut batch) {
                 if self.ground_stop_engaged() {
-                    return ran;
+                    return Drained {
+                        ran,
+                        abandoned: Vec::new(),
+                    };
                 }
 
                 unqueue(&queued.flight);
 
+                let Some(flight) = self.past_the_barrier(&queued.flight, report) else {
+                    done.push(queued.flight);
+                    continue;
+                };
+
                 // The chain is looked up, not created. Every flight in one causal chain is
                 // accounted against the same Hops, Fuel and run cap; minting a fresh itinerary
                 // per flight would reset all three and a loop between two agents would never end.
-                let sender = queued.flight.from.agent().cloned();
+                let sender = flight.from.agent().cloned();
                 let result = self
                     .chains
-                    .with(&queued.flight.itinerary, &self.config.defaults, |chain| {
-                        self.run_flight(chain, sender.as_ref(), &queued.flight)
+                    .with(&flight.itinerary, &self.config.defaults, |chain| {
+                        self.run_flight(chain, sender.as_ref(), &flight)
                     })
                     .unwrap_or_else(|| {
                         Dispatched::Failed("the itinerary ledger was poisoned".to_owned())
                     });
 
-                report(&queued.flight, &result);
+                report(&flight, &result);
 
                 if matches!(result, Dispatched::Ran { .. }) {
                     ran += 1;
@@ -553,7 +607,43 @@ impl Factory {
             batch = refill(&done);
         }
 
-        ran
+        // Nothing is running and nothing is queued, so any barrier still holding work is waiting
+        // for something that will never arrive. Giving up loudly beats a silent permanent stall,
+        // which is the worst outcome in this system: a failure at least says something happened.
+        let abandoned = self
+            .barriers
+            .abandon_unreachable(&self.graph, &BTreeSet::new());
+
+        Drained { ran, abandoned }
+    }
+
+    /// Resolves a flight against any rendezvous guarding its destination.
+    ///
+    /// Returns the flight that should actually run — which for a released join is **one** flight
+    /// carrying everything the agent was waiting for, not one run per upstream. Two edges into one
+    /// agent without a join fire it twice; for a publisher that means two pull requests.
+    ///
+    /// Returns `None` when nothing should run: the flight was parked, or it arrived after an `any`
+    /// join had already fired.
+    fn past_the_barrier(
+        &self,
+        flight: &Flight,
+        report: &mut impl FnMut(&Flight, &Dispatched),
+    ) -> Option<Flight> {
+        match self.barriers.deliver(&self.graph, flight.clone()) {
+            // The common case: the destination declares no join at all.
+            None => Some(flight.clone()),
+            Some(Delivery::Direct(direct)) => Some(*direct),
+            Some(Delivery::Ready(arrived)) => Some(combine(arrived)),
+            Some(Delivery::Parked { waiting_for }) => {
+                report(flight, &Dispatched::Parked { waiting_for });
+                None
+            }
+            Some(Delivery::Late(late)) => {
+                report(&late, &Dispatched::Superseded);
+                None
+            }
+        }
     }
 
     /// Where the factory's root is.
@@ -571,6 +661,41 @@ impl Factory {
             .map(declared_values)
             .unwrap_or_default()
     }
+}
+
+/// Folds everything a join was waiting for into the one flight that wakes its agent.
+///
+/// Each body is labelled with who sent it. A joined agent is looking at several verdicts about the
+/// same work — a test result and a review, say — and "approved" means nothing without knowing
+/// which of them said it.
+///
+/// The surviving flight keeps the first sender for the route check. Every parked sender has a
+/// permitted edge to this agent, so any of them establishes the same thing; taking one keeps the
+/// record honest about the fact that a single run happened.
+fn combine(mut arrived: Vec<Flight>) -> Flight {
+    let Some(mut first) = arrived.first().cloned() else {
+        unreachable!("a barrier does not release with nothing parked");
+    };
+
+    if arrived.len() == 1 {
+        return first;
+    }
+
+    arrived.sort_by(|a, b| a.from.agent().cmp(&b.from.agent()));
+
+    let mut body = String::new();
+    for flight in &arrived {
+        let who = flight
+            .from
+            .agent()
+            .map_or_else(|| "a human".to_owned(), ToString::to_string);
+
+        let _ = writeln!(body, "## From `{who}`\n\n{}\n", flight.body.trim());
+    }
+
+    first.body.clear();
+    first.body.push_str(body.trim_end());
+    first
 }
 
 /// How a run is recorded, given how it ended and what it said.
@@ -810,7 +935,7 @@ entry = "worker"
             |_, _| {},
         );
 
-        assert_eq!(ran, 1);
+        assert_eq!(ran.ran, 1);
         assert_eq!(removed.len(), 1, "taken off the queue exactly once");
     }
 
@@ -829,7 +954,7 @@ entry = "worker"
 
         let ran = factory.drain(queued, |_| removed += 1, |_, _| {});
 
-        assert_eq!(ran, 0);
+        assert_eq!(ran.ran, 0);
         assert_eq!(
             removed, 0,
             "a stopped factory does not even consume its queue"
@@ -914,7 +1039,7 @@ to = "developer"
             },
         );
 
-        assert_eq!(ran, 2, "both hops ran: {seen:?}");
+        assert_eq!(ran.ran, 2, "both hops ran: {seen:?}");
         assert_eq!(seen, ["analyst", "developer"]);
     }
 
@@ -976,7 +1101,10 @@ to = "developer"
             |_| vec![queued_to(&chain, Origin::Human, "analyst", 4)],
         );
 
-        assert_eq!(ran, 10, "ran up to the configured run cap and no further");
+        assert_eq!(
+            ran.ran, 10,
+            "ran up to the configured run cap and no further"
+        );
         assert!(refusals >= 1, "the cap must refuse, not silently stop");
     }
 
@@ -1031,5 +1159,191 @@ to = "developer"
             0,
             "a token that outlives its run is a finished process that can still send work"
         );
+    }
+
+    /// The shape the reference factory is built around: two verdicts, one publisher.
+    fn joined(temp: &Temp) -> Factory {
+        let text = format!(
+            r#"
+[layover]
+work_dir = "work"
+
+[defaults]
+runner = "shell"
+max_hops = 6
+fuel_usd = 5.0
+max_runs = 20
+timeout_sec = 30
+
+[runners.shell]
+command = {}
+
+[agents.developer]
+prompt = "develop"
+entry = true
+
+[agents.tester]
+prompt = "test"
+
+[agents.reviewer]
+prompt = "review"
+
+[agents.publisher]
+prompt = "publish"
+
+[pipelines.build]
+entry = "developer"
+
+[[routes]]
+from = "developer"
+to = ["tester", "reviewer"]
+
+[[routes]]
+from = ["tester", "reviewer"]
+to = "publisher"
+join = "all"
+"#,
+            shell("echo done")
+        );
+
+        let config: Config = toml::from_str(&text).expect("parses");
+        Factory::new(config, &temp.0).expect("opens")
+    }
+
+    fn verdict(chain: &ItineraryId, from: &str, to: &str, body: &str) -> Queued {
+        Queued::new(
+            Flight::new(
+                chain.clone(),
+                Origin::Agent(AgentName::new(from)),
+                AgentName::new(to),
+                body,
+                4,
+            ),
+            None,
+            BTreeMap::new(),
+        )
+    }
+
+    #[test]
+    fn a_publisher_behind_a_join_runs_once_not_once_per_verdict() {
+        // Two edges into one agent without a join fire it twice. For a publisher that is two pull
+        // requests for one piece of work.
+        let temp = Temp::new("join-once");
+        let factory = joined(&temp);
+        let chain = ItineraryId::generate();
+
+        let mut woke = Vec::new();
+        let drained = factory.drain(
+            vec![
+                verdict(&chain, "tester", "publisher", "tests pass"),
+                verdict(&chain, "reviewer", "publisher", "looks good"),
+            ],
+            |_: &Flight| {},
+            |flight, result| {
+                if matches!(result, Dispatched::Ran { .. }) {
+                    woke.push(flight.to.to_string());
+                }
+            },
+        );
+
+        assert_eq!(drained.ran, 1, "the publisher ran once: {woke:?}");
+        assert_eq!(woke, ["publisher"]);
+        assert!(drained.abandoned.is_empty(), "{:?}", drained.abandoned);
+    }
+
+    #[test]
+    fn the_first_verdict_parks_and_says_who_it_is_waiting_for() {
+        let temp = Temp::new("join-park");
+        let factory = joined(&temp);
+        let chain = ItineraryId::generate();
+
+        let mut parked = Vec::new();
+        factory.drain(
+            vec![verdict(&chain, "tester", "publisher", "tests pass")],
+            |_: &Flight| {},
+            |_, result| {
+                if let Dispatched::Parked { waiting_for } = result {
+                    parked.clone_from(waiting_for);
+                }
+            },
+        );
+
+        assert_eq!(parked, [AgentName::new("reviewer")]);
+    }
+
+    #[test]
+    fn a_released_join_hands_the_agent_every_verdict_labelled_by_sender() {
+        // "Approved" means nothing without knowing which of them said it.
+        let temp = Temp::new("join-body");
+        let factory = joined(&temp);
+        let chain = ItineraryId::generate();
+
+        factory.drain(
+            vec![
+                verdict(&chain, "tester", "publisher", "17 tests pass"),
+                verdict(&chain, "reviewer", "publisher", "no blocking comments"),
+            ],
+            |_: &Flight| {},
+            |_, _| {},
+        );
+
+        let payload = std::fs::read_dir(temp.0.join(".layover").join("hangars").join("publisher"))
+            .expect("a Hangar")
+            .filter_map(Result::ok)
+            .map(|entry| entry.path().join("prompt.md"))
+            .find(|path| path.exists())
+            .and_then(|path| std::fs::read_to_string(path).ok())
+            .expect("a composed payload");
+
+        assert!(payload.contains("From `tester`"), "{payload}");
+        assert!(payload.contains("17 tests pass"), "{payload}");
+        assert!(payload.contains("From `reviewer`"), "{payload}");
+        assert!(payload.contains("no blocking comments"), "{payload}");
+    }
+
+    #[test]
+    fn a_join_that_can_never_complete_is_given_up_and_named() {
+        // Silent permanent stalling is the worst outcome in the system. When the drain goes quiet
+        // with a barrier still holding work, nothing can ever deliver the rest.
+        let temp = Temp::new("join-dead");
+        let factory = joined(&temp);
+        let chain = ItineraryId::generate();
+
+        let drained = factory.drain(
+            vec![verdict(&chain, "tester", "publisher", "tests pass")],
+            |_: &Flight| {},
+            |_, _| {},
+        );
+
+        assert_eq!(drained.ran, 0, "the publisher never woke");
+        assert_eq!(drained.abandoned.len(), 1);
+        assert_eq!(drained.abandoned[0].missing, [AgentName::new("reviewer")]);
+        assert_eq!(
+            drained.abandoned[0].stranded, 1,
+            "the flight that was held is accounted for"
+        );
+    }
+
+    #[test]
+    fn a_human_reaching_a_joined_agent_is_not_held_up_by_the_join() {
+        // A join declares which inputs an agent needs together, not when it may run.
+        let temp = Temp::new("join-human");
+        let factory = joined(&temp);
+
+        let direct = Queued::new(
+            Flight::new(
+                ItineraryId::generate(),
+                Origin::Human,
+                AgentName::new("publisher"),
+                "publish it anyway",
+                4,
+            ),
+            None,
+            BTreeMap::new(),
+        );
+
+        let drained = factory.drain(vec![direct], |_| {}, |_, _| {});
+
+        assert_eq!(drained.ran, 1, "a human trigger bypasses the barrier");
     }
 }

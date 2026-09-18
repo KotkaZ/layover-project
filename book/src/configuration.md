@@ -221,6 +221,43 @@ timeout_sec = 3600
 
 Direction is explicit. An edge absent from `[[routes]]` means the flight is refused.
 
+### What a join does while the factory runs
+
+A barrier holds **flights**, not processes. The obvious implementation — start the joined agent and
+let it block until the rest arrive — costs a live agent CLI per waiting branch, each with a context
+window and, under some pricing, a meter running. Parking the flight costs a map entry, and makes
+the wait durable: a parked flight is data, a blocked process is not.
+
+| What arrives | What happens |
+|---|---|
+| The first declared upstream | Parked. `layover run` says who it is still waiting for. |
+| The last declared upstream | The agent wakes **once**, with every parked flight, each body labelled with who sent it. |
+| A second delivery from an upstream that already reported | A new wave. Partial state is discarded and every upstream must deliver again. |
+| An upstream after an `any` join has fired | Dropped, and reported as superseded. |
+| Anyone the join does not name — including a human | Straight through. The barrier is untouched. |
+
+The agent wakes **once** because two edges into one agent without a join fire it twice, and for a
+publisher that is two pull requests for one piece of work.
+
+A new wave on a second delivery is what makes the develop → test → review loop correct. The
+reviewer's approval of the *previous* revision must not combine with a fresh test result for the
+one after it, so the moment the tester reports again, the reviewer has to look again too.
+
+### When a rendezvous is given up
+
+A barrier waiting for an upstream nothing can still produce would hold that work forever. Silent
+permanent stalling is the worst outcome in this system — worse than a failure, which at least says
+something happened — so when a drain goes quiet with a barrier still holding flights, it is
+abandoned and named:
+
+```text
+Gave up on 1 rendezvous:
+  `publisher` will never wake: nothing live can still deliver reviewer (1 flight(s) stranded)
+```
+
+`layover validate` catches the version of this that is visible before anything runs — a `join =
+"all"` upstream that `max_hops` could never afford the flight into.
+
 ### Spawning
 
 `mode = "spawn"` makes an edge open a **new itinerary** per flight instead of continuing the

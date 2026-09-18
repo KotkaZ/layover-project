@@ -479,7 +479,7 @@ pub fn run(path: &Path, dry_run: bool) -> Result<String, Failure> {
     served.resolve_against(factory.tokens());
 
     let mut lines = Vec::new();
-    let ran = factory.drain_with(
+    let drained = factory.drain_with(
         pending,
         &mut |flight| {
             // Off the queue before it runs. A flight that crashes the factory mid-run must not
@@ -503,8 +503,7 @@ pub fn run(path: &Path, dry_run: bool) -> Result<String, Failure> {
                     };
                     format!("  {} {outcome} ${usd:.2} ({measured})", flight.to)
                 }
-                Dispatched::Refused(refusal) => format!("  {} refused: {refusal}", flight.to),
-                Dispatched::Failed(why) => format!("  {} could not start: {why}", flight.to),
+                other => format!("  {} {other}", flight.to),
             });
         },
         // Whatever the runs just finished put in the queue. Agents send flights while they run,
@@ -512,9 +511,22 @@ pub fn run(path: &Path, dry_run: bool) -> Result<String, Failure> {
         |_| journal.pending().unwrap_or_default(),
     );
 
-    let _ = writeln!(out, "Ran {ran} flight(s):");
+    let _ = writeln!(out, "Ran {} flight(s):", drained.ran);
     for line in lines {
         let _ = writeln!(out, "{line}");
+    }
+
+    // Last and separate, because this is the failure that does not announce itself: work somebody
+    // asked for that will not happen, and that nothing else will report.
+    if !drained.abandoned.is_empty() {
+        let _ = writeln!(out, "\nGave up on {} rendezvous:", drained.abandoned.len());
+        for given_up in &drained.abandoned {
+            let _ = writeln!(
+                out,
+                "  {given_up} ({} flight(s) stranded)",
+                given_up.stranded
+            );
+        }
     }
 
     Ok(out)
