@@ -14,6 +14,7 @@
 - [Configuration](./configuration.md)
 - [Pipelines and triggers](./pipelines.md)
 - [Prompts](./prompts.md)
+- [The tools an agent has](./tools.md)
 - [Cost](./cost.md)
 - [The dashboard](./dashboard.md)
 - [Help and learnings](./learning.md)

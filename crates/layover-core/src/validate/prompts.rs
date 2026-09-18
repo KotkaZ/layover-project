@@ -13,7 +13,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::agent::{AgentName, PromptSpec};
 use crate::config::Config;
 use crate::graph::RouteGraph;
-use crate::prompt::{PromptSource, referenced_flags};
+use crate::pipeline::Flags;
+use crate::prompt::{PromptSource, referenced_flags, resolve};
+use crate::tools::unknown_tools_in;
 
 use super::Diagnostic;
 
@@ -24,6 +26,35 @@ pub(super) fn check_prompt_files(
 ) {
     let referenced = collect_referenced_flags(config, source, found);
     check_flags_are_available_at_every_entry(config, &referenced, found);
+    check_tools_exist(config, source, found);
+}
+
+/// Refuses a prompt that tells an agent to call a tool Layover does not offer.
+///
+/// An agent instructed to use a tool it does not have will improvise, and improvising is what a
+/// factory is meant not to do unattended. This is also the check that would have caught the drift
+/// it was written in response to: eleven tool names were documented across prompts and the book,
+/// and none of them existed.
+fn check_tools_exist(config: &Config, source: &dyn PromptSource, found: &mut Vec<Diagnostic>) {
+    for (name, agent) in &config.agents {
+        let text = match agent.prompt_spec() {
+            Ok(PromptSpec::Inline(text)) => text,
+            Ok(PromptSpec::File(path)) => match resolve(source, &path, &Flags::default()) {
+                Ok(text) => text,
+                // A prompt that will not compose is already reported elsewhere; saying so twice
+                // makes the real problem harder to find.
+                Err(_) => continue,
+            },
+            Err(_) => continue,
+        };
+
+        for unknown in unknown_tools_in(&text) {
+            found.push(Diagnostic::error(format!(
+                "agent `{name}`'s prompt tells it to call `{unknown}`, which is not a tool \
+                 Layover offers; an agent told to use a tool it does not have will improvise"
+            )));
+        }
+    }
 }
 
 /// Reads every agent's prompt once, reporting anything that does not compose.

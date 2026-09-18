@@ -27,13 +27,16 @@ What exists and is fully tested:
 - `crates/layover-dashboard` — the monitoring page and the `Api` implementation behind it.
 - `crates/layover-tower` — the supervisor. The only crate that starts a process, and the first
   place in the project that can do something irreversible.
+- `crates/layover-mcp` — the MCP surface agents talk to Layover through. Untrusted input arrives
+  here; identity comes from the token and never from the request.
 - `crates/layover-cli` — the `layover` binary: `validate`, `explain`, `graph`, `prompt`, `serve`,
   `autostart`.
 
-**One run can be supervised; a factory cannot.** `layover-tower` spawns an agent CLI, streams its
-transcript, times it out, kills its process tree and reads what it cost. What does not exist is
-routing — dispatching a flight, parking a barrier, debiting a rail — or the MCP server agents talk
-through, or the schedule.
+**`layover run` drains what is queued, and agents have tools.** The supervisor spawns an agent CLI,
+watches it, bounds it and prices it; `layover-mcp` answers the calls an agent makes. What does not
+exist is the last connection between them — nothing yet serves the MCP surface to a running child,
+so `layover_send` has no live socket to arrive on and a chain is one hop long. Barriers and
+schedules are also unbuilt.
 
 What each of those will do is settled rather than open: see
 [`docs/first-release.md`](docs/first-release.md). What is still genuinely undecided is the short

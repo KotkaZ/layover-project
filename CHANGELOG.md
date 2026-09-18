@@ -8,6 +8,31 @@ See [project status](README.md#project-status).
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-09-18
+
+The MCP surface agents talk to Layover through: the protocol, the tool registry, and a check that
+stops a prompt naming a tool that does not exist.
+
+### Added
+
+- **`layover-mcp`: JSON-RPC 2.0, `initialize`, `tools/list`, `tools/call`.** Everything here is
+  untrusted input — the content that shaped a request came from a work item or another agent — so
+  a missing field, a wrong type or an unknown method is answered rather than unwrapped.
+- **A tool registry in the domain crate**, which is what lets validation read it. Ten tools, each
+  with a description written for the agent that will read it, and deliberately no `layover_spawn`:
+  a `mode = "spawn"` route already opens an itinerary per flight, and a tool doing the same would
+  be a second permission model over one graph.
+- **`layover validate` refuses a prompt that names a tool Layover does not offer.** Eleven names
+  were once documented across prompts and the book and none existed, because nothing could compare
+  them. An agent told to use a tool it does not have will improvise.
+- **Identity comes from the token, never the request.** `Session` is built by the Tower from a
+  token it minted; there is no constructor taking an agent name from a request, and a test asserts
+  that sending an `agent` field changes nothing.
+- **A refused call is a successful response.** "You may not send to that agent" comes back as a
+  result marked `isError` with text the agent can act on, not as a JSON-RPC error — which would
+  tell the CLI its connection broke rather than telling the agent what it may do instead.
+- **A new book page** describing the tool surface and why it is short.
+
 ## [0.11.0] — 2026-09-18
 
 `layover run` exists, and it runs things. A flight queued through the API is authorised against the
@@ -170,7 +195,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/KotkaZ/layover-project/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/KotkaZ/layover-project/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/KotkaZ/layover-project/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/KotkaZ/layover-project/compare/v0.8.0...v0.9.0

@@ -587,7 +587,7 @@ dependencies = [
 
 [[package]]
 name = "layover-cli"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "axum",
  "clap",
@@ -601,7 +601,7 @@ dependencies = [
 
 [[package]]
 name = "layover-core"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "croner",
  "jiff",
@@ -614,7 +614,7 @@ dependencies = [
 
 [[package]]
 name = "layover-dashboard"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "axum",
  "http-body-util",
@@ -629,7 +629,7 @@ dependencies = [
 
 [[package]]
 name = "layover-http"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "axum",
  "http-body-util",
@@ -640,8 +640,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "layover-mcp"
+version = "0.12.0"
+dependencies = [
+ "layover-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "layover-store"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "jiff",
  "layover-core",
@@ -652,7 +661,7 @@ dependencies = [
 
 [[package]]
 name = "layover-tower"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "jiff",
  "layover-core",
@@ -1298,7 +1307,7 @@ checksum = "f17a85883d4e6d00e8a97c586de764dabcc06133f7f1d55dce5cdc070ad7fe59"
 
 [[package]]
 name = "xtask"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "serde",
  "serde_json",

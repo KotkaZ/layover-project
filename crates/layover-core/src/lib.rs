@@ -42,6 +42,7 @@ pub mod report;
 pub mod route;
 pub mod run;
 pub mod slots;
+pub mod tools;
 pub mod validate;
 
 pub use agent::{Access, Agent, AgentName, PromptSpec, PromptSpecError};
