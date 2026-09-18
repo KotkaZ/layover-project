@@ -21,7 +21,15 @@ permissions:
 jobs:
   verify:
     name: cargo xtask verify
-    runs-on: ubuntu-latest
+    # Windows is where this project is developed and Linux is where CI runs, so every change is
+    # written on one and proved on the other. Both are needed: the supervisor kills process trees
+    # and handles signals, which are not the same operation on the two platforms, and a
+    # platform-conditional block compiles on exactly the platform its author is not using.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       # Every action is pinned to a commit. A version tag is mutable, so `@v4` is a promise from
       # whoever can move that tag rather than a description of what will run.

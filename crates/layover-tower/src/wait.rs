@@ -14,7 +14,6 @@
 //! workspace, still burning CPU, and on the next run, still there. What "kill the tree" means
 //! differs sharply by platform, which is why it is here and not inlined.
 
-use std::io;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
@@ -97,7 +96,7 @@ pub fn kill_tree(pid: u32) -> Result<(), SpawnError> {
             return Ok(());
         }
 
-        Err(SpawnError::Io(io::Error::other(format!(
+        Err(SpawnError::Io(std::io::Error::other(format!(
             "taskkill refused to end process tree {pid}: {status}"
         ))))
     }
