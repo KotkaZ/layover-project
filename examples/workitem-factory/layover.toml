@@ -72,7 +72,7 @@ command = ["copilot", "--model", "{model}", "--allow-all-tools", "--output-forma
 mcp     = { flag = "--mcp-config", format = "claude_json" }
 
 [runners.codex]
-command = ["codex", "exec", "--model", "{model}", "-"]
+command = ["codex", "exec", "--model", "{model}", "{mcp}", "-"]
 mcp     = { flag = "-c", format = "codex_toml" }
 
 # ── Intake ─────────────────────────────────────────────────────────

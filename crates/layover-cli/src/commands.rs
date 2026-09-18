@@ -6,12 +6,15 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use jiff::{Timestamp, ToSpan};
 use layover_core::cost::RETENTION_DAYS;
 use layover_dashboard::{Dashboard, DashboardState};
 use layover_store::{History, Journal};
 use layover_tower::{Dispatched, Factory};
+
+use crate::mcp::ServedMcp;
 
 use layover_core::agent::PromptSpec;
 use layover_core::prompt::resolve;
@@ -434,20 +437,15 @@ pub fn run(path: &Path, dry_run: bool) -> Result<String, Failure> {
     let (config, _) = load(path)?;
     let root = path.parent().unwrap_or_else(|| Path::new("."));
 
-    let journal =
-        Journal::open(root.join(".layover").join("journal")).map_err(|error| error.to_string())?;
+    let journal = Arc::new(
+        Journal::open(root.join(".layover").join("journal")).map_err(|error| error.to_string())?,
+    );
     let pending = journal.pending().map_err(|error| error.to_string())?;
 
     let mut out = String::new();
 
     if pending.is_empty() {
         return Ok("Nothing is queued.\n".to_owned());
-    }
-
-    let factory = Factory::new(config, root).map_err(|error| error.to_string())?;
-
-    if factory.ground_stop_engaged() {
-        return Err("a Ground Stop is engaged; release it before running anything".into());
     }
 
     if dry_run {
@@ -464,15 +462,31 @@ pub fn run(path: &Path, dry_run: bool) -> Result<String, Failure> {
         return Ok(out);
     }
 
+    // Started before the factory, because the factory needs the address it actually bound to.
+    // Port 0 and reading it back is the only way to be sure: a port chosen in advance can be
+    // taken between choosing it and binding it, and a child told the wrong address fails in a way
+    // that reads as the agent misbehaving.
+    let served = ServedMcp::start(&config, root, Arc::clone(&journal))?;
+
+    let factory = Factory::new(config, root)
+        .map_err(|error| error.to_string())?
+        .serving_mcp(served.endpoint.clone());
+
+    if factory.ground_stop_engaged() {
+        return Err("a Ground Stop is engaged; release it before running anything".into());
+    }
+
+    served.resolve_against(factory.tokens());
+
     let mut lines = Vec::new();
-    let ran = factory.drain(
+    let ran = factory.drain_with(
         pending,
-        |flight| {
+        &mut |flight| {
             // Off the queue before it runs. A flight that crashes the factory mid-run must not
             // come back on restart and do its work a second time.
             let _ = journal.unqueue(&flight.id);
         },
-        |flight, result| {
+        &mut |flight, result| {
             lines.push(match result {
                 Dispatched::Ran {
                     outcome,
@@ -493,6 +507,9 @@ pub fn run(path: &Path, dry_run: bool) -> Result<String, Failure> {
                 Dispatched::Failed(why) => format!("  {} could not start: {why}", flight.to),
             });
         },
+        // Whatever the runs just finished put in the queue. Agents send flights while they run,
+        // so the work waiting now is not the work that was waiting when this started.
+        |_| journal.pending().unwrap_or_default(),
     );
 
     let _ = writeln!(out, "Ran {ran} flight(s):");

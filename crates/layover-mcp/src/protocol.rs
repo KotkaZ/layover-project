@@ -97,6 +97,20 @@ pub fn handle(request: &Request, session: &Session, runtime: &dyn Runtime) -> Op
     })
 }
 
+/// A reply to a body that did not parse as a request.
+///
+/// The identifier is null because there is nothing to echo: the id lived in the body that failed
+/// to parse. This is a genuine JSON-RPC error rather than a refusal, because the client's framing
+/// is wrong and no tool was reached.
+#[must_use]
+pub fn malformed(detail: &str) -> Response {
+    Response::failed(
+        Value::Null,
+        -32700,
+        &format!("could not parse the request: {detail}"),
+    )
+}
+
 /// What Layover says it is and what it can do.
 fn initialize() -> Value {
     json!({

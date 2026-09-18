@@ -6,6 +6,7 @@
 //! one that says it cannot.
 
 mod commands;
+mod mcp;
 
 use std::path::PathBuf;
 use std::process::ExitCode;

@@ -8,9 +8,14 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-layover-core = { path = "../layover-core", version = "0.12.0" }
+layover-core = { path = "../layover-core", version = "0.13.0" }
+axum = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+tower = { version = "0.5", features = ["util"] }

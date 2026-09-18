@@ -61,9 +61,14 @@ report.
 map and the safety rails, spawns the agent CLI, watches it, times it out if it wedges, reads what
 it cost and writes the run to history.
 
-**What does not exist is the agent-to-agent half.** Nothing routes a flight from one agent to the
-next, there is no MCP server for them to talk through, and no schedule fires — so a chain is one
-hop long, and `run` drains what was asked of it and stops.
+**Agents reach one another.** Each run is served an MCP endpoint and a token minted for it alone.
+An agent that calls `layover_send` queues a real flight; the same invocation picks it up and runs
+the next agent. Every hop is charged to the one itinerary that began the chain, so Hops, Fuel and
+the run cap bound the whole conversation rather than each message in it. The route map is enforced
+against the live child: a call to an agent the map does not reach is refused, with advice.
+
+**What does not exist is scheduling.** Nothing fires on a timer, so a chain still has to be started
+by hand — through the API, or by whatever you point at it.
 
 The [README](https://github.com/KotkaZ/layover-project#what-works-today) carries the built and
 not-built list, kept in one place so the two cannot disagree.

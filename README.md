@@ -20,11 +20,13 @@
 
 </div>
 
-> **Status: early implementation.** `layover run` now does real work: it takes what is queued,
-> checks each flight against the route map and the safety rails, spawns the agent CLI, watches it,
-> bounds it, prices it and writes it down. **What does not exist is the agent-to-agent half** —
-> nothing routes a flight from one agent to the next, and there is no MCP server for them to talk
-> through, so a chain is one hop long. Detail in [what works today](#what-works-today).
+> **Status: early implementation.** Agents now reach one another. `layover run` takes what is
+> queued, checks each flight against the route map and the safety rails, spawns the agent CLI —
+> and serves that CLI an MCP endpoint it can call back into. An agent that calls `layover_send`
+> queues a real flight, and the same invocation picks it up and runs the next agent, charging
+> every hop to one shared Hops, Fuel and run-cap budget. **What does not exist is scheduling** —
+> nothing fires on a timer, so a chain still has to be started by hand. Detail in
+> [what works today](#what-works-today).
 >
 > Pre-1.0 and maintained by one person: expect breaking changes on a minor bump. See
 > [project status](#project-status).
@@ -194,16 +196,22 @@ test and doc build, with warnings denied. CI runs the same command, unchanged.
 
 | Built | Not built |
 |---|---|
-| `validate`, `explain`, `prompt`, `graph` | Routing: nothing sends a message from one agent to another |
-| `serve`: the dashboard and the read endpoints behind it | The MCP server agents would talk to each other through |
-| **`run`: drains the queue, authorises each flight against the route map and the rails, spawns it, records it** | Barriers, schedules, and resuming a booked Layover |
-| Run history, costs, the Reserve, help requests, learnings, reports | A daemon — `run` drains what is queued and stops |
-| `POST /flights`, which queues a trigger durably | Live run streaming and Ground Stop over HTTP, which answer `501` |
+| `validate`, `explain`, `prompt`, `graph` | Schedules: nothing fires on a timer |
+| `serve`: the dashboard and the read endpoints behind it | Barriers at runtime, and resuming a booked Layover |
+| **`run`: drains the queue, authorises each flight against the route map and the rails, spawns it, records it** | A daemon — `run` drains what is queued and stops |
+| **The MCP endpoint agents call back into: `layover_send` queues a real flight and the same `run` picks it up** | Live run streaming and Ground Stop over HTTP, which answer `501` |
+| Run history, costs, the Reserve, help requests, learnings, reports | |
+| `POST /flights`, which queues a trigger durably | |
 | `autostart`, which registers `layover serve` at login | |
 
-**A factory that runs one agent is not yet a mesh.** A human can trigger work and Layover will do
-it — authorise it, spawn it, bound it, price it, write it down. What is missing is the agent-to-agent
-half: nothing routes a flight from one agent to the next, so a chain is one hop long.
+**A chain is now longer than one hop.** Each run is served an MCP endpoint and a token minted for
+it alone; an agent that calls `layover_send` queues a real flight and the same invocation runs the
+next agent. Every hop is charged to the itinerary that began the chain, so Hops, Fuel and the run
+cap bound the whole conversation rather than each message in it — and an agent reaching for an edge
+the route map does not draw is refused while it runs, not after.
+
+What is missing is anything that starts work on its own: no schedule fires, so a chain still has to
+be triggered by hand.
 
 What each remaining piece will do is settled rather than open: see
 [`docs/first-release.md`](docs/first-release.md).

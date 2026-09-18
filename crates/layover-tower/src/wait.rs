@@ -185,6 +185,7 @@ mod tests {
             hangar: temp.0.join("hangar"),
             work_dir: temp.0.clone(),
             env: BTreeMap::new(),
+            mcp_config: None,
         }
     }
 

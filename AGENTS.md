@@ -30,20 +30,19 @@ What exists and is fully tested:
 - `crates/layover-mcp` — the MCP surface agents talk to Layover through. Untrusted input arrives
   here; identity comes from the token and never from the request.
 - `crates/layover-cli` — the `layover` binary: `validate`, `explain`, `graph`, `prompt`, `serve`,
-  `autostart`.
+  `run`, `autostart`.
 
-**`layover run` drains what is queued, and agents have tools.** The supervisor spawns an agent CLI,
-watches it, bounds it and prices it; `layover-mcp` answers the calls an agent makes. What does not
-exist is the last connection between them — nothing yet serves the MCP surface to a running child,
-so `layover_send` has no live socket to arrive on and a chain is one hop long. Barriers and
-schedules are also unbuilt.
+**`layover run` runs a factory, and agents reach one another.** The supervisor spawns an agent CLI,
+serves it an MCP endpoint with a token minted for that run alone, watches it, bounds it and prices
+it. An agent that calls `layover_send` queues a real flight and the same invocation runs the next
+agent, charging every hop to the one itinerary that began the chain.
+
+What does not exist is anything that starts work on its own: no schedule fires, so a chain has to
+be triggered by hand. Barriers at runtime and resuming a booked Layover are also unbuilt.
 
 What each of those will do is settled rather than open: see
 [`docs/first-release.md`](docs/first-release.md). What is still genuinely undecided is the short
 list in `docs/decisions.md`; do not guess at those.
-
-`layover run` is deliberately absent rather than stubbed. A command that pretends to start a
-factory is worse than one that says it cannot.
 
 ## The golden rule
 

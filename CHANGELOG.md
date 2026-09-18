@@ -8,6 +8,46 @@ See [project status](README.md#project-status).
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-09-18
+
+Agents reach one another. A run is served an MCP endpoint it can call back into, and a chain is no
+longer one hop long.
+
+### Added
+
+- **The MCP endpoint is served, and a run is given a token for it.** `layover run` binds on
+  loopback for the length of the drain, writes each run an MCP configuration into its Hangar, and
+  passes the address and token in the child's environment. The port is chosen by the operating
+  system and read back after binding: a port picked in advance can be taken between picking it and
+  binding it, and a child told an address nothing is listening on fails in a way that reads as the
+  agent misbehaving.
+- **`layover_send` queues a real flight, and the same invocation runs it.** `drain` loops rather
+  than iterating once. A run can send while it is running, and draining only the list it started
+  with would leave that work sitting until something else happened to pick it up — one hop per
+  invocation, forever.
+- **A chain shares one itinerary.** Every flight in a causal chain is now accounted against the
+  same Hops, Fuel and run cap. Previously `drain` minted a fresh itinerary per flight, which would
+  have reset all three on every hop: two agents passing work back and forth would have run forever
+  on a budget renewed each time round.
+- **The route map is enforced against the live child.** An agent reaching for an edge the map does
+  not draw is refused while it runs, and told to call `layover_peers` to see what it can reach —
+  rather than finding out after the fact, or not at all.
+- **A token dies with its run**, on every path out: a refused plan, a spawn that failed, a timeout,
+  a Ground Stop, a clean exit. A token that outlives its run is a finished process that can still
+  queue work, with no itinerary to charge it to.
+- **An unknown token is refused loudly**, with HTTP 401, before any tool runs. Every other refusal
+  in the MCP surface is a successful response the agent can read and act on; this one is not,
+  because a call that cannot be accounted to a run must not reach a tool at all.
+- **`{mcp}` may be placed in a runner command.** Without it the flag and config path are appended,
+  which is what `claude` and `copilot` want. With it they go where the command says — `codex
+  exec … -` reads the prompt from stdin and the `-` has to stay last.
+
+### Fixed
+
+- **A drain whose every flight is refused no longer spins.** Only a run can send a flight, so a
+  pass that started nothing cannot have produced new work; the loop now stops rather than asking
+  a closed queue for more. Found by a test that hung instead of failing.
+
 ## [0.12.0] — 2026-09-18
 
 The MCP surface agents talk to Layover through: the protocol, the tool registry, and a check that
@@ -195,7 +235,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/KotkaZ/layover-project/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/KotkaZ/layover-project/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/KotkaZ/layover-project/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/KotkaZ/layover-project/compare/v0.9.0...v0.10.0

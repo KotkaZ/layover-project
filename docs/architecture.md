@@ -154,7 +154,7 @@ command = ["copilot", "-p", "{prompt}", "--allow-all-tools"]
 mcp     = { flag = "--mcp-config", format = "claude_json" }
 
 [runners.codex]
-command = ["codex", "exec", "{prompt}"]
+command = ["codex", "exec", "{mcp}", "{prompt}"]
 mcp     = { flag = "-c", format = "codex_toml" }
 
 # ── Agents ─────────────────────────────────────────────────────────

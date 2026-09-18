@@ -156,6 +156,15 @@ impl Runner {
     /// in one place and half in another.
     pub const MODEL: &'static str = "{model}";
 
+    /// The placeholder substituted with this runner's [`McpWiring::flag`] and the path to the
+    /// generated MCP configuration — two arguments, not one.
+    ///
+    /// Optional. A command that does not contain it gets the pair appended at the end, which is
+    /// what `claude` and `copilot` want. It exists for commands that end in a positional argument
+    /// — `codex exec … -` reads the prompt from stdin and must stay last — where appending would
+    /// put a flag after the thing it has to precede.
+    pub const MCP: &'static str = "{mcp}";
+
     /// Returns `true` when this runner wants the instructions as a file it is handed.
     ///
     /// When `false`, the Tower prepends them to the stdin payload instead.
@@ -187,10 +196,36 @@ impl Runner {
     /// CLIs treat it as a positional.
     #[must_use]
     pub fn invocation(&self, prompt_path: Option<&str>, model: Option<&str>) -> Vec<String> {
-        let mut out = Vec::with_capacity(self.command.len());
+        self.invocation_with_mcp(prompt_path, model, None)
+    }
+
+    /// The command to run, with every placeholder resolved.
+    ///
+    /// `mcp_config` is the path to the file [`McpWiring::format`] describes. When the command
+    /// names [`Self::MCP`] the flag and path replace it there; otherwise they are appended, which
+    /// is the right answer for every CLI that does not end in a positional argument.
+    #[must_use]
+    pub fn invocation_with_mcp(
+        &self,
+        prompt_path: Option<&str>,
+        model: Option<&str>,
+        mcp_config: Option<&str>,
+    ) -> Vec<String> {
+        let wiring = self.mcp.as_ref().zip(mcp_config);
+        let mut out = Vec::with_capacity(self.command.len() + 2);
 
         for arg in &self.command {
             if arg == Self::MODEL && model.is_none() {
+                continue;
+            }
+
+            if arg == Self::MCP {
+                if let Some((mcp, path)) = wiring {
+                    out.push(mcp.flag.clone());
+                    out.push(path.to_owned());
+                }
+                // Dropped when there is nothing to wire: an unresolved placeholder reaching a CLI
+                // becomes an argument it does not understand.
                 continue;
             }
 
@@ -203,6 +238,13 @@ impl Runner {
             }
 
             out.push(rendered);
+        }
+
+        if let Some((mcp, path)) = wiring
+            && !self.command.iter().any(|arg| arg == Self::MCP)
+        {
+            out.push(mcp.flag.clone());
+            out.push(path.to_owned());
         }
 
         out
@@ -666,6 +708,64 @@ mod invocation_tests {
         // An empty string in argv is not nothing; several CLIs read it as a positional argument.
         let r = runner(&["claude", "-p", "{model}"]);
         assert_eq!(r.invocation(None, None), ["claude", "-p"]);
+    }
+
+    fn mcp_runner(args: &[&str], flag: &str) -> Runner {
+        toml::from_str(&format!(
+            "command = [{}]\nmcp = {{ flag = \"{flag}\", format = \"claude_json\" }}",
+            args.iter()
+                .map(|a| format!("\"{a}\""))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ))
+        .expect("parses")
+    }
+
+    #[test]
+    fn mcp_wiring_is_appended_when_the_command_does_not_place_it() {
+        // What `claude` and `copilot` want, and what every existing factory file relies on.
+        let r = mcp_runner(&["copilot", "--allow-all-tools"], "--mcp-config");
+        assert_eq!(
+            r.invocation_with_mcp(None, None, Some("/h/mcp.json")),
+            [
+                "copilot",
+                "--allow-all-tools",
+                "--mcp-config",
+                "/h/mcp.json"
+            ]
+        );
+    }
+
+    #[test]
+    fn mcp_wiring_goes_where_the_command_puts_it_when_it_says() {
+        // `codex exec … -` reads the prompt from stdin and the `-` has to stay last, so appending
+        // would put the flag after the argument it must precede.
+        let r = mcp_runner(&["codex", "exec", "{mcp}", "-"], "-c");
+        assert_eq!(
+            r.invocation_with_mcp(None, None, Some("/h/mcp.toml")),
+            ["codex", "exec", "-c", "/h/mcp.toml", "-"]
+        );
+    }
+
+    #[test]
+    fn an_mcp_placeholder_disappears_when_there_is_nothing_to_wire() {
+        // An unresolved placeholder reaching a CLI becomes an argument it does not understand.
+        let r = mcp_runner(&["codex", "exec", "{mcp}", "-"], "-c");
+        assert_eq!(
+            r.invocation_with_mcp(None, None, None),
+            ["codex", "exec", "-"]
+        );
+    }
+
+    #[test]
+    fn a_runner_with_no_mcp_block_is_wired_to_nothing_even_if_a_path_exists() {
+        // The factory always has a config file to offer; only the runner knows whether its CLI
+        // can be told about one.
+        let r = runner(&["echo", "hello"]);
+        assert_eq!(
+            r.invocation_with_mcp(None, None, Some("/h/mcp.json")),
+            ["echo", "hello"]
+        );
     }
 
     #[test]

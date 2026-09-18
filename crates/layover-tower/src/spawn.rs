@@ -47,6 +47,11 @@ pub struct Plan {
     pub work_dir: PathBuf,
     /// Variables to pass, already resolved from the supervisor's own environment.
     pub env: BTreeMap<String, String>,
+    /// The MCP configuration written for this run, when the factory is serving one.
+    ///
+    /// Held as a path rather than as content because the flag a CLI takes names a file, and the
+    /// file has to outlive this struct — it is read by the child, after the spawn.
+    pub mcp_config: Option<PathBuf>,
 }
 
 /// A process that has been started and recorded.
@@ -264,9 +269,16 @@ pub fn start(plan: &Plan) -> Result<Started, SpawnError> {
         .takes_prompt_path()
         .then(|| payload_path.display().to_string());
 
-    let argv = plan
-        .runner
-        .invocation(payload_arg.as_deref(), plan.model.as_deref());
+    let mcp_arg = plan
+        .mcp_config
+        .as_ref()
+        .map(|path| path.display().to_string());
+
+    let argv = plan.runner.invocation_with_mcp(
+        payload_arg.as_deref(),
+        plan.model.as_deref(),
+        mcp_arg.as_deref(),
+    );
     let (program, arguments) = argv.split_first().ok_or(SpawnError::EmptyCommand)?;
 
     let transcript = plan.hangar.join(TRANSCRIPT_FILE);
@@ -384,6 +396,7 @@ mod tests {
             hangar: temp.0.join("hangar"),
             work_dir: temp.0.clone(),
             env: BTreeMap::new(),
+            mcp_config: None,
         }
     }
 

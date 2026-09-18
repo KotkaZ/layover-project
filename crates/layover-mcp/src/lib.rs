@@ -18,6 +18,8 @@
 
 pub mod protocol;
 pub mod runtime;
+pub mod serve;
 
-pub use protocol::{PROTOCOL_VERSION, Request, Response, handle};
+pub use protocol::{PROTOCOL_VERSION, Request, Response, handle, malformed};
 pub use runtime::{Peer, Runtime, Session, ToolError};
+pub use serve::{AUTH_HEADER, ENDPOINT_PATH, Served, Sessions, router, token_from};

@@ -30,6 +30,57 @@ There is deliberately **no `layover_spawn`**. A `mode = "spawn"` route already o
 per flight, and a tool doing the same would be a second permission model over the same graph —
 two places to look when asking what an agent may start, which is one too many.
 
+## How a run reaches them
+
+`layover run` binds an MCP endpoint on loopback for as long as it is draining, and gives each run
+a token minted for it alone. The child is told about both in two ways:
+
+| | |
+|---|---|
+| `LAYOVER_MCP_URL` | The endpoint, in the child's environment |
+| `LAYOVER_RUN_TOKEN` | Its token, in the child's environment |
+| `mcp.json` in the run's Hangar | The same two, in the shape the CLI's `--mcp-config` flag expects |
+
+Which file is written depends on the runner's `mcp.format`. The flag is appended to the command
+unless the command places `{mcp}` itself:
+
+```toml
+[runners.copilot]
+command = ["copilot", "--allow-all-tools", "--output-format", "json"]
+mcp     = { flag = "--mcp-config", format = "claude_json" }
+# runs: copilot --allow-all-tools --output-format json --mcp-config <hangar>/mcp.json
+
+[runners.codex]
+command = ["codex", "exec", "--model", "{model}", "{mcp}", "-"]
+mcp     = { flag = "-c", format = "codex_toml" }
+# runs: codex exec --model <model> -c <hangar>/mcp.toml -
+```
+
+`codex exec … -` reads its prompt from stdin, so the `-` has to stay last; that is what `{mcp}` is
+for. Everything else can take the append.
+
+### The token is the identity
+
+An agent never says which agent it is. The token does, and Layover holds the mapping — so the
+answer to "who is calling?" cannot be influenced by anything in the request, including a work item
+or another agent's output that is trying to talk the child into something.
+
+A token is minted as a run starts and revoked the instant its process is gone, on every path out:
+a clean exit, a failure, a timeout, a Ground Stop. A call arriving on a revoked token is refused
+with HTTP 401 before any tool runs — not as a readable refusal like the others, because a call that
+cannot be charged to a run has no chain to spend from and no agent to be.
+
+### What the rails do while a run is live
+
+`layover_send` is checked against the same route map and the same itinerary the supervisor uses:
+
+- An edge the map does not draw is refused, and the agent is told to call `layover_peers`.
+- A chain with no Hops left is told to finish and report rather than send, while it can still do
+  something about it.
+- The flight it queues **continues the caller's chain**. It is not a new itinerary, so it spends
+  the same Hops, the same Fuel and the same run cap. Two agents passing work back and forth are
+  bounded by the budget the chain started with, not by a fresh one each time round.
+
 ## A prompt cannot name a tool that does not exist
 
 `layover validate` reads every prompt, finds every `layover_*` name in it, and refuses a factory
