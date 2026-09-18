@@ -16,8 +16,8 @@
 //! # What this does not do
 //!
 //! Resolution produces the agent's *standing instructions* and nothing else. How those combine
-//! with the incoming flight body and the agent's `memory.md` is a run-bootstrap question that is
-//! still open — see `docs/decisions.md`. Do not add that here without settling it first.
+//! with the flight body, the agent's memory, its learnings and any handover is
+//! [`crate::payload`]'s job, and the order is settled there. Do not assemble a payload here.
 
 use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};

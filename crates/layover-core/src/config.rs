@@ -148,6 +148,14 @@ impl Runner {
     /// The placeholder substituted with the path to the composed instructions.
     pub const PROMPT_PATH: &'static str = "{prompt}";
 
+    /// The placeholder substituted with the agent's model.
+    ///
+    /// Every supported CLI spells its model flag differently — `--model`, `-m`, a config key — so
+    /// the spelling stays in the runner command, which is already the one place that knows how to
+    /// invoke a given CLI. The alternative, a `model_flag` field, would put half of an invocation
+    /// in one place and half in another.
+    pub const MODEL: &'static str = "{model}";
+
     /// Returns `true` when this runner wants the instructions as a file it is handed.
     ///
     /// When `false`, the Tower prepends them to the stdin payload instead.
@@ -156,6 +164,48 @@ impl Runner {
         self.command
             .iter()
             .any(|arg| arg.contains(Self::PROMPT_PATH))
+    }
+
+    /// Returns `true` when this runner can carry an agent's `model`.
+    ///
+    /// An agent that declares a model whose runner cannot carry it is a silent no-op: the run
+    /// happens, on whichever model the CLI defaults to, and nothing says the declaration was
+    /// ignored. Validation warns about it rather than letting it pass.
+    #[must_use]
+    pub fn takes_model(&self) -> bool {
+        self.command.iter().any(|arg| arg.contains(Self::MODEL))
+    }
+
+    /// Builds the command line for one run.
+    ///
+    /// Substitution is textual and deliberately so: a placeholder sits inside an argument like
+    /// `--model={model}` as readily as it stands alone, and the operator writes whichever their
+    /// CLI expects.
+    ///
+    /// An argument that is *only* a `{model}` placeholder disappears when no model is set, rather
+    /// than becoming an empty argument — an empty string in `argv` is not nothing, and several
+    /// CLIs treat it as a positional.
+    #[must_use]
+    pub fn invocation(&self, prompt_path: Option<&str>, model: Option<&str>) -> Vec<String> {
+        let mut out = Vec::with_capacity(self.command.len());
+
+        for arg in &self.command {
+            if arg == Self::MODEL && model.is_none() {
+                continue;
+            }
+
+            let mut rendered = arg.clone();
+            if let Some(path) = prompt_path {
+                rendered = rendered.replace(Self::PROMPT_PATH, path);
+            }
+            if let Some(model) = model {
+                rendered = rendered.replace(Self::MODEL, model);
+            }
+
+            out.push(rendered);
+        }
+
+        out
     }
 }
 
@@ -576,5 +626,97 @@ mod tests {
         flags.sort_unstable();
 
         assert_eq!(flags, ["deep_scan", "run_e2e"]);
+    }
+}
+
+#[cfg(test)]
+mod invocation_tests {
+    use crate::config::Runner;
+
+    fn runner(args: &[&str]) -> Runner {
+        toml::from_str(&format!(
+            "command = [{}]",
+            args.iter()
+                .map(|a| format!("\"{a}\""))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ))
+        .expect("parses")
+    }
+
+    #[test]
+    fn a_model_placeholder_is_substituted_wherever_it_sits() {
+        // Some CLIs take `--model x`, some take `--model=x`. The operator writes whichever theirs
+        // wants, so substitution has to be textual rather than positional.
+        let separate = runner(&["claude", "-p", "--model", "{model}"]);
+        assert_eq!(
+            separate.invocation(None, Some("claude-opus-5")),
+            ["claude", "-p", "--model", "claude-opus-5"]
+        );
+
+        let joined = runner(&["codex", "exec", "--model={model}"]);
+        assert_eq!(
+            joined.invocation(None, Some("gpt-5.4")),
+            ["codex", "exec", "--model=gpt-5.4"]
+        );
+    }
+
+    #[test]
+    fn a_bare_model_placeholder_disappears_when_no_model_is_set() {
+        // An empty string in argv is not nothing; several CLIs read it as a positional argument.
+        let r = runner(&["claude", "-p", "{model}"]);
+        assert_eq!(r.invocation(None, None), ["claude", "-p"]);
+    }
+
+    #[test]
+    fn the_prompt_path_is_substituted_independently_of_the_model() {
+        let r = runner(&["agent", "--file", "{prompt}", "--model", "{model}"]);
+        assert_eq!(
+            r.invocation(Some("/run/prompt.md"), Some("m1")),
+            ["agent", "--file", "/run/prompt.md", "--model", "m1"]
+        );
+    }
+
+    #[test]
+    fn a_runner_without_placeholders_is_passed_through_untouched() {
+        let r = runner(&["copilot", "--allow-all-tools"]);
+        assert_eq!(
+            r.invocation(Some("/x"), Some("m")),
+            ["copilot", "--allow-all-tools"]
+        );
+        assert!(!r.takes_model());
+        assert!(!r.takes_prompt_path());
+    }
+
+    #[test]
+    fn declaring_a_model_a_runner_cannot_carry_is_a_warning() {
+        let config: crate::config::Config = toml::from_str(
+            r#"
+[layover]
+work_dir = "work"
+
+[defaults]
+runner = "claude"
+
+[runners.claude]
+command = ["claude", "-p"]
+
+[agents.analyst]
+prompt = "analyse"
+model = "claude-opus-5"
+entry = true
+"#,
+        )
+        .expect("parses");
+
+        let said: Vec<_> = crate::validate::validate(&config)
+            .iter()
+            .map(|d| d.message.clone())
+            .collect();
+
+        assert!(
+            said.iter().any(|m| m.contains("no `{model}` placeholder")),
+            "{said:?}"
+        );
     }
 }

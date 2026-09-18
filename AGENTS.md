@@ -29,8 +29,9 @@ What exists and is fully tested:
   `autostart`.
 
 **Nothing that spawns a process exists yet** — no process supervision, no MCP server, no Tower.
-Those are blocked on the run-bootstrap questions in `docs/decisions.md`, which are
-unanswered. Do not guess at them; ask.
+The run bootstrap is now settled: see [`docs/first-release.md`](docs/first-release.md) for what a
+run receives and in what order. What remains open is listed in `docs/decisions.md`; do not guess
+at those.
 
 `layover run` is deliberately absent rather than stubbed. A command that pretends to start a
 factory is worse than one that says it cannot.
@@ -136,7 +137,8 @@ type names, API fields and prose alike.
 | `dist-workspace.toml` | **Release configuration.** Edit this, never `.github/workflows/release.yml`. |
 | `book/` | The published documentation site (mdBook → GitHub Pages) |
 | `docs/architecture.md` | System design |
-| `docs/decisions.md` | Why each choice was made, and what is still open |
+| `docs/decisions.md` | Why the system that exists is shaped as it is, and what is still open |
+| `docs/first-release.md` | Decisions made for the first runnable release, not yet built |
 | `docs/routing.md` | Route map semantics, joins, failure paths |
 
 | `docs/risks.md` | Known risks and mitigations |

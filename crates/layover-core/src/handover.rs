@@ -19,10 +19,10 @@
 //!
 //! # What this module does not decide
 //!
-//! [`Handover::brief`] renders a block of text *about* the previous run. How that block combines
-//! with the agent's own prompt, the incoming flight body and `memory.md` is run-bootstrap
-//! question 1 in `docs/decisions.md`, and is still open. This produces the block; something else
-//! decides where it goes.
+//! [`Handover::brief`] renders a block of text *about* the previous run. Where that block sits in
+//! the payload is settled and lives in [`crate::payload`]: immediately above the flight body, so
+//! that "you are continuing work that did not finish" reads next to what the work is. This
+//! produces the block; `payload::compose` places it.
 
 use jiff::Timestamp;
 use std::fmt;

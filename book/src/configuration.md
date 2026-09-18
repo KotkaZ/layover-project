@@ -84,6 +84,15 @@ and then fails on the first agent worth running.
 instructions to before spawning. Include it only for CLIs that accept a file of instructions as a
 flag; runners without it have the instructions prepended to the stdin payload instead.
 
+`{model}` carries the agent's `model` into the command. Every CLI spells the flag differently, so
+the spelling stays here rather than in a field of its own — write `"--model", "{model}"` or
+`"--model={model}"`, whichever yours wants. An agent that declares a `model` whose runner has no
+placeholder gets a warning at load time, because otherwise the run would quietly use the CLI's own
+default and nothing would say the declaration was ignored.
+
+A bare `"{model}"` argument disappears when no model is set, rather than becoming an empty
+argument — several CLIs read an empty string in `argv` as a positional.
+
 `mcp` says how this runner is told where Layover's MCP server is.
 
 ## `[agents.*]` — who exists

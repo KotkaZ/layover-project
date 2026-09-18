@@ -17,10 +17,10 @@ name = "layover"
 path = "src/main.rs"
 
 [dependencies]
-layover-core = { path = "../layover-core", version = "0.8.0" }
+layover-core = { path = "../layover-core", version = "0.9.0" }
 clap = { workspace = true, features = ["derive"] }
-layover-dashboard = { path = "../layover-dashboard", version = "0.8.0" }
-layover-store = { path = "../layover-store", version = "0.8.0" }
+layover-dashboard = { path = "../layover-dashboard", version = "0.9.0" }
+layover-store = { path = "../layover-store", version = "0.9.0" }
 axum = { workspace = true }
 jiff = { workspace = true }
 tokio = { workspace = true, features = ["rt", "net", "macros", "signal"] }

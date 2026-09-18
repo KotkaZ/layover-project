@@ -34,6 +34,7 @@ pub mod itinerary;
 pub mod layover;
 pub mod learning;
 pub mod mcp;
+pub mod payload;
 pub mod pipeline;
 pub mod prompt;
 pub mod queue;

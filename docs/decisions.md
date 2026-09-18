@@ -448,96 +448,24 @@ knows to look further rather than assuming the agent stopped there.
 
 ---
 
-## Open questions
+## Still open
+
+Fifty questions were answered on 18 September 2026; the reasoning is in
+[`first-release.md`](first-release.md). What follows is what remains genuinely undecided.
 
 Agents should ask rather than guess on any of these.
 
-### Run bootstrap — blocks implementation
-
-1. **How do the instructions, the handover and the flight body order themselves within that stdin payload?** The transport is settled; the composition is not. How do the agent's configured `prompt`, the incoming
-   flight `body`, and the agent's `memory.md` combine into a single CLI invocation? Nothing
-   specifies the composition or its order.
-2. **Is memory injected or fetched?** Either the Tower splices `memory.md` into the prompt, or the
-   agent must call `layover_memory_read()` itself. Because runs are fresh, this one choice decides
-   whether explicit memory actually works — an agent that forgets to look never remembers anything.
-3. **How does `model` reach each CLI?** The runner command templates have no model placeholder,
-   and each CLI spells the flag differently.
-4. **Does an agent know its own name?** Needed for self-reference in prompts and for reasoning
-   about its own position in the mesh.
-
-### Lifecycle semantics
-
-5. **What does Ground Stop actually do?** Kill running processes, or only block new spawns? What
-   happens to parked barriers, and are outstanding MCP tokens revoked?
-6. **What is a dead-end run?** An agent exits without sending anything. Success, or a silently
-   abandoned branch? This directly affects barrier reachability analysis.
-7. **What happens on timeout?** `timeout_sec` exists in config, but nothing defines the behaviour
-   when it fires.
-8. **What happens when a run crashes?** Distinct from an agent reporting failure: the process
-   dies or exits non-zero. Retry, dead-letter, notify the sender, or stall the itinerary.
-9. **When is an Itinerary done?** Exhausting Hops or Fuel is failure, not success. Without a
-   terminal state the UI cannot distinguish finished from idle.
-
-### Concurrency edges
-
-10. **Two humans POST simultaneously** — one itinerary or two?
-11. **How many loop-backs before giving up?** Hops bounds it, but exhausting Hops mid-repair can
-    leave half-finished work in the shared workspace and no one to clean it up.
-12. **Can the barrier-reset constraint be enforced?** A loop-back must re-dispatch the whole
-    fan-out, and today that lives only in agent prompts.
-13. **Can a join wait only for the upstreams that were actually dispatched?** `join = "all"` waits
-    for every *declared* upstream, so an agent that consults a specialist only when the work needs
-    one strands its own rendezvous. The workaround is to dispatch everyone every time and let the
-    idle specialist reply "nothing to add" — see
-    [`routing.md`](routing.md#a-join-has-no-optional-upstreams). A real fix needs the Tower to
-    observe dispatch, and it has a race: a fast upstream could release the barrier before its
-    sibling has been dispatched at all.
-
-### Surviving a restart
-
-**Settled: never resume a process. Start a new run and hand it the old one's state.** Both
-recovery and steering use the one mechanism — see
-[the decision log](architecture.md#13-decision-log) and
-`crates/layover-core/src/handover.rs`. The domain model and its rails are built; what remains needs the Tower:
-
-14. **How does the Tower notice an interruption?** A run that was live when the Tower died leaves
-    no exit code. Distinguishing "was running when we crashed" from "finished while we were away"
-    means writing run state before spawning and reconciling on startup.
-15. **What goes in the handover's `progress` list?** The model carries whatever the store can
-    honestly supply. Whether that is the agent's `memory.md`, a summary of its transcript, or
-    the last N lines is a question about the store, which does not exist yet.
-16. **Does a parked barrier survive a restart?** Its upstreams' runs did not. Re-dispatching the
-    whole fan-out is the rule for a loop-back; the same probably applies here, which would mean a
-    recovered itinerary discards partial barrier state.
-### Platform
-
-17. **Windows support.** Development happens on Windows, where process-tree termination, git
-    worktrees and signal handling all differ from Unix. Ground Stop and timeouts are the
-    OS-specific parts.
-
-### Everything else
-
-18. **How do child CLIs receive credentials?** Inherited environment, or injected per run by the
-    Tower. Per-run injection allows per-agent credentials and revocation.
-19. **Is the Logbook one flat file or namespaced?** One file serializes every write in the factory
-    through a single lock.
-20. **Observability** — structured logs, or OpenTelemetry traces where an Itinerary is a trace and
-    each Run a span? The latter would visualise a stalled barrier.
-21. **Is the aviation terminology confirmed?** Adopted provisionally throughout. Now that code
-    exists it is no longer free to strip, but it is still only names.
-22. **Does a scheduled pipeline skip a tick it is still working on, or start a second run?**
-    Runs are reentrant, so today it would start a second. Validation warns when the firing gap is
-    shorter than `timeout_sec`, which is a smell test rather than an answer. An independent review
-    argued the safe default for unattended spending is to *skip* the tick and require
-    `overlap = "allow"` to opt in; that is probably right and is a Tower behaviour, so it is
-    recorded here rather than guessed at.
-23. **Should `entry = true` survive at all?** A review argued it is two ways to do one thing, and
-    that a pipeline with no flags expresses the same intent. The counter-argument is in the
-    decision log. The deciding evidence would be whether anyone actually uses a bare entry agent
-    once pipelines exist; nobody has used either yet.
-
-
----
+1. **Idle detection.** Whether "no output for N minutes" should be a rail alongside wall-clock
+   `timeout_sec`. It needs per-runner knowledge of what counts as output, and for unattended
+   spending the distinction between thinking and wedged is worth real money. Deferred, not
+   dismissed.
+2. **Two-phase Fuel reservation.** The floor is an approximation; reserving before a run and
+   reconciling after is the real answer. Recorded as risk 15.
+3. **Dispatch-aware barriers.** Wanted the moment a factory has several rarely-needed expensive
+   helpers. Held back by a race that needs a dispatch window.
+4. **A code of conduct.** Absent deliberately; the argument for adding it strengthens the moment a
+   first outside contributor appears.
+5. **Continuity.** A bus factor of one, stated plainly rather than solved.
 
 ## Beyond the first runnable release
 
@@ -546,7 +474,8 @@ Rough ordering, not commitments.
 - Safe concurrent read-write agents: path allow-lists or per-run worktrees
 - Resident agents with serialized runs
 - `join = "any"`, quorum joins, and joins that wait only for the upstreams actually dispatched
-- Per-agent MCP servers, pushed on by the reference scenario's telemetry agent
 - Non-boolean pipeline parameters, if booleans turn out not to be enough
 - `include = [...]` for multi-file factory definitions
-- Additional runners: Gemini CLI, Aider, arbitrary command templates
+- Two-phase Fuel reservation, replacing the floor
+- Idle detection alongside wall-clock timeouts
+- Authenticode and Apple notarization, once the warning costs more than the keys

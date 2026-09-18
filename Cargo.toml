@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/layover-cli", "crates/layover-core", "crates/layover-dashboard", "crates/layover-http", "crates/layover-store", "xtask"]
 
 [workspace.package]
-version = "0.8.0"
+version = "0.9.0"
 edition = "2024"
 rust-version = "1.98"
 license = "Apache-2.0"

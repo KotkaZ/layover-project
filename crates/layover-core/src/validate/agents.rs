@@ -313,3 +313,34 @@ entry = true
         );
     }
 }
+
+/// An agent's `model` must be able to reach its runner.
+///
+/// Every supported CLI spells the model flag differently, so it lives in the runner command as a
+/// `{model}` placeholder. An agent that declares a model whose runner has no placeholder runs
+/// anyway, on whichever model the CLI defaults to, and nothing says the declaration was ignored --
+/// which is the shape of bug that costs money quietly and is found by accident.
+pub(super) fn check_model_reaches_its_runner(config: &Config, found: &mut Vec<Diagnostic>) {
+    for (name, agent) in &config.agents {
+        let Some(model) = agent.model.as_deref() else {
+            continue;
+        };
+
+        let runner_name = agent
+            .runner
+            .as_deref()
+            .or(config.defaults.runner.as_deref());
+        let Some(runner) = runner_name.and_then(|runner| config.runners.get(runner)) else {
+            continue;
+        };
+
+        if !runner.takes_model() {
+            found.push(Diagnostic::warning(format!(
+                "agent `{name}` sets `model = \"{model}\"`, but runner `{}` has no `{}` \
+                 placeholder, so the run would use the CLI's own default instead",
+                runner_name.unwrap_or("?"),
+                crate::config::Runner::MODEL
+            )));
+        }
+    }
+}

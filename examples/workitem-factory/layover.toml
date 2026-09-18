@@ -64,15 +64,15 @@ cache_write_usd = 6.25
 # therefore a *path* to the composed instructions, for CLIs that take one; the rest have the
 # instructions prepended to stdin.
 [runners.claude]
-command = ["claude", "-p", "--output-format", "stream-json"]
+command = ["claude", "-p", "--model", "{model}", "--output-format", "stream-json"]
 mcp     = { flag = "--mcp-config", format = "claude_json" }
 
 [runners.copilot]
-command = ["copilot", "--allow-all-tools", "--output-format", "json"]
+command = ["copilot", "--model", "{model}", "--allow-all-tools", "--output-format", "json"]
 mcp     = { flag = "--mcp-config", format = "claude_json" }
 
 [runners.codex]
-command = ["codex", "exec", "-"]
+command = ["codex", "exec", "--model", "{model}", "-"]
 mcp     = { flag = "-c", format = "codex_toml" }
 
 # ── Intake ─────────────────────────────────────────────────────────

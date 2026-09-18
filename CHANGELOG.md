@@ -8,6 +8,37 @@ See [project status](README.md#project-status).
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-09-18
+
+The fifty questions blocking the first runnable release were answered, and the run bootstrap they
+were blocking is now built.
+
+### Added
+
+- **`payload`: what a run is told, and in what order.** The decision that was blocking the
+  supervisor. Identity, instructions, memory, learnings, handover, and the flight body last —
+  because whatever arrives last reads as the current instruction, and the body *is* the
+  instruction. The order is pinned by a test rather than left to whoever edits next.
+- **Memory is injected, not fetched.** The tail of `memory.md` always reaches a run, capped at
+  4 KB, saying so when it was cut. Fetch-only would have failed silently: an agent that forgets to
+  call for its own notes simply has none, and nothing would report it.
+- **`{model}` in runner commands.** Every CLI spells the flag differently, so the spelling stays
+  where the invocation does. A bare `"{model}"` argument disappears when no model is set rather
+  than becoming an empty string, which several CLIs read as a positional.
+- **Validation catches a model that cannot reach its runner** — which immediately found the bug in
+  our own shipped examples, where three agents declared a model that would have been ignored.
+- **`docs/first-release.md`**: the reasoning behind all fifty answers, including the
+  counter-argument wherever the call was close.
+- **Branch and tag protection.** `main` requires a passing `cargo xtask verify`; `v*` tags cannot
+  be rewritten or deleted.
+
+### Changed
+
+- **`docs/decisions.md` now covers only the system that exists**; decisions made for the first
+  runnable release live beside it. Both files are back under the 500-line rule.
+- The run-bootstrap questions are gone from the open list, and the source comments in `handover.rs`
+  and `prompt.rs` that cited them as open now point at `payload` instead.
+
 ## [0.8.0] — 2026-09-17
 
 ### Added
@@ -85,7 +116,8 @@ See [project status](README.md#project-status).
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/KotkaZ/layover-project/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/KotkaZ/layover-project/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/KotkaZ/layover-project/compare/v0.3.0...v0.7.0
 [0.3.0]: https://github.com/KotkaZ/layover-project/releases/tag/v0.3.0
