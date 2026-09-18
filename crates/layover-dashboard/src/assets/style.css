@@ -154,10 +154,37 @@ tr:last-child td { border-bottom: 0; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 
 .outcome { font-weight: 600; }
-.outcome.succeeded { color: var(--ok); }
+.outcome.succeeded, .outcome.finished { color: var(--ok); }
 .outcome.failed, .outcome.timed_out, .outcome.interrupted { color: var(--bad); }
 .outcome.halted { color: var(--warn); }
-.outcome.running { color: var(--accent); }
+.outcome.running, .outcome.working { color: var(--accent); }
+
+/* Stalled is deliberately the loudest thing on the page. Every run in a stalled chain reports
+   success, so nothing else here will draw the eye to it. */
+.outcome.stalled { color: var(--bad); text-decoration: underline wavy; }
+
+/* The kill switch sits in the header rather than behind a tab, because the moment you want it is
+   the moment you do not want to go looking for it. */
+.stop {
+  margin-left: auto;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--bad);
+  background: transparent;
+  color: var(--bad);
+}
+.stop:hover { background: color-mix(in srgb, var(--bad) 12%, transparent); }
+.stop:disabled { opacity: 0.5; cursor: progress; }
+.stop.engaged { background: var(--bad); color: #fff; }
+
+/* Once the stop button claims the auto margin, the pill only needs a gap. */
+.stop + .pill { margin-left: 10px; }
+
+.note { color: var(--muted); font-size: 13px; max-width: 70ch; margin: 0 0 14px; }
 
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-bottom: 16px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }

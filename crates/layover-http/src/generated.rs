@@ -4,7 +4,7 @@
 //! regenerates this file and fails if the result differs, so an edit here is reverted
 //! rather than kept. Change the specification instead.
 //!
-//! Source: Layover Tower API v0.14.0
+//! Source: Layover Tower API v0.15.0
 
 #![allow(clippy::too_many_lines)]
 
@@ -286,6 +286,69 @@ pub enum Impact {
     /// `high`
     #[serde(rename = "high")]
     High,
+}
+
+/// One causal chain of flights, and the budget it shares.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Itinerary {
+    /// Agents that ran in this chain, in the order they first ran.
+    #[serde(default)]
+    pub agents: Option<Vec<String>>,
+    /// Why a chain is stalled or halted, when that can be said.
+    #[serde(default)]
+    pub detail: Option<String>,
+    /// When the last run of the chain ended. Null while it is still working.
+    #[serde(default)]
+    pub finished_at: Option<String>,
+    /// Identifier of the chain.
+    pub itinerary_id: String,
+    /// False when any run in the chain reported no cost. A total built partly from silence is
+    /// a floor, not a figure, and showing it as though it were measured invites planning
+    /// against it.
+    #[serde(default)]
+    pub measured: Option<bool>,
+    /// The pipeline it was triggered through, when one was named.
+    #[serde(default)]
+    pub pipeline: Option<String>,
+    /// How many runs the chain has started.
+    pub runs: i32,
+    /// When the first run of the chain began.
+    pub started_at: String,
+    /// What became of the chain.
+    pub state: ItineraryState,
+    /// What the chain has spent, as far as its runners reported.
+    pub usd: f64,
+}
+
+/// Chains of work.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ItineraryList {
+    /// Chains, most recently started first.
+    pub itineraries: Vec<Itinerary>,
+    /// How many of them are stalled. Counted separately so the number can be shown without
+    /// reading the list, because it is the one that should prompt somebody to look.
+    pub stalled: i32,
+}
+
+/// What became of a chain.
+///
+/// `stalled` is the one that matters and the one a list of runs cannot show: every run
+/// succeeded, nothing is live, nothing is queued, and nothing will ever happen again. It is
+/// the failure mode this whole surface exists to make visible.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ItineraryState {
+    /// `working`
+    #[serde(rename = "working")]
+    Working,
+    /// `finished`
+    #[serde(rename = "finished")]
+    Finished,
+    /// `stalled`
+    #[serde(rename = "stalled")]
+    Stalled,
+    /// `halted`
+    #[serde(rename = "halted")]
+    Halted,
 }
 
 /// The condition under which a rendezvous barrier releases.
@@ -714,6 +777,13 @@ pub struct GetCostsQuery {
     pub pipeline: Option<String>,
 }
 
+/// path parameters for `cancelFlight`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CancelFlightPath {
+    /// Identifier of the queued flight.
+    pub flight_id: String,
+}
+
 /// query parameters for `getGraph`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GetGraphQuery {
@@ -745,6 +815,18 @@ pub struct ListHelpQuery {
     /// How far back to look. Defaults to the last 30 days.
     #[serde(default)]
     pub window: Option<CostWindow>,
+}
+
+/// query parameters for `listItineraries`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ListItinerariesQuery {
+    /// How far back to look. Defaults to the last 24 hours, because a dashboard opening on
+    /// ninety days of chains is answering a question nobody asked.
+    #[serde(default)]
+    pub window: Option<CostWindow>,
+    /// Only chains in this state.
+    #[serde(default)]
+    pub state: Option<ItineraryState>,
 }
 
 /// query parameters for `listLearnings`.
@@ -854,6 +936,18 @@ pub trait Api: Send + Sync + 'static {
         &self,
         body: SendFlightRequest,
     ) -> impl core::future::Future<Output = Result<FlightAccepted, Problem>> + Send;
+    /// Take a queued flight back off the queue.
+    ///
+    /// Only work that has not started can be cancelled. A run that is already going is stopped
+    /// with a Ground Stop, which is a different decision with a different blast radius — one
+    /// flight versus the whole factory — and conflating them would make the smaller action feel
+    /// as dangerous as the larger one.
+    ///
+    /// `DELETE /flights/{flight_id}`
+    fn cancel_flight(
+        &self,
+        path: CancelFlightPath,
+    ) -> impl core::future::Future<Output = Result<PendingList, Problem>> + Send;
     /// The route map as a diagram, with what is happening drawn on it.
     ///
     /// Mermaid source, generated from the configuration as it is on disk right now. Edit
@@ -902,6 +996,18 @@ pub trait Api: Send + Sync + 'static {
         &self,
         query: ListHelpQuery,
     ) -> impl core::future::Future<Output = Result<HelpList, Problem>> + Send;
+    /// Chains of work, and what became of each.
+    ///
+    /// A run is one agent doing one thing; an itinerary is the whole causal chain and the budget
+    /// it shares. The distinction matters most when something goes wrong: a chain can be *stalled*
+    /// — every run in it succeeded and nothing will ever happen again — and a list of runs cannot
+    /// show that, because there is no failed run to point at.
+    ///
+    /// `GET /itineraries`
+    fn list_itineraries(
+        &self,
+        query: ListItinerariesQuery,
+    ) -> impl core::future::Future<Output = Result<ItineraryList, Problem>> + Send;
     /// What agents have worked out, and how well established it is.
     ///
     /// A learning applies as soon as it is proposed and expires unless later runs arrive at it
@@ -968,6 +1074,10 @@ pub fn router<A: Api>(api: std::sync::Arc<A>) -> axum::Router {
             "/flights",
             axum::routing::get(handle_list_pending::<A>).post(handle_send_flight::<A>),
         )
+        .route(
+            "/flights/{flight_id}",
+            axum::routing::delete(handle_cancel_flight::<A>),
+        )
         .route("/graph", axum::routing::get(handle_get_graph::<A>))
         .route(
             "/ground-stop",
@@ -976,6 +1086,10 @@ pub fn router<A: Api>(api: std::sync::Arc<A>) -> axum::Router {
         )
         .route("/health", axum::routing::get(handle_get_health::<A>))
         .route("/help", axum::routing::get(handle_list_help::<A>))
+        .route(
+            "/itineraries",
+            axum::routing::get(handle_list_itineraries::<A>),
+        )
         .route("/learnings", axum::routing::get(handle_list_learnings::<A>))
         .route("/pipelines", axum::routing::get(handle_list_pipelines::<A>))
         .route("/runs", axum::routing::get(handle_list_runs::<A>))
@@ -1029,6 +1143,16 @@ async fn handle_send_flight<A: Api>(
     }
 }
 
+async fn handle_cancel_flight<A: Api>(
+    axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
+    axum::extract::Path(path): axum::extract::Path<CancelFlightPath>,
+) -> axum::response::Response {
+    match api.cancel_flight(path).await {
+        Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
+        Err(problem) => problem.into_response(),
+    }
+}
+
 async fn handle_get_graph<A: Api>(
     axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
     axum::extract::Query(query): axum::extract::Query<GetGraphQuery>,
@@ -1071,6 +1195,16 @@ async fn handle_list_help<A: Api>(
     axum::extract::Query(query): axum::extract::Query<ListHelpQuery>,
 ) -> axum::response::Response {
     match api.list_help(query).await {
+        Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
+        Err(problem) => problem.into_response(),
+    }
+}
+
+async fn handle_list_itineraries<A: Api>(
+    axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
+    axum::extract::Query(query): axum::extract::Query<ListItinerariesQuery>,
+) -> axum::response::Response {
+    match api.list_itineraries(query).await {
         Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
         Err(problem) => problem.into_response(),
     }
@@ -1138,16 +1272,18 @@ async fn handle_stream_run<A: Api>(
 /// Every operation the specification declares, as (method, path, operationId).
 ///
 /// Exposed so tests can assert the router and the specification agree.
-pub const OPERATIONS: [(&str, &str, &str); 15] = [
+pub const OPERATIONS: [(&str, &str, &str); 17] = [
     ("GET", "/agents", "listAgents"),
     ("GET", "/costs", "getCosts"),
     ("GET", "/flights", "listPending"),
     ("POST", "/flights", "sendFlight"),
+    ("DELETE", "/flights/{flight_id}", "cancelFlight"),
     ("GET", "/graph", "getGraph"),
     ("POST", "/ground-stop", "engageGroundStop"),
     ("DELETE", "/ground-stop", "releaseGroundStop"),
     ("GET", "/health", "getHealth"),
     ("GET", "/help", "listHelp"),
+    ("GET", "/itineraries", "listItineraries"),
     ("GET", "/learnings", "listLearnings"),
     ("GET", "/pipelines", "listPipelines"),
     ("GET", "/runs", "listRuns"),

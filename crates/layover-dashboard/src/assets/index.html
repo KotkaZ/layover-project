@@ -11,11 +11,13 @@
   <h1>Layover</h1>
   <nav>
     <button class="tab" data-view="map" aria-current="true">Route map</button>
+    <button class="tab" data-view="chains">Chains<span id="stalled-badge" class="badge" hidden></span></button>
     <button class="tab" data-view="runs">Runs</button>
     <button class="tab" data-view="cost">Cost</button>
     <button class="tab" data-view="journal">Help &amp; learnings<span id="help-badge" class="badge" hidden></span></button>
   </nav>
   <label id="scope-label">Workflow <select id="scope"></select></label>
+  <button id="ground-stop" class="stop" type="button">Ground Stop</button>
   <span id="health" class="pill"></span>
 </header>
 
@@ -40,6 +42,33 @@
       <li><span class="swatch line bypass"></span>bypasses it</li>
       <li><span class="swatch line spawn"></span>spawns a new itinerary</li>
     </ul>
+  </section>
+
+  <section id="chains" class="view" hidden>
+    <div class="bar">
+      <label>Window <select id="chains-window"></select></label>
+      <label>State
+        <select id="chains-state">
+          <option value="">any</option>
+          <option value="working">working</option>
+          <option value="finished">finished</option>
+          <option value="stalled">stalled</option>
+          <option value="halted">halted</option>
+        </select>
+      </label>
+      <span id="chains-count" class="muted"></span>
+    </div>
+    <p class="note">
+      A chain is everything one trigger caused, and the budget it shares. <b>Stalled</b> is the one
+      worth looking for: every run in it succeeded and nothing will ever happen again, so a list of
+      runs cannot show it.
+    </p>
+    <table id="chains-table">
+      <thead>
+        <tr><th>Started</th><th>Workflow</th><th>Agents</th><th>Runs</th><th>Cost</th><th>State</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
   </section>
 
   <section id="runs" class="view" hidden>

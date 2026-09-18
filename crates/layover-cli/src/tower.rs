@@ -137,6 +137,21 @@ fn drain(factory: &Factory, journal: &Journal, announce: &impl Fn(String)) {
     );
 
     for given_up in &drained.abandoned {
+        // Written down, not just printed. Every run in a stalled chain says `succeeded`, so read
+        // back from history it is indistinguishable from one that finished. This is the only
+        // record that the work never happened.
+        let stall = layover_core::stall::Stall::new(
+            given_up.key.itinerary.clone(),
+            given_up.key.to.clone(),
+            given_up.missing.clone(),
+            given_up.stranded,
+            jiff::Timestamp::now(),
+        );
+
+        if let Err(error) = journal.record_stall(&stall) {
+            announce(format!("could not record a stall: {error}"));
+        }
+
         announce(format!(
             "{given_up} ({} flight(s) stranded)",
             given_up.stranded

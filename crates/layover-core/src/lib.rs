@@ -42,6 +42,7 @@ pub mod report;
 pub mod route;
 pub mod run;
 pub mod slots;
+pub mod stall;
 pub mod tools;
 pub mod validate;
 
@@ -72,4 +73,5 @@ pub use report::Report;
 pub use route::{Join, Mode, Route};
 pub use run::{Outcome, RunRecord};
 pub use slots::{Admission, Slots};
+pub use stall::Stall;
 pub use validate::{Diagnostic, Severity, validate, validate_prompts};

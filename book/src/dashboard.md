@@ -64,12 +64,61 @@ already cost money — and a trimmed one says so, so you know to look further ra
 the agent stopped there. The caps are a 160-character headline, a 12,000-character body and 32
 artifacts; a learning is capped at 400 characters, and at most 25 are injected into any one run.
 
-Everything else here is read-only. The operations that genuinely need a running supervisor — streaming a run, engaging a Ground Stop — answer `501` rather than pretending. A control that silently does nothing is worse
-than a control that is not there, because it gets trusted once and then relied upon.
+## Stopping it
 
-It also needs no Tower at all. History outlives the process that wrote it, so the dashboard
-answers for a factory that is not currently running — which is exactly when you most want to know
-what it did.
+The **Ground Stop** button is in the header, not behind a tab, because the moment you want it is
+the moment you do not want to go looking for it. Pressing it halts everything: running agents are
+ended, and no new work starts.
+
+It is a pause, not a stop. Parked work is kept, so engaging a Ground Stop to look at something and
+then releasing it resumes where the factory was. Releasing asks for confirmation; engaging does
+not — stopping should be easy and starting again should be deliberate, because the cost of a
+Ground Stop nobody meant is a pause, and the cost of releasing one somebody did mean is whatever
+they engaged it to prevent.
+
+It is a file on disk rather than state in memory, so it survives a crash and can be set by hand
+when nothing is responding. The Tower reads it on every pass, so it takes effect within seconds
+rather than at the next restart.
+
+Queued work can be cancelled individually. Only work that has *not started*: a run already going
+is stopped with a Ground Stop, which is a different decision with a different blast radius — one
+flight versus the whole factory — and saying "cancelled" about something still opening pull
+requests is the most dangerous thing this surface could say.
+
+Streaming a live run still answers `501`. A control that silently does nothing is worse than a
+control that is not there, because it gets trusted once and then relied upon.
+
+The read-only half needs no Tower at all. History outlives the process that wrote it, so the
+dashboard answers for a factory that is not currently running — which is exactly when you most
+want to know what it did. `layover serve --watch-only` serves that half alone.
+
+## Chains
+
+A run is one agent doing one thing. A **chain** is everything one trigger caused, and the budget
+they share — Hops, Fuel and the run cap are per chain, so "what did this cost" and "did this
+finish" are questions about a chain rather than a run.
+
+| State | Meaning |
+|---|---|
+| `working` | Something is running, or waiting to |
+| `finished` | It ran and stopped, and nothing is outstanding |
+| `stalled` | It stopped and nothing will ever happen again |
+| `halted` | A Ground Stop caught it |
+
+**`stalled` is the one worth looking for**, and the reason this view exists. A joined agent never
+woke because the barrier it was waiting behind could no longer be completed — the tester reported,
+the reviewer never did, and the publisher is still waiting for a verdict that is not coming.
+
+Read as a list of runs, that chain looks perfect. Every run says `succeeded`. There is no failed
+run to point at and nothing saying the last step never happened. So the Tower writes down the
+moment it gives up on a rendezvous, and this is where that shows up:
+
+```text
+`publisher` never woke: nothing live could still deliver reviewer
+```
+
+A cost with a `+` after it is a floor rather than a figure: some run in the chain reported nothing,
+so the real total is at least that much.
 
 ## The route map
 

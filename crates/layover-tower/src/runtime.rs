@@ -20,6 +20,7 @@ use layover_core::config::Config;
 use layover_core::flight::{Flight, ItineraryId, Origin};
 use layover_core::graph::RouteGraph;
 use layover_core::itinerary::Itinerary;
+use layover_core::pipeline::PipelineName;
 use layover_core::queue::Queued;
 use layover_mcp::{Peer, Runtime, Session, ToolError};
 
@@ -29,6 +30,12 @@ use layover_mcp::{Peer, Runtime, Session, ToolError};
 #[derive(Debug, Default)]
 pub struct Chains {
     live: Mutex<HashMap<String, Itinerary>>,
+    /// Which pipeline each chain was triggered through.
+    ///
+    /// Held here rather than carried on every flight because only the *first* flight of a chain
+    /// knows: a flight an agent sends has no pipeline of its own, and labelling only the first hop
+    /// would leave the rest of a chain looking like it belonged to nothing.
+    pipelines: Mutex<HashMap<String, PipelineName>>,
 }
 
 impl Chains {
@@ -66,6 +73,28 @@ impl Chains {
     #[must_use]
     pub fn count(&self) -> usize {
         self.live.lock().map_or(0, |live| live.len())
+    }
+
+    /// Remembers which pipeline opened a chain.
+    ///
+    /// Only the first flight of a chain carries one, so this is recorded once and read by every
+    /// run after it.
+    pub fn opened_by(&self, id: &ItineraryId, pipeline: Option<&PipelineName>) {
+        let Some(pipeline) = pipeline else {
+            return;
+        };
+
+        if let Ok(mut known) = self.pipelines.lock() {
+            known
+                .entry(id.as_str().to_owned())
+                .or_insert_with(|| pipeline.clone());
+        }
+    }
+
+    /// Which pipeline a chain was triggered through, if it is known.
+    #[must_use]
+    pub fn pipeline_of(&self, id: &ItineraryId) -> Option<PipelineName> {
+        self.pipelines.lock().ok()?.get(id.as_str()).cloned()
     }
 }
 

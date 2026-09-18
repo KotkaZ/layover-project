@@ -16,10 +16,11 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt as _;
 use layover_http::{
-    Access, Agent, AgentList, Api, Blocker, CostBucket, CostReport, CostSource, CostSummary,
-    CostWindow, EventStream, FlightAccepted, GetCostsQuery, GetGraphQuery, GetReportPath,
-    GetRunPath, GroundStop, Health, HelpList, HelpRequest, Impact, Learning, LearningList,
-    LearningState, ListHelpQuery, ListLearningsQuery, ListRunsQuery, OPERATIONS, PendingFlight,
+    Access, Agent, AgentList, Api, Blocker, CancelFlightPath, CostBucket, CostReport, CostSource,
+    CostSummary, CostWindow, EventStream, FlightAccepted, GetCostsQuery, GetGraphQuery,
+    GetReportPath, GetRunPath, GroundStop, Health, HelpList, HelpRequest, Impact, Itinerary,
+    ItineraryList, ItineraryState, Learning, LearningList, LearningState, ListHelpQuery,
+    ListItinerariesQuery, ListLearningsQuery, ListRunsQuery, OPERATIONS, PendingFlight,
     PendingList, Pipeline, PipelineList, Problem, Report, ReserveState, RouteMap, Run, RunList,
     RunStatus, SendFlightRequest, Status, StreamRunPath, TokenUsage, Trigger, TriggerKind,
     WindowSpan, Workspace, router,
@@ -246,6 +247,31 @@ impl Api for Stub {
         })
     }
 
+    async fn cancel_flight(&self, _: CancelFlightPath) -> Result<PendingList, Problem> {
+        Ok(PendingList {
+            pending: Vec::new(),
+            dispatched_by: None,
+        })
+    }
+
+    async fn list_itineraries(&self, _: ListItinerariesQuery) -> Result<ItineraryList, Problem> {
+        Ok(ItineraryList {
+            itineraries: vec![Itinerary {
+                itinerary_id: "itn_1".to_owned(),
+                pipeline: Some("development".to_owned()),
+                state: ItineraryState::Stalled,
+                agents: Some(vec!["tester".to_owned(), "reviewer".to_owned()]),
+                runs: 2,
+                usd: 0.42,
+                measured: Some(true),
+                started_at: "2026-09-17T10:00:00Z".to_owned(),
+                finished_at: Some("2026-09-17T10:09:00Z".to_owned()),
+                detail: Some("`publisher` never woke".to_owned()),
+            }],
+            stalled: 1,
+        })
+    }
+
     async fn list_pending(&self) -> Result<PendingList, Problem> {
         Ok(PendingList {
             pending: vec![PendingFlight {
@@ -334,7 +360,7 @@ fn json(body: &str) -> serde_json::Value {
 
 #[test]
 fn every_specified_operation_is_routed() {
-    assert_eq!(OPERATIONS.len(), 15);
+    assert_eq!(OPERATIONS.len(), 17);
 
     for (method, path, operation) in OPERATIONS {
         assert!(path.starts_with('/'), "`{operation}` has an odd path");

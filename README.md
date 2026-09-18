@@ -199,19 +199,22 @@ test and doc build, with warnings denied. CI runs the same command, unchanged.
 | Built | Not built |
 |---|---|
 | `validate`, `explain`, `prompt`, `graph` | Resuming a booked Layover — `layover_wait` is declared, not connected |
-| **`serve`: the Tower — fires schedules, runs the queue, hosts MCP, serves the dashboard** | Dashboard write controls: Ground Stop, cancelling queued work, resolving a help request |
-| **Schedules: `every` and `cron`, skipping a tick whose previous wave is still going** | API authentication — the surface is loopback-only and unauthenticated |
-| **Rendezvous joins: work is parked and its agent wakes once, with every verdict** | Live run streaming over HTTP, which answers `501` |
-| **The MCP endpoint agents call back into: `layover_send` queues a real flight** | An itineraries endpoint, so the dashboard can show a chain rather than its runs |
+| **`serve`: the Tower — fires schedules, runs the queue, hosts MCP, serves the dashboard** | API authentication — the surface is loopback-only and unauthenticated |
+| **Schedules: `every` and `cron`, skipping a tick whose previous wave is still going** | Confirming or rejecting a learning from the dashboard |
+| **Rendezvous joins: work is parked and its agent wakes once, with every verdict** | Resolving a help request from the dashboard |
+| **The MCP endpoint agents call back into: `layover_send` queues a real flight** | Live run streaming over HTTP, which answers `501` |
+| **Ground Stop from the dashboard, and cancelling queued work** | |
+| **Chains: what one trigger caused, and whether it finished or stalled** | |
 | `run`: drains the queue once, for when you want to watch it | |
 | Run history, costs, the Reserve, help requests, learnings, reports | |
 | `POST /flights`, which queues a trigger durably | |
 | `autostart`, which registers `layover serve` at login | |
 
-**A factory now runs itself.** A schedule fires, an agent starts, it hands work on through the MCP
-endpoint, a joined agent waits for every verdict it needs, and the chain finishes — all inside the
-budget it started with, and all without anybody typing a command. A Ground Stop pauses the whole
-thing and releasing it resumes.
+**A factory now runs itself, and you can watch and stop it.** A schedule fires, an agent starts, it
+hands work on through the MCP endpoint, a joined agent waits for every verdict it needs, and the
+chain finishes — inside the budget it started with, without anybody typing a command. The dashboard
+shows each chain and whether it *stalled*: the failure where every run reports success and nothing
+will ever happen again.
 
 **What is not proven is the claim on the tin.** Forty-eight hours unattended, no intervention, is
 the bar this project set for itself, and it has not been run. Everything above is tested and has

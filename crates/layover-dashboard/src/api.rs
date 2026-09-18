@@ -19,10 +19,11 @@ use layover_core::pipeline::{FlagError, Pipeline as CorePipeline, PipelineName};
 use layover_core::queue::Queued;
 use layover_core::run::Outcome;
 use layover_http::{
-    AgentList, Api, CostBucket, CostReport, CostWindow, EventStream, FlightAccepted, GetCostsQuery,
-    GetGraphQuery, GetReportPath, GetRunPath, GroundStop, Health, HelpList, LearningList,
-    ListHelpQuery, ListLearningsQuery, ListRunsQuery, PendingList, PipelineList, Problem, Report,
-    ReserveState, RouteMap, Run, RunList, RunStatus, SendFlightRequest, Status, StreamRunPath,
+    AgentList, Api, CancelFlightPath, CostBucket, CostReport, CostWindow, EventStream,
+    FlightAccepted, GetCostsQuery, GetGraphQuery, GetReportPath, GetRunPath, GroundStop, Health,
+    HelpList, ItineraryList, ItineraryState, LearningList, ListHelpQuery, ListItinerariesQuery,
+    ListLearningsQuery, ListRunsQuery, PendingList, PipelineList, Problem, Report, ReserveState,
+    RouteMap, Run, RunList, RunStatus, SendFlightRequest, Status, StreamRunPath,
 };
 use layover_store::{HelpFilter, History, Journal, RunFilter};
 
@@ -75,6 +76,23 @@ impl Dashboard {
     /// had just pulled the handle that nothing was stopped.
     fn ground_stop_engaged(&self) -> bool {
         self.0.ground_stop.exists()
+    }
+
+    /// The Ground Stop as it is on disk right now, and when it was engaged.
+    ///
+    /// The timestamp is read from the file rather than held in memory, so it survives the restart
+    /// a Ground Stop is most often engaged before — and so a stop set by hand, with nothing in it,
+    /// still reports as engaged rather than being ignored for having no timestamp.
+    fn ground_stop(&self) -> GroundStop {
+        let since = std::fs::read_to_string(&self.0.ground_stop)
+            .ok()
+            .and_then(|text| text.trim().parse::<Timestamp>().ok())
+            .map(|at| at.to_string());
+
+        GroundStop {
+            engaged: self.ground_stop_engaged(),
+            since,
+        }
     }
 
     /// Loads the factory definition as it is on disk right now.
@@ -416,12 +434,119 @@ impl Api for Dashboard {
         Err(not_supervised("streaming a run"))
     }
 
+    async fn cancel_flight(&self, path: CancelFlightPath) -> Result<PendingList, Problem> {
+        let removed = self
+            .0
+            .journal
+            .unqueue(&layover_core::flight::FlightId::from(
+                path.flight_id.as_str(),
+            ))
+            .map_err(|error| {
+                Problem::new(StatusCode::INTERNAL_SERVER_ERROR, "the queue is unwritable")
+                    .with_detail(error.to_string())
+            })?;
+
+        if !removed {
+            // Deliberately not a silent success. "Cancelled" about work that is already running
+            // is the most dangerous thing this surface could say: somebody would walk away from a
+            // run that is still opening pull requests.
+            return Err(
+                Problem::new(StatusCode::NOT_FOUND, "nothing by that name is waiting").with_detail(
+                    format!(
+                        "`{}` is not in the queue. It may already have started, in which case a \
+                         Ground Stop is what stops it.",
+                        path.flight_id
+                    ),
+                ),
+            );
+        }
+
+        self.list_pending().await
+    }
+
+    async fn list_itineraries(
+        &self,
+        query: ListItinerariesQuery,
+    ) -> Result<ItineraryList, Problem> {
+        let span = self.span(query.window);
+
+        let records = self.runs(&span, &RunFilter::default())?;
+        let stalls = self.0.journal.stalls(&span).map_err(|error| {
+            Problem::new(StatusCode::INTERNAL_SERVER_ERROR, "stalls are unreadable")
+                .with_detail(error.to_string())
+        })?;
+        let pending = self.0.journal.pending().unwrap_or_default();
+
+        let mut chains =
+            crate::itinerary::itineraries(&records, &stalls, &pending, self.ground_stop_engaged());
+
+        if let Some(wanted) = query.state {
+            chains.retain(|chain| chain.state == wanted);
+        }
+
+        Ok(ItineraryList {
+            stalled: i32::try_from(
+                chains
+                    .iter()
+                    .filter(|chain| chain.state == ItineraryState::Stalled)
+                    .count(),
+            )
+            .unwrap_or(i32::MAX),
+            itineraries: chains,
+        })
+    }
+
     async fn engage_ground_stop(&self) -> Result<GroundStop, Problem> {
-        Err(not_supervised("engaging a Ground Stop"))
+        // Already engaged is a success, not a conflict. Somebody hitting the button twice because
+        // the first press was not obviously acknowledged should not be told it failed — that is a
+        // way to teach people the kill switch is unreliable.
+        if !self.ground_stop_engaged() {
+            if let Some(parent) = self.0.ground_stop.parent() {
+                std::fs::create_dir_all(parent).map_err(|error| {
+                    Problem::new(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "could not halt the factory",
+                    )
+                    .with_detail(error.to_string())
+                })?;
+            }
+
+            // The file's contents are the moment it was engaged, so the dashboard can say how long
+            // work has been held without keeping that in memory — which would not survive the
+            // restart a Ground Stop is most often engaged before.
+            std::fs::write(&self.0.ground_stop, Timestamp::now().to_string()).map_err(|error| {
+                Problem::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "could not halt the factory",
+                )
+                .with_detail(format!(
+                    "{error}. Create {} by hand; the Tower reads it from disk on every pass.",
+                    self.0.ground_stop.display()
+                ))
+            })?;
+        }
+
+        Ok(self.ground_stop())
     }
 
     async fn release_ground_stop(&self) -> Result<GroundStop, Problem> {
-        Err(not_supervised("releasing a Ground Stop"))
+        match std::fs::remove_file(&self.0.ground_stop) {
+            Ok(()) => {}
+            // Releasing something that is not engaged is what the caller wanted: work may start.
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(Problem::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "could not release the Ground Stop",
+                )
+                .with_detail(format!(
+                    "{error}. Delete {} by hand.",
+                    self.0.ground_stop.display()
+                )));
+            }
+        }
+
+        Ok(self.ground_stop())
     }
 }
 

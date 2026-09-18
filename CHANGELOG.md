@@ -8,6 +8,35 @@ See [project status](README.md#project-status).
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-09-18
+
+You can now see what the factory is doing and stop it from the page you are watching it on.
+
+### Added
+
+- **The Ground Stop works over HTTP**, and there is a button for it. It answered `501` while
+  `layover serve` had become the thing that actually runs agents — so the only way to stop an
+  unattended factory was to create a file by hand, at exactly the moment nobody wants to go
+  looking for instructions. Engaging twice is a success rather than a conflict: somebody pressing
+  again because the first press was not obviously acknowledged must not be told it failed.
+- **`GET /itineraries`, and a Chains tab.** A run is one agent doing one thing; a chain is
+  everything one trigger caused and the budget it shares. Chains are reported as `working`,
+  `finished`, `stalled` or `halted`.
+- **`stalled` is real rather than guessed.** When the Tower gives up on a rendezvous it now writes
+  the reason to the journal, and the dashboard reads it. Without that record a stalled chain is
+  indistinguishable from a finished one — every run in it reports success, and nothing says the
+  last step never happened. It is drawn as the loudest thing on the page for the same reason.
+- **`DELETE /flights/{id}` cancels queued work.** Only work that has not started: a run already
+  going is stopped with a Ground Stop, and saying "cancelled" about something still opening pull
+  requests is the most dangerous thing this surface could say.
+
+### Fixed
+
+- **Runs now carry the pipeline that opened their chain.** Every run recorded `pipeline: null`, so
+  per-workflow filtering silently matched nothing. The pipeline is remembered per chain rather
+  than read off each flight, because only the *first* flight of a chain has one — a flight an
+  agent sends carries none, and reading it per flight would label the first hop and lose the rest.
+
 ## [0.14.0] — 2026-09-18
 
 The factory runs itself. `layover serve` fires scheduled pipelines, runs what is queued, and serves
@@ -279,7 +308,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/KotkaZ/layover-project/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/KotkaZ/layover-project/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/KotkaZ/layover-project/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/KotkaZ/layover-project/compare/v0.11.0...v0.12.0

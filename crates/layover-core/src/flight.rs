@@ -60,6 +60,24 @@ impl FlightId {
     }
 }
 
+/// Reads an identifier that came from outside — a URL path, say.
+///
+/// Deliberately not validated. This type identifies a flight; it does not certify that one
+/// exists, and the only thing done with an identifier that names nothing is to say so. Rejecting
+/// a malformed string here would turn "no such flight" into "bad request", which tells the caller
+/// less about what actually happened.
+impl From<&str> for FlightId {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+}
+
+impl std::fmt::Display for FlightId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
 /// Identifier of one causal chain of flights.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
 #[serde(transparent)]

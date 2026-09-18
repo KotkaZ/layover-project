@@ -27,6 +27,7 @@ use layover_core::layover::{Layover, LayoverId, Standing};
 use layover_core::learning::{Learning, Learnings};
 use layover_core::queue::Queued;
 use layover_core::report::Report;
+use layover_core::stall::Stall;
 
 use crate::history::StoreError;
 
@@ -170,7 +171,8 @@ impl Journal {
     pub fn prune(&self, horizon: Timestamp) -> Result<usize, StoreError> {
         let help = crate::segment::prune_segments(&self.root, "help", horizon)?;
         let reports = crate::segment::prune_segments(&self.root, "reports", horizon)?;
-        Ok(help + reports)
+        let stalls = crate::segment::prune_segments(&self.root, "stalls", horizon)?;
+        Ok(help + reports + stalls)
     }
 
     /// Reads the learnings.
@@ -410,6 +412,36 @@ impl Journal {
     /// Where queued flights live.
     fn pending_path(&self) -> PathBuf {
         self.root.join("pending.jsonl")
+    }
+
+    /// Records a chain the Tower has given up on.
+    ///
+    /// Appended to a day segment like help requests, because a stall is a dated event somebody
+    /// needs to see rather than state to be kept current — and because the run history it sits
+    /// alongside is pruned on the same horizon.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Io`] if the segment cannot be written.
+    pub fn record_stall(&self, stall: &Stall) -> Result<(), StoreError> {
+        let path = crate::segment::segment_for(&self.root, "stalls", stall.at);
+        let line = serde_json::to_string(stall)?;
+        crate::segment::append_line(&path, &line)
+    }
+
+    /// Chains given up on within `span`, most recent first.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Io`] if a segment cannot be read.
+    pub fn stalls(&self, span: &Span) -> Result<Vec<Stall>, StoreError> {
+        let mut found: Vec<Stall> = crate::segment::read_segments(&self.root, "stalls", span)?
+            .into_iter()
+            .filter(|stall: &Stall| span.contains(stall.at))
+            .collect();
+
+        found.sort_by_key(|stall| std::cmp::Reverse(stall.at));
+        Ok(found)
     }
 }
 

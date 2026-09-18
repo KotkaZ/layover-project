@@ -77,6 +77,7 @@ function showView(name) {
     tab.setAttribute("aria-current", String(tab.dataset.view === name));
   });
   if (name === "map") loadMap();
+  if (name === "chains") loadChains();
   if (name === "runs") loadRuns();
   if (name === "cost") loadCost();
   if (name === "journal") loadJournal();
@@ -84,10 +85,19 @@ function showView(name) {
 
 async function loadHealth() {
   const pill = $("#health");
+  const button = $("#ground-stop");
   try {
     const health = await get("/health");
     pill.textContent = `v${health.version}${health.ground_stop ? " · ground stop" : ""}`;
     pill.classList.toggle("down", health.ground_stop);
+
+    // The button says what pressing it will do, not what the state is. "Ground Stop" next to a
+    // factory that is already stopped reads as though pressing it would stop it again.
+    button.classList.toggle("engaged", health.ground_stop);
+    button.textContent = health.ground_stop ? "Release" : "Ground Stop";
+    button.title = health.ground_stop
+      ? "Everything is halted. Press to let work start again."
+      : "Halt everything. Running agents are ended; parked work is kept.";
   } catch {
     pill.textContent = "Tower unreachable";
     pill.classList.add("down");
@@ -260,6 +270,80 @@ async function loadRuns() {
     $("#runs-table").hidden = true;
     empty.hidden = false;
     empty.textContent = `Could not read history: ${error.message}`;
+  }
+}
+
+// A chain is what a person actually asked for; a run is one step of it. Shown separately because
+// the interesting failure — a chain that stopped with every run reporting success — is invisible
+// in a list of runs, which is where somebody would otherwise go looking for it.
+async function loadChains() {
+  const body = $("#chains-table tbody");
+  const count = $("#chains-count");
+  const params = new URLSearchParams({ window: $("#chains-window").value });
+  if ($("#chains-state").value) params.set("state", $("#chains-state").value);
+
+  try {
+    const { itineraries, stalled } = await get(`/itineraries?${params}`);
+    body.replaceChildren();
+
+    for (const chain of itineraries) {
+      const row = el("tr");
+      const cost = chain.measured === false ? `${money(chain.usd)}+` : money(chain.usd);
+
+      row.append(
+        el("td", "", when(chain.started_at)),
+        el("td", "", chain.pipeline ?? "—"),
+        el("td", "", (chain.agents ?? []).join(" → ") || "—"),
+        el("td", "num", String(chain.runs)),
+        el("td", "num", cost),
+        el("td", `outcome ${chain.state}`, chain.state),
+      );
+
+      // The reason lives in a tooltip rather than a column: it is a sentence, and a column wide
+      // enough for it would squeeze out everything that is scannable.
+      if (chain.detail) row.title = chain.detail;
+      body.append(row);
+    }
+
+    $("#chains-table").hidden = itineraries.length === 0;
+    count.textContent = itineraries.length === 0
+      ? "Nothing ran in this window."
+      : `${itineraries.length} chain(s)${stalled ? `, ${stalled} stalled` : ""}`;
+
+    const badge = $("#stalled-badge");
+    badge.textContent = String(stalled);
+    badge.hidden = stalled === 0;
+  } catch (error) {
+    body.replaceChildren();
+    $("#chains-table").hidden = true;
+    count.textContent = `Could not read chains: ${error.message}`;
+  }
+}
+
+// The kill switch. Confirmed on the way in but not on the way out: stopping should be easy and
+// starting again should be deliberate, because the cost of a Ground Stop nobody meant is a pause,
+// and the cost of releasing one somebody did mean is whatever they engaged it to prevent.
+async function toggleGroundStop() {
+  const button = $("#ground-stop");
+  const engaged = button.classList.contains("engaged");
+
+  if (engaged && !confirm("Release the Ground Stop? Work will start again.")) return;
+
+  button.disabled = true;
+  try {
+    const response = await fetch("/ground-stop", {
+      method: engaged ? "DELETE" : "POST",
+      headers: { accept: "application/json" },
+    });
+    if (!response.ok) throw new Error(`the Tower answered ${response.status}`);
+    await response.json();
+  } catch (error) {
+    // Said out loud rather than swallowed. A kill switch that fails quietly is worse than one
+    // that is not there.
+    alert(`Could not change the Ground Stop: ${error.message}`);
+  } finally {
+    button.disabled = false;
+    loadHealth();
   }
 }
 
@@ -663,6 +747,15 @@ function start() {
     }),
   );
 
+  $("#chains-window").replaceChildren(
+    ...WINDOWS.map(([slug, label]) => {
+      const option = el("option", "", label);
+      option.value = slug;
+      option.selected = slug === "last_7d";
+      return option;
+    }),
+  );
+
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => showView(tab.dataset.view));
   });
@@ -670,7 +763,11 @@ function start() {
   $("#trigger-open").addEventListener("click", openTrigger);
   $("#trigger-pipeline").addEventListener("change", (e) => showFlags(e.target.value));
   $("#trigger-send").addEventListener("click", submitTrigger);
+  $("#ground-stop").addEventListener("click", toggleGroundStop);
   ["#runs-window", "#runs-status"].forEach((id) => $(id).addEventListener("change", loadRuns));
+  ["#chains-window", "#chains-state"].forEach((id) =>
+    $(id).addEventListener("change", loadChains),
+  );
   $("#runs-agent").addEventListener("input", loadRuns);
 
   // One selector, so every view has to be told. Redrawing only the visible one would leave the
@@ -678,6 +775,7 @@ function start() {
   $("#scope").addEventListener("change", () => {
     $("#learn-scope").hidden = !scope();
     loadMap();
+    loadChains();
     loadRuns();
     loadCost();
     loadJournal();
@@ -685,6 +783,7 @@ function start() {
   });
 
   loadHealth();
+  loadChains();
   loadHelpBadge();
   loadQueued();
   // The pipeline list has to exist before the first draw, or the selector is empty on load.

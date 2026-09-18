@@ -30,6 +30,7 @@
 
 mod api;
 mod assets;
+mod itinerary;
 mod view;
 
 pub use api::{Dashboard, DashboardState};

@@ -14,7 +14,7 @@ openapi: 3.2.0
 
 info:
   title: Layover Tower API
-  version: 0.14.0
+  version: 0.15.0
   summary: Control surface for a local-first agent factory.
   description: |
     The UI is purely a client of this API, so this document bounds what the UI can ever do.
@@ -133,6 +133,72 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Problem"
+
+  /flights/{flight_id}:
+    delete:
+      operationId: cancelFlight
+      summary: Take a queued flight back off the queue.
+      description: |
+        Only work that has not started can be cancelled. A run that is already going is stopped
+        with a Ground Stop, which is a different decision with a different blast radius — one
+        flight versus the whole factory — and conflating them would make the smaller action feel
+        as dangerous as the larger one.
+      tags: [control]
+      parameters:
+        - name: flight_id
+          in: path
+          required: true
+          description: Identifier of the queued flight.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: |
+            It was queued and is not any more. The body is what is still waiting, so a dashboard
+            can show the result of the cancellation without a second request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PendingList"
+        "404":
+          description: Nothing by that identifier is waiting. It may already have started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /itineraries:
+    get:
+      operationId: listItineraries
+      summary: Chains of work, and what became of each.
+      description: |
+        A run is one agent doing one thing; an itinerary is the whole causal chain and the budget
+        it shares. The distinction matters most when something goes wrong: a chain can be *stalled*
+        — every run in it succeeded and nothing will ever happen again — and a list of runs cannot
+        show that, because there is no failed run to point at.
+      tags: [work]
+      parameters:
+        - name: window
+          in: query
+          required: false
+          description: |
+            How far back to look. Defaults to the last 24 hours, because a dashboard opening on
+            ninety days of chains is answering a question nobody asked.
+          schema:
+            $ref: "#/components/schemas/CostWindow"
+        - name: state
+          in: query
+          required: false
+          description: Only chains in this state.
+          schema:
+            $ref: "#/components/schemas/ItineraryState"
+      responses:
+        "200":
+          description: Chains, most recent first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItineraryList"
 
   /runs:
     get:
@@ -1086,6 +1152,76 @@ components:
           type: string
           format: date-time
           description: When it was asked for.
+
+    ItineraryState:
+      type: string
+      description: |
+        What became of a chain.
+
+        `stalled` is the one that matters and the one a list of runs cannot show: every run
+        succeeded, nothing is live, nothing is queued, and nothing will ever happen again. It is
+        the failure mode this whole surface exists to make visible.
+      enum: [working, finished, stalled, halted]
+
+    Itinerary:
+      type: object
+      description: One causal chain of flights, and the budget it shares.
+      required: [itinerary_id, state, runs, usd, started_at]
+      properties:
+        itinerary_id:
+          type: string
+          description: Identifier of the chain.
+        pipeline:
+          type: [string, "null"]
+          description: The pipeline it was triggered through, when one was named.
+        state:
+          $ref: "#/components/schemas/ItineraryState"
+          description: What became of the chain.
+        agents:
+          type: array
+          description: Agents that ran in this chain, in the order they first ran.
+          items:
+            type: string
+        runs:
+          type: integer
+          description: How many runs the chain has started.
+        usd:
+          type: number
+          format: double
+          description: What the chain has spent, as far as its runners reported.
+        measured:
+          type: boolean
+          description: |
+            False when any run in the chain reported no cost. A total built partly from silence is
+            a floor, not a figure, and showing it as though it were measured invites planning
+            against it.
+        started_at:
+          type: string
+          format: date-time
+          description: When the first run of the chain began.
+        finished_at:
+          type: [string, "null"]
+          format: date-time
+          description: When the last run of the chain ended. Null while it is still working.
+        detail:
+          type: [string, "null"]
+          description: Why a chain is stalled or halted, when that can be said.
+
+    ItineraryList:
+      type: object
+      description: Chains of work.
+      required: [itineraries, stalled]
+      properties:
+        itineraries:
+          type: array
+          description: Chains, most recently started first.
+          items:
+            $ref: "#/components/schemas/Itinerary"
+        stalled:
+          type: integer
+          description: |
+            How many of them are stalled. Counted separately so the number can be shown without
+            reading the list, because it is the one that should prompt somebody to look.
 
     PendingList:
       type: object

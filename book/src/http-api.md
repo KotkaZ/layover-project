@@ -3,9 +3,9 @@
 Layover exposes an HTTP API. The dashboard is purely a client of it, so this list bounds what the
 dashboard can ever do.
 
-> **Status:** the read surface is implemented and served by `layover serve`. `POST /flights`
-> queues durably and nothing dispatches it; streaming and Ground Stop answer `501` until the
-> supervisor exists. See [Status](./index.md#status).
+> **Status:** implemented and served by `layover serve`, which also runs the factory behind it —
+> `POST /flights` queues work the Tower then starts. Streaming a live run is the one endpoint
+> still answering `501`. See [Status](./index.md#status).
 
 ## The specification is the contract
 
@@ -19,7 +19,7 @@ code but not in the specification is impossible, and one that is specified but h
 a compile error rather than a 404 found in production.
 
 It does not mean every handler does something. Generation enforces routes and types, not
-behaviour — which is why three endpoints below compile, route, and answer `501`.
+behaviour — which is why one endpoint below compiles, routes, and answers `501`.
 
 Point any OpenAPI tool at the file to get a client, a mock server or rendered documentation.
 
@@ -31,17 +31,19 @@ Point any OpenAPI tool at the file to get a client, a mock server or rendered do
 | `GET` | `/agents` | | Every agent and the route map between them. |
 | `GET` | `/pipelines` | | Declared pipelines, their triggers and their flags. |
 | `GET` | `/graph` | `pipeline` | The route map as a rendered diagram, optionally for one workflow. |
-| `POST` | `/flights` | | **Queue** work. Nothing dispatches it yet. |
+| `POST` | `/flights` | | **Queue** work. The Tower starts it within seconds. |
 | `GET` | `/flights` | | What is queued and waiting. |
+| `DELETE` | `/flights/{flight_id}` | | Cancel queued work. Only what has not started. |
+| `GET` | `/itineraries` | `window`, `state` | Chains of work, and whether each finished or stalled. |
 | `GET` | `/runs` | `status`, `itinerary_id`, `agent`, `pipeline`, `window`, `limit` | Runs, live and historical. |
 | `GET` | `/runs/{run_id}` | | One run, including how it ended. |
 | `GET` | `/runs/{run_id}/report` | | What that agent wrote about its own run. |
 | `GET` | `/costs` | `window`, `pipeline` | What the factory has spent, and how much of it is measured. |
 | `GET` | `/help` | `agent`, `pipeline`, `blocker`, `open`, `window` | Help requests agents have raised. |
 | `GET` | `/learnings` | `agent`, `state` | Learnings agents have proposed. |
+| `POST` | `/ground-stop` | | Halt everything. Engaging twice is a success, not a conflict. |
+| `DELETE` | `/ground-stop` | | Resume. |
 | `GET` | `/runs/{run_id}/stream` | | Live output as server-sent events — **`501`**. |
-| `POST` | `/ground-stop` | | Halt everything — **`501`**. |
-| `DELETE` | `/ground-stop` | | Resume — **`501`**. |
 
 ## Queueing work
 

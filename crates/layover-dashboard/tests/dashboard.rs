@@ -154,6 +154,30 @@ from = "analyst"
 to = "developer"
 "#;
 
+/// Issues a request with a method other than GET, and reads the whole body.
+async fn verb(app: Router, method: &str, path: &str) -> (StatusCode, String) {
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(method)
+                .uri(path)
+                .body(Body::empty())
+                .expect("request builds"),
+        )
+        .await
+        .expect("router responds");
+
+    let status = response.status();
+    let bytes = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body collects")
+        .to_bytes();
+
+    (status, String::from_utf8_lossy(&bytes).into_owned())
+}
+
 async fn call(app: Router, path: &str) -> (StatusCode, String) {
     let response = app
         .oneshot(
@@ -341,15 +365,15 @@ async fn a_run_still_going_is_listed_but_not_billed() {
 #[tokio::test]
 async fn control_operations_refuse_rather_than_pretend() {
     // A control that silently does nothing is worse than one that is not there, because it gets
-    // trusted once and then relied upon.
+    // trusted once and then relied upon. Streaming a run is the one still unbuilt.
     let factory = Factory::new("control");
 
     let response = factory
         .router()
         .oneshot(
             Request::builder()
-                .method("POST")
-                .uri("/ground-stop")
+                .method("GET")
+                .uri("/runs/run_x/stream")
                 .body(Body::empty())
                 .expect("request builds"),
         )
@@ -357,6 +381,66 @@ async fn control_operations_refuse_rather_than_pretend() {
         .expect("router responds");
 
     assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+}
+
+#[tokio::test]
+async fn a_ground_stop_can_be_engaged_and_released_over_http() {
+    // The factory now runs unattended, so the kill switch has to be reachable from the page
+    // somebody is watching it on — not only by creating a file by hand.
+    let factory = Factory::new("groundstop");
+
+    let (status, body) = verb(factory.router(), "POST", "/ground-stop").await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body.contains("\"engaged\":true"), "{body}");
+    assert!(
+        factory.path().join("ground-stop").exists(),
+        "it has to be on disk: the Tower reads it from there, and it must survive a crash"
+    );
+
+    let (status, body) = verb(factory.router(), "DELETE", "/ground-stop").await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body.contains("\"engaged\":false"), "{body}");
+    assert!(!factory.path().join("ground-stop").exists());
+}
+
+#[tokio::test]
+async fn engaging_a_ground_stop_twice_is_not_an_error() {
+    // Somebody pressing the button again because the first press was not obviously acknowledged
+    // must not be told it failed. That is how people learn a kill switch is unreliable.
+    let factory = Factory::new("groundstop-twice");
+
+    let (first, _) = verb(factory.router(), "POST", "/ground-stop").await;
+    let (second, body) = verb(factory.router(), "POST", "/ground-stop").await;
+
+    assert_eq!(first, StatusCode::OK);
+    assert_eq!(second, StatusCode::OK, "{body}");
+    assert!(body.contains("\"engaged\":true"), "{body}");
+}
+
+#[tokio::test]
+async fn releasing_a_ground_stop_that_is_not_engaged_is_not_an_error() {
+    let factory = Factory::new("groundstop-absent");
+
+    let (status, body) = verb(factory.router(), "DELETE", "/ground-stop").await;
+
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body.contains("\"engaged\":false"), "{body}");
+}
+
+#[tokio::test]
+async fn cancelling_work_that_is_not_queued_says_so_rather_than_claiming_success() {
+    // "Cancelled" about a run that is already going is the most dangerous thing this surface
+    // could say: somebody would walk away from something still opening pull requests.
+    let factory = Factory::new("cancel-missing");
+
+    let (status, body) = verb(factory.router(), "DELETE", "/flights/flt_nope").await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    assert!(body.contains("flt_nope"), "{body}");
+    assert!(
+        body.contains("Ground Stop"),
+        "it should say what does stop a live run: {body}"
+    );
 }
 
 #[tokio::test]

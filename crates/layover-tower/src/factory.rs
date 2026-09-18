@@ -256,7 +256,7 @@ impl Factory {
         let started = match spawn::start(&plan) {
             Ok(started) => started,
             Err(error) => {
-                self.record(&Self::never_started(
+                self.record(&self.never_started(
                     &run,
                     itinerary,
                     &authorised,
@@ -327,7 +327,7 @@ impl Factory {
             run: run.clone(),
             itinerary: itinerary.id().clone(),
             agent: authorised.name.clone(),
-            pipeline: None,
+            pipeline: self.chains.pipeline_of(itinerary.id()),
             model: authorised.agent.model.clone(),
             outcome,
             started_at,
@@ -361,6 +361,7 @@ impl Factory {
     /// spent a slot against the cap before the spawn was attempted — so a history that omits it
     /// disagrees with the accounting.
     fn never_started(
+        &self,
         run: &layover_core::RunId,
         itinerary: &Itinerary,
         authorised: &crate::dispatch::Authorised<'_>,
@@ -371,7 +372,7 @@ impl Factory {
             run: run.clone(),
             itinerary: itinerary.id().clone(),
             agent: authorised.name.clone(),
-            pipeline: None,
+            pipeline: self.chains.pipeline_of(itinerary.id()),
             model: authorised.agent.model.clone(),
             outcome: Outcome::Failed,
             started_at,
@@ -570,6 +571,12 @@ impl Factory {
                 }
 
                 unqueue(&queued.flight);
+
+                // Recorded before anything runs, because only this first flight knows which
+                // pipeline opened the chain: a flight an agent sends carries none, and every run
+                // after this one reads the answer from here.
+                self.chains
+                    .opened_by(&queued.flight.itinerary, queued.pipeline.as_ref());
 
                 let Some(flight) = self.past_the_barrier(&queued.flight, report) else {
                     done.push(queued.flight);
@@ -1222,6 +1229,46 @@ join = "all"
             None,
             BTreeMap::new(),
         )
+    }
+
+    #[test]
+    fn every_run_in_a_chain_is_labelled_with_the_pipeline_that_opened_it() {
+        // Only the first flight carries a pipeline; one an agent sends has none. Labelling only
+        // the first hop would leave the rest of a chain looking like it belonged to nothing.
+        let temp = Temp::new("pipeline-label");
+        let factory = pair(&temp);
+        let chain = ItineraryId::generate();
+
+        let mut opener = queued_to(&chain, Origin::Human, "analyst", 4);
+        opener.pipeline = Some(layover_core::pipeline::PipelineName::new("build"));
+
+        let mut handed_over = false;
+        factory.drain_with(vec![opener], &mut |_| {}, &mut |_, _| {}, |_| {
+            if handed_over {
+                Vec::new()
+            } else {
+                handed_over = true;
+                // As an agent's `layover_send` would: no pipeline of its own.
+                vec![queued_to(
+                    &chain,
+                    Origin::Agent(AgentName::new("analyst")),
+                    "developer",
+                    3,
+                )]
+            }
+        });
+
+        let history = std::fs::read_dir(factory.history_dir())
+            .expect("a history directory")
+            .filter_map(Result::ok)
+            .filter_map(|entry| std::fs::read_to_string(entry.path()).ok())
+            .collect::<String>();
+
+        assert_eq!(
+            history.matches("\"pipeline\":\"build\"").count(),
+            2,
+            "both runs should carry the pipeline: {history}"
+        );
     }
 
     #[test]
