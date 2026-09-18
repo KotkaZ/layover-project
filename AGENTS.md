@@ -30,10 +30,14 @@ What exists and is fully tested:
 - `crates/layover-cli` — the `layover` binary: `validate`, `explain`, `graph`, `prompt`, `serve`,
   `autostart`.
 
-**Nothing that spawns a process exists yet** — no process supervision, no MCP server, no Tower.
-The run bootstrap is now settled: see [`docs/first-release.md`](docs/first-release.md) for what a
-run receives and in what order. What remains open is listed in `docs/decisions.md`; do not guess
-at those.
+**One run can be supervised; a factory cannot.** `layover-tower` spawns an agent CLI, streams its
+transcript, times it out, kills its process tree and reads what it cost. What does not exist is
+routing — dispatching a flight, parking a barrier, debiting a rail — or the MCP server agents talk
+through, or the schedule.
+
+What each of those will do is settled rather than open: see
+[`docs/first-release.md`](docs/first-release.md). What is still genuinely undecided is the short
+list in `docs/decisions.md`; do not guess at those.
 
 `layover run` is deliberately absent rather than stubbed. A command that pretends to start a
 factory is worse than one that says it cannot.

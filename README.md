@@ -20,11 +20,12 @@
 
 </div>
 
-> **Status: early implementation.** Everything up to the moment a process would be spawned is
-> built and tested — a factory loads, validates, composes its prompts, and the dashboard serves
-> its route map, run history, costs, help requests, learnings and reports. **Nothing spawns a
-> process yet**, so a factory is something you can define, inspect and cost, not yet something
-> that runs. Detail in [what works today](#what-works-today).
+> **Status: early implementation.** A factory loads, validates and composes its prompts; the
+> dashboard serves its route map, run history, costs, help requests, learnings and reports; and
+> Layover can now **supervise a single run** — spawn an agent CLI, stream its transcript, time it
+> out, kill its process tree and read what it cost. **What does not exist is the loop that makes
+> that a factory**: nothing routes a message between agents, and there is no MCP server for them
+> to talk through. Detail in [what works today](#what-works-today).
 >
 > Pre-1.0 and maintained by one person: expect breaking changes on a minor bump. See
 > [project status](#project-status).
@@ -193,14 +194,20 @@ test and doc build, with warnings denied. CI runs the same command, unchanged.
 
 | Built | Not built |
 |---|---|
-| `validate`, `explain`, `prompt`, `graph` | `layover run` — the Tower, and anything that spawns a process |
-| `serve`: the dashboard and the read endpoints behind it | The MCP server agents would talk to |
-| Run history, costs, the Reserve, help requests, learnings, reports | Live run streaming and Ground Stop, which answer `501` |
-| `POST /flights`, which **queues** a trigger durably | Anything that would dispatch that queue |
-| `autostart`, which registers `layover serve` at login | |
+| `validate`, `explain`, `prompt`, `graph` | `layover run` — nothing yet drives the supervisor |
+| `serve`: the dashboard and the read endpoints behind it | The MCP server agents would talk to each other through |
+| Run history, costs, the Reserve, help requests, learnings, reports | Routing: dispatching a flight, parking a barrier, debiting a rail |
+| `POST /flights`, which **queues** a trigger durably | Anything that would drain that queue |
+| `autostart`, which registers `layover serve` at login | Schedules, and resuming a booked Layover |
+| **Supervising one run**: composing its payload, spawning the CLI, streaming its transcript, timing it out, killing its process tree, reading what it cost | Live run streaming and Ground Stop over HTTP, which answer `501` |
 
-The missing half is blocked on the run-bootstrap questions in
-[`docs/decisions.md`](docs/decisions.md). Do not guess at them.
+**A supervisor that can run one agent is not yet a factory.** `layover-tower` can start a real
+process, watch it, end it and price it; what does not exist is the loop that decides *which* agent
+to start and what happens to what it produces. That is routing, the MCP server, and the schedule —
+and it is the next work.
+
+What each piece will do is settled rather than open: see
+[`docs/first-release.md`](docs/first-release.md).
 
 ## Contributing
 

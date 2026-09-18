@@ -25,6 +25,12 @@
 //! Recovery needs to say "this was running, and it is confirmed gone". Both halves come from the
 //! record written before the spawn.
 
+pub mod cost;
 pub mod spawn;
+pub mod state;
+pub mod wait;
 
+pub use cost::{Reported, from_transcript};
 pub use spawn::{Finished, Plan, SpawnError, Started, start};
+pub use state::{Ledger, Live, Verdict};
+pub use wait::{Ended, kill_tree, wait_for};

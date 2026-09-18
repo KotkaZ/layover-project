@@ -8,6 +8,39 @@ See [project status](README.md#project-status).
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-09-18
+
+Layover can supervise a run. Not yet a factory — nothing routes a message between agents — but the
+mechanisms a supervisor is made of now exist and are tested against real processes.
+
+### Added
+
+- **`layover-tower`: Layover starts a process.** The first code in the project that can do
+  something irreversible. A run writes its composed payload to the hangar, builds its invocation,
+  spawns the CLI, streams both output streams to one transcript file, and reports how it ended.
+- **A run is recorded before it is spawned.** A run alive when the supervisor dies leaves no exit
+  code, so the record written first is the only evidence it existed. It carries the process
+  identifier *and* the moment it began, because identifiers get reused and recovering into
+  something else's process is worse than not recovering.
+- **Timeouts, and killing a process tree.** An agent CLI is rarely one process — it starts language
+  servers, shells out to git, runs suites — so ending only the child leaves those holding the
+  workspace. What that means differs sharply by platform.
+- **Stop requests reach a running child.** What makes Ground Stop real rather than advisory.
+- **Cost is read from the transcript, and disbelieved when it should be.** A figure an order of
+  magnitude below what the reported tokens imply is treated as unreported rather than as a
+  measurement, so a runner that under-reports cannot quietly defeat Fuel and the Reserve together.
+- **Only declared variables reach a child**, plus the handful the operating system needs for a
+  process to exist at all. Clearing the environment outright leaves a child unable to start —
+  found the hard way, and now pinned by a test.
+
+### Changed
+
+- The aviation vocabulary stays whole and `entry = true` stays, reversing two earlier decisions.
+  Both were simplifications rather than capabilities, and both would have changed config and API
+  for factories that already exist.
+- The soak gate is 48 hours against a sandbox repository, revised from seven days, and named as a
+  compromise: it catches the second-day failures and not the slow ones.
+
 ## [0.9.0] — 2026-09-18
 
 The fifty questions blocking the first runnable release were answered, and the run bootstrap they
@@ -116,7 +149,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/KotkaZ/layover-project/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/KotkaZ/layover-project/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/KotkaZ/layover-project/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/KotkaZ/layover-project/compare/v0.3.0...v0.7.0
