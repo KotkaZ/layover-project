@@ -11,6 +11,7 @@ use jiff::{Timestamp, ToSpan};
 use layover_core::cost::RETENTION_DAYS;
 use layover_dashboard::{Dashboard, DashboardState};
 use layover_store::{History, Journal};
+use layover_tower::{Dispatched, Factory};
 
 use layover_core::agent::PromptSpec;
 use layover_core::prompt::resolve;
@@ -422,6 +423,84 @@ fn strip_verbatim(path: &Path) -> PathBuf {
         Some(rest) => PathBuf::from(rest),
         None => path.to_path_buf(),
     }
+}
+
+/// Runs everything waiting in the queue, once.
+///
+/// # Errors
+///
+/// Returns a failure when the factory does not load or its state cannot be opened.
+pub fn run(path: &Path, dry_run: bool) -> Result<String, Failure> {
+    let (config, _) = load(path)?;
+    let root = path.parent().unwrap_or_else(|| Path::new("."));
+
+    let journal =
+        Journal::open(root.join(".layover").join("journal")).map_err(|error| error.to_string())?;
+    let pending = journal.pending().map_err(|error| error.to_string())?;
+
+    let mut out = String::new();
+
+    if pending.is_empty() {
+        return Ok("Nothing is queued.\n".to_owned());
+    }
+
+    let factory = Factory::new(config, root).map_err(|error| error.to_string())?;
+
+    if factory.ground_stop_engaged() {
+        return Err("a Ground Stop is engaged; release it before running anything".into());
+    }
+
+    if dry_run {
+        let _ = writeln!(out, "{} flight(s) queued:", pending.len());
+        for queued in &pending {
+            let _ = writeln!(
+                out,
+                "  {} -> {}",
+                queued.flight.id.as_str(),
+                queued.flight.to
+            );
+        }
+        let _ = writeln!(out, "\nNothing was started: --dry-run.");
+        return Ok(out);
+    }
+
+    let mut lines = Vec::new();
+    let ran = factory.drain(
+        pending,
+        |flight| {
+            // Off the queue before it runs. A flight that crashes the factory mid-run must not
+            // come back on restart and do its work a second time.
+            let _ = journal.unqueue(&flight.id);
+        },
+        |flight, result| {
+            lines.push(match result {
+                Dispatched::Ran {
+                    outcome,
+                    usd,
+                    source,
+                } => {
+                    // A figure's provenance is part of the figure. "$0.00 unmeasured" and
+                    // "$0.00 measured" mean opposite things, and a line that shows only the
+                    // number invites reading the first as the second.
+                    let measured = if source.is_measured() {
+                        "measured"
+                    } else {
+                        "not measured"
+                    };
+                    format!("  {} {outcome} ${usd:.2} ({measured})", flight.to)
+                }
+                Dispatched::Refused(refusal) => format!("  {} refused: {refusal}", flight.to),
+                Dispatched::Failed(why) => format!("  {} could not start: {why}", flight.to),
+            });
+        },
+    );
+
+    let _ = writeln!(out, "Ran {ran} flight(s):");
+    for line in lines {
+        let _ = writeln!(out, "{line}");
+    }
+
+    Ok(out)
 }
 
 #[cfg(test)]

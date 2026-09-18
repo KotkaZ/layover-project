@@ -88,6 +88,21 @@ enum Command {
         history: Option<PathBuf>,
     },
 
+    /// Run the queued work, once.
+    ///
+    /// Takes everything waiting in the queue and runs it to completion: each flight is authorised
+    /// against the route map and the rails, spawned, watched, and written to history.
+    ///
+    /// Deliberately **not** a daemon yet. Nothing here routes a message from one agent to
+    /// another, and there is no MCP server for them to talk through, so a factory drains what was
+    /// asked for and stops. A command that looped forever would look like a working factory
+    /// that never does anything.
+    Run {
+        /// Report what would happen without starting anything.
+        #[arg(long)]
+        dry_run: bool,
+    },
+
     /// Write the file that starts Layover when you log in.
     ///
     /// A lights-out factory that stops at every reboot is not lights-out. This generates the
@@ -121,6 +136,7 @@ fn main() -> ExitCode {
             commands::autostart(&cli.config, output.as_deref(), show)
         }
         Command::Serve { addr, history } => commands::serve(&cli.config, &addr, history.as_deref()),
+        Command::Run { dry_run } => commands::run(&cli.config, dry_run),
     };
 
     match result {

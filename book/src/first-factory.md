@@ -35,12 +35,13 @@ layover validate --config examples/planner.toml --strict
 layover explain --config examples/planner.toml
 layover prompt planner --config examples/planner.toml
 layover serve --config examples/planner.toml     # the dashboard, on http://127.0.0.1:7878
+layover run --config examples/planner.toml --dry-run   # what is queued, without starting it
 ```
 
-> **There is no `layover run`.** Layover can supervise a single run, but nothing yet decides which
-> agent to start or routes what it produces — so this is the whole loop for now: define a factory,
-> check it, read the prompts it would send, and watch the dashboard. A trigger from the dashboard
-> is queued and waits. See [Status](./index.md#status).
+> **`layover run` drains what is queued.** Trigger a workflow from the dashboard, then run it:
+> Layover authorises the flight against the route map and the rails, spawns the agent, watches it,
+> and records what happened. What it will not do yet is pass the result on — nothing routes between
+> agents — so a chain is one hop long. See [Status](./index.md#status).
 
 ## What it does not say
 

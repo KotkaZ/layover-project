@@ -20,12 +20,11 @@
 
 </div>
 
-> **Status: early implementation.** A factory loads, validates and composes its prompts; the
-> dashboard serves its route map, run history, costs, help requests, learnings and reports; and
-> Layover can now **supervise a single run** — spawn an agent CLI, stream its transcript, time it
-> out, kill its process tree and read what it cost. **What does not exist is the loop that makes
-> that a factory**: nothing routes a message between agents, and there is no MCP server for them
-> to talk through. Detail in [what works today](#what-works-today).
+> **Status: early implementation.** `layover run` now does real work: it takes what is queued,
+> checks each flight against the route map and the safety rails, spawns the agent CLI, watches it,
+> bounds it, prices it and writes it down. **What does not exist is the agent-to-agent half** —
+> nothing routes a flight from one agent to the next, and there is no MCP server for them to talk
+> through, so a chain is one hop long. Detail in [what works today](#what-works-today).
 >
 > Pre-1.0 and maintained by one person: expect breaking changes on a minor bump. See
 > [project status](#project-status).
@@ -194,19 +193,18 @@ test and doc build, with warnings denied. CI runs the same command, unchanged.
 
 | Built | Not built |
 |---|---|
-| `validate`, `explain`, `prompt`, `graph` | `layover run` — nothing yet drives the supervisor |
+| `validate`, `explain`, `prompt`, `graph` | Routing: nothing sends a message from one agent to another |
 | `serve`: the dashboard and the read endpoints behind it | The MCP server agents would talk to each other through |
-| Run history, costs, the Reserve, help requests, learnings, reports | Routing: dispatching a flight, parking a barrier, debiting a rail |
-| `POST /flights`, which **queues** a trigger durably | Anything that would drain that queue |
-| `autostart`, which registers `layover serve` at login | Schedules, and resuming a booked Layover |
-| **Supervising one run**: composing its payload, spawning the CLI, streaming its transcript, timing it out, killing its process tree, reading what it cost | Live run streaming and Ground Stop over HTTP, which answer `501` |
+| **`run`: drains the queue, authorises each flight against the route map and the rails, spawns it, records it** | Barriers, schedules, and resuming a booked Layover |
+| Run history, costs, the Reserve, help requests, learnings, reports | A daemon — `run` drains what is queued and stops |
+| `POST /flights`, which queues a trigger durably | Live run streaming and Ground Stop over HTTP, which answer `501` |
+| `autostart`, which registers `layover serve` at login | |
 
-**A supervisor that can run one agent is not yet a factory.** `layover-tower` can start a real
-process, watch it, end it and price it; what does not exist is the loop that decides *which* agent
-to start and what happens to what it produces. That is routing, the MCP server, and the schedule —
-and it is the next work.
+**A factory that runs one agent is not yet a mesh.** A human can trigger work and Layover will do
+it — authorise it, spawn it, bound it, price it, write it down. What is missing is the agent-to-agent
+half: nothing routes a flight from one agent to the next, so a chain is one hop long.
 
-What each piece will do is settled rather than open: see
+What each remaining piece will do is settled rather than open: see
 [`docs/first-release.md`](docs/first-release.md).
 
 ## Contributing

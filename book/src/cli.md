@@ -81,12 +81,22 @@ Generates your platform's own autostart artefact — a Scheduled Task, a launchd
 user unit — and prints the one command that registers it. It writes nothing if the factory does
 not load. See [Install](./install.md#starting-with-the-computer).
 
-## There is no `layover run`
+## `run`
 
-It is deliberately absent rather than stubbed. `run` is the command that will start the Tower, and
-while the Tower can now supervise an individual run — spawn a CLI, watch it, end it, price it —
-nothing yet routes a message between agents and there is no MCP server for them to talk through.
+```sh
+layover run                  # run everything queued
+layover run --dry-run        # say what would run, start nothing
+```
 
-A command that pretended to start a factory would be worse than one that says it cannot: the
-failure would look like a factory with nothing to do. See
-[Status](./index.md#status).
+Takes every flight waiting in the queue and runs it: each is authorised against the route map and
+the safety rails, spawned, watched, and written to history. A flight is taken **off** the queue
+before it runs, so a factory that dies mid-run does not repeat the work on restart — an agent that
+opened a pull request and was interrupted before its outcome was recorded would otherwise open a
+second one.
+
+A Ground Stop refuses the command outright, and one appearing mid-drain stops it between flights.
+
+**It is deliberately not a daemon.** Nothing yet routes a message from one agent to another, and
+there is no MCP server for them to talk through, so a factory drains what was asked of it and
+stops. A command that looped forever would look like a working factory that never does anything.
+See [Status](./index.md#status).

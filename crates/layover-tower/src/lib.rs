@@ -26,11 +26,15 @@
 //! record written before the spawn.
 
 pub mod cost;
+pub mod dispatch;
+pub mod factory;
 pub mod spawn;
 pub mod state;
 pub mod wait;
 
 pub use cost::{Reported, from_transcript};
+pub use dispatch::{Authorised, Refusal, authorise};
+pub use factory::{Dispatched, Factory};
 pub use spawn::{Finished, Plan, SpawnError, Started, start};
 pub use state::{Ledger, Live, Verdict};
 pub use wait::{Ended, kill_tree, wait_for};

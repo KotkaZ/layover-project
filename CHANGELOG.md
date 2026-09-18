@@ -8,6 +8,27 @@ See [project status](README.md#project-status).
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-09-18
+
+`layover run` exists, and it runs things. A flight queued through the API is authorised against the
+route map and the safety rails, spawned, watched, priced and written to history.
+
+### Added
+
+- **`layover run`**, with `--dry-run`. Drains the queue once; deliberately not a daemon, because
+  nothing routes between agents yet and a command that looped forever would look like a working
+  factory that never does anything.
+- **Dispatch: deciding whether a flight may fly.** Ground Stop, then route, then rails — in that
+  order, because "everything is stopped" should beat a detail about one flight, and "that edge does
+  not exist" is permanent where "no Fuel left" is about this chain right now.
+- **The rails bite for the first time.** Hops decrement per flight and the count never passes
+  through an agent; the run cap counts starts rather than completions, because a run that is never
+  seen to finish has still been started; Fuel is debited even when a run fails, because money spent
+  is money spent.
+- **A flight leaves the queue before it runs**, so a factory that dies mid-run does not repeat the
+  work on restart — an agent interrupted after opening a pull request would otherwise open a
+  second one.
+
 ## [0.10.0] — 2026-09-18
 
 Layover can supervise a run. Not yet a factory — nothing routes a message between agents — but the
@@ -149,7 +170,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/KotkaZ/layover-project/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/KotkaZ/layover-project/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/KotkaZ/layover-project/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/KotkaZ/layover-project/compare/v0.7.0...v0.8.0
