@@ -37,9 +37,10 @@ layover prompt planner --config examples/planner.toml
 layover serve --config examples/planner.toml     # the dashboard, on http://127.0.0.1:7878
 ```
 
-> **There is no `layover run`.** Nothing spawns a process yet, so this is the whole loop: define a
-> factory, check it, read the prompts it would send, and watch the dashboard. A trigger from the
-> dashboard is queued and waits. See [Status](./index.md#status).
+> **There is no `layover run`.** Layover can supervise a single run, but nothing yet decides which
+> agent to start or routes what it produces — so this is the whole loop for now: define a factory,
+> check it, read the prompts it would send, and watch the dashboard. A trigger from the dashboard
+> is queued and waits. See [Status](./index.md#status).
 
 ## What it does not say
 

@@ -100,6 +100,9 @@ The reference factory sets `recovery = "manual"` on its publisher, and nothing e
 
 ## Status
 
-The domain model, its rails and the handover text are built and tested. Actually detecting an
-interruption and starting the replacement needs the Tower, which does not exist yet — see
-[the open questions](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md).
+The domain model, its rails and the handover text are built and tested, and so is the part that
+notices: a run is recorded before it is spawned, with its process identifier and the moment it
+began, which is what lets an interrupted run be told apart from a finished one after a restart.
+
+What is missing is the loop that acts on that — deciding to start the replacement, and routing what
+it produces. See [Status](./index.md#status).

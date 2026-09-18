@@ -83,8 +83,9 @@ not load. See [Install](./install.md#starting-with-the-computer).
 
 ## There is no `layover run`
 
-It is deliberately absent rather than stubbed. `run` is the command that will start the Tower —
-process supervision and the MCP server — and neither exists yet.
+It is deliberately absent rather than stubbed. `run` is the command that will start the Tower, and
+while the Tower can now supervise an individual run — spawn a CLI, watch it, end it, price it —
+nothing yet routes a message between agents and there is no MCP server for them to talk through.
 
 A command that pretended to start a factory would be worse than one that says it cannot: the
 failure would look like a factory with nothing to do. See

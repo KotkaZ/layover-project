@@ -53,13 +53,16 @@ flowchart LR
 
 ## Status
 
-Early. Everything up to the moment a process would be spawned works: a factory loads, validates
-and composes its prompts, and `layover serve` puts a dashboard on it — route map, run history,
-cost and the Reserve, help requests, learnings and each agent's report.
+Early. A factory loads, validates and composes its prompts, and `layover serve` puts a dashboard
+on it — route map, run history, cost and the Reserve, help requests, learnings and each agent's
+report.
 
-**Nothing spawns a process yet.** There is no `layover run`, and no MCP server for agents to talk
-to, so a factory is something you can define, inspect and cost rather than something that runs.
-A trigger from the dashboard is queued durably and waits.
+**Layover can now supervise a single run**: spawn an agent CLI, stream its transcript, time it out,
+kill its process tree and read what it cost.
+
+**What does not exist is the loop that makes that a factory.** Nothing routes a message from one
+agent to another, there is no MCP server for them to talk through, and no schedule fires. So there
+is still no `layover run`, and a trigger from the dashboard is queued durably and waits.
 
 The [README](https://github.com/KotkaZ/layover-project#what-works-today) carries the built and
 not-built list, kept in one place so the two cannot disagree.

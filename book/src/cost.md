@@ -49,9 +49,28 @@ Every run's cost carries a `CostSource`:
 
 | Source | Meaning |
 |---|---|
-| `reported` | The runner said so. The only kind worth billing against. |
+| `reported` | The runner said so, and the figure survived a sanity check. The only kind worth billing against. |
 | `rate_card` | Layover derived it from token counts and published prices. An estimate. |
-| `unreported` | The runner said nothing. The figure is zero and means nothing. |
+| `unreported` | The runner said nothing, or said something that cannot be believed. The figure is zero and means nothing. |
+
+### When a reported figure is disbelieved
+
+Layover parses three CLIs' output formats and controls none of them, so the assumption is that
+parsing will break. What matters is what happens when it does — and the answer is never a zero
+that looks like a measurement:
+
+- **Unreadable output** is `unreported`, not `$0`. A total built from it says it is a lower bound.
+- **Negative, `NaN` or infinite** is `unreported`. A cost that could credit Fuel back to a chain
+  would be a rail running backwards.
+- **Zero dollars alongside real tokens** is silence, not a measurement. Work happened; the runner
+  did not price it.
+- **A figure an order of magnitude below what its own reported tokens imply** is `unreported`. A
+  runner claiming a cent for a four-dollar run defeats Fuel and the Reserve together, because both
+  read the same number. The check is a yardstick, not a price list — a cheap model is not
+  constantly accused of lying.
+
+When cost cannot be trusted, `max_runs` is the rail that still holds: it counts invocations, and
+needs no cooperation from the child.
 
 **A total reports the weakest source that fed it.** Ninety-nine measured runs and one estimate
 make an estimate. This looks pedantic until you see what the alternative costs: a system that
