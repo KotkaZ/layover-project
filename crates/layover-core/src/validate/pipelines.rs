@@ -105,8 +105,9 @@ fn check_flag_declarations_agree(config: &Config, found: &mut Vec<Diagnostic>) {
 
 /// Warns when a schedule can fire again before the previous run could plausibly have finished.
 ///
-/// Runs are reentrant, so a schedule that outruns its own work does not queue — it piles up
-/// concurrent copies of the same itinerary, each spending real money.
+/// The Tower skips a tick whose previous wave is still going, so this is not a runaway — it is a
+/// schedule that will mostly not run, which looks from the outside exactly like one that is
+/// working. Under `overlap = "allow"` it *is* a runaway, and the wording says which.
 fn check_schedules_are_survivable(config: &Config, found: &mut Vec<Diagnostic>) {
     let timeout = config.defaults.timeout_sec;
 
@@ -119,9 +120,15 @@ fn check_schedules_are_survivable(config: &Config, found: &mut Vec<Diagnostic>) 
         };
 
         if gap < timeout {
+            let consequence = if pipeline.allows_overlap() {
+                "and `overlap = \"allow\"` is set, so copies will pile up concurrently"
+            } else {
+                "so most ticks will be skipped"
+            };
+
             found.push(Diagnostic::warning(format!(
                 "pipeline `{name}` fires at least every {gap}s but a single run may take \
-                 {timeout}s; runs are reentrant, so slow runs will overlap rather than queue"
+                 {timeout}s, {consequence}"
             )));
         }
     }
@@ -245,7 +252,28 @@ mod tests {
             "#
         ));
 
-        assert_mentions(&warnings(&config), "will overlap rather than queue");
+        assert_mentions(&warnings(&config), "most ticks will be skipped");
+    }
+
+    #[test]
+    fn a_schedule_faster_than_a_run_that_is_allowed_to_overlap_says_copies_will_pile_up() {
+        // The same shape means two different things now, and "most ticks will be skipped" would
+        // be actively misleading for the one that spends money.
+        let config = parse(&format!(
+            r#"
+            [defaults]
+            timeout_sec = 1800
+
+            {AGENT}
+
+            [pipelines.review-bot]
+            entry = "analyst"
+            trigger = {{ every = "5m" }}
+            overlap = "allow"
+            "#
+        ));
+
+        assert_mentions(&warnings(&config), "pile up concurrently");
     }
 
     #[test]
@@ -286,7 +314,7 @@ mod tests {
             "#
         ));
 
-        assert_mentions(&warnings(&config), "will overlap rather than queue");
+        assert_mentions(&warnings(&config), "most ticks will be skipped");
     }
 
     #[test]

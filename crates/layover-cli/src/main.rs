@@ -7,6 +7,7 @@
 
 mod commands;
 mod mcp;
+mod tower;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -74,11 +75,15 @@ enum Command {
         svg: bool,
     },
 
-    /// Serve the monitoring dashboard.
+    /// Run the factory and serve the dashboard.
     ///
-    /// Read-only: the route map as configured right now, what has run, and what it cost. It
-    /// needs no Tower, which is the point — history outlives the process that wrote it, so the
-    /// dashboard answers for a factory that is not currently running.
+    /// This is the lights-out command, and what `layover autostart` registers. It fires scheduled
+    /// pipelines, runs what is queued, serves agents the MCP endpoint they call back into, and
+    /// puts a dashboard over all of it.
+    ///
+    /// `--watch-only` leaves the running out and serves the dashboard alone, which is what you
+    /// want when looking at a factory another process is already running. Two Towers over one
+    /// factory directory would race for its queue.
     Serve {
         /// Address to listen on.
         #[arg(long, default_value = "127.0.0.1:7878")]
@@ -87,6 +92,10 @@ enum Command {
         /// Where run history lives. Defaults to `.layover/history` beside the configuration.
         #[arg(long, value_name = "DIR")]
         history: Option<PathBuf>,
+
+        /// Serve the dashboard without running anything.
+        #[arg(long)]
+        watch_only: bool,
     },
 
     /// Run the queued work, once.
@@ -136,7 +145,11 @@ fn main() -> ExitCode {
         Command::Autostart { output, show } => {
             commands::autostart(&cli.config, output.as_deref(), show)
         }
-        Command::Serve { addr, history } => commands::serve(&cli.config, &addr, history.as_deref()),
+        Command::Serve {
+            addr,
+            history,
+            watch_only,
+        } => commands::serve(&cli.config, &addr, history.as_deref(), watch_only),
         Command::Run { dry_run } => commands::run(&cli.config, dry_run),
     };
 

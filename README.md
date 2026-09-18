@@ -20,13 +20,15 @@
 
 </div>
 
-> **Status: early implementation.** Agents now reach one another. `layover run` takes what is
-> queued, checks each flight against the route map and the safety rails, spawns the agent CLI —
-> and serves that CLI an MCP endpoint it can call back into. An agent that calls `layover_send`
-> queues a real flight, and the same invocation picks it up and runs the next agent, charging
-> every hop to one shared Hops, Fuel and run-cap budget. **What does not exist is scheduling** —
-> nothing fires on a timer, so a chain still has to be started by hand. Detail in
+> **Status: early implementation.** Layover now runs a factory unattended. `layover serve` fires
+> scheduled pipelines, runs what is queued, and serves each agent an MCP endpoint it can call back
+> into — so a chain starts on a clock, hands work from agent to agent, waits at a rendezvous for
+> several verdicts at once, and finishes with nobody watching. Every hop is bounded by the Hops,
+> Fuel and run cap of the one chain that began it. Detail in
 > [what works today](#what-works-today).
+>
+> What has **not** been proven is the thing this project claims: forty-eight hours unattended
+> without intervention. Until that soak passes, treat it as working rather than trustworthy.
 >
 > Pre-1.0 and maintained by one person: expect breaking changes on a minor bump. See
 > [project status](#project-status).
@@ -196,22 +198,24 @@ test and doc build, with warnings denied. CI runs the same command, unchanged.
 
 | Built | Not built |
 |---|---|
-| `validate`, `explain`, `prompt`, `graph` | Schedules: nothing fires on a timer |
-| `serve`: the dashboard and the read endpoints behind it | Barriers at runtime, and resuming a booked Layover |
-| **`run`: drains the queue, authorises each flight against the route map and the rails, spawns it, records it** | A daemon — `run` drains what is queued and stops |
-| **The MCP endpoint agents call back into: `layover_send` queues a real flight and the same `run` picks it up** | Live run streaming and Ground Stop over HTTP, which answer `501` |
+| `validate`, `explain`, `prompt`, `graph` | Resuming a booked Layover — `layover_wait` is declared, not connected |
+| **`serve`: the Tower — fires schedules, runs the queue, hosts MCP, serves the dashboard** | Dashboard write controls: Ground Stop, cancelling queued work, resolving a help request |
+| **Schedules: `every` and `cron`, skipping a tick whose previous wave is still going** | API authentication — the surface is loopback-only and unauthenticated |
+| **Rendezvous joins: work is parked and its agent wakes once, with every verdict** | Live run streaming over HTTP, which answers `501` |
+| **The MCP endpoint agents call back into: `layover_send` queues a real flight** | An itineraries endpoint, so the dashboard can show a chain rather than its runs |
+| `run`: drains the queue once, for when you want to watch it | |
 | Run history, costs, the Reserve, help requests, learnings, reports | |
 | `POST /flights`, which queues a trigger durably | |
 | `autostart`, which registers `layover serve` at login | |
 
-**A chain is now longer than one hop.** Each run is served an MCP endpoint and a token minted for
-it alone; an agent that calls `layover_send` queues a real flight and the same invocation runs the
-next agent. Every hop is charged to the itinerary that began the chain, so Hops, Fuel and the run
-cap bound the whole conversation rather than each message in it — and an agent reaching for an edge
-the route map does not draw is refused while it runs, not after.
+**A factory now runs itself.** A schedule fires, an agent starts, it hands work on through the MCP
+endpoint, a joined agent waits for every verdict it needs, and the chain finishes — all inside the
+budget it started with, and all without anybody typing a command. A Ground Stop pauses the whole
+thing and releasing it resumes.
 
-What is missing is anything that starts work on its own: no schedule fires, so a chain still has to
-be triggered by hand.
+**What is not proven is the claim on the tin.** Forty-eight hours unattended, no intervention, is
+the bar this project set for itself, and it has not been run. Everything above is tested and has
+been watched working; none of it has been left alone for two days.
 
 What each remaining piece will do is settled rather than open: see
 [`docs/first-release.md`](docs/first-release.md).

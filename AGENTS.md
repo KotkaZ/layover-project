@@ -32,13 +32,14 @@ What exists and is fully tested:
 - `crates/layover-cli` — the `layover` binary: `validate`, `explain`, `graph`, `prompt`, `serve`,
   `run`, `autostart`.
 
-**`layover run` runs a factory, and agents reach one another.** The supervisor spawns an agent CLI,
-serves it an MCP endpoint with a token minted for that run alone, watches it, bounds it and prices
-it. An agent that calls `layover_send` queues a real flight and the same invocation runs the next
-agent, charging every hop to the one itinerary that began the chain.
+**`layover serve` runs a factory unattended.** It fires scheduled pipelines, drains the queue,
+spawns agent CLIs with an MCP endpoint and a per-run token, holds work at rendezvous joins, and
+writes every run to history. An agent that calls `layover_send` queues a real flight and the same
+process runs the next agent, charging every hop to the one itinerary that began the chain.
 
-What does not exist is anything that starts work on its own: no schedule fires, so a chain has to
-be triggered by hand. Barriers at runtime and resuming a booked Layover are also unbuilt.
+What does not exist is resuming a booked Layover, dashboard write controls, API authentication and
+an itineraries endpoint. And the claim this project is named for — forty-eight hours unattended
+without intervention — has not been proven.
 
 What each of those will do is settled rather than open: see
 [`docs/first-release.md`](docs/first-release.md). What is still genuinely undecided is the short

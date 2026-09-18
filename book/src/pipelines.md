@@ -75,10 +75,9 @@ With `shared`, two instances that both reach a `read-write` agent edit the same 
 time. That fails in the way hardest to notice — plausible output built from two unrelated changes.
 `per-itinerary` is what makes parallel instances safe.
 
-`layover validate` warns when a **scheduled** pipeline uses `shared` and reaches a writer, because
-a schedule overlaps itself with nobody watching. It does not warn for manual pipelines: a human
-starting a second instance knows they did, and warning on every manual pipeline with a writer
-would fire on almost every factory.
+`layover validate` warns when a pipeline sets `overlap = "allow"`, uses `shared` and reaches a
+writer, because two instances will then edit the same files with nobody watching. A pipeline left
+on the default cannot reach that state, so nothing is said about it.
 
 Setting both `every` and `cron` is an error rather than a silent choice between them.
 
@@ -89,19 +88,52 @@ invocation, and a schedule runs with nobody watching. Six-field cron expressions
 a seconds column — are refused for the same reason: a seconds field can schedule work faster than
 a run can finish, which is a fork bomb with a clock attached.
 
-### Schedules do not queue
+### Overlapping ticks
 
-Runs are reentrant. A schedule that fires again before the previous run has finished does not
-queue behind it — it starts a second, concurrent copy of the same itinerary. `layover validate`
-warns when an interval is shorter than `timeout_sec`:
+### When a tick comes round before the last one finished
+
+By default the tick is **skipped**. Starting a second copy means paying twice for one result and,
+on a shared workspace, two agents editing the same files. Skipping means being one interval late.
+For unattended spending those are not comparable.
+
+```toml
+[pipelines.review-bot]
+entry   = "reviewer"
+trigger = { every = "5m" }
+overlap = "allow"          # start another anyway
+```
+
+| Value | Meaning |
+|---|---|
+| `skip` | Miss this firing, wait for the next. The default. |
+| `allow` | Start a second instance regardless. |
+
+Every skip is reported, because a schedule quietly skipping every tick because its work always
+overruns looks exactly like a schedule that is running fine — and the difference is that nothing
+is happening.
+
+`overlap = "allow"` is the right answer when instances genuinely cannot interfere: a
+`per-itinerary` workspace, or agents that only read. `layover validate` warns when you set it and
+a writer is reachable on a shared workspace.
+
+`layover validate` also warns when an interval is shorter than `timeout_sec`:
 
 ```text
 warning: pipeline `review-bot` fires every 300s but a single run may take 1800s;
-         runs are reentrant, so slow runs will overlap rather than queue
+         most ticks will be skipped
 ```
 
 A cron expression has no single interval to compare against, so that check stays silent rather
 than guessing. Sizing a cron schedule is on you.
+
+### What the clock does across a restart
+
+Nothing fires at startup. A Tower restarting is not a reason to run every hourly job at once; if it
+were, restarting would be expensive enough to avoid.
+
+Next firings are computed from the clock, not from when the last run finished — otherwise the
+period drifts by however long the work took, and an hourly job slowly becomes a ninety-minute one.
+A Tower that was asleep for six hours fires **once** on waking rather than six times in a row.
 
 ## Flags
 

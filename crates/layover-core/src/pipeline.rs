@@ -18,6 +18,7 @@ use std::fmt;
 use std::str::FromStr;
 use std::time::Duration;
 
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 
 use crate::agent::AgentName;
@@ -77,6 +78,35 @@ impl Schedule {
         match self {
             Self::Every(duration) => Some(*duration),
             Self::Cron(_) => None,
+        }
+    }
+
+    /// The first firing strictly after `now`.
+    ///
+    /// Both forms are computed from the clock rather than from when the last run finished. Adding
+    /// an interval to a finish time makes the period drift by however long the work took, so an
+    /// hourly job slowly becomes a ninety-minute one.
+    ///
+    /// Returns `None` only for a cron expression that never matches — 31 February, say — which
+    /// parses cleanly and is therefore accepted at load. A pipeline that can never fire is better
+    /// left silent than made to fire at some arbitrary substitute time.
+    #[must_use]
+    pub fn next_after(&self, now: Timestamp) -> Option<Timestamp> {
+        match self {
+            Self::Every(interval) => {
+                let step = i64::try_from(interval.as_secs()).ok()?.max(1);
+                now.checked_add(jiff::SignedDuration::from_secs(step)).ok()
+            }
+            Self::Cron(expression) => {
+                let cron = croner::Cron::from_str(expression).ok()?;
+                // Local time, because somebody writing `0 8 * * *` means eight in the morning
+                // where they are.
+                let zoned = now.to_zoned(jiff::tz::TimeZone::system());
+
+                cron.find_next_occurrence(&zoned, false)
+                    .ok()
+                    .map(|at| at.timestamp())
+            }
         }
     }
 
@@ -191,6 +221,32 @@ impl Workspace {
     }
 }
 
+/// What happens when a scheduled pipeline is due and its previous wave has not finished.
+///
+/// The default is to skip. Starting a second copy means paying twice for one result and, where
+/// agents share a workspace, two of them writing to the same files; skipping means being one
+/// interval late. For unattended spending those are not comparable.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Overlap {
+    /// Miss this firing and wait for the next one.
+    #[default]
+    Skip,
+    /// Start another instance anyway.
+    ///
+    /// Safe when instances cannot interfere — a `per-itinerary` workspace, or agents that only
+    /// read — and a way to pay twice when they can.
+    Allow,
+}
+
+impl Overlap {
+    /// Returns `true` when a second instance may start.
+    #[must_use]
+    pub fn allows_second_instance(&self) -> bool {
+        matches!(self, Self::Allow)
+    }
+}
+
 /// A named entry point into the mesh.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -206,6 +262,9 @@ pub struct Pipeline {
     /// Whether instances of this pipeline share a workspace or get one each.
     #[serde(default)]
     pub workspace: Workspace,
+    /// What to do when this pipeline is due again before the last wave has finished.
+    #[serde(default)]
+    pub overlap: Overlap,
     /// Whether this pipeline picks up booked layovers rather than starting fresh work.
     ///
     /// A resuming pipeline does not open an itinerary on every tick. It looks for work that was
@@ -220,6 +279,12 @@ pub struct Pipeline {
 }
 
 impl Pipeline {
+    /// Returns `true` when a second instance may start while the first is still going.
+    #[must_use]
+    pub fn allows_overlap(&self) -> bool {
+        self.overlap.allows_second_instance()
+    }
+
     /// Resolves the flag values for one run, filling in declared defaults.
     ///
     /// # Errors

@@ -36,7 +36,11 @@ pub struct DashboardState {
     /// The run history.
     pub history: History,
     /// Help requests and learnings.
-    pub journal: Journal,
+    /// Help requests, learnings and the queue.
+    ///
+    /// Shared rather than owned, because in `layover serve` the Tower holds the same journal and
+    /// both write to the queue. One handle means one lock.
+    pub journal: std::sync::Arc<Journal>,
     /// The Ground Stop file. Its presence means everything is halted.
     pub ground_stop: PathBuf,
 }

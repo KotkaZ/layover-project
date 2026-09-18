@@ -61,13 +61,30 @@ will actually be told before it costs anything to find out.
 layover serve                          # http://127.0.0.1:7878
 layover serve --addr 127.0.0.1:8080
 layover serve --history .layover/history
+layover serve --watch-only             # dashboard only, start nothing
 ```
 
-Serves the [dashboard](./dashboard.md) and the [HTTP API](./http-api.md) behind it: the route map
-per workflow, run history, cost and the Reserve, help requests, learnings, and each agent's
-report. Also prunes history past its 90-day horizon on startup.
+**This is the lights-out command**, and what [`autostart`](#autostart) registers. It does four
+things in one process:
 
-This is the most useful command here right now.
+| | |
+|---|---|
+| Fires schedules | A pipeline with a `trigger` starts on its own, and skips a tick whose previous wave has not finished |
+| Runs the queue | Whatever is waiting — from a schedule, from `POST /flights`, or sent by another agent |
+| Hosts MCP | Every run gets the endpoint and a token, so `layover_send` reaches a real queue |
+| Serves the dashboard | The [route map per workflow](./dashboard.md), run history, cost and the Reserve, help requests, learnings, and each agent's report |
+
+They share one process because they share one factory definition, one queue and one set of live
+tokens. Splitting them would mean keeping three copies of that agreeing.
+
+It also prunes history past its 90-day horizon on startup.
+
+`--watch-only` leaves out the first three and serves the dashboard alone. That is what you want
+when pointing a second window at a factory another process is already running: **two Towers over
+one factory directory would race for its queue.**
+
+A Ground Stop is a pause. Engage it and nothing new starts; release it and the next tick fires as
+usual.
 
 ## `autostart`
 
@@ -88,15 +105,16 @@ layover run                  # run everything queued
 layover run --dry-run        # say what would run, start nothing
 ```
 
-Takes every flight waiting in the queue and runs it: each is authorised against the route map and
-the safety rails, spawned, watched, and written to history. A flight is taken **off** the queue
-before it runs, so a factory that dies mid-run does not repeat the work on restart — an agent that
-opened a pull request and was interrupted before its outcome was recorded would otherwise open a
-second one.
+Drains the queue **once** and stops. Each flight is authorised against the route map and the safety
+rails, spawned, watched, and written to history; agents can call back over MCP, so a chain sent by
+one run is picked up by the same command.
+
+A flight is taken **off** the queue before it runs, so a factory that dies mid-run does not repeat
+the work on restart — an agent that opened a pull request and was interrupted before its outcome
+was recorded would otherwise open a second one.
 
 A Ground Stop refuses the command outright, and one appearing mid-drain stops it between flights.
 
-**It is deliberately not a daemon.** Nothing yet routes a message from one agent to another, and
-there is no MCP server for them to talk through, so a factory drains what was asked of it and
-stops. A command that looped forever would look like a working factory that never does anything.
-See [Status](./index.md#status).
+**It is not the lights-out command** — that is [`serve`](#serve). `run` is for when you want to
+watch one batch of work go through, and for scripting Layover from something else that already has
+a scheduler.

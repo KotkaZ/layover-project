@@ -214,6 +214,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a59ed87528b2ee2b6d2b14d6767f6dbe41867dfc581433fc23a7c0fae847467a"
 dependencies = [
  "derive_builder",
+ "jiff",
  "strum",
 ]
 
@@ -587,7 +588,7 @@ dependencies = [
 
 [[package]]
 name = "layover-cli"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "axum",
  "clap",
@@ -603,7 +604,7 @@ dependencies = [
 
 [[package]]
 name = "layover-core"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "croner",
  "jiff",
@@ -616,7 +617,7 @@ dependencies = [
 
 [[package]]
 name = "layover-dashboard"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "axum",
  "http-body-util",
@@ -631,7 +632,7 @@ dependencies = [
 
 [[package]]
 name = "layover-http"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "axum",
  "http-body-util",
@@ -643,7 +644,7 @@ dependencies = [
 
 [[package]]
 name = "layover-mcp"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "axum",
  "layover-core",
@@ -655,7 +656,7 @@ dependencies = [
 
 [[package]]
 name = "layover-store"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "jiff",
  "layover-core",
@@ -666,7 +667,7 @@ dependencies = [
 
 [[package]]
 name = "layover-tower"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "jiff",
  "layover-core",
@@ -1313,7 +1314,7 @@ checksum = "f17a85883d4e6d00e8a97c586de764dabcc06133f7f1d55dce5cdc070ad7fe59"
 
 [[package]]
 name = "xtask"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "serde",
  "serde_json",

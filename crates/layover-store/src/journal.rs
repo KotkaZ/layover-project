@@ -15,6 +15,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
@@ -56,6 +57,22 @@ impl HelpFilter {
 #[derive(Debug, Clone)]
 pub struct Journal {
     root: PathBuf,
+    /// Serialises the read-modify-write pairs below.
+    ///
+    /// `queue` and `unqueue` both read the whole queue, change it and write it back. Two of those
+    /// interleaving loses whichever change was read first — a trigger somebody asked for that
+    /// silently never happens, which is exactly the failure this project exists to prevent.
+    ///
+    /// It became reachable the moment one process served the dashboard *and* ran the factory: the
+    /// API queues a flight on one thread while the Tower takes one off on another.
+    ///
+    /// This closes the in-process case, which is the one Layover creates. Two Towers pointed at
+    /// one factory directory would still race, and that is a reason not to do it rather than
+    /// something this guards.
+    ///
+    /// Shared across clones rather than copied: a clone addresses the same file, so a clone with
+    /// its own lock would look like it was protected and protect nothing.
+    writes: Arc<Mutex<()>>,
 }
 
 impl Journal {
@@ -67,7 +84,10 @@ impl Journal {
     pub fn open(root: impl Into<PathBuf>) -> Result<Self, StoreError> {
         let root = root.into();
         fs::create_dir_all(&root).map_err(StoreError::at(&root))?;
-        Ok(Self { root })
+        Ok(Self {
+            root,
+            writes: Arc::new(Mutex::new(())),
+        })
     }
 
     /// Where the journal lives.
@@ -343,6 +363,8 @@ impl Journal {
     ///
     /// Returns [`StoreError::Io`] if the queue cannot be read back or written.
     pub fn queue(&self, queued: Queued) -> Result<(), StoreError> {
+        let _writing = self.writes.lock().map_err(|_| poisoned())?;
+
         let mut pending = self.pending()?;
         pending.push(queued);
         crate::segment::write_document(&self.pending_path(), &pending)
@@ -366,13 +388,19 @@ impl Journal {
     ///
     /// Returns [`StoreError::Io`] if the queue cannot be read or written.
     pub fn unqueue(&self, id: &FlightId) -> Result<bool, StoreError> {
+        let _writing = self.writes.lock().map_err(|_| poisoned())?;
+
         let pending = self.pending()?;
+        let before = pending.len();
         let kept: Vec<Queued> = pending
             .into_iter()
             .filter(|queued| queued.flight.id != *id)
             .collect();
 
-        let removed = kept.len() != self.pending()?.len();
+        // Compared against the length read a moment ago rather than re-reading. Reading the queue
+        // a second time to find out what the first read contained is how a concurrent write slips
+        // in between the two.
+        let removed = kept.len() != before;
         if removed {
             crate::segment::write_document(&self.pending_path(), &kept)?;
         }
@@ -382,5 +410,16 @@ impl Journal {
     /// Where queued flights live.
     fn pending_path(&self) -> PathBuf {
         self.root.join("pending.jsonl")
+    }
+}
+
+/// The error for a queue lock whose holder panicked.
+///
+/// A poisoned lock means a thread died mid-write, so the queue on disk may be half a change. This
+/// reports rather than recovers: guessing which half survived is how work quietly disappears.
+fn poisoned() -> StoreError {
+    StoreError::Io {
+        path: PathBuf::from("pending.jsonl"),
+        source: std::io::Error::other("the queue lock was poisoned by a panicking writer"),
     }
 }

@@ -8,18 +8,49 @@ See [project status](README.md#project-status).
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-09-18
+
+The factory runs itself. `layover serve` fires scheduled pipelines, runs what is queued, and serves
+agents the endpoint they call back into — so a chain starts, travels and finishes with nobody
+watching.
+
 ### Added
 
-- **Barriers hold work while a factory runs.** A flight for a joined agent is parked rather than
-  run, and the agent wakes **once** when the last declared upstream arrives, with every parked
-  flight and each body labelled by who sent it. Two edges into one agent without a join fire it
-  twice; for a publisher that is two pull requests for one piece of work.
-- **A rendezvous nothing can complete is given up and named.** When a drain goes quiet with a
-  barrier still holding flights, no live run can deliver the rest, so it is abandoned and reported
-  with what was stranded. Silent permanent stalling is the worst outcome in this system: a failure
-  at least says something happened.
-- **`Dispatched` now distinguishes parked and superseded from ran, refused and failed**, so
-  `layover run` can say "waiting for reviewer" rather than counting a held flight as nothing.
+- **`layover serve` is the Tower.** It was a read-only dashboard; it now also fires schedules,
+  drains the queue and hosts the MCP endpoint. `layover autostart` has always registered `serve`,
+  which was only useful if `serve` ran the factory. `--watch-only` keeps the old behaviour, for
+  looking at a factory another process is running.
+- **Schedules fire.** `trigger = { every = "1h" }` and `{ cron = "0 8,18 * * *" }` are evaluated
+  against the clock rather than against when the last run finished, so an hourly job does not
+  slowly become a ninety-minute one. A Tower that was asleep for six hours fires once on waking,
+  not six times.
+- **Nothing fires at startup.** A Tower restarting is not a reason to run every hourly job at
+  once; if it were, restarting would be expensive enough to avoid.
+- **`overlap` on a pipeline.** The default skips a tick whose previous wave is still going —
+  starting a second copy means paying twice for one result and, on a shared workspace, two agents
+  writing the same files. `overlap = "allow"` opts in. Every skip is reported, because a schedule
+  quietly skipping every tick because its work always overruns looks exactly like one that is
+  running fine.
+- **Barriers hold work while a factory runs.** A flight for a joined agent is parked, and the agent
+  wakes **once** when the last declared upstream arrives, with every parked flight and each body
+  labelled by who sent it. Two edges into one agent without a join fire it twice; for a publisher
+  that is two pull requests for one piece of work.
+- **A rendezvous nothing can complete is given up and named**, with what it was holding. Silent
+  permanent stalling is the worst outcome in this system: a failure at least says something
+  happened.
+
+### Fixed
+
+- **`mode = "spawn"` now does something.** A spawn edge was reported by `layover_peers` and ignored
+  by `layover_send`, so a fan-out shared one chain — and a fan-out of twenty pull-request reviews
+  would have had the twenty-first refused for a budget the first twenty spent. A spawn now opens a
+  fresh itinerary with its own Hops, Fuel and run cap, and does not spend the caller's Hops.
+- **The queue is no longer a lost-update race.** `queue` and `unqueue` read the whole queue, change
+  it and write it back, which was safe while only one thread did it. Serving the dashboard and
+  running the factory in one process made it reachable: a trigger could be accepted and silently
+  never happen.
+- **`layover validate` no longer warns that a scheduled pipeline "can overlap itself"** when the
+  default now stops it doing so. A warning that is not true is one people learn to ignore.
 
 ## [0.13.0] — 2026-09-18
 
@@ -248,7 +279,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/KotkaZ/layover-project/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/KotkaZ/layover-project/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/KotkaZ/layover-project/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/KotkaZ/layover-project/compare/v0.10.0...v0.11.0

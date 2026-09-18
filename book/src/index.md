@@ -57,18 +57,21 @@ Early. A factory loads, validates and composes its prompts, and `layover serve` 
 on it — route map, run history, cost and the Reserve, help requests, learnings and each agent's
 report.
 
-**`layover run` does real work.** It takes what is queued, authorises each flight against the route
-map and the safety rails, spawns the agent CLI, watches it, times it out if it wedges, reads what
-it cost and writes the run to history.
+**`layover serve` runs the factory.** It fires scheduled pipelines, drains the queue, spawns agent
+CLIs, watches them, times them out if they wedge, reads what they cost and writes each run to
+history — and serves the MCP endpoint they call back into.
 
-**Agents reach one another.** Each run is served an MCP endpoint and a token minted for it alone.
-An agent that calls `layover_send` queues a real flight; the same invocation picks it up and runs
-the next agent. Every hop is charged to the one itinerary that began the chain, so Hops, Fuel and
-the run cap bound the whole conversation rather than each message in it. The route map is enforced
-against the live child: a call to an agent the map does not reach is refused, with advice.
+**Agents reach one another.** Each run gets a token minted for it alone. An agent that calls
+`layover_send` queues a real flight; the same drain picks it up and runs the next agent. Every hop
+is charged to the one itinerary that began the chain, so Hops, Fuel and the run cap bound the whole
+conversation rather than each message in it. The route map is enforced against the live child.
 
-**What does not exist is scheduling.** Nothing fires on a timer, so a chain still has to be started
-by hand — through the API, or by whatever you point at it.
+**Work waits at a rendezvous.** A joined agent's flights are parked, and it wakes once, with every
+verdict it was waiting for. A barrier nothing can complete is given up and named rather than left
+to hang.
+
+**What is not proven is two days unattended**, which is the bar this project set for itself. All of
+the above is tested and has been watched working; none of it has been left alone.
 
 The [README](https://github.com/KotkaZ/layover-project#what-works-today) carries the built and
 not-built list, kept in one place so the two cannot disagree.

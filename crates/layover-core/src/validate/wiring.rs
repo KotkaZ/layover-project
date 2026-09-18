@@ -78,20 +78,24 @@ fn check_url(at: &str, url: &str, found: &mut Vec<Diagnostic>) {
 
 /// Warns when a pipeline that can overlap itself would share a working directory.
 ///
-/// A scheduled pipeline fires whether or not the previous instance has finished, and runs are
-/// reentrant, so two instances can be live at once with nobody watching. If they share `work_dir`
+/// A scheduled pipeline with `overlap = "allow"` fires whether or not the previous instance has
+/// finished, so two instances can be live at once with nobody watching. If they share `work_dir`
 /// and any reachable agent is `read-write`, they edit the same files at the same time — which
 /// fails in the way hardest to notice: plausible output built from two unrelated changes.
 ///
-/// Manual pipelines are deliberately **not** flagged. A human choosing to start a second instance
-/// knows they did, and warning on every manual pipeline with a writer would fire on almost every
-/// factory. `workspace = "per-itinerary"` is still the right answer when you want one instance per
-/// pull request; it is documented rather than nagged about.
+/// A pipeline left on the default `overlap = "skip"` is **not** flagged, because it cannot reach
+/// this state: the Tower misses the tick rather than starting a second copy. Warning about it
+/// anyway would be a warning that is not true, and a validator that cries wolf is one people stop
+/// reading.
+///
+/// Manual pipelines are deliberately not flagged either. A human choosing to start a second
+/// instance knows they did. `workspace = "per-itinerary"` is still the right answer when you want
+/// one instance per pull request; it is documented rather than nagged about.
 fn check_parallel_instances_are_isolated(config: &Config, found: &mut Vec<Diagnostic>) {
     let graph = RouteGraph::from_config(config);
 
     for (name, pipeline) in config.scheduled_pipelines() {
-        if pipeline.workspace.is_isolated() {
+        if pipeline.workspace.is_isolated() || !pipeline.allows_overlap() {
             continue;
         }
 
@@ -112,7 +116,7 @@ fn check_parallel_instances_are_isolated(config: &Config, found: &mut Vec<Diagno
         }
 
         found.push(Diagnostic::warning(format!(
-            "pipeline `{name}` fires on a schedule and can overlap itself, reaches read-write \
+            "pipeline `{name}` sets `overlap = \"allow\"`, reaches read-write \
              agent(s) {} and uses `workspace = \"shared\"`; two instances would edit the same \
              files at once. Set `workspace = \"per-itinerary\"` to give each its own worktree",
             writers.join(", ")
@@ -274,7 +278,32 @@ mod tests {
     }
 
     #[test]
-    fn a_shared_workspace_with_a_writer_warns_about_parallel_instances() {
+    fn a_shared_workspace_with_a_writer_warns_only_when_overlap_is_allowed() {
+        let config = parse(&format!(
+            r#"
+            [reserve]
+            fuel_usd = 500.0
+
+            {WRITER}
+
+            [pipelines.development]
+            entry = "analyst"
+            trigger = {{ every = "1h" }}
+            overlap = "allow"
+            "#
+        ));
+
+        assert_mentions(
+            &warnings(&config),
+            "two instances would edit the same files",
+        );
+    }
+
+    #[test]
+    fn the_default_schedule_cannot_overlap_so_nothing_is_said() {
+        // The Tower skips a tick whose previous wave is still going, so two instances never
+        // exist. A warning about a state that cannot be reached is a warning people learn to
+        // ignore.
         let config = parse(&format!(
             r#"
             [reserve]
@@ -288,9 +317,11 @@ mod tests {
             "#
         ));
 
-        assert_mentions(
-            &warnings(&config),
-            "two instances would edit the same files",
+        assert!(
+            !warnings(&config)
+                .iter()
+                .any(|w| w.contains("two instances would edit the same files")),
+            "a skip-by-default schedule cannot overlap itself"
         );
     }
 

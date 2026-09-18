@@ -109,7 +109,9 @@ impl Factory {
         router(Dashboard::new(DashboardState {
             config_path: self.0.join("layover.toml"),
             history: History::open(self.0.join("history")).expect("opens history"),
-            journal: Journal::open(self.0.join("journal")).expect("opens journal"),
+            journal: std::sync::Arc::new(
+                Journal::open(self.0.join("journal")).expect("opens journal"),
+            ),
             ground_stop: self.0.join("ground-stop"),
         }))
     }

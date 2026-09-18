@@ -15,6 +15,7 @@ use layover_store::{History, Journal};
 use layover_tower::{Dispatched, Factory};
 
 use crate::mcp::ServedMcp;
+use crate::tower::Tower;
 
 use layover_core::agent::PromptSpec;
 use layover_core::prompt::resolve;
@@ -126,20 +127,30 @@ pub fn graph(path: &Path, svg: bool) -> Result<String, Failure> {
     })
 }
 
-/// Serves the monitoring dashboard until interrupted.
+/// Serves the monitoring dashboard, and runs the factory behind it, until interrupted.
 ///
 /// Binds before printing the address, so the line it prints is a fact rather than a hope. The
 /// configuration is validated first: a dashboard whose route map cannot be drawn is a confusing
 /// way to find out the factory definition is broken.
 ///
+/// This is the lights-out command. It fires scheduled pipelines, runs what is queued, and serves
+/// agents the MCP endpoint they call back into. `--watch-only` leaves all of that out and serves a
+/// read-only dashboard, which is what you want when pointing a second window at a factory another
+/// process is already running.
+///
 /// # Errors
 ///
 /// Returns [`Failure`] if the configuration is invalid, the history directory cannot be opened,
 /// or the address is already in use.
-pub fn serve(path: &Path, addr: &str, history: Option<&Path>) -> Result<String, Failure> {
+pub fn serve(
+    path: &Path,
+    addr: &str,
+    history: Option<&Path>,
+    watch_only: bool,
+) -> Result<String, Failure> {
     // Load once up front purely to fail early. A dashboard whose route map cannot be drawn is a
     // confusing way to discover the factory definition is broken.
-    load(path)?;
+    let (config, _) = load(path)?;
 
     let history_dir = history.map_or_else(
         || {
@@ -152,8 +163,9 @@ pub fn serve(path: &Path, addr: &str, history: Option<&Path>) -> Result<String, 
     );
 
     let store = History::open(&history_dir).map_err(|error| error.to_string())?;
-    let journal =
-        Journal::open(history_dir.with_file_name("journal")).map_err(|error| error.to_string())?;
+    let journal = Arc::new(
+        Journal::open(history_dir.with_file_name("journal")).map_err(|error| error.to_string())?,
+    );
 
     // Enforce retention on the way up. `prune` and `sweep` existed and were called only from
     // tests, so the documented ninety days was a promise nothing kept: history grew forever while
@@ -169,9 +181,33 @@ pub fn serve(path: &Path, addr: &str, history: Option<&Path>) -> Result<String, 
     let dashboard = Dashboard::new(DashboardState {
         config_path: path.to_path_buf(),
         history: store,
-        journal,
+        journal: Arc::clone(&journal),
         ground_stop: history_dir.with_file_name("ground-stop"),
     });
+
+    // Held for the lifetime of the command. Dropping either stops it: the endpoint frees its port,
+    // and the Tower finishes whatever run it is watching before the thread joins.
+    let factory_root = path.parent().unwrap_or_else(|| Path::new("."));
+    let running = if watch_only {
+        None
+    } else {
+        let served = ServedMcp::start(&config, factory_root, Arc::clone(&journal))?;
+
+        let factory = Factory::new(config.clone(), factory_root)
+            .map_err(|error| error.to_string())?
+            .serving_mcp(served.endpoint.clone());
+
+        served.resolve_against(factory.tokens());
+
+        let tower = Tower::start(factory, Arc::clone(&journal), |line| println!("  {line}"))
+            .map_err(|error| error.to_string())?;
+
+        Some((served, tower))
+    };
+
+    // Copied out before the async block, which would otherwise take ownership of the pair and
+    // stop it being dropped — and therefore stopped — after the server returns.
+    let endpoint = running.as_ref().map(|(served, _)| served.endpoint.clone());
 
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -189,16 +225,27 @@ pub fn serve(path: &Path, addr: &str, history: Option<&Path>) -> Result<String, 
         println!("Reading {}", path.display());
         println!("History in {}", history_dir.display());
 
+        match &endpoint {
+            Some(url) => {
+                println!("Agents reach Layover at {url}");
+                println!("Running the factory: scheduled pipelines fire, queued work starts.");
+            }
+            // Said plainly, because a dashboard showing a queue that nothing will drain is the
+            // failure this whole surface is meant to avoid.
+            None => println!("Watching only: nothing here will start work (--watch-only)."),
+        }
+
         // Nothing authenticates this surface. On loopback that is a reasonable trade; off it,
         // anyone who can reach the port can read the factory's history, its agents' reports and
         // its help requests — which is where an agent describes a credential failure — and can
-        // queue work for a future supervisor to pick up. Saying so at the moment it happens is
-        // cheaper than a warning in a document nobody reads twice.
+        // queue work the Tower will then run. Saying so at the moment it happens is cheaper than
+        // a warning in a document nobody reads twice.
         if !bound.ip().is_loopback() {
             eprintln!();
             eprintln!("warning: {bound} is not loopback, and this API has no authentication.");
             eprintln!("         Anyone who can reach it can read run history, reports and help");
-            eprintln!("         requests, and queue work. Put something in front of it.");
+            eprintln!("         requests, and queue work this process will run. Put something in");
+            eprintln!("         front of it.");
         }
 
         println!("Press Ctrl+C to stop.");
@@ -207,6 +254,8 @@ pub fn serve(path: &Path, addr: &str, history: Option<&Path>) -> Result<String, 
             .await
             .map_err(|error| error.to_string())
     })?;
+
+    drop(running);
 
     Ok(String::new())
 }

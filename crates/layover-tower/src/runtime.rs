@@ -126,24 +126,40 @@ impl Runtime for FactoryRuntime {
             });
         }
 
+        // A spawn edge is the one case where Hops do not apply: it is not continuing this chain,
+        // it is starting another. Checking the caller's remaining Hops would refuse a fan-out for
+        // a budget the new chain does not draw on.
+        let spawns = self.graph.is_spawn(&session.agent, to);
+
         // Refused here as well as at dispatch, because being told now is worth more than being
         // told later: the agent can report what it could not pass on, rather than finishing
         // believing it handed the work over.
-        if session.hops_remaining == 0 {
+        if !spawns && session.hops_remaining == 0 {
             return Err(ToolError::Refused {
                 because: "this chain has no messages left; finish and report instead of sending"
                     .to_owned(),
             });
         }
 
-        // The chain continues rather than beginning. Minting a fresh itinerary here would reset
+        // A spawn edge opens a fresh itinerary, with its own Hops, Fuel and run cap; every other
+        // edge continues the caller's. Minting a fresh itinerary for an ordinary edge would reset
         // every rail, and a loop between two agents would run forever on a renewed budget.
+        //
+        // The reverse mistake is subtler and is why `mode` is declared rather than inferred: a
+        // fan-out of twenty pull-request reviews sharing one chain would have the twenty-first
+        // review refused for a budget the first twenty spent.
+        let (itinerary, hops) = if spawns {
+            (ItineraryId::generate(), self.config.defaults.max_hops)
+        } else {
+            (session.itinerary.clone(), session.hops_remaining)
+        };
+
         let flight = Flight::new(
-            session.itinerary.clone(),
+            itinerary,
             Origin::Agent(session.agent.clone()),
             to.clone(),
             body,
-            session.hops_remaining,
+            hops,
         );
         let id = flight.id.as_str().to_owned();
 
@@ -280,12 +296,20 @@ prompt = "develop"
 [agents.stranger]
 prompt = "lurk"
 
+[agents.reviewer]
+prompt = "review one pull request"
+
 [pipelines.build]
 entry = "analyst"
 
 [[routes]]
 from = "analyst"
 to = "developer"
+
+[[routes]]
+from = "analyst"
+to = "reviewer"
+mode = "spawn"
 "#;
 
     /// A runtime over a temporary directory, with everything it queued kept for inspection.
@@ -350,9 +374,13 @@ to = "developer"
         let fixture = Fixture::new("peers");
 
         let peers = fixture.runtime.peers(&session("analyst", 3));
+        let names: Vec<String> = peers.iter().map(|peer| peer.name.to_string()).collect();
 
-        assert_eq!(peers.len(), 1, "only the one drawn edge");
-        assert_eq!(peers[0].name, AgentName::new("developer"));
+        assert_eq!(names, ["developer", "reviewer"], "the two drawn edges");
+        assert!(
+            !names.contains(&"stranger".to_owned()),
+            "an agent with no edge from `analyst` is not a peer"
+        );
         assert_eq!(peers[0].description.as_deref(), Some("Writes the code"));
     }
 
@@ -435,6 +463,75 @@ to = "developer"
 
         assert!(error.to_string().contains("report"), "{error}");
         assert!(fixture.sent().is_empty(), "nothing may be queued");
+    }
+
+    #[test]
+    fn a_spawn_edge_opens_a_new_chain_with_its_own_budget() {
+        // A fan-out of twenty pull-request reviews sharing one chain would have the twenty-first
+        // refused for a budget the first twenty spent. That is what `mode = "spawn"` exists for.
+        let fixture = Fixture::new("spawn");
+        let caller = session("analyst", 2);
+
+        fixture
+            .runtime
+            .send(&caller, &AgentName::new("reviewer"), "review #41")
+            .expect("the spawn edge is drawn");
+
+        let sent = fixture.sent();
+        assert_ne!(
+            sent[0].flight.itinerary, caller.itinerary,
+            "a spawn edge starts a chain rather than continuing one"
+        );
+        assert_eq!(
+            sent[0].flight.hops_remaining, fixture.defaults.max_hops,
+            "the new chain gets the configured budget, not the caller's remainder"
+        );
+    }
+
+    #[test]
+    fn a_spawn_may_be_sent_even_when_the_caller_has_no_hops_left() {
+        // Hops bound one causal chain. A spawn is not continuing this one, so refusing it would
+        // charge the new chain for a budget it does not draw on.
+        let fixture = Fixture::new("spawn-nohops");
+
+        let id = fixture
+            .runtime
+            .send(&session("analyst", 0), &AgentName::new("reviewer"), "go")
+            .expect("a spawn does not spend the caller's hops");
+
+        assert!(!id.is_empty());
+        assert_eq!(fixture.sent().len(), 1);
+    }
+
+    #[test]
+    fn a_spawn_edge_is_still_an_edge_the_route_map_has_to_draw() {
+        let fixture = Fixture::new("spawn-refused");
+
+        let error = fixture
+            .runtime
+            .send(&session("developer", 3), &AgentName::new("reviewer"), "go")
+            .expect_err("no edge from developer to reviewer");
+
+        assert!(matches!(error, ToolError::NotPermitted { .. }), "{error}");
+    }
+
+    #[test]
+    fn peers_say_which_of_them_open_a_new_chain() {
+        // An agent deciding where work goes should be able to tell a hand-off from a fan-out.
+        let fixture = Fixture::new("spawn-peers");
+
+        let peers = fixture.runtime.peers(&session("analyst", 3));
+        let reviewer = peers
+            .iter()
+            .find(|peer| peer.name == AgentName::new("reviewer"))
+            .expect("reviewer is reachable");
+        let developer = peers
+            .iter()
+            .find(|peer| peer.name == AgentName::new("developer"))
+            .expect("developer is reachable");
+
+        assert!(reviewer.spawns, "the spawn edge is marked");
+        assert!(!developer.spawns, "an ordinary edge is not");
     }
 
     #[test]

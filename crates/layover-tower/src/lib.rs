@@ -26,6 +26,7 @@
 //! record written before the spawn.
 
 pub mod barriers;
+pub mod clock;
 pub mod cost;
 pub mod dispatch;
 pub mod factory;
@@ -36,6 +37,7 @@ pub mod tokens;
 pub mod wait;
 
 pub use barriers::{Abandoned, Barriers};
+pub use clock::{Clock, Due, Skipped};
 pub use cost::{Reported, from_transcript};
 pub use dispatch::{Authorised, Refusal, authorise};
 pub use factory::{Dispatched, Factory};
