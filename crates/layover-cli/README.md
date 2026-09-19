@@ -27,6 +27,8 @@ The binary is called `layover`.
 layover validate --config layover.toml     # check a factory before it runs
 layover explain                            # what can trigger what, and what talks to what
 layover prompt tester --flag run_e2e=true  # what an agent would actually be told
+layover serve                              # run the factory and serve the dashboard
+layover doctor                             # report anything a person should look at
 layover autostart --show                   # the file that starts Layover at logon
 ```
 
@@ -34,13 +36,16 @@ layover autostart --show                   # the file that starts Layover at log
 factory definition: an unattended factory that discovers a typo three agents deep has already
 spent money to find out.
 
+`layover doctor` exits non-zero when a factory's recorded history contains something that would
+fail an unattended run — a stalled chain, a schedule that never fired, a Ground Stop left engaged.
+
 ## Status
 
-Early. What works today is everything before the first spawn — loading a factory definition,
-checking it, and showing what it would do. Process supervision, the MCP server and the HTTP API
-are not built yet.
+`layover serve` runs a factory unattended: it fires scheduled pipelines, spawns agent CLIs, hosts
+the MCP endpoint they call back into, enforces the safety rails, and serves a dashboard over all
+of it.
 
-See [the open questions](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md).
+See [the decision log](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md).
 
 ## License
 

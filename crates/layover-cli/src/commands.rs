@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use jiff::{Timestamp, ToSpan};
-use layover_core::cost::RETENTION_DAYS;
+use layover_core::cost::{RETENTION_DAYS, Window};
 use layover_dashboard::{Dashboard, DashboardState};
 use layover_store::{History, Journal, layout};
 use layover_tower::{Dispatched, Factory};
@@ -490,6 +490,32 @@ pub fn autostart(config: &Path, output: Option<&Path>, show: bool) -> Result<Str
 ///
 /// `canonicalize` produces it on Windows, and `schtasks` rejects a path that carries it — with an
 /// error naming neither the path nor the prefix.
+/// Checks a factory's recorded state and reports what a person should look at.
+///
+/// Returns the report and whether the factory would pass an unattended run, which the caller
+/// turns into the exit code.
+///
+/// # Errors
+///
+/// Returns an error when the configuration or the state directory cannot be read.
+pub fn doctor(path: &Path, window: &str) -> Result<(String, bool), Failure> {
+    let (config, _) = load(path)?;
+
+    let window = Window::from_slug(window).ok_or_else(|| {
+        let known = Window::ALL
+            .iter()
+            .map(|w| w.slug())
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("unknown window `{window}`. Known windows: {known}")
+    })?;
+
+    let root = path.parent().unwrap_or(Path::new("."));
+    let report = crate::doctor::check(&config, root, window)?;
+
+    Ok((report.render(), report.healthy()))
+}
+
 /// The state directory a command is about to use.
 ///
 /// `--history` points at `.layover/history`, and the versioned thing is its parent: one marker

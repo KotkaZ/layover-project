@@ -210,6 +210,7 @@ test and doc build, with warnings denied. CI runs the same command, unchanged.
 | **A versioned state directory: a newer layout is refused, an older one migrated** | |
 | **A token on the API by default, signed build provenance, and an SBOM per release** | |
 | `run`: drains the queue once, for when you want to watch it | |
+| **`doctor`: reads a factory's history and reports the quiet failures** | |
 | Run history, costs, the Reserve, help requests, learnings, reports | |
 | `autostart`, which registers `layover serve` at login | |
 

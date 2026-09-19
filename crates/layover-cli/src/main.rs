@@ -6,6 +6,7 @@
 //! one that says it cannot.
 
 mod commands;
+mod doctor;
 mod mcp;
 mod tower;
 
@@ -120,6 +121,20 @@ enum Command {
         dry_run: bool,
     },
 
+    /// Report anything about a running factory that a person should look at.
+    ///
+    /// The failures that matter in a lights-out factory are the quiet ones: a chain that stalled
+    /// with every run reporting success, a schedule that has not fired, a cost total built from
+    /// runners that reported nothing. This finds them and says what to do.
+    ///
+    /// Exits non-zero when anything found would fail an unattended run, which makes it usable as
+    /// the verdict at the end of a soak rather than a judgement call.
+    Doctor {
+        /// How far back to look.
+        #[arg(long, default_value = "last_7d", value_name = "WINDOW")]
+        window: String,
+    },
+
     /// Write the file that starts Layover when you log in.
     ///
     /// A lights-out factory that stops at every reboot is not lights-out. This generates the
@@ -140,6 +155,26 @@ enum Command {
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
+    // Handled apart from the rest because its exit code carries the verdict rather than merely
+    // whether the command worked. A check that always exits zero cannot be the thing a soak is
+    // judged by.
+    if let Command::Doctor { window } = &cli.command {
+        return match commands::doctor(&cli.config, window) {
+            Ok((output, healthy)) => {
+                print!("{output}");
+                if healthy {
+                    ExitCode::SUCCESS
+                } else {
+                    ExitCode::FAILURE
+                }
+            }
+            Err(error) => {
+                eprintln!("error: {error}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+
     let result = match cli.command {
         Command::Validate { strict } => commands::validate_config(&cli.config, strict),
         Command::Explain => commands::explain(&cli.config),
@@ -159,6 +194,7 @@ fn main() -> ExitCode {
             no_auth,
         } => commands::serve(&cli.config, &addr, history.as_deref(), watch_only, no_auth),
         Command::Run { dry_run } => commands::run(&cli.config, dry_run),
+        Command::Doctor { .. } => unreachable!("handled above"),
     };
 
     match result {

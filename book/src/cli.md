@@ -1,6 +1,6 @@
 # The `layover` command
 
-Six commands. `--config` (or `-c`) is global and defaults to `layover.toml` in the working
+Eight commands. `--config` (or `-c`) is global and defaults to `layover.toml` in the working
 directory, so it can go before or after the subcommand.
 
 ```sh
@@ -130,3 +130,41 @@ A Ground Stop refuses the command outright, and one appearing mid-drain stops it
 **It is not the lights-out command** — that is [`serve`](#serve). `run` is for when you want to
 watch one batch of work go through, and for scripting Layover from something else that already has
 a scheduler.
+
+## `doctor`
+
+```sh
+layover doctor                      # the last 7 days
+layover doctor --window last_24h    # a narrower look
+layover doctor --window all_time    # everything still on disk
+```
+
+Reads a factory's recorded history and reports anything a person should look at. **Exits non-zero
+when something found would fail an unattended run**, which is the point: it turns "did that soak
+pass?" into a command rather than a judgement made by squinting at a dashboard two days later.
+
+The failures it looks for are the quiet ones — the ones that look like nothing from the outside:
+
+| Finding | Why it is invisible otherwise |
+|---|---|
+| A **stalled chain** | Every run in it reports success. A stall and a finished chain look identical on a list |
+| Runs reporting no cost | The total still renders. It is a floor, not a figure, and nothing says so |
+| A schedule that never fired | A schedule that is not firing looks exactly like one with nothing to do |
+| Open help requests | The channel that reaches a person is the one nobody is there to read |
+| Expired layovers | Work set down that nothing ever picked up |
+| A Ground Stop left engaged | The factory is up, the dashboard is green, and nothing is running |
+
+Findings come in three weights. A **fault** means work was lost or money cannot be accounted for; a
+**warning** means something is wrong and a person should look; a **note** is worth knowing and does
+not fail anything. Only the first two affect the exit code — a check that failed on every curiosity
+is one people stop running.
+
+Windows are the same set the [dashboard](./dashboard.md) offers: `today`, `last_24h`, `last_7d`,
+`last_30d`, `last_90d`, `month_to_date`, `all_time`.
+
+### It will not invent a verdict
+
+A factory with no history in the window is reported as exactly that, and exits **zero**. Nothing
+has run, so nothing has passed and nothing has failed — and a schedule that has not fired is not a
+finding about that schedule when *nothing at all* has fired. Widen `--window` if you expected
+history and see none.

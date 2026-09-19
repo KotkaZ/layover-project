@@ -8,6 +8,45 @@ See [project status](README.md#project-status).
 
 ## [Unreleased]
 
+## [0.21.0] — 2026-09-19
+
+A soak you cannot check is not proof. This adds the command that checks it.
+
+### Added
+
+- **`layover doctor`** reads a factory's recorded history and reports anything a person should
+  look at, exiting non-zero when something found would fail an unattended run.
+
+  The bar this project set for itself is forty-eight hours with nobody watching. The problem with
+  that bar has been that passing it was a judgement call — you came back two days later, looked at
+  a dashboard, and decided. The failures that actually matter are the ones that look like nothing
+  from the outside, and a dashboard shows them as nothing:
+
+  - A **stalled chain** reports success on every run it contains. On a list it is indistinguishable
+    from a chain that finished.
+  - A **cost total built from runners that reported nothing** still renders. It is a floor rather
+    than a figure, and the number itself does not say so.
+  - A **schedule that never fired** looks exactly like a schedule with nothing to do.
+  - A **Ground Stop left engaged** leaves the process up and the dashboard green.
+  - An **open help request** is on the one channel that reaches a person, which in a lights-out
+    factory is the channel nobody is there to read.
+
+  Findings carry a weight: a *fault* means work was lost or money cannot be accounted for, a
+  *warning* means somebody should look, a *note* is worth knowing and does not fail anything. Only
+  the first two reach the exit code — a check that failed on every curiosity is one people stop
+  running.
+
+  It will not invent a verdict. A factory with no history in the window is reported as having none
+  and exits zero: nothing has run, so nothing has passed. In particular "this schedule never fired"
+  is not a finding about that schedule when nothing at all has fired, and reporting it per pipeline
+  turned a factory nobody had started yet into a page of warnings.
+
+### Fixed
+
+- **`layover-cli`'s README claimed process supervision, the MCP server and the HTTP API were not
+  built.** All three have been built for ten releases. It is the page crates.io will show.
+- **The CLI reference said "six commands" over a list of seven.**
+
 ## [0.20.0] — 2026-09-19
 
 The last of the engineering before 1.0. What remains is proof, not code.
@@ -509,7 +548,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.20.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/KotkaZ/layover-project/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/KotkaZ/layover-project/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/KotkaZ/layover-project/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/KotkaZ/layover-project/compare/v0.17.0...v0.18.0
