@@ -44,15 +44,22 @@ resumes     = true
 `resumes` is an optional boolean, `false` by default. A pipeline with `resumes = true` does not
 start fresh work when it fires: it looks for **Layovers** that have come due — work a previous
 chain deliberately set down to pick up later — and opens one itinerary per Layover, seeded with
-the handover its author wrote.
+what its author was waiting for.
 
 This is how a chain follows something up days later without anything being kept alive in between.
 The publisher opens a pull request, books a Layover for "when there are comments", and exits; the
-resuming pipeline is what brings that work back. See [Recovery and steering](./recovery.md).
+resuming pipeline is what brings that work back. See [the tools an agent has](./tools.md#setting-work-down).
 
-A resuming pipeline that finds nothing due does nothing, which is the ordinary case. It still
-declares `entry` — the agent a resumed itinerary is handed to — and it may declare flags like any
-other pipeline.
+A resuming pipeline that finds nothing due does nothing, which is the ordinary case — and that is
+what makes checking every forty-five minutes affordable.
+
+**Resumed work goes back to the agent that booked it**, not to the pipeline's `entry`. A layover
+records which agent set it down, and sending a follow-up to whatever happens to be a pipeline's
+entry point would hand the publisher's pull request to the analyst. `entry` is still required by
+the schema and is unused by a resuming pipeline; it may declare flags like any other.
+
+**Only a resuming pipeline collects them.** An ordinary schedule never picks up booked work, so a
+factory's hourly sweep cannot quietly start following up somebody else's.
 
 ## Running several instances at once
 

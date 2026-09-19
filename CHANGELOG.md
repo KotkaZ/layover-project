@@ -8,6 +8,41 @@ See [project status](README.md#project-status).
 
 ## [Unreleased]
 
+## [0.17.0] — 2026-09-19
+
+Layover has layovers. The feature the project is named after was a declared tool that answered
+"not connected yet" for six releases; it now works.
+
+### Added
+
+- **`layover_wait` sets work down.** An agent that has opened a pull request and wants to react to
+  comments over the following days books a layover and *ends*. Nothing stays alive in between — no
+  process, no parked chain, no held budget.
+
+  Neither alternative worked. Keeping the chain alive and polling spends a Hop and real money on
+  every tick, so Hops kills it long before a human replies — and the whole point of Hops is that it
+  should. Re-triggering on a schedule works mechanically but arrives knowing nothing.
+- **A `resumes = true` pipeline collects what is due**, on its own schedule. It does not open fresh
+  work on its tick; it goes looking for work that was set down. An ordinary pipeline never collects
+  layovers, so a factory's hourly sweep cannot quietly start following up somebody else's work.
+- **A resumed run opens a new chain with a fresh budget.** The chain that booked the layover is
+  over — its Hops and Fuel are spent — and reviving it would make the second follow-up cheaper than
+  the first and the tenth refused. A layover is new work about an old subject, and it is priced
+  that way. What carries over is context: which chain set this down, what it was waiting for, and
+  how many times it has looked.
+- **`Cause::Resumed`, which deliberately does not repeat earlier work.** A recovered run may have
+  half-applied a side effect and is warned to check. A resumed layover was not interrupted — the
+  earlier run finished, having chosen to come back — so it is told the opposite: nothing was left
+  half-done. Telling it to look for damage would send it hunting something that was never there.
+- **Waits use the same vocabulary as a schedule** — `30m`, `2h`, `3d`. An operator who has written
+  `every = "2h"` should not have to learn a second way to say two hours to read a prompt.
+
+### Fixed
+
+- **Booking a layover no longer races the Tower resuming one.** `book` and `amend` are
+  read-modify-write over one file, like the queue was, and the Tower now writes there while agents
+  do. Both are guarded.
+
 ## [0.16.2] — 2026-09-19
 
 **Identical in content to 0.16.0.** Two version numbers were burned recovering from a problem that
@@ -360,7 +395,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.16.2...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/KotkaZ/layover-project/compare/v0.16.2...v0.17.0
 [0.16.2]: https://github.com/KotkaZ/layover-project/compare/v0.16.1...v0.16.2
 [0.16.1]: https://github.com/KotkaZ/layover-project/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/KotkaZ/layover-project/compare/v0.15.0...v0.16.0

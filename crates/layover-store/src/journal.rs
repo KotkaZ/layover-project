@@ -243,10 +243,16 @@ impl Journal {
 
     /// Books a layover.
     ///
+    /// Guarded, like the queue and for the same reason: this reads the whole file, changes it and
+    /// writes it back, and a run booking a layover while the Tower is resuming another would
+    /// otherwise lose whichever change was read first.
+    ///
     /// # Errors
     ///
     /// Returns [`StoreError::Io`] if the file cannot be read back or written.
     pub fn book(&self, layover: Layover) -> Result<(), StoreError> {
+        let _writing = self.writes.lock().map_err(|_| poisoned())?;
+
         let mut booked = self.layovers()?;
         booked.push(layover);
         self.save_layovers(&booked)
@@ -278,6 +284,8 @@ impl Journal {
         id: &LayoverId,
         change: impl FnOnce(&mut Layover),
     ) -> Result<bool, StoreError> {
+        let _writing = self.writes.lock().map_err(|_| poisoned())?;
+
         let mut booked = self.layovers()?;
         let Some(layover) = booked.iter_mut().find(|layover| layover.id == *id) else {
             return Ok(false);

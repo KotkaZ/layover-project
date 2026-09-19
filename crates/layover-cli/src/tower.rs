@@ -26,6 +26,7 @@ use std::time::Duration;
 use jiff::Timestamp;
 use layover_core::config::Config;
 use layover_core::flight::{Flight, ItineraryId, Origin};
+use layover_core::handover::{Handover, Resumption};
 use layover_core::pipeline::PipelineName;
 use layover_core::queue::Queued;
 use layover_store::Journal;
@@ -99,8 +100,22 @@ fn run_loop(factory: &Factory, journal: &Journal, stop: &AtomicBool, announce: &
         let due = clock.tick(&config, now, |pipeline| working(&pending, pipeline));
 
         for name in due.fire {
-            match trigger(&config, journal, &name) {
-                Ok(flight) => announce(format!("{name} is due; queued {flight}")),
+            // A resuming pipeline does not open fresh work on its tick; it goes looking for work
+            // that was set down and is now due. Its schedule is how often the operator wants that
+            // looked at — collecting on every poll instead would ignore what they declared.
+            let fired = if config.pipelines.get(&name).is_some_and(|p| p.resumes) {
+                resume_due(&config, journal, &name, now, announce)
+            } else {
+                trigger(&config, journal, &name).map(|flight| {
+                    announce(format!("{name} is due; queued {flight}"));
+                    1
+                })
+            };
+
+            match fired {
+                Ok(0) => {}
+                Ok(count) if count > 1 => announce(format!("{name} resumed {count} layover(s)")),
+                Ok(_) => {}
                 Err(why) => announce(format!("{name} is due but could not be queued: {why}")),
             }
         }
@@ -118,6 +133,83 @@ fn run_loop(factory: &Factory, journal: &Journal, stop: &AtomicBool, announce: &
         let nap = clock.until_next(Timestamp::now()).unwrap_or(POLL).min(POLL);
         std::thread::sleep(nap);
     }
+}
+
+/// Opens a fresh chain for each layover that has come due.
+///
+/// # Why a new itinerary rather than reviving the old one
+///
+/// The chain that booked the layover is over. Its Hops are spent, its Fuel is spent, and reviving
+/// it would mean a follow-up costing the budget of the work it follows up — so the second comment
+/// on a pull request would be cheaper than the first and the tenth would be free or refused,
+/// depending on which rail ran out. A layover is new work about an old subject, and it is priced
+/// that way.
+///
+/// What carries over is context, not budget: the resumed run is told which chain set this down,
+/// what it was waiting for, and how many times it has looked.
+fn resume_due(
+    config: &Config,
+    journal: &Journal,
+    name: &PipelineName,
+    now: Timestamp,
+    announce: &impl Fn(String),
+) -> Result<usize, String> {
+    let pipeline = config
+        .pipelines
+        .get(name)
+        .ok_or_else(|| format!("`{name}` is not declared"))?;
+
+    let due = journal.due(now).map_err(|error| error.to_string())?;
+    let mut resumed = 0;
+
+    for layover in due {
+        let resumption = Resumption {
+            booked_by: layover.booked_by.clone(),
+            waiting_for: layover.waiting_for.clone(),
+            booked_at: layover.booked_at,
+            checks: layover.checks,
+        };
+
+        let body = Handover::resumed(resumption, Vec::new()).brief();
+
+        // The layover names the agent to come back to; the pipeline only says that this factory
+        // collects them. Sending to the pipeline's entry agent instead would hand a follow-up to
+        // whatever happens to be first in the route map.
+        let flight = Flight::new(
+            ItineraryId::generate(),
+            Origin::Human,
+            layover.agent.clone(),
+            body,
+            config.defaults.max_hops,
+        );
+
+        let flags = pipeline
+            .flags_for_run(&std::collections::BTreeMap::new())
+            .map(|flags| {
+                flags
+                    .iter()
+                    .map(|(flag, value)| (flag.to_owned(), value))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        if let Err(error) = journal.queue(Queued::new(flight, Some(name.clone()), flags)) {
+            announce(format!("could not resume {}: {error}", layover.id));
+            continue;
+        }
+
+        // Marked resumed only after the work is queued. The other order loses the layover if the
+        // queue write fails — work somebody is owed, gone with nothing to show it existed.
+        let _ = journal.amend(&layover.id, layover_core::layover::Layover::resumed);
+        resumed += 1;
+
+        announce(format!(
+            "resumed {} for `{}`: {}",
+            layover.id, layover.agent, layover.waiting_for
+        ));
+    }
+
+    Ok(resumed)
 }
 
 /// Runs whatever is waiting, if anything is.
@@ -332,6 +424,242 @@ default = true
 
         let pending = journal.pending().expect("readable");
         assert_eq!(pending[0].flags.get("deep"), Some(&true));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_due_layover_is_resumed_as_a_new_chain_with_a_fresh_budget() {
+        // The chain that booked it is over: its Hops and Fuel are spent. Reviving it would make
+        // the second follow-up cheaper than the first and the tenth refused.
+        let root = temp("resume");
+        let journal = Journal::open(root.join("journal")).expect("opens");
+        let config = factory_config(
+            r#"
+[pipelines.follow_up]
+entry = "worker"
+trigger = { every = "20m" }
+resumes = true
+"#,
+        );
+
+        let booked_by = ItineraryId::generate();
+        let now = Timestamp::now();
+        journal
+            .book(layover_core::layover::Layover::book(
+                AgentName::new("worker"),
+                booked_by.clone(),
+                "the review to land",
+                layover_core::handover::Handover::dispatch(Vec::new()),
+                now.checked_sub(jiff::SignedDuration::from_hours(2))
+                    .expect("in range"),
+                now.checked_sub(jiff::SignedDuration::from_hours(1))
+                    .expect("in range"),
+                12,
+            ))
+            .expect("books");
+
+        resume_due(
+            &config,
+            &journal,
+            &PipelineName::new("follow_up"),
+            now,
+            &|_| {},
+        )
+        .expect("collects");
+
+        let pending = journal.pending().expect("readable");
+        assert_eq!(pending.len(), 1, "the due layover became work");
+        assert_ne!(
+            pending[0].flight.itinerary, booked_by,
+            "a resumed layover opens a new chain"
+        );
+        assert_eq!(pending[0].flight.hops_remaining, 4);
+        assert_eq!(pending[0].pipeline, Some(PipelineName::new("follow_up")));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_resumed_run_is_told_what_it_is_coming_back_for() {
+        // Without this it is a fresh run with no idea which work item it is following up, which
+        // is the failure booking a layover exists to avoid.
+        let root = temp("resume-body");
+        let journal = Journal::open(root.join("journal")).expect("opens");
+        let config = factory_config(
+            r#"
+[pipelines.follow_up]
+entry = "worker"
+resumes = true
+"#,
+        );
+
+        let now = Timestamp::now();
+        journal
+            .book(layover_core::layover::Layover::book(
+                AgentName::new("worker"),
+                ItineraryId::generate(),
+                "comments on pull request 41",
+                layover_core::handover::Handover::dispatch(Vec::new()),
+                now,
+                now,
+                12,
+            ))
+            .expect("books");
+
+        resume_due(
+            &config,
+            &journal,
+            &PipelineName::new("follow_up"),
+            now,
+            &|_| {},
+        )
+        .expect("collects");
+
+        let body = journal.pending().expect("readable")[0].flight.body.clone();
+        assert!(body.contains("comments on pull request 41"), "{body}");
+        assert!(body.contains("set down"), "{body}");
+        assert!(
+            !body.contains("anywhere from nowhere to almost finished"),
+            "a resumed layover left nothing half-done: {body}"
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_layover_that_is_not_due_yet_is_left_alone() {
+        let root = temp("resume-early");
+        let journal = Journal::open(root.join("journal")).expect("opens");
+        let config = factory_config(
+            r#"
+[pipelines.follow_up]
+entry = "worker"
+resumes = true
+"#,
+        );
+
+        let now = Timestamp::now();
+        journal
+            .book(layover_core::layover::Layover::book(
+                AgentName::new("worker"),
+                ItineraryId::generate(),
+                "later",
+                layover_core::handover::Handover::dispatch(Vec::new()),
+                now,
+                now.checked_add(jiff::SignedDuration::from_hours(2))
+                    .expect("in range"),
+                12,
+            ))
+            .expect("books");
+
+        resume_due(
+            &config,
+            &journal,
+            &PipelineName::new("follow_up"),
+            now,
+            &|_| {},
+        )
+        .expect("collects");
+
+        assert!(journal.pending().expect("readable").is_empty());
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_resumed_layover_is_not_resumed_twice() {
+        let root = temp("resume-once");
+        let journal = Journal::open(root.join("journal")).expect("opens");
+        let config = factory_config(
+            r#"
+[pipelines.follow_up]
+entry = "worker"
+resumes = true
+"#,
+        );
+
+        let now = Timestamp::now();
+        journal
+            .book(layover_core::layover::Layover::book(
+                AgentName::new("worker"),
+                ItineraryId::generate(),
+                "once",
+                layover_core::handover::Handover::dispatch(Vec::new()),
+                now,
+                now,
+                12,
+            ))
+            .expect("books");
+
+        resume_due(
+            &config,
+            &journal,
+            &PipelineName::new("follow_up"),
+            now,
+            &|_| {},
+        )
+        .expect("collects");
+        resume_due(
+            &config,
+            &journal,
+            &PipelineName::new("follow_up"),
+            now,
+            &|_| {},
+        )
+        .expect("collects");
+
+        assert_eq!(
+            journal.pending().expect("readable").len(),
+            1,
+            "a layover picked up twice is one follow-up done twice"
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn an_ordinary_schedule_never_collects_booked_work() {
+        // Only a pipeline that declares `resumes` goes looking. Otherwise a factory's hourly
+        // sweep would quietly start following up other people's work.
+        let root = temp("resume-none");
+        let journal = Journal::open(root.join("journal")).expect("opens");
+        let config = factory_config(
+            r#"
+[pipelines.build]
+entry = "worker"
+trigger = { every = "1h" }
+"#,
+        );
+
+        let now = Timestamp::now();
+        journal
+            .book(layover_core::layover::Layover::book(
+                AgentName::new("worker"),
+                ItineraryId::generate(),
+                "nobody collects this",
+                layover_core::handover::Handover::dispatch(Vec::new()),
+                now,
+                now,
+                12,
+            ))
+            .expect("books");
+
+        // What the loop does for a pipeline that does not resume.
+        trigger(&config, &journal, &PipelineName::new("build")).expect("queues fresh work");
+
+        let pending = journal.pending().expect("readable");
+        assert_eq!(pending.len(), 1);
+        assert!(
+            !pending[0].flight.body.contains("set down"),
+            "an ordinary tick opens fresh work, not a follow-up: {}",
+            pending[0].flight.body
+        );
+        assert_eq!(
+            journal.due(now).expect("readable").len(),
+            1,
+            "the layover is still owed, and still visible"
+        );
 
         let _ = std::fs::remove_dir_all(&root);
     }

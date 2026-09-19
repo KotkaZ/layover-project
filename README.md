@@ -198,10 +198,11 @@ test and doc build, with warnings denied. CI runs the same command, unchanged.
 
 | Built | Not built |
 |---|---|
-| `validate`, `explain`, `prompt`, `graph` | Resuming a booked Layover — `layover_wait` is declared, not connected |
-| **`serve`: the Tower — fires schedules, runs the queue, hosts MCP, serves the dashboard** | API authentication — the surface is loopback-only and unauthenticated |
-| **Schedules: `every` and `cron`, skipping a tick whose previous wave is still going** | Live run streaming over HTTP, which answers `501` |
+| `validate`, `explain`, `prompt`, `graph` | API authentication — the surface is loopback-only and unauthenticated |
+| **`serve`: the Tower — fires schedules, runs the queue, hosts MCP, serves the dashboard** | Live run streaming over HTTP, which answers `501` |
+| **Schedules: `every` and `cron`, skipping a tick whose previous wave is still going** | `layover_learn` and `layover_logbook_append`, declared but not connected |
 | **Rendezvous joins: work is parked and its agent wakes once, with every verdict** | Publishing to crates.io |
+| **Layovers: an agent sets work down and a resuming pipeline brings it back** | |
 | **The MCP endpoint agents call back into: `layover_send` queues a real flight** | |
 | **Ground Stop, cancelling queued work, resolving help, settling learnings** | |
 | **Chains: what one trigger caused, and whether it finished or stalled** | |
@@ -210,12 +211,13 @@ test and doc build, with warnings denied. CI runs the same command, unchanged.
 | Run history, costs, the Reserve, help requests, learnings, reports | |
 | `autostart`, which registers `layover serve` at login | |
 
-**A factory runs itself, and the loop with you is closed.** A schedule fires, an agent starts, it
-hands work on through the MCP endpoint, a joined agent waits for every verdict it needs, and the
-chain finishes — inside the budget it started with, without anybody typing a command. When an agent
-gets stuck it says so and you can mark it fixed; when it works something out, you can keep that
-permanently or throw it away. The dashboard shows each chain and whether it *stalled*: the failure
-where every run reports success and nothing will ever happen again.
+**A factory runs itself, the loop with you is closed, and work can wait.** A schedule fires, an
+agent starts, it hands work on through the MCP endpoint, a joined agent waits for every verdict it
+needs, and the chain finishes — inside the budget it started with, without anybody typing a
+command. An agent that needs to come back to something days later sets it down and ends; a
+resuming pipeline brings it back with the context it needs and a fresh budget. When an agent gets
+stuck it says so and you can mark it fixed; when it works something out, you can keep that
+permanently or throw it away.
 
 **What is not proven is the claim on the tin.** Forty-eight hours unattended, no intervention, is
 the bar this project set for itself, and it has not been run. Everything above is tested and has

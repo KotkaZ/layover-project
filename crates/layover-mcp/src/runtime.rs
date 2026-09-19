@@ -142,4 +142,15 @@ pub trait Runtime {
     ///
     /// Returns [`ToolError`] when they cannot be written.
     fn memory_write(&self, session: &Session, text: &str) -> Result<(), ToolError>;
+
+    /// Sets this work down to be picked up later, returning when it will be.
+    ///
+    /// `until` is how long to wait — `30m`, `2h`, `3d` — using the same vocabulary as a pipeline's
+    /// `every`. An agent asked to wait "until the review lands" has no way to know when that is,
+    /// so it names an interval and is brought back to look.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ToolError`] when `until` cannot be read, or the layover cannot be stored.
+    fn wait(&self, session: &Session, until: &str, because: &str) -> Result<String, ToolError>;
 }

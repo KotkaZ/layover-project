@@ -30,7 +30,7 @@ use std::fmt::Write as _;
 
 use serde::{Deserialize, Serialize};
 
-use crate::flight::{Flight, RunId};
+use crate::flight::{Flight, ItineraryId, RunId};
 
 /// Why a run stopped without finishing.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -144,6 +144,23 @@ pub struct Steer {
     pub at: Timestamp,
 }
 
+/// Work being picked up after a deliberate wait.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct Resumption {
+    /// The chain that set this work down.
+    pub booked_by: ItineraryId,
+    /// What the earlier run said it was waiting for.
+    pub waiting_for: String,
+    /// When it was set down.
+    pub booked_at: Timestamp,
+    /// How many times it has been picked up and found nothing yet.
+    ///
+    /// Told to the agent because it changes what a reasonable response is. Finding nothing on the
+    /// first check is normal; finding nothing on the twelfth is worth saying out loud rather than
+    /// quietly booking a thirteenth.
+    pub checks: u32,
+}
+
 /// Why a run is being started.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -154,6 +171,13 @@ pub enum Cause {
     Recovered(Recovery),
     /// A human redirected an earlier run.
     Steered(Steer),
+    /// Work an earlier chain set down deliberately, now picked up again.
+    ///
+    /// Distinct from [`Self::Recovered`], and the difference matters to the agent reading it. A
+    /// recovered run is repeating work that may be half-done; a resumed layover is not. The
+    /// earlier run *finished*, having chosen to come back later, so nothing is half-applied and
+    /// the warning about doing things twice would be misleading here.
+    Resumed(Resumption),
 }
 
 impl Cause {
@@ -161,9 +185,13 @@ impl Cause {
     ///
     /// The distinction matters to an agent: work already done may need checking before it is done
     /// again, and a side effect already applied must not be applied twice.
+    ///
+    /// A resumed layover is deliberately **not** repeating work. The earlier run set it down on
+    /// purpose and ended cleanly, so telling this one to check for half-applied side effects would
+    /// send it looking for something that is not there.
     #[must_use]
     pub fn repeats_earlier_work(&self) -> bool {
-        !matches!(self, Self::Dispatch)
+        matches!(self, Self::Recovered(_) | Self::Steered(_))
     }
 }
 
@@ -213,6 +241,16 @@ impl Handover {
         }
     }
 
+    /// Work an earlier chain set down deliberately.
+    #[must_use]
+    pub fn resumed(resumption: Resumption, flights: Vec<Flight>) -> Self {
+        Self {
+            cause: Cause::Resumed(resumption),
+            flights,
+            progress: Vec::new(),
+        }
+    }
+
     /// Adds what the earlier run had managed to record.
     #[must_use]
     pub fn with_progress(mut self, progress: Vec<String>) -> Self {
@@ -255,13 +293,39 @@ impl Handover {
                 );
                 let _ = writeln!(out, "> {}\n", steer.note.trim());
             }
+            Cause::Resumed(resumption) => {
+                out.push_str("## You are picking up work that was set down\n\n");
+                let _ = writeln!(
+                    out,
+                    "An earlier chain ({}) finished what it could and chose to come back to this \
+                     later. It was waiting for: {}\n",
+                    resumption.booked_by.as_str(),
+                    resumption.waiting_for.trim()
+                );
+                let _ = writeln!(
+                    out,
+                    "It was set down at {}, and this is check {}.\n",
+                    resumption.booked_at,
+                    resumption.checks.saturating_add(1)
+                );
+                out.push_str(
+                    "Nothing was left half-done: the earlier run ended cleanly. Your job is to \
+                     see whether the thing it was waiting for has happened, and to act on it if \
+                     it has. If it has not, set the work down again rather than waiting.\n\n",
+                );
+            }
         }
 
+        // Only said when the earlier run may have stopped mid-sentence. A resumed layover ended on
+        // purpose, so warning that it might have got "anywhere from nowhere to almost finished"
+        // would send this run looking for damage that was never done.
         if self.progress.is_empty() {
-            out.push_str(
-                "Nothing was recorded about what the earlier run had done, so assume it may have \
-                 got anywhere from nowhere to almost finished.\n",
-            );
+            if self.cause.repeats_earlier_work() {
+                out.push_str(
+                    "Nothing was recorded about what the earlier run had done, so assume it may \
+                     have got anywhere from nowhere to almost finished.\n",
+                );
+            }
         } else {
             out.push_str("What the earlier run recorded, oldest first:\n\n");
             for note in &self.progress {

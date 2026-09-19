@@ -19,7 +19,9 @@ use layover_core::agent::AgentName;
 use layover_core::config::Config;
 use layover_core::flight::{Flight, ItineraryId, Origin};
 use layover_core::graph::RouteGraph;
+use layover_core::handover::Handover;
 use layover_core::itinerary::Itinerary;
+use layover_core::layover::Layover;
 use layover_core::pipeline::PipelineName;
 use layover_core::queue::Queued;
 use layover_mcp::{Peer, Runtime, Session, ToolError};
@@ -106,6 +108,7 @@ pub struct FactoryRuntime {
     config: Arc<Config>,
     graph: Arc<RouteGraph>,
     queue: Arc<dyn Fn(Queued) -> Result<(), String> + Send + Sync>,
+    book: Arc<dyn Fn(Layover) -> Result<(), String> + Send + Sync>,
     hangars: PathBuf,
 }
 
@@ -117,11 +120,13 @@ impl FactoryRuntime {
         graph: Arc<RouteGraph>,
         hangars: PathBuf,
         queue: Arc<dyn Fn(Queued) -> Result<(), String> + Send + Sync>,
+        book: Arc<dyn Fn(Layover) -> Result<(), String> + Send + Sync>,
     ) -> Self {
         Self {
             config,
             graph,
             queue,
+            book,
             hangars,
         }
     }
@@ -267,6 +272,75 @@ impl Runtime for FactoryRuntime {
             detail: error.to_string(),
         })
     }
+
+    fn wait(&self, session: &Session, until: &str, because: &str) -> Result<String, ToolError> {
+        let wait = parse_wait(until).ok_or_else(|| ToolError::BadArguments {
+            detail: format!(
+                "`{until}` is not a length of time. Use a number and a unit — `30m`, `2h`, `3d` — \
+                 which is how long to wait before this is looked at again."
+            ),
+        })?;
+
+        let now = jiff::Timestamp::now();
+        let due_at = now
+            .checked_add(jiff::SignedDuration::from_secs(wait))
+            .map_err(|_| ToolError::BadArguments {
+                detail: format!("`{until}` is further away than this factory can plan for"),
+            })?;
+
+        // The handover carries no flights and no progress. A layover is not a recovery: the run
+        // that booked it finished, so there is nothing half-done to hand over — what the later run
+        // needs is why it is here, which `waiting_for` carries.
+        let handover = Handover::dispatch(Vec::new());
+
+        let layover = Layover::book(
+            session.agent.clone(),
+            session.itinerary.clone(),
+            because,
+            handover,
+            now,
+            due_at,
+            DEFAULT_MAX_CHECKS,
+        );
+
+        let when = layover.due_at.to_string();
+
+        (self.book)(layover).map_err(|detail| ToolError::Unavailable { detail })?;
+
+        Ok(format!(
+            "Set down. This will be picked up no sooner than {when}, by a pipeline that resumes \
+             layovers. Finish and report now — nothing is kept running in the meantime."
+        ))
+    }
+}
+
+/// How many fruitless checks a layover gets before it is given up on.
+///
+/// Twelve, against the backoff in `layover_core::layover`, is a little over two days of looking.
+/// Long enough for a review to come back over a weekend; short enough that something nobody ever
+/// answers stops costing money.
+const DEFAULT_MAX_CHECKS: u32 = 12;
+
+/// Reads a wait as a number of seconds.
+///
+/// Same vocabulary as a pipeline's `every`, deliberately: an operator who has written `every =
+/// "2h"` should not have to learn a second way to say two hours in order to read a prompt.
+fn parse_wait(text: &str) -> Option<i64> {
+    let trimmed = text.trim();
+    let (digits, unit) = match trimmed.char_indices().next_back() {
+        Some((index, unit)) => (&trimmed[..index], unit),
+        None => return None,
+    };
+
+    let multiplier = match unit {
+        's' => 1_i64,
+        'm' => 60,
+        'h' => 60 * 60,
+        'd' => 24 * 60 * 60,
+        _ => return None,
+    };
+
+    digits.trim().parse::<i64>().ok()?.checked_mul(multiplier)
 }
 
 impl FactoryRuntime {
@@ -341,10 +415,12 @@ to = "reviewer"
 mode = "spawn"
 "#;
 
-    /// A runtime over a temporary directory, with everything it queued kept for inspection.
+    /// A runtime over a temporary directory, with everything it queued or booked kept for
+    /// inspection.
     struct Fixture {
         runtime: FactoryRuntime,
         sent: Arc<Mutex<Vec<Queued>>>,
+        booked: Arc<Mutex<Vec<Layover>>>,
         defaults: layover_core::config::Defaults,
         dir: PathBuf,
     }
@@ -361,6 +437,8 @@ mode = "spawn"
 
             let sent: Arc<Mutex<Vec<Queued>>> = Arc::new(Mutex::new(Vec::new()));
             let sink = Arc::clone(&sent);
+            let booked: Arc<Mutex<Vec<Layover>>> = Arc::new(Mutex::new(Vec::new()));
+            let shelf = Arc::clone(&booked);
 
             Self {
                 runtime: FactoryRuntime::new(
@@ -371,8 +449,16 @@ mode = "spawn"
                         sink.lock().map_err(|_| "poisoned".to_owned())?.push(queued);
                         Ok(())
                     }),
+                    Arc::new(move |layover| {
+                        shelf
+                            .lock()
+                            .map_err(|_| "poisoned".to_owned())?
+                            .push(layover);
+                        Ok(())
+                    }),
                 ),
                 sent,
+                booked,
                 defaults,
                 dir,
             }
@@ -380,6 +466,10 @@ mode = "spawn"
 
         fn sent(&self) -> Vec<Queued> {
             self.sent.lock().expect("not poisoned").clone()
+        }
+
+        fn booked(&self) -> Vec<Layover> {
+            self.booked.lock().expect("not poisoned").clone()
         }
     }
 
@@ -561,6 +651,90 @@ mode = "spawn"
 
         assert!(reviewer.spawns, "the spawn edge is marked");
         assert!(!developer.spawns, "an ordinary edge is not");
+    }
+
+    #[test]
+    fn booking_a_layover_sets_the_work_down_and_says_when_it_returns() {
+        let fixture = Fixture::new("wait");
+
+        let answer = fixture
+            .runtime
+            .wait(&session("analyst", 3), "2h", "the review to land")
+            .expect("2h is a length of time");
+
+        assert!(answer.contains("Set down"), "{answer}");
+        assert!(
+            answer.contains("Finish and report"),
+            "an agent must be told not to wait: {answer}"
+        );
+
+        let booked = fixture.booked();
+        assert_eq!(booked.len(), 1);
+        assert_eq!(booked[0].agent, AgentName::new("analyst"));
+        assert_eq!(booked[0].waiting_for, "the review to land");
+    }
+
+    #[test]
+    fn a_layover_comes_back_to_the_chain_that_booked_it() {
+        // The resumed run is told which chain set this down, which is the only thread back to
+        // what it was about.
+        let fixture = Fixture::new("wait-chain");
+        let caller = session("analyst", 3);
+
+        fixture
+            .runtime
+            .wait(&caller, "1d", "the build to go green")
+            .expect("books");
+
+        assert_eq!(fixture.booked()[0].booked_by, caller.itinerary);
+    }
+
+    #[test]
+    fn a_layover_is_not_due_before_its_time() {
+        let fixture = Fixture::new("wait-due");
+
+        fixture
+            .runtime
+            .wait(&session("analyst", 3), "2h", "something")
+            .expect("books");
+
+        let booked = &fixture.booked()[0];
+        assert!(!booked.is_due(jiff::Timestamp::now()));
+        assert!(
+            booked.is_due(
+                jiff::Timestamp::now()
+                    .checked_add(jiff::SignedDuration::from_hours(3))
+                    .expect("in range")
+            )
+        );
+    }
+
+    #[test]
+    fn a_wait_that_is_not_a_length_of_time_is_refused_with_an_example() {
+        // An agent given "until the review lands" has to be told what shape the answer takes,
+        // not merely that it was wrong.
+        let fixture = Fixture::new("wait-bad");
+
+        let error = fixture
+            .runtime
+            .wait(&session("analyst", 3), "when the review lands", "x")
+            .expect_err("not a duration");
+
+        assert!(matches!(error, ToolError::BadArguments { .. }));
+        assert!(error.to_string().contains("2h"), "{error}");
+        assert!(fixture.booked().is_empty(), "nothing may be booked");
+    }
+
+    #[test]
+    fn every_unit_a_schedule_understands_works_here_too() {
+        // Same vocabulary as a pipeline's `every`. An operator who wrote `every = "2h"` should not
+        // have to learn a second way to say two hours.
+        for (text, seconds) in [("45s", 45), ("30m", 1_800), ("6h", 21_600), ("3d", 259_200)] {
+            assert_eq!(parse_wait(text), Some(seconds), "{text}");
+        }
+
+        assert_eq!(parse_wait("2 weeks"), None);
+        assert_eq!(parse_wait(""), None);
     }
 
     #[test]

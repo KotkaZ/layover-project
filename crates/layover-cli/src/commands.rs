@@ -200,7 +200,7 @@ pub fn serve(
     let running = if watch_only {
         None
     } else {
-        let served = ServedMcp::start(&config, factory_root, Arc::clone(&journal))?;
+        let served = ServedMcp::start(&config, factory_root, &journal)?;
 
         let factory = Factory::new(config.clone(), factory_root)
             .map_err(|error| error.to_string())?
@@ -548,7 +548,7 @@ pub fn run(path: &Path, dry_run: bool) -> Result<String, Failure> {
     // Port 0 and reading it back is the only way to be sure: a port chosen in advance can be
     // taken between choosing it and binding it, and a child told the wrong address fails in a way
     // that reads as the agent misbehaving.
-    let served = ServedMcp::start(&config, root, Arc::clone(&journal))?;
+    let served = ServedMcp::start(&config, root, &journal)?;
 
     let factory = Factory::new(config, root)
         .map_err(|error| error.to_string())?

@@ -8,8 +8,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-layover-core = { path = "../layover-core", version = "0.16.2" }
-layover-mcp = { path = "../layover-mcp", version = "0.16.2" }
+layover-core = { path = "../layover-core", version = "0.17.0" }
+layover-mcp = { path = "../layover-mcp", version = "0.17.0" }
 jiff = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

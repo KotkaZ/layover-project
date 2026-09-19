@@ -265,10 +265,16 @@ fn run_tool(
             session.agent, session.hops_remaining
         )),
 
+        Tool::Wait => {
+            let until = required(arguments, "until")?;
+            let because = required(arguments, "because")?;
+            runtime.wait(session, until, because)
+        }
+
         // Declared so agents can see them, and honest about not being connected yet. Better than
         // omitting them: a tool that appears and disappears between releases is harder to write a
         // prompt against than one that says what it is waiting for.
-        Tool::Learn | Tool::LogbookAppend | Tool::Wait => Err(ToolError::Unavailable {
+        Tool::Learn | Tool::LogbookAppend => Err(ToolError::Unavailable {
             detail: format!("`{tool}` is not connected yet in this release."),
         }),
     }
@@ -329,6 +335,7 @@ mod tests {
         reported: RefCell<Vec<String>>,
         helped: RefCell<Vec<(String, bool)>>,
         written: RefCell<Vec<String>>,
+        booked: RefCell<Vec<String>>,
         refuse_send: bool,
     }
 
@@ -371,6 +378,11 @@ mod tests {
         fn memory_write(&self, _: &Session, text: &str) -> Result<(), ToolError> {
             self.written.borrow_mut().push(text.to_owned());
             Ok(())
+        }
+
+        fn wait(&self, _: &Session, until: &str, because: &str) -> Result<String, ToolError> {
+            self.booked.borrow_mut().push(format!("{until}:{because}"));
+            Ok("Set down.".to_owned())
         }
     }
 
@@ -575,6 +587,9 @@ mod tests {
             fn memory_write(&self, _: &Session, _: &str) -> Result<(), ToolError> {
                 Ok(())
             }
+            fn wait(&self, _: &Session, _: &str, _: &str) -> Result<String, ToolError> {
+                Ok("Set down.".to_owned())
+            }
         }
 
         let text = text_of(&call_tool("layover_peers", &json!({}), &Alone));
@@ -631,6 +646,30 @@ mod tests {
 
         assert_eq!(result["isError"], json!(true));
         assert!(text_of(&result).contains("not connected yet"), "{result}");
+    }
+
+    #[test]
+    fn booking_a_layover_reaches_the_runtime() {
+        // The project is named after this tool. It answered "not connected yet" for six releases.
+        let spy = Spy::default();
+        let result = call_tool(
+            "layover_wait",
+            &json!({ "until": "2h", "because": "the review to land" }),
+            &spy,
+        );
+
+        assert_eq!(result["isError"], json!(false), "{result}");
+        assert_eq!(spy.booked.borrow().as_slice(), ["2h:the review to land"]);
+    }
+
+    #[test]
+    fn booking_a_layover_without_saying_what_for_is_refused() {
+        // `waiting_for` is the only thread back to what this was about. A layover without one is
+        // a run that reappears in two hours knowing nothing.
+        let result = call_tool("layover_wait", &json!({ "until": "2h" }), &Spy::default());
+
+        assert_eq!(result["isError"], json!(true), "{result}");
+        assert!(text_of(&result).contains("because"), "{result}");
     }
 
     #[test]

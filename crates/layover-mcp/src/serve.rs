@@ -161,6 +161,10 @@ mod tests {
         fn memory_write(&self, _: &Session, _: &str) -> Result<(), ToolError> {
             Ok(())
         }
+
+        fn wait(&self, _: &Session, _: &str, _: &str) -> Result<String, ToolError> {
+            Ok("Set down.".to_owned())
+        }
     }
 
     fn app() -> Router {

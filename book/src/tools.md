@@ -20,9 +20,9 @@ applied was whether an agent could do its job without it.
 | `layover_status` | What this chain has left: how many messages, how much budget. |
 | `layover_learn` | Propose something future runs should know. **Not connected yet.** |
 | `layover_logbook_append` | Add to the factory's shared memory. **Not connected yet.** |
-| `layover_wait` | Set work down to be picked up later. **Not connected yet.** |
+| `layover_wait` | Set work down to be picked up later, by a pipeline that resumes layovers. |
 
-The three marked *not connected* are declared and answer honestly when called. Declaring them is
+The two marked *not connected* are declared and answer honestly when called. Declaring them is
 deliberate: a tool that appears and disappears between releases is harder to write a prompt against
 than one that says what it is waiting for.
 
@@ -80,6 +80,76 @@ cannot be charged to a run has no chain to spend from and no agent to be.
 - The flight it queues **continues the caller's chain**. It is not a new itinerary, so it spends
   the same Hops, the same Fuel and the same run cap. Two agents passing work back and forth are
   bounded by the budget the chain started with, not by a fresh one each time round.
+
+## Setting work down
+
+The project is named after this. An agent that has opened a pull request and wants to react to
+comments over the following days calls:
+
+```json
+{ "until": "6h", "because": "comments on pull request 41" }
+```
+
+and then **finishes**. Nothing stays alive in between: no process, no parked chain, no held budget.
+
+Neither alternative worked. Keeping the chain alive and polling spends a Hop and real money on
+every tick, so Hops kills it long before a human replies — and the whole point of Hops is that it
+should. Re-triggering on a schedule works mechanically but arrives knowing nothing: which work item
+is this about, what was already tried, what did the earlier chain conclude.
+
+`until` is how long to wait, in the same vocabulary as a pipeline's `every`: `30m`, `2h`, `3d`. An
+agent asked to wait "until the review lands" cannot know when that is, so it names an interval and
+is brought back to look.
+
+### Coming back
+
+A pipeline declares that it collects them:
+
+```toml
+[pipelines.follow_up]
+entry   = "publisher"
+trigger = { every = "45m" }
+resumes = true
+```
+
+A resuming pipeline does not open fresh work on its tick — it goes looking for layovers that are
+due. An ordinary pipeline never collects them, so a factory's hourly sweep cannot quietly start
+following up somebody else's work.
+
+The resumed run gets a **new chain with a fresh budget**. The chain that booked the layover is over;
+its Hops and Fuel are spent, and reviving it would make the second follow-up cheaper than the first
+and the tenth refused. A layover is new work about an old subject, and it is priced that way.
+
+What carries over is context. The run is told which chain set this down, what it was waiting for,
+when, and how many times it has already looked:
+
+```text
+## You are picking up work that was set down
+
+An earlier chain (itn_01M2WH…) finished what it could and chose to come back to this later.
+It was waiting for: comments on pull request 41
+
+It was set down at 2026-09-19T09:56:18Z, and this is check 1.
+
+Nothing was left half-done: the earlier run ended cleanly. Your job is to see whether the thing
+it was waiting for has happened, and to act on it if it has. If it has not, set the work down
+again rather than waiting.
+```
+
+That last paragraph is the opposite of what a *recovered* run is told, and deliberately so. A
+recovered run may have half-applied a side effect and is warned to check before repeating
+anything. A resumed layover was not interrupted — telling it to look for damage would send it
+hunting something that was never there.
+
+### When a wait becomes a leak
+
+Each fruitless check pushes the next one further out, doubling from fifteen minutes and capping at
+six hours. Backing off is what makes a long wait affordable; the alternative is paying for a run
+every few minutes to be told nothing has changed.
+
+After twelve fruitless checks — a little over two days of looking — the layover expires. That is
+the difference between waiting patiently and waiting forever, which is the difference between a
+follow-up and a leak.
 
 ## A prompt cannot name a tool that does not exist
 

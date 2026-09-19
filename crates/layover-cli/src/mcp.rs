@@ -56,19 +56,27 @@ impl ServedMcp {
     pub fn start(
         config: &Config,
         root: &std::path::Path,
-        journal: Arc<Journal>,
+        journal: &Arc<Journal>,
     ) -> Result<Self, Failure> {
         let gate = Arc::new(TokenGate::default());
         let hangars = root.join(".layover").join("hangars");
+
+        let queueing = Arc::clone(journal);
+        let booking = Arc::clone(journal);
 
         let runtime = FactoryRuntime::new(
             Arc::new(config.clone()),
             Arc::new(RouteGraph::from_config(config)),
             hangars,
             Arc::new(move |queued| {
-                journal
+                queueing
                     .queue(queued)
                     .map_err(|error| format!("the queue would not take it: {error}"))
+            }),
+            Arc::new(move |layover| {
+                booking
+                    .book(layover)
+                    .map_err(|error| format!("the layover could not be set down: {error}"))
             }),
         );
 
@@ -178,7 +186,7 @@ entry = "analyst"
         let root = temp("bound");
         let journal = Arc::new(Journal::open(root.join("journal")).expect("opens"));
 
-        let served = ServedMcp::start(&factory(), &root, journal).expect("binds");
+        let served = ServedMcp::start(&factory(), &root, &journal).expect("binds");
 
         assert!(
             served.endpoint.starts_with("http://127.0.0.1:"),
@@ -202,7 +210,7 @@ entry = "analyst"
         let root = temp("ungated");
         let journal = Arc::new(Journal::open(root.join("journal")).expect("opens"));
 
-        let served = ServedMcp::start(&factory(), &root, journal).expect("binds");
+        let served = ServedMcp::start(&factory(), &root, &journal).expect("binds");
         assert!(served.tokens.resolve("lvt_anything").is_none());
 
         drop(served);
@@ -216,7 +224,7 @@ entry = "analyst"
         let root = temp("freed");
         let journal = Arc::new(Journal::open(root.join("journal")).expect("opens"));
 
-        let served = ServedMcp::start(&factory(), &root, journal).expect("binds");
+        let served = ServedMcp::start(&factory(), &root, &journal).expect("binds");
         let address = served
             .endpoint
             .trim_start_matches("http://")
@@ -290,7 +298,7 @@ to = "developer"
         )
         .expect("parses");
 
-        let served = ServedMcp::start(&config, &root, Arc::clone(&journal)).expect("binds");
+        let served = ServedMcp::start(&config, &root, &journal).expect("binds");
 
         // Stands in for the Tower minting a token as it starts a run of `analyst`.
         let tokens = Arc::new(layover_tower::Tokens::new());
@@ -330,7 +338,7 @@ to = "developer"
         let root = temp("forbidden");
         let journal = Arc::new(Journal::open(root.join("journal")).expect("opens"));
 
-        let served = ServedMcp::start(&factory(), &root, Arc::clone(&journal)).expect("binds");
+        let served = ServedMcp::start(&factory(), &root, &journal).expect("binds");
 
         let tokens = Arc::new(layover_tower::Tokens::new());
         let token = tokens.mint(
@@ -367,7 +375,7 @@ to = "developer"
         let root = temp("revoked");
         let journal = Arc::new(Journal::open(root.join("journal")).expect("opens"));
 
-        let served = ServedMcp::start(&factory(), &root, Arc::clone(&journal)).expect("binds");
+        let served = ServedMcp::start(&factory(), &root, &journal).expect("binds");
 
         let tokens = Arc::new(layover_tower::Tokens::new());
         let token = tokens.mint(
