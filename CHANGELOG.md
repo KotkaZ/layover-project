@@ -10,27 +10,25 @@ See [project status](README.md#project-status).
 
 ## [0.16.2] — 2026-09-19
 
-The release of 0.16.0. Two tags failed to produce one before it, and both are worth recording
-because the recovery for each is different.
+**Identical in content to 0.16.0.** Two version numbers were burned recovering from a problem that
+did not exist, and the sequence is recorded here rather than tidied away.
 
-**0.16.0** was tagged and GitHub silently did not fire the release workflow. **0.16.1** was tagged
-with a hand-added `workflow_dispatch` trigger to make that recoverable — which `dist` rejects,
-because it verifies the generated workflow against what it would generate, so that build failed
-too. The workflow is back to its generated form.
+0.16.0's release build sat queued behind several unrelated workflow runs. Checking too early, and
+trusting a listing that had not caught up, I concluded GitHub had dropped the tag event — it had
+not, and that build finished successfully. 0.16.1 was the attempted fix: a `workflow_dispatch`
+trigger added by hand to the release workflow. `dist` generates that file and verifies it against
+what it would generate, so the edit made `dist host` refuse and the 0.16.1 build fail. The workflow
+is back to its generated form.
 
-**Use this. 0.16.0 and 0.16.1 have no artifacts.**
-
-The recovery for a tag event GitHub drops is to release the next patch version. `dist` can be told
-to use a manual trigger instead (`[dist.release-workflow] workflow-dispatch = true`), but that
-disables tag-push releases entirely, which is the wrong trade for a fault this rare.
+**0.16.0 and 0.16.2 carry the same code.** 0.16.1 has no release. The lesson is the cheap one: wait
+for a queued build before diagnosing it, and do not hand-edit a generated file to fix a fault you
+have not confirmed.
 
 ## [0.16.1] — 2026-09-19
 
-Tagged; the build failed. Superseded by 0.16.2.
+Tagged; the build failed. No release exists.
 
 ## [0.16.0] — 2026-09-19
-
-Tagged; never built. Superseded by 0.16.2, which carries these changes.
 
 The factory can ask you things, and now you can answer. The state directory is versioned, so two
 releases cannot silently disagree about it.
