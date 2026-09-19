@@ -21,8 +21,9 @@ use layover_core::run::Outcome;
 use layover_http::{
     AgentList, Api, CancelFlightPath, CostBucket, CostReport, CostWindow, EventStream,
     FlightAccepted, GetCostsQuery, GetGraphQuery, GetReportPath, GetRunPath, GroundStop, Health,
-    HelpList, ItineraryList, ItineraryState, LearningList, ListHelpQuery, ListItinerariesQuery,
-    ListLearningsQuery, ListRunsQuery, PendingList, PipelineList, Problem, Report, ReserveState,
+    HelpList, HelpResolved, ItineraryList, ItineraryState, JudgeLearningPath, JudgeLearningRequest,
+    Judgement, Learning, LearningList, ListHelpQuery, ListItinerariesQuery, ListLearningsQuery,
+    ListRunsQuery, PendingList, PipelineList, Problem, Report, ReserveState, ResolveHelpRequest,
     RouteMap, Run, RunList, RunStatus, SendFlightRequest, Status, StreamRunPath,
 };
 use layover_store::{HelpFilter, History, Journal, RunFilter};
@@ -286,6 +287,7 @@ impl Api for Dashboard {
         let filter = HelpFilter {
             agent: query.agent.as_deref().map(Into::into),
             blocker: query.blocker.map(view::blocker_from),
+            run: None,
             open_only: query.open.unwrap_or(false),
             fatal_only: false,
         };
@@ -494,6 +496,83 @@ impl Api for Dashboard {
             .unwrap_or(i32::MAX),
             itineraries: chains,
         })
+    }
+
+    async fn resolve_help(&self, body: ResolveHelpRequest) -> Result<HelpResolved, Problem> {
+        let span = self.span(body.window.or(Some(CostWindow::Last30d)));
+
+        let filter = HelpFilter {
+            agent: body.agent.as_deref().map(Into::into),
+            blocker: body.blocker.map(view::blocker_from),
+            run: body.run_id.as_deref().map(Into::into),
+            // Only what is open. Re-stamping something already dealt with would move its
+            // resolution time to now and lose when the blocker was actually cleared.
+            open_only: true,
+            fatal_only: false,
+        };
+
+        let resolved = self
+            .0
+            .journal
+            .resolve(&span, &filter, Timestamp::now())
+            .map_err(|error| {
+                Problem::new(StatusCode::INTERNAL_SERVER_ERROR, "help is unwritable")
+                    .with_detail(error.to_string())
+            })?;
+
+        Ok(HelpResolved {
+            resolved: i32::try_from(resolved).unwrap_or(i32::MAX),
+        })
+    }
+
+    async fn judge_learning(
+        &self,
+        path: JudgeLearningPath,
+        body: JudgeLearningRequest,
+    ) -> Result<Learning, Problem> {
+        let mut learnings = self.0.journal.learnings().map_err(|error| {
+            Problem::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "learnings are unreadable",
+            )
+            .with_detail(error.to_string())
+        })?;
+
+        let id = layover_core::learning::LearningId::from(path.learning_id.as_str());
+        let at = Timestamp::now();
+
+        let changed = match body.state {
+            Judgement::Confirmed => learnings.confirm(&id, at),
+            Judgement::Rejected => learnings.reject(&id, at),
+        };
+
+        if !changed {
+            return Err(
+                Problem::new(StatusCode::NOT_FOUND, "no such learning").with_detail(format!(
+                    "`{}` is not in this factory's memory",
+                    path.learning_id
+                )),
+            );
+        }
+
+        self.0.journal.save_learnings(&learnings).map_err(|error| {
+            Problem::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "learnings are unwritable",
+            )
+            .with_detail(error.to_string())
+        })?;
+
+        // Read back rather than constructed from what was asked for, so the response is what the
+        // next run will actually be given.
+        learnings
+            .all()
+            .find(|learning| learning.id == id)
+            .map(view::learning)
+            .ok_or_else(|| {
+                Problem::new(StatusCode::INTERNAL_SERVER_ERROR, "the learning vanished")
+                    .with_detail("it was written and could not be read back")
+            })
     }
 
     async fn engage_ground_stop(&self) -> Result<GroundStop, Problem> {

@@ -467,15 +467,16 @@ async function loadCost(selected = "last_30d") {
 // ── Triggering ───────────────────────────────────────────────────────────────
 //
 // The dashboard is otherwise read-only. This one control writes, and what it writes is a *queued*
-// flight: nothing dispatches it yet, because dispatching needs the supervisor. The window says so
-// rather than presenting a button that appears to start work and does not -- a control trusted
-// once and then relied upon is worse than one that was never offered.
+// flight. The Tower behind this page starts it within seconds; the window says what was queued
+// rather than pretending it has already run.
 
 let pipelinesByName = new Map();
 
-async function post(path, payload) {
+/// Sends a JSON body and reads back whatever the Tower says, preferring its own wording for a
+/// failure over a bare status code.
+async function send(path, method, payload) {
   const response = await fetch(path, {
-    method: "POST",
+    method,
     headers: { "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify(payload),
   });
@@ -550,7 +551,7 @@ async function submitTrigger(event) {
 
   event.preventDefault();
   try {
-    await post("/flights", { pipeline, body, flags });
+    await send("/flights", "POST", { pipeline, body, flags });
     $("#trigger").close();
     loadQueued();
   } catch (error) {
@@ -596,8 +597,37 @@ async function openReport(runId) {
   }
 }
 
-async function loadJournal() {
-  const helpBody = document.querySelector("#help-table tbody");
+// Marks every open request from one run as dealt with.
+async function resolveHelp(runId, button) {
+  button.disabled = true;
+  try {
+    await send("/help/resolve", "POST", { run_id: runId, window: "last_90d" });
+    loadJournal();
+    loadHelpBadge();
+  } catch (error) {
+    button.disabled = false;
+    alert(`Could not resolve it: ${error.message}`);
+  }
+}
+
+// Settles a learning either way. Rejecting is confirmed because it takes something out of every
+// future run; keeping is not, because it only stops something already in use from lapsing.
+async function judge(id, state, button) {
+  if (state === "rejected" && !confirm("Drop this learning? Future runs will stop seeing it.")) {
+    return;
+  }
+
+  button.disabled = true;
+  try {
+    await send(`/learnings/${encodeURIComponent(id)}`, "PATCH", { state });
+    loadJournal();
+  } catch (error) {
+    button.disabled = false;
+    alert(`Could not change it: ${error.message}`);
+  }
+}
+
+async function loadJournal() {  const helpBody = document.querySelector("#help-table tbody");
   const helpEmpty = $("#help-empty");
 
   try {
@@ -619,6 +649,16 @@ async function loadJournal() {
       const what = el("td", "wide", request.summary);
       what.title = request.detail;
       row.append(what, el("td", "", request.fatal ? "stopped the run" : "limited it"));
+
+      // Resolving says the blocker is gone, not that somebody read this. An agent that hits the
+      // same wall next run raises it again, which is the point of the list.
+      const action = el("td");
+      const done = el("button", "link", "Resolved");
+      done.title = "Mark as dealt with. If it is not, the next run will raise it again.";
+      done.addEventListener("click", () => resolveHelp(request.run_id, done));
+      action.append(done);
+      row.append(action);
+
       helpBody.append(row);
     }
 
@@ -653,6 +693,25 @@ async function loadJournal() {
         el("td", "num", `${learning.proposals}\u00d7`),
         el("td", "num", learning.state === "provisional" ? `${learning.runs_left}` : "\u2014"),
       );
+
+      // Not an approval queue: this learning is already being given to runs. These say "keep it
+      // for good" and "stop using it", which is a judgement about something in use rather than
+      // permission for it to start.
+      const action = el("td", "actions");
+      if (learning.state !== "confirmed") {
+        const keep = el("button", "link", "Keep");
+        keep.title = "Confirm it: apply indefinitely instead of lapsing.";
+        keep.addEventListener("click", () => judge(learning.id, "confirmed", keep));
+        action.append(keep);
+      }
+      if (learning.state !== "rejected") {
+        const drop = el("button", "link danger", "Drop");
+        drop.title = "Reject it: stop giving it to runs.";
+        drop.addEventListener("click", () => judge(learning.id, "rejected", drop));
+        action.append(drop);
+      }
+      row.append(action);
+
       row.title = `impact: ${learning.impact}`;
       learnBody.append(row);
     }

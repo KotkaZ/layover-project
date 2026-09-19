@@ -85,6 +85,16 @@ impl LearningId {
     }
 }
 
+/// Reads an identifier that came from outside — a URL path, say.
+///
+/// Deliberately not validated. This type names a learning; it does not certify that one exists,
+/// and the only thing done with an identifier matching nothing is to say so.
+impl From<&str> for LearningId {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+}
+
 impl fmt::Display for LearningId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)

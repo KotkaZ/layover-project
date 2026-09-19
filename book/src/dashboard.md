@@ -92,6 +92,20 @@ The read-only half needs no Tower at all. History outlives the process that wrot
 dashboard answers for a factory that is not currently running — which is exactly when you most
 want to know what it did. `layover serve --watch-only` serves that half alone.
 
+## Answering an agent
+
+An agent that cannot get past something raises a **help request** rather than guessing. Those are
+in the Help &amp; learnings tab, with a `Resolved` button beside each.
+
+Resolving says *the blocker is gone*, not *I have read this*. Nothing checks: if it is not actually
+fixed, the next run raises it again, which is what keeps the list evidence of something rather than
+a queue somebody clears to feel tidy.
+
+Learnings sit below them, with `Keep` and `Drop`. **Neither is an approval step.** A learning
+applies from the moment an agent proposes it; these say "this is real, stop it lapsing" and "this
+is wrong, stop giving it to runs". Dropping asks for confirmation because it takes something out
+of every future run; keeping does not, because it only preserves what is already happening.
+
 ## Chains
 
 A run is one agent doing one thing. A **chain** is everything one trigger caused, and the budget

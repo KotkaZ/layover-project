@@ -14,7 +14,7 @@ openapi: 3.2.0
 
 info:
   title: Layover Tower API
-  version: 0.15.0
+  version: 0.16.0
   summary: Control surface for a local-first agent factory.
   description: |
     The UI is purely a client of this API, so this document bounds what the UI can ever do.
@@ -464,6 +464,32 @@ paths:
               schema:
                 $ref: "#/components/schemas/HelpList"
 
+  /help/resolve:
+    post:
+      operationId: resolveHelp
+      summary: Mark help requests as dealt with.
+      description: |
+        Resolving says *the blocker is gone*, not *I have read this*. An agent that raises the same
+        problem on its next run will raise it again, which is the point: a list that clears itself
+        on being looked at stops being evidence of anything.
+
+        Narrow by agent, blocker or run. An empty body resolves every open request in the window,
+        which is what you want after fixing something that stopped everything.
+      tags: [control]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveHelpRequest"
+      responses:
+        "200":
+          description: How many were resolved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HelpResolved"
+
   /learnings:
     get:
       operationId: listLearnings
@@ -496,6 +522,47 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LearningList"
+
+  /learnings/{learning_id}:
+    patch:
+      operationId: judgeLearning
+      summary: Settle a learning, either way.
+      description: |
+        **This is not an approval queue.** A learning applies from the moment it is proposed, and
+        nothing is waiting on you. A sibling project gated learnings behind approval and after 22
+        days held 88 of them, none ever approved, so not one had ever reached a run.
+
+        This is the override. `confirmed` means "this is real, keep it indefinitely" and spares it
+        from lapsing. `rejected` means "this is wrong, stop applying it" and takes it out of every
+        future run. Both are judgements a person makes about something already in use, not
+        permission for it to start being used.
+      tags: [control]
+      parameters:
+        - name: learning_id
+          in: path
+          required: true
+          description: Identifier of the learning.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JudgeLearningRequest"
+      responses:
+        "200":
+          description: The learning as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Learning"
+        "404":
+          description: No learning by that identifier.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 
   /ground-stop:
     post:
@@ -1152,6 +1219,55 @@ components:
           type: string
           format: date-time
           description: When it was asked for.
+
+    ResolveHelpRequest:
+      type: object
+      description: Which open help requests to mark as dealt with.
+      properties:
+        agent:
+          type: [string, "null"]
+          description: Only requests from this agent.
+        blocker:
+          $ref: "#/components/schemas/Blocker"
+          description: Only requests of this kind.
+        run_id:
+          type: [string, "null"]
+          description: |
+            Only requests raised by this run. The narrowest form, and the one a list with a button
+            beside each row uses.
+        window:
+          $ref: "#/components/schemas/CostWindow"
+          description: How far back to look. Defaults to the last 30 days.
+
+    HelpResolved:
+      type: object
+      description: The result of resolving.
+      required: [resolved]
+      properties:
+        resolved:
+          type: integer
+          description: |
+            How many open requests were marked. Zero is not an error: somebody else may have
+            resolved them, or the narrowing may have matched nothing.
+
+    Judgement:
+      type: string
+      description: |
+        What a person decided about a learning that is already in use.
+
+        There is no `provisional` here. A learning starts provisional on its own and becomes
+        confirmed through independent rediscovery; putting one *back* would discard evidence
+        already gathered.
+      enum: [confirmed, rejected]
+
+    JudgeLearningRequest:
+      type: object
+      description: A person's verdict on a learning.
+      required: [state]
+      properties:
+        state:
+          $ref: "#/components/schemas/Judgement"
+          description: The verdict.
 
     ItineraryState:
       type: string

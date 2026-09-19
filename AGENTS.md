@@ -138,6 +138,16 @@ type names, API fields and prose alike.
 4. **Never point a factory at this repository's own source.** Explicitly out of scope.
 5. **Ask rather than guess** on anything listed as open in `docs/decisions.md`.
 
+## Adding an HTTP endpoint
+
+`api/openapi.yaml` is the contract; `cargo xtask generate-api` turns it into the server. Three
+things then need updating by hand, and the compiler only finds them one at a time:
+
+1. The `Api` implementation in `crates/layover-dashboard/src/api.rs`.
+2. The `Stub` in `crates/layover-http/tests/contract.rs`, and its `OPERATIONS.len()` assertion.
+3. **The doctest in `crates/layover-http/src/lib.rs`** — it implements `Api` by hand, and a warm
+   doctest cache hides the breakage locally until CI finds it. Check it before pushing.
+
 ## Where things live
 
 | Path | Purpose |

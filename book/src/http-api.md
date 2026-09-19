@@ -40,7 +40,9 @@ Point any OpenAPI tool at the file to get a client, a mock server or rendered do
 | `GET` | `/runs/{run_id}/report` | | What that agent wrote about its own run. |
 | `GET` | `/costs` | `window`, `pipeline` | What the factory has spent, and how much of it is measured. |
 | `GET` | `/help` | `agent`, `pipeline`, `blocker`, `open`, `window` | Help requests agents have raised. |
+| `POST` | `/help/resolve` | | Mark help requests as dealt with. |
 | `GET` | `/learnings` | `agent`, `state` | Learnings agents have proposed. |
+| `PATCH` | `/learnings/{learning_id}` | | Keep a learning for good, or stop using it. |
 | `POST` | `/ground-stop` | | Halt everything. Engaging twice is a success, not a conflict. |
 | `DELETE` | `/ground-stop` | | Resume. |
 | `GET` | `/runs/{run_id}/stream` | | Live output as server-sent events — **`501`**. |

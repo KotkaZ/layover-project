@@ -38,8 +38,25 @@ impl Factory {
         fs::write(self.0.join("layover.toml"), body).expect("writes config");
     }
 
+    /// Writes a run into the segment for the day its own `started_at` names.
+    ///
+    /// Derived rather than fixed. History is one file per UTC day and is read by opening the files
+    /// a span covers, so a record whose timestamp and filename disagree is simply never found —
+    /// and a test that hard-codes the filename while stamping the record `now()` passes until the
+    /// calendar moves past the window, then fails for reasons that look nothing like the cause.
     fn write_run(&self, line: &str) {
-        let path = self.0.join("history").join("runs-2026-09-16.jsonl");
+        let started_at = serde_json::from_str::<serde_json::Value>(line)
+            .ok()
+            .and_then(|value| value["started_at"].as_str().map(ToOwned::to_owned))
+            .and_then(|text| text.parse::<jiff::Timestamp>().ok())
+            .expect("a run record with a parseable `started_at`");
+
+        let day = started_at
+            .to_zoned(jiff::tz::TimeZone::UTC)
+            .date()
+            .to_string();
+
+        let path = self.0.join("history").join(format!("runs-{day}.jsonl"));
         let mut existing = fs::read_to_string(&path).unwrap_or_default();
         existing.push_str(line);
         existing.push('\n');
@@ -184,6 +201,31 @@ async fn call(app: Router, path: &str) -> (StatusCode, String) {
             Request::builder()
                 .uri(path)
                 .body(Body::empty())
+                .expect("request builds"),
+        )
+        .await
+        .expect("router responds");
+
+    let status = response.status();
+    let bytes = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body collects")
+        .to_bytes();
+
+    (status, String::from_utf8_lossy(&bytes).into_owned())
+}
+
+/// Sends a JSON body, and reads the whole response.
+async fn body(app: Router, method: &str, path: &str, payload: &str) -> (StatusCode, String) {
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(method)
+                .uri(path)
+                .header("content-type", "application/json")
+                .body(Body::from(payload.to_owned()))
                 .expect("request builds"),
         )
         .await
@@ -425,6 +467,88 @@ async fn releasing_a_ground_stop_that_is_not_engaged_is_not_an_error() {
 
     assert_eq!(status, StatusCode::OK, "{body}");
     assert!(body.contains("\"engaged\":false"), "{body}");
+}
+
+#[tokio::test]
+async fn resolving_help_clears_it_from_the_open_list() {
+    // Resolving says the blocker is gone, not that somebody read it. An agent that hits the same
+    // wall next run raises it again, which is what makes the list evidence of anything.
+    let factory = Factory::new("resolve-help");
+    factory.write_help("itn_1", "analyst", "the token expired");
+
+    let (_, before) = call(factory.router(), "/help?open=true&window=last_7d").await;
+    assert_eq!(json(&before)["requests"].as_array().map(Vec::len), Some(1));
+
+    let (status, resolved) = body(
+        factory.router(),
+        "POST",
+        "/help/resolve",
+        r#"{"run_id":"run_h","window":"last_7d"}"#,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{resolved}");
+    assert_eq!(json(&resolved)["resolved"], 1, "{resolved}");
+
+    let (_, after) = call(factory.router(), "/help?open=true&window=last_7d").await;
+    assert_eq!(json(&after)["requests"].as_array().map(Vec::len), Some(0));
+}
+
+#[tokio::test]
+async fn resolving_narrows_to_the_run_it_names() {
+    // The list has a button per row, so the narrowest form has to actually narrow.
+    let factory = Factory::new("resolve-narrow");
+    factory.write_help("itn_1", "analyst", "the token expired");
+
+    let (_, resolved) = body(
+        factory.router(),
+        "POST",
+        "/help/resolve",
+        r#"{"run_id":"run_somebody_else","window":"last_7d"}"#,
+    )
+    .await;
+
+    assert_eq!(json(&resolved)["resolved"], 0, "{resolved}");
+
+    let (_, after) = call(factory.router(), "/help?open=true&window=last_7d").await;
+    assert_eq!(
+        json(&after)["requests"].as_array().map(Vec::len),
+        Some(1),
+        "another run's request must be left alone"
+    );
+}
+
+#[tokio::test]
+async fn resolving_nothing_is_a_success_not_an_error() {
+    // Somebody else may have resolved it a second earlier. That is not a failure.
+    let factory = Factory::new("resolve-empty");
+
+    let (status, resolved) = body(
+        factory.router(),
+        "POST",
+        "/help/resolve",
+        r#"{"window":"last_7d"}"#,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{resolved}");
+    assert_eq!(json(&resolved)["resolved"], 0);
+}
+
+#[tokio::test]
+async fn judging_a_learning_that_does_not_exist_is_a_404() {
+    let factory = Factory::new("judge-missing");
+
+    let (status, problem) = body(
+        factory.router(),
+        "PATCH",
+        "/learnings/lrn_nope",
+        r#"{"state":"confirmed"}"#,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND, "{problem}");
+    assert!(problem.contains("lrn_nope"), "{problem}");
 }
 
 #[tokio::test]

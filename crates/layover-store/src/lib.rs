@@ -28,7 +28,9 @@
 
 mod history;
 mod journal;
+pub mod layout;
 mod segment;
 
 pub use history::{History, RunFilter, StoreError};
 pub use journal::{HelpFilter, Journal};
+pub use layout::{Incompatible, Opened};

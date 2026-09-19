@@ -11,7 +11,7 @@ use std::sync::Arc;
 use jiff::{Timestamp, ToSpan};
 use layover_core::cost::RETENTION_DAYS;
 use layover_dashboard::{Dashboard, DashboardState};
-use layover_store::{History, Journal};
+use layover_store::{History, Journal, layout};
 use layover_tower::{Dispatched, Factory};
 
 use crate::mcp::ServedMcp;
@@ -166,6 +166,15 @@ pub fn serve(
     let journal = Arc::new(
         Journal::open(history_dir.with_file_name("journal")).map_err(|error| error.to_string())?,
     );
+
+    // Checked before anything reads or writes. A directory written by a newer release is refused
+    // rather than read hopefully: an older build cannot know what it does not understand, and
+    // writing it back without that would turn an afternoon's downgrade into permanent loss.
+    match layout::open(&state_dir(path, history)) {
+        Ok(layout::Opened::Current) => {}
+        Ok(other) => println!("{other}"),
+        Err(incompatible) => return Err(incompatible.to_string()),
+    }
 
     // Enforce retention on the way up. `prune` and `sweep` existed and were called only from
     // tests, so the documented ninety days was a promise nothing kept: history grew forever while
@@ -469,6 +478,24 @@ pub fn autostart(config: &Path, output: Option<&Path>, show: bool) -> Result<Str
 ///
 /// `canonicalize` produces it on Windows, and `schtasks` rejects a path that carries it — with an
 /// error naming neither the path nor the prefix.
+/// The state directory a command is about to use.
+///
+/// `--history` points at `.layover/history`, and the versioned thing is its parent: one marker
+/// covers history, the journal, live run state and the Hangars, because they change shape
+/// together and a per-file version would be four things to keep agreeing.
+fn state_dir(config: &Path, history: Option<&Path>) -> PathBuf {
+    match history {
+        Some(dir) => dir
+            .parent()
+            .map_or_else(|| dir.to_path_buf(), Path::to_path_buf),
+        None => config
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join(".layover"),
+    }
+}
+
+/// Removes the `\\?\` prefix Windows canonicalisation adds.
 fn strip_verbatim(path: &Path) -> PathBuf {
     let shown = path.display().to_string();
     match shown.strip_prefix(r"\\?\") {
@@ -485,6 +512,12 @@ fn strip_verbatim(path: &Path) -> PathBuf {
 pub fn run(path: &Path, dry_run: bool) -> Result<String, Failure> {
     let (config, _) = load(path)?;
     let root = path.parent().unwrap_or_else(|| Path::new("."));
+
+    match layout::open(&state_dir(path, None)) {
+        Ok(layout::Opened::Current) => {}
+        Ok(other) => println!("{other}"),
+        Err(incompatible) => return Err(incompatible.to_string()),
+    }
 
     let journal = Arc::new(
         Journal::open(root.join(".layover").join("journal")).map_err(|error| error.to_string())?,

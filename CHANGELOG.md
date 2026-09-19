@@ -8,6 +8,38 @@ See [project status](README.md#project-status).
 
 ## [Unreleased]
 
+## [0.16.0] — 2026-09-19
+
+The factory can ask you things, and now you can answer. The state directory is versioned, so two
+releases cannot silently disagree about it.
+
+### Added
+
+- **Help requests can be resolved**, from the API or a button beside each row. Resolving says *the
+  blocker is gone*, not *I have read this*: an agent that hits the same wall next run raises it
+  again, which is what makes the list evidence of anything. Narrow by run, agent or blocker, or
+  clear everything after fixing something that stopped the lot.
+- **Learnings can be settled either way.** `PATCH /learnings/{id}` with `confirmed` keeps one
+  indefinitely; `rejected` takes it out of every future run.
+
+  **This is not an approval queue**, and the wording throughout says so. A learning applies from
+  the moment it is proposed and nothing waits on a human — a sibling project gated learnings behind
+  approval and after 22 days held 88 of them, none ever approved, so not one had ever reached a
+  run. These are judgements about something already in use.
+- **The on-disk layout is versioned.** `.layover/version.json` records which shape the directory
+  is. A newer one is **refused** rather than read hopefully: an older build cannot know what it
+  does not understand, and writing the directory back without that would turn an afternoon's
+  downgrade into permanent loss. An older one is migrated forward once and says so, because a
+  silent migration is indistinguishable from a silent corruption until much later.
+
+### Fixed
+
+- **A test that had quietly rotted.** `a_failed_run_colours_its_agent_on_the_route_map` wrote its
+  record into a hard-coded day segment while stamping it `now()`. History is one file per UTC day
+  and is read by opening the files a span covers, so the record was findable only while the
+  calendar stayed within the window — and had just fallen outside it. The helper now derives the
+  segment from the record's own timestamp, so the two cannot disagree again.
+
 ## [0.15.0] — 2026-09-18
 
 You can now see what the factory is doing and stop it from the page you are watching it on.
@@ -308,7 +340,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/KotkaZ/layover-project/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/KotkaZ/layover-project/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/KotkaZ/layover-project/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/KotkaZ/layover-project/compare/v0.12.0...v0.13.0

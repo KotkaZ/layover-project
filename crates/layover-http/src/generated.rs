@@ -4,7 +4,7 @@
 //! regenerates this file and fails if the result differs, so an edit here is reverted
 //! rather than kept. Change the specification instead.
 //!
-//! Source: Layover Tower API v0.15.0
+//! Source: Layover Tower API v0.16.0
 
 #![allow(clippy::too_many_lines)]
 
@@ -273,6 +273,14 @@ pub struct HelpRequest {
     pub summary: String,
 }
 
+/// The result of resolving.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HelpResolved {
+    /// How many open requests were marked. Zero is not an error: somebody else may have
+    /// resolved them, or the narrowing may have matched nothing.
+    pub resolved: i32,
+}
+
 /// How much applying a learning would change a future run. Self-assessed, and therefore used
 /// for display and triage only — never to decide whether a learning applies.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -360,6 +368,28 @@ pub enum Join {
     /// `any`
     #[serde(rename = "any")]
     Any,
+}
+
+/// A person's verdict on a learning.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct JudgeLearningRequest {
+    /// The verdict.
+    pub state: Judgement,
+}
+
+/// What a person decided about a learning that is already in use.
+///
+/// There is no `provisional` here. A learning starts provisional on its own and becomes
+/// confirmed through independent rediscovery; putting one *back* would discard evidence
+/// already gathered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Judgement {
+    /// `confirmed`
+    #[serde(rename = "confirmed")]
+    Confirmed,
+    /// `rejected`
+    #[serde(rename = "rejected")]
+    Rejected,
 }
 
 /// Something an agent worked out, with its history.
@@ -539,6 +569,24 @@ pub struct ReserveState {
     pub spent_usd: f64,
     /// How far back the rolling window reaches.
     pub window_hours: i64,
+}
+
+/// Which open help requests to mark as dealt with.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ResolveHelpRequest {
+    /// Only requests from this agent.
+    #[serde(default)]
+    pub agent: Option<String>,
+    /// Only requests of this kind.
+    #[serde(default)]
+    pub blocker: Option<Blocker>,
+    /// Only requests raised by this run. The narrowest form, and the one a list with a button
+    /// beside each row uses.
+    #[serde(default)]
+    pub run_id: Option<String>,
+    /// How far back to look. Defaults to the last 30 days.
+    #[serde(default)]
+    pub window: Option<CostWindow>,
 }
 
 /// One entry of the route map, possibly expanding to several edges.
@@ -840,6 +888,13 @@ pub struct ListLearningsQuery {
     pub state: Option<LearningState>,
 }
 
+/// path parameters for `judgeLearning`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct JudgeLearningPath {
+    /// Identifier of the learning.
+    pub learning_id: String,
+}
+
 /// query parameters for `listRuns`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListRunsQuery {
@@ -996,6 +1051,20 @@ pub trait Api: Send + Sync + 'static {
         &self,
         query: ListHelpQuery,
     ) -> impl core::future::Future<Output = Result<HelpList, Problem>> + Send;
+    /// Mark help requests as dealt with.
+    ///
+    /// Resolving says *the blocker is gone*, not *I have read this*. An agent that raises the same
+    /// problem on its next run will raise it again, which is the point: a list that clears itself
+    /// on being looked at stops being evidence of anything.
+    ///
+    /// Narrow by agent, blocker or run. An empty body resolves every open request in the window,
+    /// which is what you want after fixing something that stopped everything.
+    ///
+    /// `POST /help/resolve`
+    fn resolve_help(
+        &self,
+        body: ResolveHelpRequest,
+    ) -> impl core::future::Future<Output = Result<HelpResolved, Problem>> + Send;
     /// Chains of work, and what became of each.
     ///
     /// A run is one agent doing one thing; an itinerary is the whole causal chain and the budget
@@ -1022,6 +1091,23 @@ pub trait Api: Send + Sync + 'static {
         &self,
         query: ListLearningsQuery,
     ) -> impl core::future::Future<Output = Result<LearningList, Problem>> + Send;
+    /// Settle a learning, either way.
+    ///
+    /// **This is not an approval queue.** A learning applies from the moment it is proposed, and
+    /// nothing is waiting on you. A sibling project gated learnings behind approval and after 22
+    /// days held 88 of them, none ever approved, so not one had ever reached a run.
+    ///
+    /// This is the override. `confirmed` means "this is real, keep it indefinitely" and spares it
+    /// from lapsing. `rejected` means "this is wrong, stop applying it" and takes it out of every
+    /// future run. Both are judgements a person makes about something already in use, not
+    /// permission for it to start being used.
+    ///
+    /// `PATCH /learnings/{learning_id}`
+    fn judge_learning(
+        &self,
+        path: JudgeLearningPath,
+        body: JudgeLearningRequest,
+    ) -> impl core::future::Future<Output = Result<Learning, Problem>> + Send;
     /// Every declared pipeline, its trigger and the flags it accepts.
     ///
     /// `GET /pipelines`
@@ -1087,10 +1173,18 @@ pub fn router<A: Api>(api: std::sync::Arc<A>) -> axum::Router {
         .route("/health", axum::routing::get(handle_get_health::<A>))
         .route("/help", axum::routing::get(handle_list_help::<A>))
         .route(
+            "/help/resolve",
+            axum::routing::post(handle_resolve_help::<A>),
+        )
+        .route(
             "/itineraries",
             axum::routing::get(handle_list_itineraries::<A>),
         )
         .route("/learnings", axum::routing::get(handle_list_learnings::<A>))
+        .route(
+            "/learnings/{learning_id}",
+            axum::routing::patch(handle_judge_learning::<A>),
+        )
         .route("/pipelines", axum::routing::get(handle_list_pipelines::<A>))
         .route("/runs", axum::routing::get(handle_list_runs::<A>))
         .route("/runs/{run_id}", axum::routing::get(handle_get_run::<A>))
@@ -1200,6 +1294,16 @@ async fn handle_list_help<A: Api>(
     }
 }
 
+async fn handle_resolve_help<A: Api>(
+    axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
+    axum::Json(body): axum::Json<ResolveHelpRequest>,
+) -> axum::response::Response {
+    match api.resolve_help(body).await {
+        Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
+        Err(problem) => problem.into_response(),
+    }
+}
+
 async fn handle_list_itineraries<A: Api>(
     axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
     axum::extract::Query(query): axum::extract::Query<ListItinerariesQuery>,
@@ -1215,6 +1319,17 @@ async fn handle_list_learnings<A: Api>(
     axum::extract::Query(query): axum::extract::Query<ListLearningsQuery>,
 ) -> axum::response::Response {
     match api.list_learnings(query).await {
+        Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
+        Err(problem) => problem.into_response(),
+    }
+}
+
+async fn handle_judge_learning<A: Api>(
+    axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
+    axum::extract::Path(path): axum::extract::Path<JudgeLearningPath>,
+    axum::Json(body): axum::Json<JudgeLearningRequest>,
+) -> axum::response::Response {
+    match api.judge_learning(path, body).await {
         Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
         Err(problem) => problem.into_response(),
     }
@@ -1272,7 +1387,7 @@ async fn handle_stream_run<A: Api>(
 /// Every operation the specification declares, as (method, path, operationId).
 ///
 /// Exposed so tests can assert the router and the specification agree.
-pub const OPERATIONS: [(&str, &str, &str); 17] = [
+pub const OPERATIONS: [(&str, &str, &str); 19] = [
     ("GET", "/agents", "listAgents"),
     ("GET", "/costs", "getCosts"),
     ("GET", "/flights", "listPending"),
@@ -1283,8 +1398,10 @@ pub const OPERATIONS: [(&str, &str, &str); 17] = [
     ("DELETE", "/ground-stop", "releaseGroundStop"),
     ("GET", "/health", "getHealth"),
     ("GET", "/help", "listHelp"),
+    ("POST", "/help/resolve", "resolveHelp"),
     ("GET", "/itineraries", "listItineraries"),
     ("GET", "/learnings", "listLearnings"),
+    ("PATCH", "/learnings/{learning_id}", "judgeLearning"),
     ("GET", "/pipelines", "listPipelines"),
     ("GET", "/runs", "listRuns"),
     ("GET", "/runs/{run_id}", "getRun"),

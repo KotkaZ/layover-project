@@ -32,6 +32,8 @@
 //!     # async fn get_run(&self, _: layover_http::GetRunPath) -> Result<layover_http::Run, Problem> { todo!() }
 //!     # async fn stream_run(&self, _: layover_http::StreamRunPath) -> Result<layover_http::EventStream, Problem> { todo!() }
 //!     # async fn list_pending(&self) -> Result<layover_http::PendingList, Problem> { todo!() }
+//!     # async fn resolve_help(&self, _: layover_http::ResolveHelpRequest) -> Result<layover_http::HelpResolved, Problem> { todo!() }
+//!     # async fn judge_learning(&self, _: layover_http::JudgeLearningPath, _: layover_http::JudgeLearningRequest) -> Result<layover_http::Learning, Problem> { todo!() }
 //!     # async fn cancel_flight(&self, _: layover_http::CancelFlightPath) -> Result<layover_http::PendingList, Problem> { todo!() }
 //!     # async fn list_itineraries(&self, _: layover_http::ListItinerariesQuery) -> Result<layover_http::ItineraryList, Problem> { todo!() }
 //!     # async fn get_report(&self, _: layover_http::GetReportPath) -> Result<layover_http::Report, Problem> { todo!() }

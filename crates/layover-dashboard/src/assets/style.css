@@ -186,6 +186,21 @@ tr:last-child td { border-bottom: 0; }
 
 .note { color: var(--muted); font-size: 13px; max-width: 70ch; margin: 0 0 14px; }
 
+/* Row actions are understated on purpose. They are judgements about things already happening, not
+   a queue waiting on somebody, and a row of prominent buttons would read as work to get through. */
+.link {
+  all: unset;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--accent);
+  border-bottom: 1px solid transparent;
+}
+.link:hover { border-bottom-color: currentColor; }
+.link:disabled { opacity: 0.4; cursor: progress; }
+.link.danger { color: var(--bad); }
+.actions { white-space: nowrap; }
+.actions .link + .link { margin-left: 12px; }
+
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-bottom: 16px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
 .card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }

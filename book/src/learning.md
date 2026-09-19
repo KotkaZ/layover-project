@@ -79,10 +79,11 @@ A wrong learning therefore decays instead of compounding, and you review by exce
 by queue. That is only defensible because [run history](./dashboard.md) records what was live
 when, so *"what was it told when it did that?"* is an answerable question.
 
-> **Revoking is not yet one press.** `confirm` and `reject` exist in the domain model and are what
-> the diagram above describes, but nothing exposes them — no endpoint, no dashboard control. Until
-> something does, a learning can be removed only by editing `learnings.jsonl`, and the argument
-> above is weaker than it reads: decay still works, but the human override it leans on is manual.
+> **Revoking is one press.** `Keep` and `Drop` sit beside every learning in the dashboard, and
+> `PATCH /learnings/{id}` does the same over HTTP. Keeping one spares it from lapsing; dropping it
+> takes it out of every future run from the next one onward. Neither is an approval step — the
+> learning was already being given to runs — which is why dropping asks for confirmation and
+> keeping does not.
 
 ### Rediscovery is the confirmation signal
 

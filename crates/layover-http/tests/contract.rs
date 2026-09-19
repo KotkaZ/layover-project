@@ -18,12 +18,12 @@ use http_body_util::BodyExt as _;
 use layover_http::{
     Access, Agent, AgentList, Api, Blocker, CancelFlightPath, CostBucket, CostReport, CostSource,
     CostSummary, CostWindow, EventStream, FlightAccepted, GetCostsQuery, GetGraphQuery,
-    GetReportPath, GetRunPath, GroundStop, Health, HelpList, HelpRequest, Impact, Itinerary,
-    ItineraryList, ItineraryState, Learning, LearningList, LearningState, ListHelpQuery,
-    ListItinerariesQuery, ListLearningsQuery, ListRunsQuery, OPERATIONS, PendingFlight,
-    PendingList, Pipeline, PipelineList, Problem, Report, ReserveState, RouteMap, Run, RunList,
-    RunStatus, SendFlightRequest, Status, StreamRunPath, TokenUsage, Trigger, TriggerKind,
-    WindowSpan, Workspace, router,
+    GetReportPath, GetRunPath, GroundStop, Health, HelpList, HelpRequest, HelpResolved, Impact,
+    Itinerary, ItineraryList, ItineraryState, JudgeLearningPath, JudgeLearningRequest, Learning,
+    LearningList, LearningState, ListHelpQuery, ListItinerariesQuery, ListLearningsQuery,
+    ListRunsQuery, OPERATIONS, PendingFlight, PendingList, Pipeline, PipelineList, Problem, Report,
+    ReserveState, ResolveHelpRequest, RouteMap, Run, RunList, RunStatus, SendFlightRequest, Status,
+    StreamRunPath, TokenUsage, Trigger, TriggerKind, WindowSpan, Workspace, router,
 };
 use tower::ServiceExt as _;
 
@@ -247,6 +247,18 @@ impl Api for Stub {
         })
     }
 
+    async fn resolve_help(&self, _: ResolveHelpRequest) -> Result<HelpResolved, Problem> {
+        Ok(HelpResolved { resolved: 2 })
+    }
+
+    async fn judge_learning(
+        &self,
+        _: JudgeLearningPath,
+        _: JudgeLearningRequest,
+    ) -> Result<Learning, Problem> {
+        Err(Problem::new(StatusCode::NOT_FOUND, "no such learning"))
+    }
+
     async fn cancel_flight(&self, _: CancelFlightPath) -> Result<PendingList, Problem> {
         Ok(PendingList {
             pending: Vec::new(),
@@ -360,7 +372,7 @@ fn json(body: &str) -> serde_json::Value {
 
 #[test]
 fn every_specified_operation_is_routed() {
-    assert_eq!(OPERATIONS.len(), 17);
+    assert_eq!(OPERATIONS.len(), 19);
 
     for (method, path, operation) in OPERATIONS {
         assert!(path.starts_with('/'), "`{operation}` has an odd path");

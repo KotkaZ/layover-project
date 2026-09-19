@@ -13,6 +13,37 @@ a human is still watching.
 | `prompt_dir` | `prompts` | What `prompt_file` paths resolve against, relative to this file. |
 | `http_addr` | `127.0.0.1:7878` | Where the API binds. Loopback by default, deliberately. **Not yet honoured** — `layover serve --addr` sets the bind address today. |
 
+### The state directory is versioned
+
+`.layover/version.json` records which shape the directory is, and Layover checks it before reading
+or writing anything:
+
+```json
+{
+  "layout": 1,
+  "written_by": "0.16.0"
+}
+```
+
+A directory written by a **newer** release is refused, and the command stops:
+
+```text
+error: this state directory is layout 99, written by Layover 9.9.9, and this build understands
+       layout 1. Upgrade, or point at a different directory — reading it anyway would drop
+       whatever the newer release added.
+```
+
+That is deliberate. An older build cannot know what it does not understand, so reading the
+directory anyway means writing it back without whatever was added — which turns "I downgraded for
+an afternoon" into permanent loss. Refusing is recoverable; the other way is not.
+
+An **older** layout is migrated forward once and says so. A directory with no marker at all — one
+from before versioning, or a fresh one — is stamped as current, which is right because versioning
+arrived before the shape ever changed.
+
+`written_by` is for a person reading the file. It is never compared against: two builds of one
+layout must be interchangeable, or the layout number means nothing.
+
 ## `[defaults]` — the safety rails
 
 | Key | Default | Meaning |

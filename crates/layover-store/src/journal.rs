@@ -21,7 +21,7 @@ use jiff::Timestamp;
 use jiff::tz::TimeZone;
 use layover_core::agent::AgentName;
 use layover_core::cost::Span;
-use layover_core::flight::FlightId;
+use layover_core::flight::{FlightId, RunId};
 use layover_core::help::{Blocker, HelpRequest};
 use layover_core::layover::{Layover, LayoverId, Standing};
 use layover_core::learning::{Learning, Learnings};
@@ -38,6 +38,11 @@ pub struct HelpFilter {
     pub agent: Option<AgentName>,
     /// Only requests of this kind.
     pub blocker: Option<Blocker>,
+    /// Only requests raised by this run.
+    ///
+    /// The narrowest form. A run is what a person points at when they say "that one" — it is what
+    /// the list shows beside each request, and it is stable in a way a summary is not.
+    pub run: Option<RunId>,
     /// Only requests nobody has dealt with.
     pub open_only: bool,
     /// Only requests that stopped the work.
@@ -49,6 +54,7 @@ impl HelpFilter {
     fn matches(&self, request: &HelpRequest) -> bool {
         self.agent.as_ref().is_none_or(|a| *a == request.agent)
             && self.blocker.is_none_or(|b| b == request.blocker)
+            && self.run.as_ref().is_none_or(|r| *r == request.run)
             && (!self.open_only || request.is_open())
             && (!self.fatal_only || request.fatal)
     }
