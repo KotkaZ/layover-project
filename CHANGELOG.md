@@ -8,7 +8,21 @@ See [project status](README.md#project-status).
 
 ## [Unreleased]
 
+## [0.16.1] — 2026-09-19
+
+Same contents as 0.16.0, which was tagged but never built: GitHub silently did not fire the release
+workflow for that tag, and the `v*` ruleset — correctly — refuses to let a tag be deleted and
+re-pushed. **Use this instead of 0.16.0**, which has no artifacts.
+
+### Fixed
+
+- **The release workflow can now be run by hand.** Without a manual trigger, a tag event GitHub
+  declines to act on can only be recovered from by burning a version number, which is what
+  happened here.
+
 ## [0.16.0] — 2026-09-19
+
+Tagged but not built. See 0.16.1, which carries the same changes.
 
 The factory can ask you things, and now you can answer. The state directory is versioned, so two
 releases cannot silently disagree about it.
@@ -340,7 +354,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.16.1...HEAD
+[0.16.1]: https://github.com/KotkaZ/layover-project/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/KotkaZ/layover-project/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/KotkaZ/layover-project/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/KotkaZ/layover-project/compare/v0.13.0...v0.14.0

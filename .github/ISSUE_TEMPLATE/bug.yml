@@ -17,7 +17,7 @@ body:
     attributes:
       label: Version
       description: Output of `layover --version`.
-      placeholder: layover 0.16.0
+      placeholder: layover 0.16.1
     validations:
       required: true
 
