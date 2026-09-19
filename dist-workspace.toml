@@ -9,22 +9,24 @@
 # Regenerate .github/workflows/release.yml with `dist init` after changing anything here. That
 # file is generated and carries a header saying so; `dist plan` checks this config without
 # releasing anything.
+#
+# `dist init` also rewrites the comments below with its own boilerplate. Put them back — the
+# defaults it writes say *what* each key is, which the key already says, and not *why* this
+# project chose the value it did.
+#
+# Do not hand-edit the generated workflow. `dist host` verifies it against what `dist` would
+# generate and refuses if they differ, which fails the release rather than the check.
 
 [workspace]
 members = ["cargo:."]
 
+# Config for 'dist'
 [dist]
 cargo-dist-version = "0.32.0"
 
 # Only the binary is shipped. layover-core and layover-http are libraries, and xtask is
 # `publish = false`, so none of them produce an artifact.
-targets = [
-    "x86_64-unknown-linux-gnu",
-    "aarch64-unknown-linux-gnu",
-    "x86_64-apple-darwin",
-    "aarch64-apple-darwin",
-    "x86_64-pc-windows-msvc",
-]
+targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
 
 installers = ["shell", "powershell", "npm"]
 
@@ -38,3 +40,11 @@ install-updater = false
 
 # Every artifact is checksummed, and the installers verify before unpacking.
 checksum = "sha256"
+
+# Signed provenance for every artifact, so a download can be traced to the commit and the workflow
+# run that produced it. A checksum says a file was not altered in transit; it says nothing about
+# where the file came from — which is the question that matters when the answer is "a binary that
+# will run agent CLIs on your machine".
+github-attestations = true
+# Path that installers should place binaries in
+install-path = "CARGO_HOME"

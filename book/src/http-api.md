@@ -109,9 +109,17 @@ Errors are shaped after RFC 9457:
 
 ## Security
 
-Layover binds to loopback and is unauthenticated. It reads your factory definition and its
-history, and it is designed to start processes that write to your filesystem and spend money.
-**Do not expose it** without putting something in front of it.
+**A token is minted at startup and printed in the address.** Copy the address, and the page keeps
+the token in a `SameSite=Strict` cookie from then on. The token is accepted as an
+`Authorization: Bearer` header, a `?token=` query, or that cookie.
+
+Loopback alone was a sufficient boundary while this surface only read history. It stopped being
+one when the thing behind it began spending money: anything already on the machine can reach it,
+and so can a page in a browser that knows the port. Such a page cannot *read* a cross-origin
+response, but it can POST one — which here means queueing work a real agent CLI then runs.
+
+`--no-auth` turns it off, for a machine only you can reach. Binding off loopback *and* passing
+`--no-auth` prints a warning, because that combination is an open control plane on a network.
 
 `layover serve --addr` sets the bind address. `[layover] http_addr` is parsed but not yet
 honoured.

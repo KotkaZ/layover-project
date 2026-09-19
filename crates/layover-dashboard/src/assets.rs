@@ -12,6 +12,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 
 use crate::api::Dashboard;
+use crate::auth::Guard;
 
 /// The page.
 const INDEX: &str = include_str!("assets/index.html");
@@ -25,7 +26,11 @@ const SCRIPT: &str = include_str!("assets/app.js");
 /// The page is layered over the generated router rather than built into it, which keeps the
 /// specification the single source of truth for the API while leaving the UI free to change
 /// without regenerating anything.
-pub fn router(dashboard: Dashboard) -> Router {
+///
+/// Everything is behind the guard, including the page and its assets. Serving the page without a
+/// token and letting its first API call fail would look like a broken dashboard rather than a
+/// closed door, and the person seeing it would have no idea what to do.
+pub fn router(dashboard: Dashboard, guard: Guard) -> Router {
     let api = layover_http::router(Arc::new(dashboard));
 
     Router::new()
@@ -36,6 +41,10 @@ pub fn router(dashboard: Dashboard) -> Router {
             get(|| async { asset("text/javascript", SCRIPT) }),
         )
         .merge(api)
+        .layer(axum::middleware::from_fn_with_state(
+            guard,
+            crate::auth::require,
+        ))
 }
 
 /// Serves the page.

@@ -8,6 +8,48 @@ See [project status](README.md#project-status).
 
 ## [Unreleased]
 
+## [0.20.0] — 2026-09-19
+
+The last of the engineering before 1.0. What remains is proof, not code.
+
+### Security
+
+- **The API requires a token by default.** Minted at startup and printed in the address, so it
+  costs one copy-paste; the page keeps it in a `SameSite=Strict`, `HttpOnly` cookie afterwards. It
+  is accepted as an `Authorization: Bearer` header, a `?token=` query, or that cookie.
+
+  Loopback alone was a sufficient boundary while this surface only read history. It stopped being
+  one when the thing behind it began spending money: anything already on the machine can reach it,
+  and so can a page in a browser that knows the port. Such a page cannot *read* a cross-origin
+  response, but it can POST one — which here means queueing work a real agent CLI then runs.
+  `SameSite=Strict` is the part that closes that.
+
+  The page and its assets are behind the token too. Serving the page and letting its first API
+  call fail would look like a broken dashboard rather than a closed door.
+
+  `--no-auth` exists for a machine only you can reach. Binding off loopback *and* passing it now
+  warns, because that combination is an open control plane on a network.
+
+### Added
+
+- **Signed build provenance for every artifact**, via `dist`'s own support rather than a hand-edit
+  of its generated workflow. A checksum says a file was not altered in transit; it says nothing
+  about where the file came from, which is the question that matters when the answer is "a binary
+  that will run agent CLIs on your machine".
+- **A CycloneDX SBOM attached to each release**, generated from the tag rather than from `main` —
+  an SBOM describing a different dependency set from the one shipped is worse than none, because
+  it is wrong and looks authoritative. It is attested too: an unsigned claim about supply chain is
+  worth little, since anybody can write one.
+
+  Deliberately a separate workflow that runs *after* publication, so it cannot fail a release. An
+  SBOM that breaks builds gets switched off within a month.
+
+### Fixed
+
+- **`--no-auth` would have refused every request.** `Option::filter` on a request presenting no
+  token yields `None` whatever the guard says, so the open case fell through to the refusal. Found
+  by the existing dashboard tests going red as a group.
+
 ## [0.19.0] — 2026-09-19
 
 Hardening the two channels that outlive a run. Both were exposures created by earlier releases
@@ -467,7 +509,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/KotkaZ/layover-project/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/KotkaZ/layover-project/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/KotkaZ/layover-project/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/KotkaZ/layover-project/compare/v0.16.2...v0.17.0

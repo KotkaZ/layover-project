@@ -96,6 +96,13 @@ enum Command {
         /// Serve the dashboard without running anything.
         #[arg(long)]
         watch_only: bool,
+
+        /// Serve without a token, open to anything that can reach the port.
+        ///
+        /// A token is minted at startup and printed in the address by default. This turns that
+        /// off, which is reasonable on a machine only you can reach and is not otherwise.
+        #[arg(long)]
+        no_auth: bool,
     },
 
     /// Run the queued work, once.
@@ -149,7 +156,8 @@ fn main() -> ExitCode {
             addr,
             history,
             watch_only,
-        } => commands::serve(&cli.config, &addr, history.as_deref(), watch_only),
+            no_auth,
+        } => commands::serve(&cli.config, &addr, history.as_deref(), watch_only, no_auth),
         Command::Run { dry_run } => commands::run(&cli.config, dry_run),
     };
 

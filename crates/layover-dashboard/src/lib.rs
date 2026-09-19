@@ -30,8 +30,10 @@
 
 mod api;
 mod assets;
+pub mod auth;
 mod itinerary;
 mod view;
 
 pub use api::{Dashboard, DashboardState};
 pub use assets::router;
+pub use auth::Guard;

@@ -147,6 +147,7 @@ pub fn serve(
     addr: &str,
     history: Option<&Path>,
     watch_only: bool,
+    no_auth: bool,
 ) -> Result<String, Failure> {
     // Load once up front purely to fail early. A dashboard whose route map cannot be drawn is a
     // confusing way to discover the factory definition is broken.
@@ -215,6 +216,14 @@ pub fn serve(
     };
 
     // Copied out before the async block, which would otherwise take ownership of the pair and
+    // Minted before anything binds, so the address that gets printed is the address that works.
+    let guard = if no_auth {
+        layover_dashboard::Guard::Open
+    } else {
+        layover_dashboard::Guard::minted()
+    };
+    let announced = guard.clone();
+
     // stop it being dropped — and therefore stopped — after the server returns.
     let endpoint = running.as_ref().map(|(served, _)| served.endpoint.clone());
 
@@ -230,9 +239,15 @@ pub fn serve(
             .map_err(|error| format!("could not listen on {addr}: {error}"))?;
         let bound = listener.local_addr().map_err(|error| error.to_string())?;
 
-        println!("Layover dashboard on http://{bound}");
+        println!("Layover dashboard on {}", announced.address(&bound));
         println!("Reading {}", path.display());
         println!("History in {}", history_dir.display());
+
+        if announced.token().is_some() {
+            println!("The token is in that address; the page keeps it in a cookie afterwards.");
+        } else {
+            println!("Open to anything that can reach the port (--no-auth).");
+        }
 
         match &endpoint {
             Some(url) => {
@@ -244,22 +259,19 @@ pub fn serve(
             None => println!("Watching only: nothing here will start work (--watch-only)."),
         }
 
-        // Nothing authenticates this surface. On loopback that is a reasonable trade; off it,
-        // anyone who can reach the port can read the factory's history, its agents' reports and
-        // its help requests — which is where an agent describes a credential failure — and can
-        // queue work the Tower will then run. Saying so at the moment it happens is cheaper than
-        // a warning in a document nobody reads twice.
-        if !bound.ip().is_loopback() {
+        // A token makes an off-loopback bind defensible; without one it is an open control plane
+        // on a network. The warning is about the combination, not the address.
+        if !bound.ip().is_loopback() && announced.token().is_none() {
             eprintln!();
-            eprintln!("warning: {bound} is not loopback, and this API has no authentication.");
+            eprintln!("warning: {bound} is not loopback, and --no-auth is set.");
             eprintln!("         Anyone who can reach it can read run history, reports and help");
-            eprintln!("         requests, and queue work this process will run. Put something in");
-            eprintln!("         front of it.");
+            eprintln!("         requests, and queue work this process will run. Drop --no-auth,");
+            eprintln!("         or put something in front of it.");
         }
 
         println!("Press Ctrl+C to stop.");
 
-        axum::serve(listener, layover_dashboard::router(dashboard))
+        axum::serve(listener, layover_dashboard::router(dashboard, guard))
             .await
             .map_err(|error| error.to_string())
     })?;

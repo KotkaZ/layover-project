@@ -198,9 +198,9 @@ test and doc build, with warnings denied. CI runs the same command, unchanged.
 
 | Built | Not built |
 |---|---|
-| `validate`, `explain`, `prompt`, `graph` | API authentication — the surface is loopback-only and unauthenticated |
-| **`serve`: the Tower — fires schedules, runs the queue, hosts MCP, serves the dashboard** | Live run streaming over HTTP, which answers `501` |
-| **Schedules: `every` and `cron`, skipping a tick whose previous wave is still going** | Publishing to crates.io |
+| `validate`, `explain`, `prompt`, `graph` | Live run streaming over HTTP, which answers `501` |
+| **`serve`: the Tower — fires schedules, runs the queue, hosts MCP, serves the dashboard** | Publishing to crates.io |
+| **Schedules: `every` and `cron`, skipping a tick whose previous wave is still going** | |
 | **Rendezvous joins: work is parked and its agent wakes once, with every verdict** | |
 | **Layovers: an agent sets work down and a resuming pipeline brings it back** | |
 | **Memory and learnings: injected into every run, and all ten agent tools connected** | |
@@ -208,6 +208,7 @@ test and doc build, with warnings denied. CI runs the same command, unchanged.
 | **Ground Stop, cancelling queued work, resolving help, settling learnings** | |
 | **Chains: what one trigger caused, and whether it finished or stalled** | |
 | **A versioned state directory: a newer layout is refused, an older one migrated** | |
+| **A token on the API by default, signed build provenance, and an SBOM per release** | |
 | `run`: drains the queue once, for when you want to watch it | |
 | Run history, costs, the Reserve, help requests, learnings, reports | |
 | `autostart`, which registers `layover serve` at login | |

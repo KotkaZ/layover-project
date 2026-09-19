@@ -62,7 +62,19 @@ layover serve                          # http://127.0.0.1:7878
 layover serve --addr 127.0.0.1:8080
 layover serve --history .layover/history
 layover serve --watch-only             # dashboard only, start nothing
+layover serve --no-auth                # open to anything that can reach the port
 ```
+
+It prints the address with a token in it:
+
+```text
+Layover dashboard on http://127.0.0.1:7878/?token=01M2XGEZB8…
+The token is in that address; the page keeps it in a cookie afterwards.
+```
+
+Copy that once. Loopback alone was a sufficient boundary while this surface only read history; it
+stopped being one when the thing behind it began spending money. `--no-auth` turns it off for a
+machine only you can reach.
 
 **This is the lights-out command**, and what [`autostart`](#autostart) registers. It does four
 things in one process:

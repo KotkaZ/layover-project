@@ -49,8 +49,8 @@ vulnerability reports, and `docs/decisions.md` is the better place for them.
 
 ## Out of scope
 
-- **The dashboard being unauthenticated on loopback.** That is the documented design. An attacker
-  who can already reach loopback on your machine has your machine.
+- **The dashboard when it is run with `--no-auth`.** That flag means what it says, and choosing it
+  is choosing this. By default a token is required.
 - **An agent doing something unwise within its authority.** Agents are LLMs; a factory pointed at
   a repository can change that repository. Bound what they may do with `access`, the route map and
   the rails.

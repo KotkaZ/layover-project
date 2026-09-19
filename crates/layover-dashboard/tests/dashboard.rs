@@ -12,7 +12,7 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt as _;
-use layover_dashboard::{Dashboard, DashboardState, router};
+use layover_dashboard::{Dashboard, DashboardState, Guard, router};
 use layover_store::{History, Journal};
 use tower::ServiceExt as _;
 
@@ -123,14 +123,33 @@ impl Factory {
     }
 
     fn router(&self) -> Router {
-        router(Dashboard::new(DashboardState {
-            config_path: self.0.join("layover.toml"),
-            history: History::open(self.0.join("history")).expect("opens history"),
-            journal: std::sync::Arc::new(
-                Journal::open(self.0.join("journal")).expect("opens journal"),
-            ),
-            ground_stop: self.0.join("ground-stop"),
-        }))
+        // Open, because these tests are about what the surface does rather than who may reach it.
+        // Authentication has its own tests, where the guard is the subject.
+        router(
+            Dashboard::new(DashboardState {
+                config_path: self.0.join("layover.toml"),
+                history: History::open(self.0.join("history")).expect("opens history"),
+                journal: std::sync::Arc::new(
+                    Journal::open(self.0.join("journal")).expect("opens journal"),
+                ),
+                ground_stop: self.0.join("ground-stop"),
+            }),
+            Guard::Open,
+        )
+    }
+
+    fn guarded(&self, guard: Guard) -> Router {
+        router(
+            Dashboard::new(DashboardState {
+                config_path: self.0.join("layover.toml"),
+                history: History::open(self.0.join("history")).expect("opens history"),
+                journal: std::sync::Arc::new(
+                    Journal::open(self.0.join("journal")).expect("opens journal"),
+                ),
+                ground_stop: self.0.join("ground-stop"),
+            }),
+            guard,
+        )
     }
 
     fn path(&self) -> &Path {
@@ -915,4 +934,84 @@ async fn help_is_attributed_to_the_workflow_that_raised_it() {
         Some(0),
         "another workflow's help must not appear here: {other}"
     );
+}
+
+#[tokio::test]
+async fn a_request_without_the_token_is_refused_and_says_where_to_find_it() {
+    // Loopback stopped being a sufficient boundary when the thing behind it began spending money:
+    // anything already on the machine can reach it, and so can a page in a browser.
+    let factory = Factory::new("auth-none");
+    let guarded = factory.guarded(Guard::Token(std::sync::Arc::new("right".to_owned())));
+
+    let (status, body) = call(guarded, "/runs").await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
+    assert!(
+        body.contains("layover serve"),
+        "it has to say where to look: {body}"
+    );
+}
+
+#[tokio::test]
+async fn the_page_itself_is_behind_the_token_too() {
+    // Serving the page and letting its first API call fail would look like a broken dashboard
+    // rather than a closed door, and the person seeing it would have no idea what to do.
+    let factory = Factory::new("auth-page");
+    let guarded = factory.guarded(Guard::Token(std::sync::Arc::new("right".to_owned())));
+
+    let (status, _) = call(guarded, "/").await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn a_token_in_the_query_is_accepted_and_comes_back_as_a_cookie() {
+    // A person arrives once with ?token=; everything after that is the cookie, so the token does
+    // not stay in the address bar of every later navigation.
+    let factory = Factory::new("auth-query");
+    let guarded = factory.guarded(Guard::Token(std::sync::Arc::new("right".to_owned())));
+
+    let response = guarded
+        .oneshot(
+            Request::builder()
+                .uri("/?token=right")
+                .body(Body::empty())
+                .expect("request builds"),
+        )
+        .await
+        .expect("router responds");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let cookie = response
+        .headers()
+        .get("set-cookie")
+        .and_then(|value| value.to_str().ok())
+        .expect("a cookie is set");
+
+    assert!(cookie.contains("layover_token=right"), "{cookie}");
+    assert!(
+        cookie.contains("SameSite=Strict"),
+        "this is what stops another page posting work to the API: {cookie}"
+    );
+}
+
+#[tokio::test]
+async fn a_wrong_token_is_refused() {
+    let factory = Factory::new("auth-wrong");
+    let guarded = factory.guarded(Guard::Token(std::sync::Arc::new("right".to_owned())));
+
+    let (status, _) = call(guarded, "/runs?token=wrong").await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn no_auth_really_means_no_auth() {
+    // Half-enforcing an opt-out is worse than either choice.
+    let factory = Factory::new("auth-open");
+
+    let (status, _) = call(factory.guarded(Guard::Open), "/runs").await;
+
+    assert_eq!(status, StatusCode::OK);
 }
