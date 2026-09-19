@@ -226,6 +226,12 @@ something out, you can keep that permanently or throw it away.
 the bar this project set for itself, and it has not been run. Everything above is tested and has
 been watched working; none of it has been left alone for two days.
 
+There is now a way to *check* that run rather than judge it. `layover doctor` reads a factory's
+recorded history and exits non-zero when something in it would fail an unattended run — a stalled
+chain, a schedule that never fired, a cost total built from runners that reported nothing, a
+Ground Stop left engaged. Every one of those looks like nothing on a dashboard, which is why
+"did the soak pass?" was a judgement call until now.
+
 What each remaining piece will do is settled rather than open: see
 [`docs/first-release.md`](docs/first-release.md).
 
