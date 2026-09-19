@@ -374,7 +374,10 @@ impl Runtime for FactoryRuntime {
         // Malformed and Refused change nothing, so writing would be a needless rewrite of the
         // whole file — and `Refused` writing anything at all would let repetition look like it
         // had an effect.
-        if !matches!(uptake, Uptake::Malformed | Uptake::Refused | Uptake::Echo) {
+        if !matches!(
+            uptake,
+            Uptake::Malformed | Uptake::Refused | Uptake::Echo | Uptake::Unacceptable(_)
+        ) {
             (self.write_learnings)(&learnings)
                 .map_err(|detail| ToolError::Unavailable { detail })?;
         }
@@ -407,6 +410,11 @@ impl Runtime for FactoryRuntime {
                     detail: "a learning is one or two sentences. Empty text, or more than will \
                              fit in a prompt alongside everything else, is not one."
                         .to_owned(),
+                });
+            }
+            Uptake::Unacceptable(reason) => {
+                return Err(ToolError::Refused {
+                    because: reason.to_string(),
                 });
             }
         })

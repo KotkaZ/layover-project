@@ -64,8 +64,17 @@ the wrong instructions:
 | A malformed directive | `@include` with nothing after it. |
 
 `..` is resolved lexically rather than banned outright, so `../shared/common.md` works from a
-subdirectory while escaping the root does not. This is a lexical check: it does not follow
-symlinks. Prompt files are repository content under the same review as the rest of the factory.
+subdirectory while escaping the root does not.
+
+**Symlinks are followed and checked.** A lexical check sees a clean relative path and lets it
+through; only comparing the *resolved* path against the resolved root catches a link inside the
+prompt directory pointing outside it. Both checks run: the lexical one refuses the obvious form
+before touching the filesystem, and the canonicalising one catches the form that looks innocent.
+
+This is not yet a boundary worth much. Prompt files are repository content under the same review
+as the rest of the factory, and anyone who can plant a symlink there can also set
+`runners.*.command`, which is arbitrary code by design. It becomes a real boundary the moment
+agents write their own prompts — which is a stated goal, and by then it is load-bearing.
 
 ## Flags are checked per entry point, not per factory
 

@@ -8,6 +8,46 @@ See [project status](README.md#project-status).
 
 ## [Unreleased]
 
+## [0.19.0] — 2026-09-19
+
+Hardening the two channels that outlive a run. Both were exposures created by earlier releases
+rather than found in the abstract.
+
+### Security
+
+- **Learning text is screened before it is stored.** A learning is the most durable foothold in
+  this system: it applies to twenty runs with no human watching, sits near the top of a prompt
+  where models weight instructions heavily, and its text comes from an agent whose own input may
+  have been a work item or a pull request comment. Every other channel an attacker reaches is
+  bounded by one run; this one outlives it.
+
+  Refused: text that tries to override instructions, names Layover's own tools, carries a URL, or
+  is shaped like a credential. Each refusal says what an acceptable learning looks like, because
+  an agent told only "no" re-proposes the same thing next run.
+
+  This became live exposure in 0.18.0, which connected `layover_learn` — and it is a filter on
+  obvious attempts, not a guarantee. A patient attacker phrasing an instruction as an observation
+  still gets through, and the mitigations for that are the ones already in place: learnings
+  expire, an echo cannot confirm one, and a person can drop one.
+- **A learning is quoted in the prompt, and flattened onto one line.** Previously inserted raw, so
+  text laid out to look like a section heading would have read as prompt structure. The run is
+  told why it is quoted: a quoted line telling it to do something is a claim that somebody wrote
+  one, and worth reporting rather than following.
+- **The prompt sandbox canonicalises.** Lexical confinement handles `..`, absolute paths and UNC,
+  and does not handle a symlink *inside* the prompt directory pointing anywhere at all — the path
+  is clean, the target is not. The resolved path is now compared against the resolved root. Not
+  yet a boundary, because prompt files are reviewed repository content and anyone who can plant a
+  symlink can also set `runners.*.command`; it becomes one the moment agents write their own
+  prompts, and doing it then would mean doing it under pressure.
+
+### Fixed
+
+- **The credential shape no longer fires on ordinary repository text.** The first version flagged
+  any long run of path-ish characters, which caught `tests/data/integration/fixtures`. It now
+  looks for what a token actually has and a path does not: a long unbroken run mixing cases *and*
+  digits, with `/` and `.` breaking the run. Commit SHAs, paths and shouty filenames pass; a
+  filter that fires on normal sentences is one people work around.
+
 ## [0.18.0] — 2026-09-19
 
 The factory remembers. All ten tools are connected, and a run is finally given what earlier runs of
@@ -427,7 +467,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/KotkaZ/layover-project/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/KotkaZ/layover-project/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/KotkaZ/layover-project/compare/v0.16.2...v0.17.0
 [0.16.2]: https://github.com/KotkaZ/layover-project/compare/v0.16.1...v0.16.2

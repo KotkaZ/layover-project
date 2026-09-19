@@ -80,6 +80,18 @@ impl PromptSource for PromptDir {
         let relative = confine(path)?;
         let full = self.root.join(&relative);
 
+        // Lexical confinement handles `..`, absolute paths and UNC. It does not handle a symlink
+        // *inside* the prompt directory pointing anywhere at all — the path is clean, the target
+        // is not. So the resolved path is compared against the resolved root, which is the only
+        // check that can see through a link.
+        //
+        // Today prompt files are reviewed repository content and anyone who can plant a symlink
+        // can also set `runners.*.command`, so this is not yet a boundary. It becomes one the
+        // moment agents write their own prompts, and doing it then means doing it under pressure.
+        if let Some(escape) = self.escapes(&full) {
+            return Err(PromptError::Escapes { path: escape });
+        }
+
         match std::fs::read_to_string(&full) {
             Ok(text) => Ok(text),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -90,6 +102,25 @@ impl PromptSource for PromptDir {
                 reason: error.to_string(),
             }),
         }
+    }
+}
+
+impl PromptDir {
+    /// Whether `full` resolves to somewhere outside the prompt root.
+    ///
+    /// Returns `None` when it is inside, or when the question cannot be answered — a file that
+    /// does not exist cannot be canonicalised, and refusing it here would turn every missing
+    /// prompt into a security error rather than the "no such file" it actually is. The read that
+    /// follows reports it properly.
+    fn escapes(&self, full: &Path) -> Option<PathBuf> {
+        let resolved = std::fs::canonicalize(full).ok()?;
+        let root = std::fs::canonicalize(&self.root).ok()?;
+
+        (!resolved.starts_with(&root)).then(|| {
+            // Reported as the path that was *asked for* rather than where it led. Printing the
+            // resolved target would helpfully tell an attacker what exists outside the sandbox.
+            full.strip_prefix(&self.root).unwrap_or(full).to_path_buf()
+        })
     }
 }
 

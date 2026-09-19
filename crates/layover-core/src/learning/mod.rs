@@ -42,8 +42,10 @@ use ulid::Ulid;
 use crate::agent::AgentName;
 
 mod ledger;
+pub mod screen;
 
 pub use ledger::{Learnings, Uptake};
+pub use screen::{Rejected, screen};
 
 /// How many independent rediscoveries make a learning permanent.
 ///

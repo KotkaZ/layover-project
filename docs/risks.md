@@ -278,17 +278,24 @@ twenty runs, and can be re-proposed toward permanence, is a more durable foothol
 prompt injection.
 
 `Impact` is already not trusted — the agent proposes it and the ledger recomputes it — but the
-text is.
+text was too.
 
-**Why it is not fixed.** The alternative is an approval queue, which the decision log rejects for
-good reasons: it puts a human in a loop the factory exists to keep them out of, and unapproved
-learnings are simply lost. Expiry plus rediscovery was the answer to that.
+**What was done (0.19.0).** Text is screened before it is stored: anything overriding instructions,
+naming a `layover_*` tool, carrying a URL, shaped like a credential, or containing section markers
+is refused, with a reply saying what an acceptable learning looks like. In the prompt each learning
+is quoted, flattened onto one line, and introduced by a paragraph saying it is remembered text
+rather than instruction.
 
-**Mitigation until then.** Expiry bounds the blast radius to twenty runs; an echo does not count
-as rediscovery, so a learning cannot confirm itself. When the composer is built, a learning must
-be injected in a clearly delimited untrusted block rather than as a system-level instruction, and
-text mentioning tools, URLs, credentials or overriding earlier instructions is worth refusing
-outright.
+Screened on the way in rather than filtered on the way out: storing it and hiding it later leaves
+the thing an attacker wanted in the factory's memory, waiting for the filter to be relaxed.
+
+**What is still open.** This is a filter on obvious attempts. An attacker who phrases an
+instruction as an observation gets through, and no wordlist fixes that. The remaining mitigations
+are structural and unchanged: expiry bounds the blast radius to twenty runs, an echo cannot
+confirm a learning, it is presented as a claim, and a person can drop one in a press.
+
+An approval queue is still rejected: it puts a human in a loop the factory exists to keep them out
+of, and a sibling project's queue held 88 learnings after 22 days with none ever approved.
 
 ### 20. The prompt sandbox is lexical, so a symlink leaves it
 
@@ -297,10 +304,13 @@ paths, drive prefixes and UNC paths. It does not canonicalise, so a symlink *ins
 directory pointing at `~/.ssh/id_rsa` or a `.env` is followed, and its contents are composed into
 the prompt handed to a child CLI.
 
-**Why it is not fixed.** Today prompt files are reviewed repository content, and anyone who can
-add a symlink to them can also set `runners.*.command` — so this is not a boundary yet. It becomes
-one the moment agents write their own prompts, which is a stated goal.
+**What was done (0.19.0).** Both root and target are canonicalised, and the resolved target must
+remain under the resolved root. Both checks now run: the lexical one refuses the obvious form
+without touching the filesystem, the canonicalising one catches the form that looks innocent. A
+path that cannot be canonicalised — because the file does not exist — is left to the read, so a
+missing prompt is still reported as missing rather than as an attack.
 
-**Mitigation until then.** Canonicalising both root and target and requiring the target to remain
-under the root is a small change, and it should land before anything can write a prompt file that
-was not reviewed.
+**What is still true.** This is not yet a meaningful boundary, for the reason above: anyone who can
+plant a symlink can also set `runners.*.command`, which is arbitrary code by design. It lands now
+because it becomes load-bearing the moment agents write their own prompts, and doing it then would
+mean doing it under pressure.

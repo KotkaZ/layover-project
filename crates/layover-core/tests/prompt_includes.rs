@@ -331,3 +331,68 @@ fn a_misspelt_directive_survives_as_visible_text() {
         "@includ(run_e2e) thing.md\n"
     );
 }
+
+/// Creates a symlink, or returns `false` when the platform will not allow it.
+///
+/// Windows needs Developer Mode or elevation to create symlinks, so a test that insisted would
+/// fail on a perfectly good machine for a reason unrelated to what it checks. CI runs Linux as
+/// well, so the check is genuinely exercised somewhere on every push.
+#[cfg(unix)]
+fn link(target: &std::path::Path, at: &std::path::Path) -> bool {
+    std::os::unix::fs::symlink(target, at).is_ok()
+}
+
+#[cfg(windows)]
+fn link(target: &std::path::Path, at: &std::path::Path) -> bool {
+    std::os::windows::fs::symlink_file(target, at).is_ok()
+}
+
+#[test]
+fn a_symlink_out_of_the_prompt_directory_is_refused() {
+    // Lexical confinement sees a clean relative path here and lets it through; only comparing the
+    // *resolved* path against the resolved root catches it. Prompt files are reviewed repository
+    // content today, but they will not be once agents write their own.
+    let root = std::env::temp_dir().join(format!("layover-prompt-link-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("prompts")).expect("temp dirs");
+
+    let secret = root.join("secret.md");
+    std::fs::write(&secret, "the private key is hunter2").expect("writes");
+
+    let planted = root.join("prompts").join("innocent.md");
+    if !link(&secret, &planted) {
+        // Not silently passing: the test is reported as doing nothing rather than as succeeding.
+        eprintln!("skipped: this platform would not create a symlink");
+        let _ = std::fs::remove_dir_all(&root);
+        return;
+    }
+
+    let source = layover_core::prompt::PromptDir::new(root.join("prompts"));
+    let outcome = resolve(&source, "innocent.md", &Flags::default());
+
+    assert!(
+        matches!(outcome, Err(PromptError::Escapes { .. })),
+        "a symlink out of the sandbox must be refused, got {outcome:?}"
+    );
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn an_ordinary_file_inside_the_prompt_directory_still_reads() {
+    // The canonicalisation must not break the normal case, which is every prompt in every factory.
+    let root = std::env::temp_dir().join(format!("layover-prompt-ok-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("nested")).expect("temp dirs");
+    std::fs::write(root.join("main.md"), "@include nested/part.md\n").expect("writes");
+    std::fs::write(root.join("nested").join("part.md"), "the part\n").expect("writes");
+
+    let source = layover_core::prompt::PromptDir::new(&root);
+
+    assert_eq!(
+        resolve(&source, "main.md", &Flags::default()).expect("resolves"),
+        "the part\n"
+    );
+
+    let _ = std::fs::remove_dir_all(&root);
+}

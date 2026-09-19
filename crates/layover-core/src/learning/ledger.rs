@@ -15,6 +15,7 @@ use crate::agent::AgentName;
 use super::Impact;
 
 use super::{CONFIRM_AFTER, Learning, LearningId, PROVISIONAL_RUNS, Proposal, State};
+use crate::learning::Rejected;
 
 /// What happened to a proposal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,6 +38,13 @@ pub enum Uptake {
     Refused,
     /// The text was empty or too long.
     Malformed,
+    /// The text is not something a learning may say.
+    ///
+    /// A learning outlives the run that wrote it and is read by every run after, so its text is
+    /// screened before it is ever stored rather than filtered on the way out. Storing it and
+    /// hiding it later would leave the thing an attacker wanted sitting in the factory's memory,
+    /// waiting for the filter to be relaxed.
+    Unacceptable(Rejected),
 }
 
 /// Every learning the factory holds, across all agents.
@@ -107,6 +115,13 @@ impl Learnings {
     pub fn propose(&mut self, proposal: &Proposal) -> Uptake {
         if !proposal.is_well_formed() {
             return Uptake::Malformed;
+        }
+
+        // Screened before anything else looks at it, and before it can match an existing learning.
+        // A rediscovery of something that should never have been stored is still something that
+        // should never have been stored.
+        if let Err(reason) = crate::learning::screen(&proposal.text) {
+            return Uptake::Unacceptable(reason);
         }
 
         let text = proposal.text.trim();
