@@ -37,9 +37,8 @@ spawns agent CLIs with an MCP endpoint and a per-run token, holds work at rendez
 writes every run to history. An agent that calls `layover_send` queues a real flight and the same
 process runs the next agent, charging every hop to the one itinerary that began the chain.
 
-What does not exist is API authentication, live run streaming, and the `layover_learn` and
-`layover_logbook_append` tools. And the claim this project is named for — forty-eight hours
-unattended without intervention — has not been proven.
+What does not exist is API authentication and live run streaming. And the claim this project is
+named for — forty-eight hours unattended without intervention — has not been proven.
 
 What each of those will do is settled rather than open: see
 [`docs/first-release.md`](docs/first-release.md). What is still genuinely undecided is the short

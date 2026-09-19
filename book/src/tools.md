@@ -18,17 +18,58 @@ applied was whether an agent could do its job without it.
 | `layover_memory_read` | Read your own notes in full. |
 | `layover_memory_write` | Add to your own notes, for future runs of you. |
 | `layover_status` | What this chain has left: how many messages, how much budget. |
-| `layover_learn` | Propose something future runs should know. **Not connected yet.** |
-| `layover_logbook_append` | Add to the factory's shared memory. **Not connected yet.** |
+| `layover_learn` | Propose something future runs should know. Applies at once; lapses unless rediscovered. |
+| `layover_logbook_append` | Add to the factory's shared memory, stamped with who wrote it. |
 | `layover_wait` | Set work down to be picked up later, by a pipeline that resumes layovers. |
 
-The two marked *not connected* are declared and answer honestly when called. Declaring them is
-deliberate: a tool that appears and disappears between releases is harder to write a prompt against
-than one that says what it is waiting for.
+**All ten do something.** There is no "declared but not connected" answer left; a tool that
+answered honestly about being unfinished was a promise to finish it.
 
 There is deliberately **no `layover_spawn`**. A `mode = "spawn"` route already opens one itinerary
 per flight, and a tool doing the same would be a second permission model over the same graph —
 two places to look when asking what an agent may start, which is one too many.
+
+## What a run is given
+
+A run is a fresh process that remembers nothing. What it knows comes entirely from its payload,
+in this order — instructions, **memory**, **learnings**, handover, and the message that woke it
+last, because whatever arrives last reads as the current instruction.
+
+| | |
+|---|---|
+| **Memory** | The tail of `memory.md` from this agent's Hangar, capped at 4 KB and saying so when it was cut |
+| **Learnings** | What earlier runs of *this agent* worked out and that still applies |
+
+Both are **injected, not fetched.** An agent could call `layover_memory_read` when it wants its
+notes — cheaper, explicit, and it fails silently: an agent that forgets to call simply has no
+memory, and nothing anywhere reports that it forgot. Since fresh runs are what make memory
+deliberate in the first place, a memory system that quietly does not work would undo the decision
+it was built to serve.
+
+The tail rather than the head because the end of the file is the most recent thing written; a
+memory that kept only its oldest entries would get less useful the longer an agent ran. The whole
+file stays one tool call away.
+
+### How a learning lives and dies
+
+```text
+proposed ──> provisional ──(20 runs, unrediscovered)──> lapsed
+                 │                                        │
+                 │  rediscovered independently            │
+                 └────────────> confirmed <───────────────┘
+```
+
+A learning **applies from the moment it is proposed**. There is no approval queue: a sibling
+project built one and after 22 days held 88 learnings, none ever approved, so not one had ever
+reached a run.
+
+Every run of an agent spends one of its provisional learnings' remaining runs, whatever the
+outcome — a learning that only decayed on success would be kept alive by the failures it was meant
+to prevent. Run out, and it lapses. Rediscovered independently by a later run, and it counts:
+enough times and it becomes permanent.
+
+Repeating advice you were **just given** is an echo, not evidence, and is not counted. Otherwise a
+single fluke could confirm itself in three runs.
 
 ## How a run reaches them
 

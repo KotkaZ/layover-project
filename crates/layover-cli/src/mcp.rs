@@ -19,7 +19,7 @@ use layover_core::config::Config;
 use layover_core::graph::RouteGraph;
 use layover_mcp::{Served, Session, Sessions};
 use layover_store::Journal;
-use layover_tower::{FactoryRuntime, Tokens};
+use layover_tower::{FactoryRuntime, Tokens, Wiring};
 
 use crate::commands::Failure;
 
@@ -63,22 +63,35 @@ impl ServedMcp {
 
         let queueing = Arc::clone(journal);
         let booking = Arc::clone(journal);
+        let reading = Arc::clone(journal);
+        let writing = Arc::clone(journal);
 
-        let runtime = FactoryRuntime::new(
-            Arc::new(config.clone()),
-            Arc::new(RouteGraph::from_config(config)),
+        let runtime = FactoryRuntime::new(Wiring {
+            config: Arc::new(config.clone()),
+            graph: Arc::new(RouteGraph::from_config(config)),
             hangars,
-            Arc::new(move |queued| {
+            logbook: root.join(&config.layover.logbook),
+            queue: Arc::new(move |queued| {
                 queueing
                     .queue(queued)
                     .map_err(|error| format!("the queue would not take it: {error}"))
             }),
-            Arc::new(move |layover| {
+            book: Arc::new(move |layover| {
                 booking
                     .book(layover)
                     .map_err(|error| format!("the layover could not be set down: {error}"))
             }),
-        );
+            read_learnings: Arc::new(move || {
+                reading
+                    .learnings()
+                    .map_err(|error| format!("the learnings could not be read: {error}"))
+            }),
+            write_learnings: Arc::new(move |learnings| {
+                writing
+                    .save_learnings(learnings)
+                    .map_err(|error| format!("the learnings could not be written: {error}"))
+            }),
+        });
 
         let served = Served {
             sessions: Arc::clone(&gate) as Arc<dyn Sessions>,

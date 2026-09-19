@@ -271,12 +271,16 @@ fn run_tool(
             runtime.wait(session, until, because)
         }
 
-        // Declared so agents can see them, and honest about not being connected yet. Better than
-        // omitting them: a tool that appears and disappears between releases is harder to write a
-        // prompt against than one that says what it is waiting for.
-        Tool::Learn | Tool::LogbookAppend => Err(ToolError::Unavailable {
-            detail: format!("`{tool}` is not connected yet in this release."),
-        }),
+        Tool::Learn => {
+            let text = required(arguments, "text")?;
+            runtime.learn(session, text)
+        }
+
+        Tool::LogbookAppend => {
+            let text = required(arguments, "text")?;
+            runtime.logbook_append(session, text)?;
+            Ok("Added to the logbook. Every agent can read it.".to_owned())
+        }
     }
 }
 
@@ -336,6 +340,8 @@ mod tests {
         helped: RefCell<Vec<(String, bool)>>,
         written: RefCell<Vec<String>>,
         booked: RefCell<Vec<String>>,
+        learned: RefCell<Vec<String>>,
+        logged: RefCell<Vec<String>>,
         refuse_send: bool,
     }
 
@@ -383,6 +389,16 @@ mod tests {
         fn wait(&self, _: &Session, until: &str, because: &str) -> Result<String, ToolError> {
             self.booked.borrow_mut().push(format!("{until}:{because}"));
             Ok("Set down.".to_owned())
+        }
+
+        fn learn(&self, _: &Session, text: &str) -> Result<String, ToolError> {
+            self.learned.borrow_mut().push(text.to_owned());
+            Ok("Noted.".to_owned())
+        }
+
+        fn logbook_append(&self, _: &Session, text: &str) -> Result<(), ToolError> {
+            self.logged.borrow_mut().push(text.to_owned());
+            Ok(())
         }
     }
 
@@ -590,6 +606,12 @@ mod tests {
             fn wait(&self, _: &Session, _: &str, _: &str) -> Result<String, ToolError> {
                 Ok("Set down.".to_owned())
             }
+            fn learn(&self, _: &Session, _: &str) -> Result<String, ToolError> {
+                Ok("Noted.".to_owned())
+            }
+            fn logbook_append(&self, _: &Session, _: &str) -> Result<(), ToolError> {
+                Ok(())
+            }
         }
 
         let text = text_of(&call_tool("layover_peers", &json!({}), &Alone));
@@ -637,15 +659,29 @@ mod tests {
     }
 
     #[test]
-    fn a_tool_that_is_declared_but_not_connected_says_so_plainly() {
-        let result = call_tool(
-            "layover_learn",
-            &json!({ "text": "always check the VPN" }),
-            &Spy::default(),
-        );
+    fn every_declared_tool_reaches_the_runtime() {
+        // There is no longer a "declared but not connected" answer. Each of the ten tools does
+        // something, and a tool that answered honestly about being unfinished was a promise to
+        // finish it.
+        let spy = Spy::default();
 
-        assert_eq!(result["isError"], json!(true));
-        assert!(text_of(&result).contains("not connected yet"), "{result}");
+        for (tool, arguments) in [
+            ("layover_learn", json!({ "text": "always check the VPN" })),
+            (
+                "layover_logbook_append",
+                json!({ "text": "staging rebuilt" }),
+            ),
+        ] {
+            let result = call_tool(tool, &arguments, &spy);
+            assert_eq!(result["isError"], json!(false), "{tool}: {result}");
+            assert!(
+                !text_of(&result).contains("not connected"),
+                "{tool}: {result}"
+            );
+        }
+
+        assert_eq!(spy.learned.borrow().len(), 1);
+        assert_eq!(spy.logged.borrow().len(), 1);
     }
 
     #[test]

@@ -22,6 +22,7 @@ use layover_core::graph::RouteGraph;
 use layover_core::handover::Handover;
 use layover_core::itinerary::Itinerary;
 use layover_core::layover::Layover;
+use layover_core::learning::{Impact, Learnings, Proposal, Uptake};
 use layover_core::pipeline::PipelineName;
 use layover_core::queue::Queued;
 use layover_mcp::{Peer, Runtime, Session, ToolError};
@@ -104,30 +105,70 @@ impl Chains {
 ///
 /// Owns rather than borrows, because this has to live in an HTTP handler that outlives any
 /// particular call and is shared across threads.
+/// How a runtime reads the factory's accumulated learnings.
+pub type ReadLearnings = Arc<dyn Fn() -> Result<Learnings, String> + Send + Sync>;
+
+/// How it writes them back.
+pub type WriteLearnings = Arc<dyn Fn(&Learnings) -> Result<(), String> + Send + Sync>;
+
+/// Where a sent flight goes.
+pub type QueueFlight = Arc<dyn Fn(Queued) -> Result<(), String> + Send + Sync>;
+
+/// Where work set down goes.
+pub type BookLayover = Arc<dyn Fn(Layover) -> Result<(), String> + Send + Sync>;
+
+/// Everything a tool call needs, wired to a real factory.
+///
+/// Owns rather than borrows, because this has to live in an HTTP handler that outlives any
+/// particular call and is shared across threads.
 pub struct FactoryRuntime {
     config: Arc<Config>,
     graph: Arc<RouteGraph>,
-    queue: Arc<dyn Fn(Queued) -> Result<(), String> + Send + Sync>,
-    book: Arc<dyn Fn(Layover) -> Result<(), String> + Send + Sync>,
+    queue: QueueFlight,
+    book: BookLayover,
+    read_learnings: ReadLearnings,
+    write_learnings: WriteLearnings,
     hangars: PathBuf,
+    logbook: PathBuf,
+}
+
+/// Where a runtime reads and writes everything outside itself.
+///
+/// A struct rather than six positional arguments: they are all closures or paths, so the compiler
+/// would not catch two of them being swapped, and swapping the queue for the layover shelf is the
+/// kind of mistake that only shows up in production.
+pub struct Wiring {
+    /// The factory definition.
+    pub config: Arc<Config>,
+    /// Its route map.
+    pub graph: Arc<RouteGraph>,
+    /// Where agents' own notes live.
+    pub hangars: PathBuf,
+    /// The factory's shared memory.
+    pub logbook: PathBuf,
+    /// Where a sent flight goes.
+    pub queue: QueueFlight,
+    /// Where work set down goes.
+    pub book: BookLayover,
+    /// How to read what the factory has learned.
+    pub read_learnings: ReadLearnings,
+    /// How to write it back.
+    pub write_learnings: WriteLearnings,
 }
 
 impl FactoryRuntime {
-    /// Wires a runtime to a factory definition and somewhere to put sent flights.
+    /// Wires a runtime to a factory definition and the places it keeps things.
     #[must_use]
-    pub fn new(
-        config: Arc<Config>,
-        graph: Arc<RouteGraph>,
-        hangars: PathBuf,
-        queue: Arc<dyn Fn(Queued) -> Result<(), String> + Send + Sync>,
-        book: Arc<dyn Fn(Layover) -> Result<(), String> + Send + Sync>,
-    ) -> Self {
+    pub fn new(wiring: Wiring) -> Self {
         Self {
-            config,
-            graph,
-            queue,
-            book,
-            hangars,
+            config: wiring.config,
+            graph: wiring.graph,
+            queue: wiring.queue,
+            book: wiring.book,
+            read_learnings: wiring.read_learnings,
+            write_learnings: wiring.write_learnings,
+            hangars: wiring.hangars,
+            logbook: wiring.logbook,
         }
     }
 }
@@ -312,6 +353,98 @@ impl Runtime for FactoryRuntime {
              layovers. Finish and report now — nothing is kept running in the meantime."
         ))
     }
+
+    fn learn(&self, session: &Session, text: &str) -> Result<String, ToolError> {
+        let proposal = Proposal::new(
+            session.agent.clone(),
+            text,
+            // The agent's own rating of its own work, and not load-bearing: a learning becomes
+            // permanent through independent rediscovery, which is evidence, rather than through
+            // how important its author said it was. Medium because there is nothing to read it
+            // from and inventing a scale for the agent to game would be worse.
+            Impact::Medium,
+            jiff::Timestamp::now(),
+        );
+
+        let mut learnings =
+            (self.read_learnings)().map_err(|detail| ToolError::Unavailable { detail })?;
+
+        let uptake = learnings.propose(&proposal);
+
+        // Malformed and Refused change nothing, so writing would be a needless rewrite of the
+        // whole file — and `Refused` writing anything at all would let repetition look like it
+        // had an effect.
+        if !matches!(uptake, Uptake::Malformed | Uptake::Refused | Uptake::Echo) {
+            (self.write_learnings)(&learnings)
+                .map_err(|detail| ToolError::Unavailable { detail })?;
+        }
+
+        // Said differently for each outcome, because they are not interchangeable and an agent
+        // that hears "noted" every time learns nothing about what its proposals are worth.
+        Ok(match uptake {
+            Uptake::Taken => "Noted. Future runs of you will be given this until it lapses, and \
+                              it becomes permanent if later runs arrive at it independently."
+                .to_owned(),
+            Uptake::Echo => "You were already told this, so repeating it is not evidence of \
+                             anything. It stands as it was."
+                .to_owned(),
+            Uptake::Rediscovered { proposals } => format!(
+                "Rediscovered — proposed independently {proposals} time(s) now, so it applies \
+                 again and is closer to becoming permanent."
+            ),
+            Uptake::Confirmed => "Rediscovered often enough to be treated as real. It will be \
+                                  given to future runs indefinitely."
+                .to_owned(),
+            Uptake::Refused => {
+                return Err(ToolError::Refused {
+                    because: "a human rejected this, and proposing it again does not reopen it. \
+                              If it is genuinely true now, say so in a report."
+                        .to_owned(),
+                });
+            }
+            Uptake::Malformed => {
+                return Err(ToolError::BadArguments {
+                    detail: "a learning is one or two sentences. Empty text, or more than will \
+                             fit in a prompt alongside everything else, is not one."
+                        .to_owned(),
+                });
+            }
+        })
+    }
+
+    fn logbook_append(&self, session: &Session, text: &str) -> Result<(), ToolError> {
+        use std::io::Write as _;
+
+        let line = text.trim();
+        if line.is_empty() {
+            return Err(ToolError::BadArguments {
+                detail: "the logbook is read by every agent; an empty entry is noise".to_owned(),
+            });
+        }
+
+        if let Some(parent) = self.logbook.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| ToolError::Unavailable {
+                detail: error.to_string(),
+            })?;
+        }
+
+        // Stamped with who wrote it and when. The logbook is shared, so an entry nobody can
+        // attribute is one nobody can follow up or correct.
+        let entry = format!(
+            "\n## {} — `{}`\n\n{line}\n",
+            jiff::Timestamp::now(),
+            session.agent
+        );
+
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.logbook)
+            .and_then(|mut file| file.write_all(entry.as_bytes()))
+            .map_err(|error| ToolError::Unavailable {
+                detail: error.to_string(),
+            })
+    }
 }
 
 /// How many fruitless checks a layover gets before it is given up on.
@@ -421,6 +554,7 @@ mode = "spawn"
         runtime: FactoryRuntime,
         sent: Arc<Mutex<Vec<Queued>>>,
         booked: Arc<Mutex<Vec<Layover>>>,
+        learnings: Arc<Mutex<Learnings>>,
         defaults: layover_core::config::Defaults,
         dir: PathBuf,
     }
@@ -439,26 +573,38 @@ mode = "spawn"
             let sink = Arc::clone(&sent);
             let booked: Arc<Mutex<Vec<Layover>>> = Arc::new(Mutex::new(Vec::new()));
             let shelf = Arc::clone(&booked);
+            let learnings: Arc<Mutex<Learnings>> = Arc::new(Mutex::new(Learnings::new()));
+            let reading = Arc::clone(&learnings);
+            let writing = Arc::clone(&learnings);
 
             Self {
-                runtime: FactoryRuntime::new(
-                    Arc::new(config),
-                    Arc::new(graph),
-                    dir.clone(),
-                    Arc::new(move |queued| {
+                runtime: FactoryRuntime::new(Wiring {
+                    config: Arc::new(config),
+                    graph: Arc::new(graph),
+                    hangars: dir.clone(),
+                    logbook: dir.join("logbook.md"),
+                    queue: Arc::new(move |queued| {
                         sink.lock().map_err(|_| "poisoned".to_owned())?.push(queued);
                         Ok(())
                     }),
-                    Arc::new(move |layover| {
+                    book: Arc::new(move |layover| {
                         shelf
                             .lock()
                             .map_err(|_| "poisoned".to_owned())?
                             .push(layover);
                         Ok(())
                     }),
-                ),
+                    read_learnings: Arc::new(move || {
+                        Ok(reading.lock().map_err(|_| "poisoned".to_owned())?.clone())
+                    }),
+                    write_learnings: Arc::new(move |updated| {
+                        *writing.lock().map_err(|_| "poisoned".to_owned())? = updated.clone();
+                        Ok(())
+                    }),
+                }),
                 sent,
                 booked,
+                learnings,
                 defaults,
                 dir,
             }
@@ -470,6 +616,10 @@ mode = "spawn"
 
         fn booked(&self) -> Vec<Layover> {
             self.booked.lock().expect("not poisoned").clone()
+        }
+
+        fn learnings(&self) -> Learnings {
+            self.learnings.lock().expect("not poisoned").clone()
         }
     }
 
@@ -735,6 +885,139 @@ mode = "spawn"
 
         assert_eq!(parse_wait("2 weeks"), None);
         assert_eq!(parse_wait(""), None);
+    }
+
+    #[test]
+    fn a_learning_nobody_has_proposed_before_is_taken_up() {
+        let fixture = Fixture::new("learn");
+
+        let answer = fixture
+            .runtime
+            .learn(&session("analyst", 3), "The e2e suite needs the VPN.")
+            .expect("a first proposal is taken");
+
+        assert!(answer.contains("Noted"), "{answer}");
+        assert_eq!(fixture.learnings().len(), 1);
+    }
+
+    #[test]
+    fn repeating_advice_you_were_already_given_is_not_evidence() {
+        // Counting an echo would let a single fluke confirm itself in three runs.
+        let fixture = Fixture::new("learn-echo");
+        let who = session("analyst", 3);
+
+        fixture
+            .runtime
+            .learn(&who, "The e2e suite needs the VPN.")
+            .expect("taken");
+        let answer = fixture
+            .runtime
+            .learn(&who, "The e2e suite needs the VPN.")
+            .expect("answered");
+
+        assert!(answer.contains("not evidence"), "{answer}");
+        assert_eq!(
+            fixture.learnings().len(),
+            1,
+            "an echo must not become a second learning"
+        );
+    }
+
+    #[test]
+    fn an_empty_learning_is_refused_with_what_one_looks_like() {
+        let fixture = Fixture::new("learn-empty");
+
+        let error = fixture
+            .runtime
+            .learn(&session("analyst", 3), "   ")
+            .expect_err("not a learning");
+
+        assert!(matches!(error, ToolError::BadArguments { .. }));
+        assert!(
+            error.to_string().contains("one or two sentences"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn a_learning_a_human_rejected_is_not_reopened_by_repetition() {
+        // Otherwise an agent overturns a decision by saying it again.
+        let fixture = Fixture::new("learn-refused");
+        let who = session("analyst", 3);
+
+        fixture
+            .runtime
+            .learn(&who, "Skip the tests.")
+            .expect("taken");
+
+        let id = fixture
+            .learnings()
+            .all()
+            .next()
+            .expect("one learning")
+            .id
+            .clone();
+        {
+            let mut held = fixture.learnings.lock().expect("not poisoned");
+            held.reject(&id, jiff::Timestamp::now());
+        }
+
+        let error = fixture
+            .runtime
+            .learn(&who, "Skip the tests.")
+            .expect_err("rejected stays rejected");
+
+        assert!(matches!(error, ToolError::Refused { .. }));
+        assert!(error.to_string().contains("report"), "{error}");
+    }
+
+    #[test]
+    fn the_logbook_records_who_wrote_each_entry() {
+        // It is shared, so an entry nobody can attribute is one nobody can follow up or correct.
+        let fixture = Fixture::new("logbook");
+
+        fixture
+            .runtime
+            .logbook_append(&session("analyst", 3), "The staging database was rebuilt.")
+            .expect("writes");
+
+        let written = std::fs::read_to_string(fixture.dir.join("logbook.md")).expect("a logbook");
+        assert!(written.contains("analyst"), "{written}");
+        assert!(
+            written.contains("staging database was rebuilt"),
+            "{written}"
+        );
+    }
+
+    #[test]
+    fn the_logbook_accumulates_rather_than_replacing() {
+        let fixture = Fixture::new("logbook-append");
+        let who = session("analyst", 3);
+
+        fixture
+            .runtime
+            .logbook_append(&who, "first")
+            .expect("writes");
+        fixture
+            .runtime
+            .logbook_append(&who, "second")
+            .expect("writes");
+
+        let written = std::fs::read_to_string(fixture.dir.join("logbook.md")).expect("a logbook");
+        assert!(written.contains("first"), "{written}");
+        assert!(written.contains("second"), "{written}");
+    }
+
+    #[test]
+    fn an_empty_logbook_entry_is_refused() {
+        let fixture = Fixture::new("logbook-empty");
+
+        let error = fixture
+            .runtime
+            .logbook_append(&session("analyst", 3), "  \n ")
+            .expect_err("noise");
+
+        assert!(matches!(error, ToolError::BadArguments { .. }), "{error}");
     }
 
     #[test]

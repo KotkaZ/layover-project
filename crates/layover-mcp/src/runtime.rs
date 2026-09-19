@@ -153,4 +153,22 @@ pub trait Runtime {
     ///
     /// Returns [`ToolError`] when `until` cannot be read, or the layover cannot be stored.
     fn wait(&self, session: &Session, until: &str, because: &str) -> Result<String, ToolError>;
+
+    /// Proposes something future runs of this agent should know.
+    ///
+    /// The answer says what became of it, because the states are not interchangeable: a proposal
+    /// taken up applies to the next run, one that echoes advice the agent was already given is
+    /// evidence of nothing, and one a human rejected is not reopened by repetition.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ToolError`] when the proposal cannot be stored.
+    fn learn(&self, session: &Session, text: &str) -> Result<String, ToolError>;
+
+    /// Adds a line to the factory's shared memory, which every agent can read.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ToolError`] when it cannot be written.
+    fn logbook_append(&self, session: &Session, text: &str) -> Result<(), ToolError>;
 }

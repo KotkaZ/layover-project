@@ -40,6 +40,7 @@ use layover_core::itinerary::Itinerary;
 use layover_core::payload::{Run, compose};
 use layover_core::queue::Queued;
 use layover_core::run::{Outcome, RunRecord};
+use layover_store::Journal;
 
 use crate::barriers::{Abandoned, Barriers};
 use crate::dispatch::{Refusal, authorise, declared_env, declared_values};
@@ -118,6 +119,7 @@ pub struct Factory {
     graph: RouteGraph,
     root: PathBuf,
     live: Ledger,
+    journal: Journal,
     tokens: Arc<Tokens>,
     chains: Chains,
     barriers: Barriers,
@@ -134,12 +136,15 @@ impl Factory {
         let root = root.into();
         let graph = RouteGraph::from_config(&config);
         let live = Ledger::open(root.join(".layover").join("state").join("runs"))?;
+        let journal = Journal::open(root.join(".layover").join("journal"))
+            .map_err(|error| std::io::Error::other(error.to_string()))?;
 
         Ok(Self {
             config,
             graph,
             root,
             live,
+            journal,
             tokens: Arc::new(Tokens::new()),
             chains: Chains::new(),
             barriers: Barriers::new(),
@@ -293,6 +298,11 @@ impl Factory {
         // certainly true.
         self.revoke(token.as_deref());
 
+        // A run has happened, so the agent's provisional advice is one run closer to lapsing.
+        // Charged whatever the outcome: a learning that only decays on success would be kept alive
+        // by the failures it was meant to prevent.
+        self.age_learnings(&authorised.name);
+
         self.settle(&run, itinerary, &authorised, started_at, &finished, ended)
     }
 
@@ -386,6 +396,57 @@ impl Factory {
         }
     }
 
+    /// Where an agent keeps the notes it writes for its future selves.
+    ///
+    /// Per agent rather than per run: a note written by one run is only worth anything to the
+    /// next, and runs are deliberately fresh.
+    fn agent_dir(&self, agent: &AgentName) -> PathBuf {
+        self.root
+            .join(".layover")
+            .join("hangars")
+            .join(agent.to_string())
+    }
+
+    /// What an agent wrote down for itself, if anything.
+    ///
+    /// Read fresh on every run rather than cached, because a run that finished a moment ago may
+    /// have written the thing this one needs.
+    fn memory_of(&self, agent: &AgentName) -> Option<String> {
+        std::fs::read_to_string(self.agent_dir(agent).join("memory.md")).ok()
+    }
+
+    /// What earlier runs of this agent worked out, and how to ask for help.
+    ///
+    /// Best-effort: a factory whose learnings file cannot be read still runs, with one fewer thing
+    /// in the prompt. Refusing to start over unreadable *advice* would turn a nice-to-have into a
+    /// dependency.
+    fn brief_for(&self, agent: &AgentName) -> String {
+        let learnings = self.journal.learnings().unwrap_or_default();
+        layover_core::brief::brief(agent, &learnings, true)
+    }
+
+    /// Charges a finished run against the agent's provisional learnings.
+    ///
+    /// This is what makes a learning lapse. Without it, "applies now and expires unless later runs
+    /// arrive at it independently" is only the first half — everything proposed once would apply
+    /// forever, which is the approval queue's failure arrived at from the other direction.
+    fn age_learnings(&self, agent: &AgentName) {
+        let Ok(mut learnings) = self.journal.learnings() else {
+            return;
+        };
+
+        // `charge_run` returns the learnings that *lapsed*, not the ones it touched — so an empty
+        // result means "nothing expired this time", not "nothing changed". Saving only when
+        // something lapsed would throw away every decrement in between, and a learning would never
+        // reach zero because it never got past its first step.
+        //
+        // The lapsed list is not reported here because saving already reports it: a lapsed
+        // learning shows as `lapsed` in the dashboard, which is where somebody would look.
+        drop(learnings.charge_run(agent));
+
+        let _ = self.journal.save_learnings(&learnings);
+    }
+
     /// Assembles everything a run needs to start: its payload, its runner, its environment.
     ///
     /// Separate from starting it because every failure here is one the operator caused — a missing
@@ -407,8 +468,8 @@ impl Factory {
         let payload = compose(&Run {
             agent: &authorised.name,
             instructions: &instructions,
-            memory: None,
-            brief: "",
+            memory: self.memory_of(&authorised.name).as_deref(),
+            brief: &self.brief_for(&authorised.name),
             handover: None,
             body: &flight.body,
         });
@@ -1229,6 +1290,110 @@ join = "all"
             None,
             BTreeMap::new(),
         )
+    }
+
+    #[test]
+    fn a_run_is_given_the_notes_its_agent_wrote_for_itself() {
+        // Injected rather than fetched: an agent that forgets to call for its memory simply has
+        // none, and nothing anywhere would report that it forgot.
+        let temp = Temp::new("memory-injected");
+        let factory = factory(&temp, &shell("echo x"));
+
+        let notes = temp
+            .0
+            .join(".layover")
+            .join("hangars")
+            .join("worker")
+            .join("memory.md");
+        std::fs::create_dir_all(notes.parent().expect("a parent")).expect("dirs");
+        std::fs::write(&notes, "The e2e suite needs the VPN.\n").expect("writes");
+
+        let mut itinerary = itinerary(&flight());
+        factory.run_flight(&mut itinerary, None, &flight());
+
+        let prompt = std::fs::read_dir(temp.0.join(".layover").join("hangars").join("worker"))
+            .expect("a Hangar")
+            .filter_map(Result::ok)
+            .map(|entry| entry.path().join("prompt.md"))
+            .find(|path| path.exists())
+            .and_then(|path| std::fs::read_to_string(path).ok())
+            .expect("a composed prompt");
+
+        assert!(prompt.contains("needs the VPN"), "{prompt}");
+    }
+
+    #[test]
+    fn a_run_is_given_what_earlier_runs_of_it_learned() {
+        let temp = Temp::new("learnings-injected");
+        let factory = factory(&temp, &shell("echo x"));
+
+        let mut learnings = layover_core::learning::Learnings::new();
+        learnings.propose(&layover_core::learning::Proposal::new(
+            AgentName::new("worker"),
+            "The build cache lives in /var/cache.",
+            layover_core::learning::Impact::Medium,
+            Timestamp::now(),
+        ));
+        factory
+            .journal
+            .save_learnings(&learnings)
+            .expect("writes learnings");
+
+        let mut itinerary = itinerary(&flight());
+        factory.run_flight(&mut itinerary, None, &flight());
+
+        let prompt = std::fs::read_dir(temp.0.join(".layover").join("hangars").join("worker"))
+            .expect("a Hangar")
+            .filter_map(Result::ok)
+            .map(|entry| entry.path().join("prompt.md"))
+            .find(|path| path.exists())
+            .and_then(|path| std::fs::read_to_string(path).ok())
+            .expect("a composed prompt");
+
+        assert!(prompt.contains("/var/cache"), "{prompt}");
+    }
+
+    #[test]
+    fn a_run_ages_the_provisional_advice_it_was_given() {
+        // Without this, "applies now and expires unless later runs arrive at it independently" is
+        // only the first half: everything proposed once would apply forever.
+        let temp = Temp::new("learnings-age");
+        let factory = factory(&temp, &shell("echo x"));
+
+        let mut learnings = layover_core::learning::Learnings::new();
+        learnings.propose(&layover_core::learning::Proposal::new(
+            AgentName::new("worker"),
+            "Something provisional.",
+            layover_core::learning::Impact::Low,
+            Timestamp::now(),
+        ));
+        factory.journal.save_learnings(&learnings).expect("writes");
+
+        let before = factory
+            .journal
+            .learnings()
+            .expect("readable")
+            .all()
+            .next()
+            .expect("one")
+            .runs_left;
+
+        let mut itinerary = itinerary(&flight());
+        factory.run_flight(&mut itinerary, None, &flight());
+
+        let after = factory
+            .journal
+            .learnings()
+            .expect("readable")
+            .all()
+            .next()
+            .expect("one")
+            .runs_left;
+
+        assert!(
+            after < before,
+            "a run must spend one of its runs: {before} -> {after}"
+        );
     }
 
     #[test]

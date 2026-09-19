@@ -41,7 +41,7 @@ pub use clock::{Clock, Due, Skipped};
 pub use cost::{Reported, from_transcript};
 pub use dispatch::{Authorised, Refusal, authorise};
 pub use factory::{Dispatched, Factory};
-pub use runtime::{Chains, FactoryRuntime};
+pub use runtime::{Chains, FactoryRuntime, Wiring};
 pub use spawn::{Finished, Plan, SpawnError, Started, start};
 pub use state::{Ledger, Live, Verdict};
 pub use tokens::{ENDPOINT_VAR, TOKEN_VAR, Tokens, write_config};

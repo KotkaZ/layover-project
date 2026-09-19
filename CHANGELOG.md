@@ -8,6 +8,38 @@ See [project status](README.md#project-status).
 
 ## [Unreleased]
 
+## [0.18.0] — 2026-09-19
+
+The factory remembers. All ten tools are connected, and a run is finally given what earlier runs of
+it knew.
+
+### Fixed
+
+- **Memory and learnings were never injected.** The supervisor composed every payload with
+  `memory: None, brief: ""`, so an agent's own notes and everything earlier runs had worked out
+  reached exactly nothing. The machinery on both sides was built and tested — tail-capping,
+  decay, rediscovery, Keep and Drop in the dashboard — and the one line joining them was missing.
+
+  This directly contradicted a settled decision: memory is injected rather than fetched precisely
+  because an agent that forgets to ask simply has no memory and nothing reports that it forgot. A
+  memory system that quietly does not work undoes the decision it was built to serve, which is
+  what this was.
+- **A learning never aged.** Charging a run against provisional advice is what makes it lapse;
+  without it, "applies now and expires unless later runs arrive at it independently" was only the
+  first half, and anything proposed once would have applied forever.
+
+### Added
+
+- **`layover_learn` is connected.** A proposal is answered by what became of it, because the
+  outcomes are not interchangeable: taken up, an echo of advice the agent was already given
+  (evidence of nothing), a genuine rediscovery, or something a human rejected — which repetition
+  does not reopen. An agent told "noted" every time learns nothing about what its proposals are
+  worth.
+- **`layover_logbook_append` is connected**, stamped with who wrote each entry and when. The
+  logbook is shared, so an entry nobody can attribute is one nobody can follow up or correct.
+- **Runs are charged against provisional learnings whatever the outcome.** A learning that only
+  decayed on success would be kept alive by the failures it was meant to prevent.
+
 ## [0.17.0] — 2026-09-19
 
 Layover has layovers. The feature the project is named after was a declared tool that answered
@@ -395,7 +427,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/KotkaZ/layover-project/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/KotkaZ/layover-project/compare/v0.16.2...v0.17.0
 [0.16.2]: https://github.com/KotkaZ/layover-project/compare/v0.16.1...v0.16.2
 [0.16.1]: https://github.com/KotkaZ/layover-project/compare/v0.16.0...v0.16.1

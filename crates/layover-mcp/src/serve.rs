@@ -165,6 +165,14 @@ mod tests {
         fn wait(&self, _: &Session, _: &str, _: &str) -> Result<String, ToolError> {
             Ok("Set down.".to_owned())
         }
+
+        fn learn(&self, _: &Session, _: &str) -> Result<String, ToolError> {
+            Ok("Noted.".to_owned())
+        }
+
+        fn logbook_append(&self, _: &Session, _: &str) -> Result<(), ToolError> {
+            Ok(())
+        }
     }
 
     fn app() -> Router {
