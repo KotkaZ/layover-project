@@ -43,11 +43,6 @@ on:
   push:
     tags:
       - '**[0-9]+.[0-9]+.[0-9]+*'
-  # Added by hand, and kept through `dist init` regeneration. A tag push that GitHub silently
-  # declines to act on leaves a tagged release with no build, and the `v*` ruleset — correctly —
-  # refuses to let the tag be deleted and re-pushed. Without this the only recovery is to burn a
-  # version number. Run it against the tag: `gh workflow run Release --ref v1.2.3`.
-  workflow_dispatch:
 
 jobs:
   # Run 'dist plan' (or host) to determine what tasks we need to do

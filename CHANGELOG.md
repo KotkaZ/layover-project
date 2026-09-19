@@ -8,21 +8,29 @@ See [project status](README.md#project-status).
 
 ## [Unreleased]
 
+## [0.16.2] — 2026-09-19
+
+The release of 0.16.0. Two tags failed to produce one before it, and both are worth recording
+because the recovery for each is different.
+
+**0.16.0** was tagged and GitHub silently did not fire the release workflow. **0.16.1** was tagged
+with a hand-added `workflow_dispatch` trigger to make that recoverable — which `dist` rejects,
+because it verifies the generated workflow against what it would generate, so that build failed
+too. The workflow is back to its generated form.
+
+**Use this. 0.16.0 and 0.16.1 have no artifacts.**
+
+The recovery for a tag event GitHub drops is to release the next patch version. `dist` can be told
+to use a manual trigger instead (`[dist.release-workflow] workflow-dispatch = true`), but that
+disables tag-push releases entirely, which is the wrong trade for a fault this rare.
+
 ## [0.16.1] — 2026-09-19
 
-Same contents as 0.16.0, which was tagged but never built: GitHub silently did not fire the release
-workflow for that tag, and the `v*` ruleset — correctly — refuses to let a tag be deleted and
-re-pushed. **Use this instead of 0.16.0**, which has no artifacts.
-
-### Fixed
-
-- **The release workflow can now be run by hand.** Without a manual trigger, a tag event GitHub
-  declines to act on can only be recovered from by burning a version number, which is what
-  happened here.
+Tagged; the build failed. Superseded by 0.16.2.
 
 ## [0.16.0] — 2026-09-19
 
-Tagged but not built. See 0.16.1, which carries the same changes.
+Tagged; never built. Superseded by 0.16.2, which carries these changes.
 
 The factory can ask you things, and now you can answer. The state directory is versioned, so two
 releases cannot silently disagree about it.
@@ -354,7 +362,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.16.1...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.16.2...HEAD
+[0.16.2]: https://github.com/KotkaZ/layover-project/compare/v0.16.1...v0.16.2
 [0.16.1]: https://github.com/KotkaZ/layover-project/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/KotkaZ/layover-project/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/KotkaZ/layover-project/compare/v0.14.0...v0.15.0

@@ -8,14 +8,14 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-layover-core = { path = "../layover-core", version = "0.16.1" }
+layover-core = { path = "../layover-core", version = "0.16.2" }
 jiff = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
-layover-core = { path = "../layover-core", version = "0.16.1" }
+layover-core = { path = "../layover-core", version = "0.16.2" }
 
 [lints]
 workspace = true
