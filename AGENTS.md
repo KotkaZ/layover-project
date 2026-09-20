@@ -147,6 +147,30 @@ things then need updating by hand, and the compiler only finds them one at a tim
 3. **The doctest in `crates/layover-http/src/lib.rs`** — it implements `Api` by hand, and a warm
    doctest cache hides the breakage locally until CI finds it. Check it before pushing.
 
+## Cutting a release
+
+The version lives in four places, and missing any one of them fails `cargo xtask verify` a step
+at a time rather than all at once:
+
+1. `version` in the workspace `Cargo.toml`.
+2. The inter-crate dependency versions in every `crates/*/Cargo.toml` — `layover-core = { path =
+   "…", version = "0.22.0" }`. Cargo refuses to resolve the workspace until these agree.
+3. `version:` in `api/openapi.yaml`.
+4. `cargo xtask generate-api`, because (3) changes the generated file.
+
+**Never hand-edit `.github/workflows/release.yml`.** It is generated, and `dist host` checks it
+against what dist would produce and refuses a release that disagrees. Change `dist-workspace.toml`
+and run `dist init --yes` instead. Hand-editing it has already cost one failed release.
+
+## Testing against a real agent CLI
+
+Shell stand-ins prove the supervisor; they do not prove the wiring. Three defects survived a full
+test suite because every test used `cmd /c echo`: no agent CLI could authenticate, the Copilot MCP
+flag in every example did not exist, and Copilot reports no cost at all.
+
+Test against the real binary, in a throwaway repository under the temp directory — **never against
+this repository's own source**. `layover doctor` reports what the run left behind.
+
 ## Where things live
 
 | Path | Purpose |
