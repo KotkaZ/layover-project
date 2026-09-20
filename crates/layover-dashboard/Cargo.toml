@@ -8,9 +8,9 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-layover-core = { path = "../layover-core", version = "0.21.0" }
-layover-http = { path = "../layover-http", version = "0.21.0" }
-layover-store = { path = "../layover-store", version = "0.21.0" }
+layover-core = { path = "../layover-core", version = "0.22.0" }
+layover-http = { path = "../layover-http", version = "0.22.0" }
+layover-store = { path = "../layover-store", version = "0.22.0" }
 axum = { workspace = true }
 jiff = { workspace = true }
 ulid = { workspace = true }

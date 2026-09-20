@@ -475,7 +475,13 @@ impl Factory {
         });
 
         let mut env = declared_values(authorised.agent);
-        env.extend(spawn::env_from(&declared_env(authorised.agent)).map_err(|e| e.to_string())?);
+        env.extend(
+            spawn::env_from(&declared_env(
+                authorised.agent,
+                &self.config.defaults.env_from,
+            ))
+            .map_err(|e| e.to_string())?,
+        );
 
         let runner = self
             .config

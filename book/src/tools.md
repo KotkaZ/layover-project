@@ -80,7 +80,7 @@ a token minted for it alone. The child is told about both in two ways:
 |---|---|
 | `LAYOVER_MCP_URL` | The endpoint, in the child's environment |
 | `LAYOVER_RUN_TOKEN` | Its token, in the child's environment |
-| `mcp.json` in the run's Hangar | The same two, in the shape the CLI's `--mcp-config` flag expects |
+| `mcp.json` in the run's Hangar | The same two, in the shape the CLI's MCP-config flag expects |
 
 Which file is written depends on the runner's `mcp.format`. The flag is appended to the command
 unless the command places `{mcp}` itself:
@@ -88,14 +88,19 @@ unless the command places `{mcp}` itself:
 ```toml
 [runners.copilot]
 command = ["copilot", "--allow-all-tools", "--output-format", "json"]
-mcp     = { flag = "--mcp-config", format = "claude_json" }
-# runs: copilot --allow-all-tools --output-format json --mcp-config <hangar>/mcp.json
+mcp     = { flag = "--additional-mcp-config", format = "claude_json", prefix = "@" }
+# runs: copilot --allow-all-tools --output-format json --additional-mcp-config @<hangar>/mcp.json
 
 [runners.codex]
 command = ["codex", "exec", "--model", "{model}", "{mcp}", "-"]
 mcp     = { flag = "-c", format = "codex_toml" }
 # runs: codex exec --model <model> -c <hangar>/mcp.toml -
 ```
+
+`prefix` is prepended to the path. Copilot CLI's `--additional-mcp-config` takes *either* a JSON
+string or a file path and tells them apart by a leading `@`; without it the path is parsed as JSON
+and the run dies complaining about the factory's own configuration. Most CLIs take a plain path
+and want no prefix.
 
 `codex exec … -` reads its prompt from stdin, so the `-` has to stay last; that is what `{mcp}` is
 for. Everything else can take the append.

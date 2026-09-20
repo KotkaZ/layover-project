@@ -118,6 +118,22 @@ pub struct Agent {
     /// Per-agent Fuel override, applied when an itinerary starts at this agent.
     #[serde(default)]
     pub fuel_usd: Option<f64>,
+    /// Names of environment variables forwarded to this agent's own CLI.
+    ///
+    /// The agent CLI needs credentials of its own before it can do anything: `copilot` wants a
+    /// `GITHUB_TOKEN`, `claude` an `ANTHROPIC_API_KEY`. Those are separate from the ones its MCP
+    /// servers need, which are declared per server in [`crate::mcp::McpServer::env_from`], and
+    /// they are separate on purpose — the agent that publishes releases holds the publishing
+    /// token, and the one that reads telemetry does not.
+    ///
+    /// Only names appear here. The Tower reads each value from its own environment at spawn time,
+    /// so `layover.toml` stays a file you can commit. A name that is not set refuses the run
+    /// rather than starting a CLI that will fail to authenticate several seconds later.
+    ///
+    /// [`crate::config::Defaults::env_from`] covers the common case of every agent using the same
+    /// CLI credential; the two are combined rather than overriding one another.
+    #[serde(default)]
+    pub env_from: Vec<String>,
     /// MCP servers this agent may reach, keyed by name.
     ///
     /// Layover's own server is always wired up; these are the ones the agent needs to do its job

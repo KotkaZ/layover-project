@@ -53,6 +53,28 @@ Every run's cost carries a `CostSource`:
 | `rate_card` | Layover derived it from token counts and published prices. An estimate. |
 | `unreported` | The runner said nothing, or said something that cannot be believed. The figure is zero and means nothing. |
 
+### Copilot CLI does not report cost at all
+
+Verified against the real CLI, not assumed. With `--output-format json`, Copilot CLI's final
+`result` event carries this:
+
+```json
+{ "type": "result", "exitCode": 0,
+  "usage": { "premiumRequests": 1, "totalApiDurationMs": 44778, "sessionDurationMs": 56109 } }
+```
+
+No dollars, and no token counts either — so there is nothing for a rate card to work from. Every
+Copilot run is therefore `unreported`, and **Fuel cannot bind a Copilot factory**. What is
+actually holding such a factory back is `max_runs`, the deterministic cap that needs no
+cooperation from the runner, and the wall-clock `timeout_sec`.
+
+That is a real limit rather than a bug, and the important thing is that it is visible: `layover
+doctor` reports the share of runs that measured nothing, and raises it to a warning once a quarter
+of them have. A factory whose spend nobody can see should say so rather than showing a confident
+`$0.00`.
+
+Set `max_runs` and the Reserve deliberately when running on Copilot. They are the rails you have.
+
 ### When a reported figure is disbelieved
 
 Layover parses three CLIs' output formats and controls none of them, so the assumption is that

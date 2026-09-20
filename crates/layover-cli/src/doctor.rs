@@ -153,7 +153,7 @@ pub fn check(config: &Config, root: &Path, window: Window) -> Result<Report, Str
     unreported_costs(&runs, &mut report);
     interrupted_runs(&runs, &mut report);
     open_help(&journal, &span, &mut report);
-    stranded_layovers(&journal, &mut report);
+    stranded_layovers(&journal, config, &mut report);
     ground_stop(root, &mut report);
 
     // Only meaningful against history. With an empty window "this schedule never fired" is not a
@@ -295,7 +295,7 @@ fn open_help(journal: &Journal, span: &Span, report: &mut Report) {
 }
 
 /// Work set down that nothing will pick up.
-fn stranded_layovers(journal: &Journal, report: &mut Report) {
+fn stranded_layovers(journal: &Journal, config: &Config, report: &mut Report) {
     let Ok(all) = journal.layovers() else {
         return;
     };
@@ -320,15 +320,33 @@ fn stranded_layovers(journal: &Journal, report: &mut Report) {
         .filter(|layover| layover.standing.is_pending())
         .count();
 
-    if waiting > 0 {
-        report.findings.push(Finding {
+    if waiting == 0 {
+        return;
+    }
+
+    // The factory definition is right here, so this is a fact rather than a caveat: a layover is
+    // only ever collected by a pipeline that declares `resumes`, and with none declared every one
+    // of these is work an agent deliberately set down and nothing will ever pick up again.
+    let collectable = config.pipelines.values().any(|pipeline| pipeline.resumes);
+
+    report.findings.push(if collectable {
+        Finding {
             severity: Severity::Note,
             summary: format!("{waiting} layover(s) waiting to be picked up"),
-            advice: "Normal, as long as a pipeline declares `resumes = true`. Without one, \
-                     nothing ever collects them."
+            advice: "Expected: a resuming pipeline collects them when their time comes.".to_owned(),
+        }
+    } else {
+        Finding {
+            severity: Severity::Fault,
+            summary: format!(
+                "{waiting} layover(s) waiting, and no pipeline declares `resumes = true`"
+            ),
+            advice: "Nothing will ever collect them. An agent set this work down meaning to come \
+                     back to it, and the factory has no way back. Add `resumes = true` to the \
+                     pipeline that should pick it up."
                 .to_owned(),
-        });
-    }
+        }
+    });
 }
 
 /// Whether everything is halted.
@@ -448,6 +466,67 @@ mod tests {
             "{}",
             report.render()
         );
+    }
+
+    #[test]
+    fn a_waiting_layover_is_a_fault_when_no_pipeline_can_ever_collect_it() {
+        // Found on the first real end-to-end run: an agent booked a layover in a factory with no
+        // resuming pipeline. Every run said "succeeded", the chain looked finished, and the work
+        // the agent meant to come back to was simply gone. Hedging with "normal, as long as a
+        // pipeline declares `resumes`" left the reader to check the thing the checker could see.
+        let dir = std::env::temp_dir().join(format!("layover-doctor-lay-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let journal = Journal::open(&dir).expect("opens");
+
+        journal
+            .book(layover_core::Layover::book(
+                layover_core::agent::AgentName::new("analyst"),
+                layover_core::flight::ItineraryId::generate(),
+                "a review nobody has done yet",
+                layover_core::handover::Handover::dispatch(Vec::new()),
+                Timestamp::now(),
+                Timestamp::now(),
+                3,
+            ))
+            .expect("books");
+
+        let with_resuming: Config = toml::from_str(
+            r#"
+[agents.analyst]
+prompt = "go"
+
+[pipelines.follow_up]
+entry = "analyst"
+resumes = true
+"#,
+        )
+        .expect("parses");
+
+        let without: Config = toml::from_str(
+            r#"
+[agents.analyst]
+prompt = "go"
+
+[pipelines.once]
+entry = "analyst"
+"#,
+        )
+        .expect("parses");
+
+        let mut collectable = Report::default();
+        stranded_layovers(&journal, &with_resuming, &mut collectable);
+        assert_eq!(collectable.findings[0].severity, Severity::Note);
+
+        let mut stranded = Report::default();
+        stranded_layovers(&journal, &without, &mut stranded);
+        assert_eq!(stranded.findings[0].severity, Severity::Fault);
+        assert!(
+            stranded.findings[0].summary.contains("resumes"),
+            "{}",
+            stranded.findings[0].summary
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

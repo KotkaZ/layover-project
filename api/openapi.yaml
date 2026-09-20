@@ -14,7 +14,7 @@ openapi: 3.2.0
 
 info:
   title: Layover Tower API
-  version: 0.21.0
+  version: 0.22.0
   summary: Control surface for a local-first agent factory.
   description: |
     The UI is purely a client of this API, so this document bounds what the UI can ever do.

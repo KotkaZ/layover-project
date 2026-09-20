@@ -15,6 +15,9 @@ http_addr  = "127.0.0.1:7878"
 
 [defaults]
 runner      = "claude"
+# Only the *name* goes here; the Tower reads the value from its own environment at spawn time, so
+# this file stays committable. Name whichever your runner wants.
+env_from    = ["ANTHROPIC_API_KEY"]
 max_hops    = 8
 fuel_usd    = 5.00
 max_runs    = 64
@@ -30,7 +33,7 @@ mcp     = { flag = "--mcp-config", format = "claude_json" }
 
 [runners.copilot]
 command = ["copilot", "--model", "{model}", "--allow-all-tools"]
-mcp     = { flag = "--mcp-config", format = "claude_json" }
+mcp     = { flag = "--additional-mcp-config", format = "claude_json", prefix = "@" }
 
 [runners.codex]
 command = ["codex", "exec", "--model", "{model}", "-"]

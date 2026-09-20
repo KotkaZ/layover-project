@@ -54,6 +54,14 @@ pub struct Defaults {
     /// Runner used by agents that do not name one.
     #[serde(default)]
     pub runner: Option<String>,
+    /// Names of environment variables forwarded to every agent's CLI.
+    ///
+    /// Most factories run one CLI that needs one credential, and repeating it under every agent
+    /// is a list that falls out of step the first time an agent is added. Per-agent
+    /// [`crate::Agent::env_from`] adds to this rather than replacing it, so an agent that needs a
+    /// token nobody else should hold names only that token.
+    #[serde(default)]
+    pub env_from: Vec<String>,
     /// Maximum depth of a chain, in flights.
     ///
     /// A hop is spent per flight and branches inherit the remaining count, so this bounds depth
@@ -100,6 +108,7 @@ impl Default for Defaults {
     fn default() -> Self {
         Self {
             runner: None,
+            env_from: Vec::new(),
             max_hops: default_max_hops(),
             fuel_usd: default_fuel_usd(),
             max_runs: default_max_runs(),
@@ -119,6 +128,23 @@ pub struct McpWiring {
     pub flag: String,
     /// Configuration dialect the runner expects.
     pub format: String,
+    /// Prepended to the path the flag carries.
+    ///
+    /// Copilot CLI's `--additional-mcp-config` takes *either* a JSON string or a file path, and
+    /// tells the two apart by a leading `@`. Without it the path is read as JSON, which fails as
+    /// a parse error about the factory's own configuration rather than anything recognisable.
+    ///
+    /// Empty for CLIs that take a plain path, which is most of them.
+    #[serde(default)]
+    pub prefix: String,
+}
+
+impl McpWiring {
+    /// The argument that follows [`Self::flag`].
+    #[must_use]
+    pub fn argument(&self, path: &str) -> String {
+        format!("{}{path}", self.prefix)
+    }
 }
 
 /// How to invoke a particular headless agent CLI.
@@ -222,7 +248,7 @@ impl Runner {
             if arg == Self::MCP {
                 if let Some((mcp, path)) = wiring {
                     out.push(mcp.flag.clone());
-                    out.push(path.to_owned());
+                    out.push(mcp.argument(path));
                 }
                 // Dropped when there is nothing to wire: an unresolved placeholder reaching a CLI
                 // becomes an argument it does not understand.
@@ -244,7 +270,7 @@ impl Runner {
             && !self.command.iter().any(|arg| arg == Self::MCP)
         {
             out.push(mcp.flag.clone());
-            out.push(path.to_owned());
+            out.push(mcp.argument(path));
         }
 
         out
@@ -733,6 +759,55 @@ mod invocation_tests {
                 "--mcp-config",
                 "/h/mcp.json"
             ]
+        );
+    }
+
+    #[test]
+    fn a_prefix_is_prepended_to_the_path_rather_than_passed_separately() {
+        // Copilot CLI's `--additional-mcp-config` takes either a JSON string or a file path and
+        // tells them apart by a leading `@`. Passed as its own argument the `@` would be a second
+        // value the flag never sees; without it the path is parsed as JSON and the run dies
+        // complaining about the factory's own configuration.
+        let runner: Runner = toml::from_str(
+            r#"command = ["copilot", "--allow-all-tools"]
+mcp = { flag = "--additional-mcp-config", format = "claude_json", prefix = "@" }"#,
+        )
+        .expect("parses");
+
+        assert_eq!(
+            runner.invocation_with_mcp(None, None, Some("/h/mcp.json")),
+            [
+                "copilot",
+                "--allow-all-tools",
+                "--additional-mcp-config",
+                "@/h/mcp.json"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_prefix_applies_where_the_command_places_the_wiring_too() {
+        // Both branches render the argument, and only one of them having the prefix would be a
+        // factory that works until somebody adds `{mcp}` to keep a positional argument last.
+        let runner: Runner = toml::from_str(
+            r#"command = ["agent", "{mcp}", "-"]
+mcp = { flag = "--cfg", format = "claude_json", prefix = "@" }"#,
+        )
+        .expect("parses");
+
+        assert_eq!(
+            runner.invocation_with_mcp(None, None, Some("/h/mcp.json")),
+            ["agent", "--cfg", "@/h/mcp.json", "-"]
+        );
+    }
+
+    #[test]
+    fn a_runner_without_a_prefix_still_gets_a_bare_path() {
+        let runner = mcp_runner(&["claude", "-p"], "--mcp-config");
+
+        assert_eq!(
+            runner.invocation_with_mcp(None, None, Some("/h/mcp.json")),
+            ["claude", "-p", "--mcp-config", "/h/mcp.json"]
         );
     }
 

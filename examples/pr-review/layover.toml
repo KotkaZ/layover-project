@@ -9,6 +9,11 @@ prompt_dir = "prompts"
 
 [defaults]
 runner   = "copilot"
+# The agent CLI needs its own credential before it can do anything. Only the *name* goes here;
+# the Tower reads the value from its own environment at spawn time, so this file stays
+# committable. A name that is not set refuses the run rather than starting a CLI that will fail
+# to authenticate several seconds later.
+env_from = ["GH_TOKEN"]
 max_hops = 6
 fuel_usd = 3.00
 # Four agent CLIs at once. The forty-sixth pull request is delayed, never dropped.
@@ -22,7 +27,7 @@ window_hours = 24
 
 [runners.copilot]
 command = ["copilot", "--allow-all-tools", "--output-format", "json"]
-mcp     = { flag = "--mcp-config", format = "claude_json" }
+mcp     = { flag = "--additional-mcp-config", format = "claude_json", prefix = "@" }
 
 [agents.scanner]
 description = "Finds the pull requests assigned to you and opens one review per pull request"

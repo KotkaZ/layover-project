@@ -14,6 +14,13 @@ http_addr  = "127.0.0.1:7878"
 [defaults]
 runner = "claude"
 
+# The agent CLI needs its own credential before it can do anything. Only the *name* goes here;
+# the Tower reads the value from its own environment at spawn time, so this file stays
+# committable. Name whichever your runner wants -- ANTHROPIC_API_KEY for `claude`, GH_TOKEN or
+# COPILOT_GITHUB_TOKEN for `copilot` -- and add per-agent `env_from` for anything only one agent
+# should hold, such as the publisher's write token.
+env_from = ["ANTHROPIC_API_KEY"]
+
 # 22 = 2N + 6 at N = 8, sized for the *longer* of the two entry paths: the scheduled pipeline
 # spends one extra flight getting from `pr_scanner` to `analyst`. Both pipelines therefore get
 # eight test/review cycles and can still reach the publisher after the last one. The arithmetic is
@@ -69,7 +76,7 @@ mcp     = { flag = "--mcp-config", format = "claude_json" }
 
 [runners.copilot]
 command = ["copilot", "--model", "{model}", "--allow-all-tools", "--output-format", "json"]
-mcp     = { flag = "--mcp-config", format = "claude_json" }
+mcp     = { flag = "--additional-mcp-config", format = "claude_json", prefix = "@" }
 
 [runners.codex]
 command = ["codex", "exec", "--model", "{model}", "{mcp}", "-"]

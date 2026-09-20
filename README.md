@@ -222,15 +222,23 @@ An agent that needs to come back to something days later sets it down and ends; 
 brings it back. When an agent gets stuck it says so and you can mark it fixed; when it works
 something out, you can keep that permanently or throw it away.
 
-**What is not proven is the claim on the tin.** Forty-eight hours unattended, no intervention, is
-the bar this project set for itself, and it has not been run. Everything above is tested and has
-been watched working; none of it has been left alone for two days.
+**It has now run on a real agent CLI.** A throwaway repository with a planted bug, two agents and
+the actual `copilot` binary: the Analyst found `add` returning `a - b`, handed the finding to the
+Developer over MCP, and the Developer fixed it — unattended, end to end. That run found three
+things every test had passed over, because every test used a shell stand-in: no agent CLI could
+authenticate, the Copilot MCP flag in every example does not exist, and Copilot reports no cost at
+all. All three are fixed or documented in v0.22.0.
+
+**What is still not proven is the claim on the tin.** Forty-eight hours unattended, no
+intervention, is the bar this project set for itself, and it has not been run. What is above is
+tested and has been watched working; none of it has been left alone for two days.
 
 There is now a way to *check* that run rather than judge it. `layover doctor` reads a factory's
 recorded history and exits non-zero when something in it would fail an unattended run — a stalled
 chain, a schedule that never fired, a cost total built from runners that reported nothing, a
 Ground Stop left engaged. Every one of those looks like nothing on a dashboard, which is why
-"did the soak pass?" was a judgement call until now.
+"did the soak pass?" was a judgement call until now. On that first real run it caught a layover
+nobody would ever collect, which was not the bug anyone was looking for.
 
 What each remaining piece will do is settled rather than open: see
 [`docs/first-release.md`](docs/first-release.md).

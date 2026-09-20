@@ -8,6 +8,57 @@ See [project status](README.md#project-status).
 
 ## [Unreleased]
 
+## [0.22.0] — 2026-09-20
+
+The reference factory ran end to end on a real agent CLI for the first time. It found three things
+that every test had passed over, because every test used a shell stand-in.
+
+A throwaway repository, a planted bug, two agents and the actual `copilot` binary: the Analyst
+read the code, found `add` returning `a - b`, handed the finding to the Developer through
+`layover_send`, and the Developer fixed it. That works now. It did not before this release.
+
+### Fixed
+
+- **No agent CLI could authenticate.** `env_from` existed only on MCP servers, so an agent's own
+  CLI — which needs a credential before it can do anything at all — had no way to receive one.
+  The child gets a scrubbed environment by design, so the first real run died with "No
+  authentication information found" before it read a word of its instructions.
+
+  `env_from` now exists on an agent and on `[defaults]`, and the two are combined rather than one
+  overriding the other: the shared credential every CLI needs goes in `[defaults]`, and a token
+  only one agent should hold goes on that agent. Only names appear in the file; the Tower reads
+  each value from its own environment at spawn time, and refuses the run when one is unset rather
+  than starting a CLI that will fail to authenticate seconds later.
+
+- **Every Copilot example pointed at a flag that does not exist.** The Copilot CLI has no
+  `--mcp-config`; it has `--additional-mcp-config`, which takes *either* a JSON string or a file
+  path and tells them apart by a leading `@`. Written as it was, MCP was never wired up — so the
+  one thing that makes a factory a factory, an agent handing work to another agent, could not
+  happen.
+
+  `mcp` wiring now takes an optional `prefix`, and the Copilot examples use
+  `{ flag = "--additional-mcp-config", format = "claude_json", prefix = "@" }`.
+
+- **`docs/architecture.md` showed `copilot -p {prompt}` and `claude -p {prompt}`.** `{prompt}` is
+  a *path* and `-p` takes the prompt *text*, so a CLI invoked that way is told to go and do
+  whatever the string `/path/to/prompt.md` says. The working examples never did this; the
+  architecture document did.
+
+- **`layover doctor` hedged about waiting layovers** — "normal, as long as a pipeline declares
+  `resumes = true`" — while holding the configuration that answers it. It now checks, and a
+  layover waiting in a factory where no pipeline resumes is reported as a **fault**: an agent set
+  that work down meaning to come back to it, and there is no way back.
+
+  Found by doctor itself on the first real run, which booked exactly that layover unprompted.
+
+### Documented
+
+- **Copilot CLI does not report cost, and cannot be made to.** Verified against the real binary:
+  its `result` event carries `premiumRequests` and durations — no dollars, and no token counts for
+  a rate card to work from. So **Fuel cannot bind a Copilot factory**; `max_runs` and
+  `timeout_sec` are the rails that actually hold, because they need no cooperation from the
+  runner. `layover doctor` surfaces this rather than letting a confident `$0.00` stand.
+
 ## [0.21.0] — 2026-09-19
 
 A soak you cannot check is not proof. This adds the command that checks it.
@@ -548,7 +599,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.21.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.22.0...HEAD
+[0.22.0]: https://github.com/KotkaZ/layover-project/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/KotkaZ/layover-project/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/KotkaZ/layover-project/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/KotkaZ/layover-project/compare/v0.18.0...v0.19.0

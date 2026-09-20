@@ -145,16 +145,18 @@ max_runs    = 64
 timeout_sec = 900
 
 # ── How to invoke each supported CLI ───────────────────────────────
+# The prompt goes to stdin, so none of these name it: `-p` and its kin take the prompt *text*,
+# and `{prompt}` is a path. A CLI handed the path would be told to do whatever that string says.
 [runners.claude]
-command = ["claude", "-p", "{prompt}", "--output-format", "stream-json"]
+command = ["claude", "-p", "--output-format", "stream-json"]
 mcp     = { flag = "--mcp-config", format = "claude_json" }
 
 [runners.copilot]
-command = ["copilot", "-p", "{prompt}", "--allow-all-tools"]
-mcp     = { flag = "--mcp-config", format = "claude_json" }
+command = ["copilot", "--allow-all-tools", "--output-format", "json"]
+mcp     = { flag = "--additional-mcp-config", format = "claude_json", prefix = "@" }
 
 [runners.codex]
-command = ["codex", "exec", "{mcp}", "{prompt}"]
+command = ["codex", "exec", "{mcp}", "-"]
 mcp     = { flag = "-c", format = "codex_toml" }
 
 # ── Agents ─────────────────────────────────────────────────────────

@@ -103,7 +103,43 @@ in as a measurement — see [Cost](./cost.md) for why that distinction is load-b
 [runners.claude]
 command = ["claude", "-p", "--output-format", "stream-json"]
 mcp     = { flag = "--mcp-config", format = "claude_json" }
+
+[runners.copilot]
+command = ["copilot", "--allow-all-tools", "--output-format", "json"]
+mcp     = { flag = "--additional-mcp-config", format = "claude_json", prefix = "@" }
 ```
+
+`mcp` says how this CLI is told where Layover's endpoint is: `flag` is the option, `format` the
+dialect of the file written into the run's Hangar, and `prefix` anything that must precede the
+path. Copilot CLI needs `prefix = "@"` because `--additional-mcp-config` accepts a JSON string
+*or* a path and distinguishes them by that character; most CLIs take a plain path and want no
+prefix. See [Agent tools](./tools.md).
+
+### Credentials for the CLI itself
+
+An agent CLI needs a credential before it can do anything, and it is not the same credential its
+MCP servers need. Name it in `env_from` — under `[defaults]` when every agent uses the same one,
+under an agent when only that agent should hold it:
+
+```toml
+[defaults]
+env_from = ["GH_TOKEN"]          # every agent's CLI can authenticate
+
+[agents.publisher]
+env_from = ["RELEASE_TOKEN"]     # and this one alone can publish
+```
+
+Only **names** appear here. The Tower reads each value from its own environment when it spawns the
+run, so `layover.toml` stays a file you can commit — putting a secret in it is refused at load
+time, not discovered in your git history later.
+
+The two lists are combined, not overridden: the publisher above gets both. A name that is not set
+in the Tower's environment **refuses the run**, rather than starting a CLI that fails to
+authenticate several seconds later and reports it as the agent's failure.
+
+The child otherwise gets a scrubbed environment — `PATH`, `TEMP`, and the handful of variables a
+process needs to start at all. That is what makes `env_from` meaningful: the telemetry agent does
+not hold the publishing token because it never receives it.
 
 The prompt goes to the process's **stdin**, never onto its command line, and this is not a style
 preference. Windows caps a command line at 32,767 characters. Real agent prompts go well past it:

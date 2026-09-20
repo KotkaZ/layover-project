@@ -172,16 +172,21 @@ pub fn authorise<'a>(
     })
 }
 
-/// Resolves the environment an agent's MCP servers declared.
+/// Resolves the environment an agent needs: its own CLI's credentials and its MCP servers'.
 ///
 /// Collected across every server the agent declares, because they are all started inside the one
-/// child process and share its environment.
+/// child process and share its environment, and combined with what the agent named for itself.
+/// `defaults` covers the credential every agent's CLI needs; it adds to the agent's own list
+/// rather than being overridden by it, because the two answer different questions — "what does
+/// this CLI need to start" and "what may this particular agent hold".
 #[must_use]
-pub fn declared_env(agent: &Agent) -> Vec<String> {
+pub fn declared_env(agent: &Agent, defaults: &[String]) -> Vec<String> {
     let mut names: Vec<String> = agent
         .mcp
         .values()
         .flat_map(|server| server.env_from.iter().cloned())
+        .chain(agent.env_from.iter().cloned())
+        .chain(defaults.iter().cloned())
         .collect();
 
     names.sort();
@@ -486,9 +491,74 @@ env_from = ["SHARED_TOKEN", "TWO_TOKEN"]
             .expect("declared");
 
         assert_eq!(
-            declared_env(agent),
+            declared_env(agent, &[]),
             vec!["ONE_TOKEN", "SHARED_TOKEN", "TWO_TOKEN"],
             "a name declared twice is still one variable"
         );
+    }
+
+    #[test]
+    fn an_agent_can_name_its_own_cli_credentials_alongside_its_servers() {
+        // The agent CLI needs a credential before it can do anything at all, and it is not the
+        // same credential its MCP servers need. Without this the child authenticates as nobody
+        // and the run dies before it reads its instructions.
+        let text = r#"
+[agents.analyst]
+prompt = "go"
+env_from = ["GITHUB_TOKEN"]
+
+[agents.analyst.mcp.kusto]
+url = "https://example.invalid/"
+env_from = ["KUSTO_TOKEN"]
+"#;
+        let config: Config = toml::from_str(text).expect("parses");
+        let agent = config
+            .agents
+            .get(&AgentName::new("analyst"))
+            .expect("declared");
+
+        assert_eq!(
+            declared_env(agent, &[]),
+            vec!["GITHUB_TOKEN", "KUSTO_TOKEN"]
+        );
+    }
+
+    #[test]
+    fn defaults_add_to_an_agents_own_names_rather_than_replacing_them() {
+        // One CLI credential shared by every agent, plus whatever this one alone may hold. If
+        // defaults were overridden, naming a private token would silently drop the shared one and
+        // the agent would fail to authenticate.
+        let text = r#"
+[defaults]
+env_from = ["GITHUB_TOKEN"]
+
+[agents.publisher]
+prompt = "go"
+env_from = ["RELEASE_TOKEN"]
+
+[agents.reader]
+prompt = "go"
+"#;
+        let config: Config = toml::from_str(text).expect("parses");
+        let defaults = &config.defaults.env_from;
+
+        let publisher = config
+            .agents
+            .get(&AgentName::new("publisher"))
+            .expect("declared");
+        assert_eq!(
+            declared_env(publisher, defaults),
+            vec!["GITHUB_TOKEN", "RELEASE_TOKEN"]
+        );
+
+        // And the agent that named nothing still gets the shared one.
+        let reader = config
+            .agents
+            .get(&AgentName::new("reader"))
+            .expect("declared");
+        assert_eq!(declared_env(reader, defaults), vec!["GITHUB_TOKEN"]);
+
+        // The publishing token stays with the publisher.
+        assert!(!declared_env(reader, defaults).contains(&"RELEASE_TOKEN".to_owned()));
     }
 }

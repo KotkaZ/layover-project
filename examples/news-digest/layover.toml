@@ -9,6 +9,10 @@ prompt_dir = "prompts"
 
 [defaults]
 runner   = "copilot"
+# The agent CLI needs its own credential before it can do anything. Only the *name* goes here;
+# the Tower reads the value from its own environment at spawn time, so this file stays
+# committable. Copilot CLI also accepts COPILOT_GITHUB_TOKEN or GITHUB_TOKEN.
+env_from = ["GH_TOKEN"]
 max_hops = 4
 fuel_usd = 1.50
 max_concurrent_runs = 2
@@ -19,7 +23,7 @@ window_hours = 24
 
 [runners.copilot]
 command = ["copilot", "--allow-all-tools", "--output-format", "json"]
-mcp     = { flag = "--mcp-config", format = "claude_json" }
+mcp     = { flag = "--additional-mcp-config", format = "claude_json", prefix = "@" }
 
 [agents.scout]
 description = "Reads the news and decides what is actually worth knowing"
