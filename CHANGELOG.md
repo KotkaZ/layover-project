@@ -8,6 +8,40 @@ See [project status](README.md#project-status).
 
 ## [Unreleased]
 
+## [0.23.3] — 2026-09-21
+
+`prompt_file` never reached a run. This is the most serious bug found so far.
+
+### Fixed
+
+- **An agent defined with `prompt_file` ran with no instructions at all.** The Tower composed a
+  run's payload from `agent.prompt` — the *inline* form — and never read `prompt_file`. An agent
+  that used a file, which is what **all three shipped examples do** and what the book recommends
+  because a real prompt composes other files, received a bare `You are \`name\`.` and nothing
+  else.
+
+  Everything conspired to hide it. The factory loads. `validate` passes, including
+  `validate_prompts`, because the file is real and resolvable. `layover prompt <agent>` renders it
+  perfectly, because that command resolves the file properly — so the one tool you would reach for
+  to check shows the right answer. And the run *succeeds*: an agent handed a flight body and a
+  peer list improvises something plausible, so the output reads like an agent with opinions of its
+  own rather than one that was never briefed.
+
+  It surfaced only by reading a real run's composed prompt in its Hangar, during soak preparation,
+  after an agent twice declined to do what its prompt file plainly told it to do.
+
+  Prompt **flags** are resolved too, from the pipeline that began the chain — so a prompt whose
+  content varies by flag now varies per pipeline, rather than every run silently getting the
+  defaults.
+
+- **A prompt that cannot be resolved now refuses the run.** Starting an agent with no instructions
+  is the failure above; doing it quietly, after being told exactly which file to use, is worse
+  than not starting.
+
+- **The placeholder was emitted twice.** `You are \`name\`.` was both the fallback instructions
+  *and* the header the payload composer writes, so a briefing-less agent was told who it was
+  twice and nothing else. Identity is the composer's job; the fallback is now empty.
+
 ## [0.23.2] — 2026-09-21
 
 ### Fixed
@@ -672,7 +706,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.23.2...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.23.3...HEAD
+[0.23.3]: https://github.com/KotkaZ/layover-project/compare/v0.23.2...v0.23.3
 [0.23.2]: https://github.com/KotkaZ/layover-project/compare/v0.23.1...v0.23.2
 [0.23.1]: https://github.com/KotkaZ/layover-project/compare/v0.23.0...v0.23.1
 [0.23.0]: https://github.com/KotkaZ/layover-project/compare/v0.22.0...v0.23.0

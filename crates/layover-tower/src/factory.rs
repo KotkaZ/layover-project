@@ -29,7 +29,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use jiff::Timestamp;
-use layover_core::agent::AgentName;
+use layover_core::agent::{AgentName, PromptSpec};
 use layover_core::barrier::Delivery;
 use layover_core::config::Config;
 use layover_core::cost::CostSource;
@@ -38,6 +38,8 @@ use layover_core::flight::Flight;
 use layover_core::graph::RouteGraph;
 use layover_core::itinerary::Itinerary;
 use layover_core::payload::{Run, compose};
+use layover_core::pipeline::Flags;
+use layover_core::prompt::{PromptDir, resolve};
 use layover_core::queue::Queued;
 use layover_core::run::{Outcome, RunRecord};
 use layover_store::Journal;
@@ -447,6 +449,77 @@ impl Factory {
         let _ = self.journal.save_learnings(&learnings);
     }
 
+    /// The agent's standing instructions, as the run will actually receive them.
+    ///
+    /// # Why this is not just `agent.prompt`
+    ///
+    /// It was, and that was a silent, total failure. `prompt` holds only an *inline* prompt;
+    /// `prompt_file` — which every shipped example uses, and which the book recommends because a
+    /// real prompt composes other files — was never read here. An agent defined with
+    /// `prompt_file` therefore ran with the placeholder below and no instructions whatsoever.
+    ///
+    /// Nothing caught it. The factory loads, `validate` passes, `layover prompt` renders the file
+    /// correctly because it resolves it properly, and the run *succeeds* — the agent simply
+    /// improvises from the flight body and whatever `layover_peers` tells it. It looks like an
+    /// agent with opinions rather than an agent that was never briefed.
+    ///
+    /// A prompt that cannot be resolved now **refuses the run**. Starting an agent with no
+    /// instructions is the failure this whole method exists to prevent, and doing it quietly
+    /// would be worse than not starting at all.
+    fn instructions_for(
+        &self,
+        authorised: &crate::dispatch::Authorised<'_>,
+        flight: &Flight,
+    ) -> Result<String, String> {
+        match authorised.agent.prompt_spec() {
+            Ok(PromptSpec::Inline(text)) => Ok(text),
+            Ok(PromptSpec::File(file)) => {
+                let source = PromptDir::new(self.root.join(&self.config.layover.prompt_dir));
+
+                resolve(&source, &file, &self.flags_for(flight)).map_err(|error| {
+                    format!(
+                        "agent `{}`: cannot read its prompt `{}`: {error}",
+                        authorised.name,
+                        file.display()
+                    )
+                })
+            }
+            // Neither declared. Nothing goes here: the payload composer already opens every run
+            // with `You are `name`.`, so repeating it as the instructions told a briefing-less
+            // agent who it was twice and nothing else. An empty section is skipped entirely.
+            Err(_) => Ok(String::new()),
+        }
+    }
+
+    /// The prompt flags in force for a flight, taken from the pipeline that began its chain.
+    ///
+    /// A flag exists so one prompt serves two pipelines — a nightly run that reads further back
+    /// than a quick one. Resolving with defaults regardless of pipeline would silently give every
+    /// run the same prompt and make the flag decorative.
+    fn flags_for(&self, flight: &Flight) -> Flags {
+        let pipeline = self
+            .chains
+            .pipeline_of(&flight.itinerary)
+            .and_then(|name| self.config.pipelines.get(&name).cloned());
+
+        match pipeline {
+            Some(pipeline) => pipeline
+                .flags_for_run(&BTreeMap::new())
+                .unwrap_or_else(|_| Flags::new(BTreeMap::new())),
+            // No pipeline began this chain — a flight sent straight to an agent. Every declared
+            // flag falls back to its default, which is what `layover prompt` shows without
+            // `--pipeline`.
+            None => Flags::new(
+                self.config
+                    .pipelines
+                    .values()
+                    .flat_map(|pipeline| pipeline.flags.iter())
+                    .map(|(flag, spec)| (flag.clone(), spec.default))
+                    .collect(),
+            ),
+        }
+    }
+
     /// Assembles everything a run needs to start: its payload, its runner, its environment.
     ///
     /// Separate from starting it because every failure here is one the operator caused — a missing
@@ -459,11 +532,7 @@ impl Factory {
         flight: &Flight,
         token: Option<&str>,
     ) -> Result<Plan, String> {
-        let instructions = authorised
-            .agent
-            .prompt
-            .clone()
-            .unwrap_or_else(|| format!("You are `{}`.", authorised.name));
+        let instructions = self.instructions_for(authorised, flight)?;
 
         let payload = compose(&Run {
             agent: &authorised.name,
@@ -1080,6 +1149,173 @@ to = "developer"
             None,
             BTreeMap::new(),
         )
+    }
+
+    #[test]
+    fn an_agent_defined_by_prompt_file_actually_receives_that_file() {
+        // The bug this exists for was total and silent. `plan_for` read only `agent.prompt` --
+        // the *inline* form -- so every agent defined with `prompt_file`, which is what all three
+        // shipped examples use, ran with a bare "You are `name`." and no instructions at all.
+        //
+        // Nothing caught it: the factory loads, `validate` passes, `layover prompt` renders the
+        // file correctly because it resolves it properly, and the run *succeeds* -- the agent
+        // improvises from the flight body and its peer list. It reads like an agent with opinions
+        // rather than one that was never briefed. So this asserts on the composed payload, which
+        // is the only place the difference is visible.
+        let temp = Temp::new("promptfile");
+        let prompts = temp.0.join("prompts");
+        std::fs::create_dir_all(&prompts).expect("dirs");
+        std::fs::write(
+            prompts.join("worker.md"),
+            "Append one line to the log and stop.",
+        )
+        .expect("writes");
+
+        let text = format!(
+            r#"
+[layover]
+work_dir = "work"
+prompt_dir = "prompts"
+
+[defaults]
+runner = "shell"
+timeout_sec = 30
+
+[runners.shell]
+command = {}
+
+[agents.worker]
+prompt_file = "worker.md"
+entry = true
+
+[pipelines.build]
+entry = "worker"
+"#,
+            shell("echo ok")
+        );
+
+        let config: Config = toml::from_str(&text).expect("parses");
+        let factory = Factory::new(config, &temp.0).expect("opens");
+
+        let itinerary = ItineraryId::generate();
+        let drained = factory.drain(
+            vec![queued_to(&itinerary, Origin::Human, "worker", 4)],
+            |_| {},
+            |_, _| {},
+        );
+
+        assert_eq!(drained.ran, 1, "the run should have happened");
+
+        let hangar = std::fs::read_dir(temp.0.join(".layover").join("hangars").join("worker"))
+            .expect("hangar")
+            .next()
+            .expect("one run")
+            .expect("entry")
+            .path();
+
+        let payload = std::fs::read_to_string(hangar.join("prompt.md")).expect("payload");
+
+        assert!(
+            payload.contains("Append one line to the log and stop."),
+            "the agent's own prompt file never reached the run:\n{payload}"
+        );
+    }
+
+    #[test]
+    fn a_prompt_file_that_cannot_be_read_refuses_the_run() {
+        // Starting an agent with no instructions is the failure above. Doing it quietly, after
+        // being told exactly which file to use, would be worse than not starting.
+        let text = format!(
+            r#"
+[layover]
+work_dir = "work"
+prompt_dir = "prompts"
+
+[defaults]
+runner = "shell"
+timeout_sec = 30
+
+[runners.shell]
+command = {}
+
+[agents.worker]
+prompt_file = "absent.md"
+entry = true
+
+[pipelines.build]
+entry = "worker"
+"#,
+            shell("echo ok")
+        );
+
+        let temp = Temp::new("promptmissing");
+        let config: Config = toml::from_str(&text).expect("parses");
+        let factory = Factory::new(config, &temp.0).expect("opens");
+
+        let itinerary = ItineraryId::generate();
+        let drained = factory.drain(
+            vec![queued_to(&itinerary, Origin::Human, "worker", 4)],
+            |_| {},
+            |_, _| {},
+        );
+
+        assert_eq!(
+            drained.ran, 0,
+            "a run with no instructions should not have started"
+        );
+    }
+
+    #[test]
+    fn an_agent_with_no_prompt_is_told_who_it_is_exactly_once() {
+        // The identity line is the payload composer's job. Using it as the fallback instructions
+        // too meant a briefing-less agent read "You are `worker`." twice and nothing else, which
+        // is how the missing-prompt bug above looked from inside a Hangar.
+        let temp = Temp::new("noprompt");
+        let text = format!(
+            r#"
+[layover]
+work_dir = "work"
+
+[defaults]
+runner = "shell"
+timeout_sec = 30
+
+[runners.shell]
+command = {}
+
+[agents.worker]
+entry = true
+
+[pipelines.build]
+entry = "worker"
+"#,
+            shell("echo ok")
+        );
+
+        let config: Config = toml::from_str(&text).expect("parses");
+        let factory = Factory::new(config, &temp.0).expect("opens");
+
+        let itinerary = ItineraryId::generate();
+        factory.drain(
+            vec![queued_to(&itinerary, Origin::Human, "worker", 4)],
+            |_| {},
+            |_, _| {},
+        );
+
+        let hangar = std::fs::read_dir(temp.0.join(".layover").join("hangars").join("worker"))
+            .expect("hangar")
+            .next()
+            .expect("one run")
+            .expect("entry")
+            .path();
+
+        let payload = std::fs::read_to_string(hangar.join("prompt.md")).expect("payload");
+
+        assert_eq!(
+            payload.matches("You are `worker`.").count(),
+            1,
+            "identity is stated once, by the composer:\n{payload}"
+        );
     }
 
     #[test]
