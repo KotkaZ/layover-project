@@ -210,11 +210,33 @@ pub const TRANSCRIPT_FILE: &str = "transcript.log";
 ///
 /// So the child gets this, and what its agent declared, and nothing else. Nothing here carries a
 /// secret; every one of them is a fact about the machine.
-const BASE_ENV: [&str; 9] = [
+///
+/// # Why the Windows entries are not optional
+///
+/// Found by running a real agent CLI on Windows rather than a shell stand-in, which is the only
+/// way any of this surfaces:
+///
+/// - **`PATHEXT`** decides that `git` means `git.exe`. `cmd.exe` falls back to a built-in list
+///   when it is unset, so a stand-in invoked through `cmd /c` works and hides the problem
+///   entirely — but **PowerShell does not fall back**, and agent CLIs shell out through
+///   PowerShell on Windows. Without it every `git`, `npm` or `cargo` an agent runs fails with
+///   "not recognized", which reads like a broken machine rather than a stripped environment.
+/// - **`USERPROFILE`, `APPDATA`, `LOCALAPPDATA`** are where a Windows program keeps its own
+///   configuration and credentials, and are what `~` expands to. `HOME` was already granted for
+///   exactly this reason on Unix; omitting the Windows spelling of the same thing made an agent
+///   unable to find the login it had already performed.
+const BASE_ENV: [&str; 14] = [
     "PATH",
     // Windows: a command interpreter will not start without these two.
     "SystemRoot",
     "COMSPEC",
+    // Windows: how a bare `git` is resolved to `git.exe`. PowerShell has no fallback for this.
+    "PATHEXT",
+    "SystemDrive",
+    // Windows: the equivalents of HOME below, and what `~` expands to.
+    "USERPROFILE",
+    "APPDATA",
+    "LOCALAPPDATA",
     // Both: where a process is allowed to write scratch files.
     "TEMP",
     "TMP",
@@ -497,6 +519,29 @@ mod tests {
                 "cmd.exe will not start without SystemRoot"
             );
         }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_windows_child_can_resolve_a_bare_command_through_powershell() {
+        // The bug this exists for: an agent shelling out to `git` got "not recognized". PATH was
+        // forwarded; PATHEXT was not, and that is what decides `git` means `git.exe`.
+        //
+        // What makes it worth a test rather than a line in BASE_ENV is that it is invisible to
+        // every cheap test. `cmd.exe` falls back to a built-in extension list when PATHEXT is
+        // unset, so a shell stand-in invoked through `cmd /c` passes either way. PowerShell has
+        // no such fallback, and PowerShell is what agent CLIs shell out through on Windows.
+        let base = environment(&BTreeMap::new());
+
+        assert!(
+            base.contains_key("PATHEXT"),
+            "without PATHEXT, PowerShell cannot resolve `git` to `git.exe`"
+        );
+        assert!(
+            base.contains_key("USERPROFILE"),
+            "a CLI looking for its own credentials under `~` needs USERPROFILE on Windows, \
+             which is what HOME is for elsewhere"
+        );
     }
 
     #[test]

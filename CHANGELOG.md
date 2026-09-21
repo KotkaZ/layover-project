@@ -8,6 +8,34 @@ See [project status](README.md#project-status).
 
 ## [Unreleased]
 
+## [0.23.2] — 2026-09-21
+
+### Fixed
+
+- **On Windows, an agent could not run `git`, `npm`, or anything else it shelled out to.** The
+  child environment carried `PATH` but not **`PATHEXT`**, and `PATHEXT` is what decides that
+  `git` means `git.exe`.
+
+  What hid this for twenty-three releases is that it is invisible to cheap tests. `cmd.exe` falls
+  back to a built-in extension list when `PATHEXT` is unset, so every shell stand-in invoked
+  through `cmd /c` worked perfectly. **PowerShell has no such fallback** — and PowerShell is what
+  agent CLIs shell out through on Windows. The agent reports "`git` is not recognized", which
+  reads like a broken machine rather than a stripped environment.
+
+  Found by an agent going off-script during soak preparation: asked only to append a line, it
+  tried `git status` first and reported the failure through `layover_report`. The reporting
+  channel worked exactly as intended; the thing it reported was ours.
+
+- **A Windows agent CLI could not find credentials it had already been given.** `HOME` was
+  forwarded for precisely this reason, but not `USERPROFILE`, `APPDATA` or `LOCALAPPDATA` — the
+  Windows spellings of the same idea, and what `~` expands to. An agent that had logged in
+  interactively still started as nobody.
+
+  `SystemDrive` joins them for the same class of reason.
+
+  None of these carry a secret; all are facts about the machine, which is the standing bar for
+  what the base environment may hold. Credentials still reach a child only through `env_from`.
+
 ## [0.23.1] — 2026-09-21
 
 ### Fixed
@@ -644,7 +672,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.23.1...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.23.2...HEAD
+[0.23.2]: https://github.com/KotkaZ/layover-project/compare/v0.23.1...v0.23.2
 [0.23.1]: https://github.com/KotkaZ/layover-project/compare/v0.23.0...v0.23.1
 [0.23.0]: https://github.com/KotkaZ/layover-project/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/KotkaZ/layover-project/compare/v0.21.0...v0.22.0
