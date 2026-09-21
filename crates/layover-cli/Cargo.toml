@@ -1,6 +1,6 @@
 [package]
 name = "layover-cli"
-description = "Run a lights-out agent factory: supervise headless agent CLIs, route messages between them, and keep them bounded."
+description = "Supervise headless agent CLIs, route their messages, and bound what they spend."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -24,12 +24,12 @@ path = "src/main.rs"
 formula = "layover"
 
 [dependencies]
-layover-core = { path = "../layover-core", version = "0.23.0" }
+layover-core = { path = "../layover-core", version = "0.23.1" }
 clap = { workspace = true, features = ["derive"] }
-layover-dashboard = { path = "../layover-dashboard", version = "0.23.0" }
-layover-mcp = { path = "../layover-mcp", version = "0.23.0" }
-layover-store = { path = "../layover-store", version = "0.23.0" }
-layover-tower = { path = "../layover-tower", version = "0.23.0" }
+layover-dashboard = { path = "../layover-dashboard", version = "0.23.1" }
+layover-mcp = { path = "../layover-mcp", version = "0.23.1" }
+layover-store = { path = "../layover-store", version = "0.23.1" }
+layover-tower = { path = "../layover-tower", version = "0.23.1" }
 axum = { workspace = true }
 jiff = { workspace = true }
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "net", "macros", "signal", "sync"] }

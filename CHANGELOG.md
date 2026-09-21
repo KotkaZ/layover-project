@@ -8,6 +8,18 @@ See [project status](README.md#project-status).
 
 ## [Unreleased]
 
+## [0.23.1] — 2026-09-21
+
+### Fixed
+
+- **The Homebrew formula's `desc` broke `brew style`** at 123 characters against a 118 limit. It
+  was a release annotation rather than a failure, but it is also the check homebrew-core applies,
+  and there is no reason to carry a warning on every release. Shortened, which improves the
+  crates.io listing too.
+
+- **crates.io was a version behind GitHub.** 0.23.0 shipped the Homebrew formula but was never
+  published to the registry, so `cargo install layover-cli` still gave 0.22.0.
+
 ## [0.23.0] — 2026-09-21
 
 Installable the way people actually install things.
@@ -632,7 +644,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.23.1...HEAD
+[0.23.1]: https://github.com/KotkaZ/layover-project/compare/v0.23.0...v0.23.1
 [0.23.0]: https://github.com/KotkaZ/layover-project/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/KotkaZ/layover-project/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/KotkaZ/layover-project/compare/v0.20.0...v0.21.0
