@@ -28,7 +28,20 @@ cargo-dist-version = "0.32.0"
 # `publish = false`, so none of them produce an artifact.
 targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
 
-installers = ["shell", "powershell", "npm"]
+installers = ["shell", "powershell", "npm", "homebrew"]
+
+# A tap rather than homebrew-core, because core does not accept prebuilt binaries from third
+# parties — it builds from source — and has a notability bar this project does not meet. A tap is
+# just a GitHub repository whose name starts with `homebrew-`; Homebrew lets that prefix be
+# elided, so this reads `brew install KotkaZ/tap/layover`. Users register nothing.
+#
+# Pushing to it needs HOMEBREW_TAP_TOKEN as a repository secret: the workflow's own GITHUB_TOKEN
+# is scoped to this repository and cannot write to another one.
+#
+# Homebrew holds only the latest version of a formula — there is no version history, and a
+# release always replaces what was there.
+tap = "KotkaZ/homebrew-tap"
+publish-jobs = ["homebrew"]
 
 # Published under a scope so the unscoped name stays free, and because `npx @layover/cli` reads
 # as clearly a scoped tool rather than a squatted word.

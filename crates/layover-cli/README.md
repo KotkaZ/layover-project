@@ -16,6 +16,12 @@ Layover is a single binary. No Rust toolchain needed.
 cargo install layover-cli
 ```
 
+...or Homebrew on macOS and Linux:
+
+```sh
+brew install KotkaZ/tap/layover
+```
+
 ...or a shell one-liner, a PowerShell one-liner, or npm — see the
 [install guide](https://kotkaz.github.io/layover-project/install.html).
 

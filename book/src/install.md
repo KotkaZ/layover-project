@@ -5,6 +5,16 @@ Layover is a single binary called `layover`. It needs no runtime — not Rust, n
 ## macOS and Linux
 
 ```sh
+brew install KotkaZ/tap/layover
+```
+
+A [tap](https://docs.brew.sh/Taps) rather than `brew install layover`, because homebrew-core does
+not accept prebuilt binaries from third parties. You register nothing — taps are built into
+Homebrew, and the `homebrew-` prefix is elided in the install expression.
+
+Without Homebrew:
+
+```sh
 curl --proto '=https' --tlsv1.2 -LsSf \
   https://github.com/KotkaZ/layover-project/releases/latest/download/layover-cli-installer.sh | sh
 ```
@@ -103,9 +113,8 @@ attached to the release too.
 
 ## With Cargo
 
-Layover is **not on crates.io yet**, so install it from a clone:
-
 ```sh
+cargo install layover-cli                 # from crates.io
 cargo install --path crates/layover-cli   # from a checkout
 ```
 
@@ -113,7 +122,7 @@ cargo install --path crates/layover-cli   # from a checkout
 > whose binary is *also* called `layover`, so the mistake is silent: the install succeeds, the
 > command exists, and nothing on your `PATH` is the tool you wanted.
 
-The binary is called `layover`, not `layover-cli`.
+The crate is `layover-cli`; the binary it installs is `layover`.
 
 ## From source
 

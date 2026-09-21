@@ -44,7 +44,10 @@ which agents may trigger which others, and how work gets in. Layover then runs i
 Layover is a single binary. No Rust toolchain needed.
 
 ```sh
-# macOS / Linux
+# macOS / Linux — Homebrew
+brew install KotkaZ/tap/layover
+
+# macOS / Linux — no package manager
 curl --proto '=https' --tlsv1.2 -LsSf \
   https://github.com/KotkaZ/layover-project/releases/latest/download/layover-cli-installer.sh | sh
 
