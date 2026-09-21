@@ -8,6 +8,39 @@ See [project status](README.md#project-status).
 
 ## [Unreleased]
 
+## [0.23.0] — 2026-09-21
+
+Installable the way people actually install things.
+
+### Added
+
+- **Homebrew.** `brew install KotkaZ/tap/layover` on macOS and Linux.
+
+  A [tap](https://docs.brew.sh/Taps) rather than homebrew-core, because core does not accept
+  prebuilt binaries from third parties — it builds everything from source — and applies a
+  notability bar this project does not yet meet. A tap costs the user nothing: they are built into
+  Homebrew, need no registration, and the `homebrew-` prefix is elided in the install expression.
+
+  The formula is named `layover`, not `layover-cli`, which is what dist would otherwise derive
+  from the crate. The crate carries the suffix only because the bare name on crates.io belongs to
+  an unrelated SSH tunnelling tool; Homebrew has no such conflict, so the formula gets the name
+  the binary actually has.
+
+  Homebrew holds only the *latest* version of a formula. There is no version history, and each
+  release replaces what came before.
+
+- **crates.io.** `cargo install layover-cli`, and the seven library crates are published for
+  anyone building on them: `layover-core`, `layover-http`, `layover-store`, `layover-mcp`,
+  `layover-tower`, `layover-dashboard`.
+
+  Not `cargo install layover`. That name belongs to the SSH tunnelling crate above, whose binary
+  is *also* called `layover`, which makes the mistake silent: the install succeeds, the command
+  exists, and nothing on your `PATH` is the tool you wanted.
+
+### Fixed
+
+- **The book still said Layover was not on crates.io** and offered only a path install.
+
 ## [0.22.0] — 2026-09-20
 
 The reference factory ran end to end on a real agent CLI for the first time. It found three things
@@ -599,7 +632,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.23.0...HEAD
+[0.23.0]: https://github.com/KotkaZ/layover-project/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/KotkaZ/layover-project/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/KotkaZ/layover-project/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/KotkaZ/layover-project/compare/v0.19.0...v0.20.0
