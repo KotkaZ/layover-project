@@ -272,6 +272,31 @@ Deleting is therefore deleting whole files — no rewriting, no compaction, and 
 history is half-pruned because the process died in the middle of it. A window reaching further
 back than 90 days reports a lower bound and says so.
 
+### What else the horizon reaches
+
+| Path | Holds | Pruned? |
+|---|---|---|
+| `.layover/history/runs-*.jsonl` | One record per run | Yes, whole files |
+| `.layover/journal/help-*.jsonl` | Help requests | Yes, whole files |
+| `.layover/hangars/<agent>/run_*/` | A run's prompt and transcript | Yes, whole directories |
+| `.layover/hangars/<agent>/memory.md` | What the agent wrote for itself | **No** |
+| `.layover/journal/learnings.jsonl` | Confirmed learnings | **No** |
+
+Hangars are pruned by the age encoded in the run's own identifier rather than by the file's
+modification time. A run id is a ULID, so it carries the millisecond it was minted; asking the
+name is exact, where asking the filesystem is a guess that a copy, a restore or a backup tool
+would get wrong.
+
+A directory in a Hangar that Layover did not mint is **left alone**, whatever its age — its age is
+unknown, and deleting on a guess is how somebody's own notes disappear.
+
+`memory.md` sits beside those run directories and is never pruned, for the same reason learnings
+are not: an agent's accumulated knowledge should not get worse for being old.
+
+> This gap was found by the 48-hour soak, not by a test. Hangars grew without bound while
+> everything around them was pruned — and after ninety days a factory held transcripts for runs
+> whose records had been deleted, which is evidence attached to nothing.
+
 The files are plain text, one JSON object per line, and are meant to be read:
 
 ```console

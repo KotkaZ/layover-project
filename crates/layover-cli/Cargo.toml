@@ -24,12 +24,12 @@ path = "src/main.rs"
 formula = "layover"
 
 [dependencies]
-layover-core = { path = "../layover-core", version = "0.23.3" }
+layover-core = { path = "../layover-core", version = "1.0.0" }
 clap = { workspace = true, features = ["derive"] }
-layover-dashboard = { path = "../layover-dashboard", version = "0.23.3" }
-layover-mcp = { path = "../layover-mcp", version = "0.23.3" }
-layover-store = { path = "../layover-store", version = "0.23.3" }
-layover-tower = { path = "../layover-tower", version = "0.23.3" }
+layover-dashboard = { path = "../layover-dashboard", version = "1.0.0" }
+layover-mcp = { path = "../layover-mcp", version = "1.0.0" }
+layover-store = { path = "../layover-store", version = "1.0.0" }
+layover-tower = { path = "../layover-tower", version = "1.0.0" }
 axum = { workspace = true }
 jiff = { workspace = true }
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "net", "macros", "signal", "sync"] }

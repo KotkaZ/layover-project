@@ -20,15 +20,15 @@
 
 </div>
 
-> **Status: early implementation.** Layover now runs a factory unattended. `layover serve` fires
-> scheduled pipelines, runs what is queued, and serves each agent an MCP endpoint it can call back
-> into — so a chain starts on a clock, hands work from agent to agent, waits at a rendezvous for
-> several verdicts at once, and finishes with nobody watching. Every hop is bounded by the Hops,
-> Fuel and run cap of the one chain that began it. Detail in
-> [what works today](#what-works-today).
+> **Status: 1.0.** Layover runs a factory unattended. `layover serve` fires scheduled pipelines,
+> runs what is queued, and serves each agent an MCP endpoint it can call back into — so a chain
+> starts on a clock, hands work from agent to agent, waits at a rendezvous for several verdicts at
+> once, and finishes with nobody watching. Every hop is bounded by the Hops, Fuel and run cap of
+> the one chain that began it. Detail in [what works today](#what-works-today).
 >
-> What has **not** been proven is the thing this project claims: forty-eight hours unattended
-> without intervention. Until that soak passes, treat it as working rather than trustworthy.
+> The claim on the tin has been **tested rather than asserted**: a 48-hour soak driving the real
+> Copilot CLI, one process, no intervention — **1,501 runs, all succeeded**, 12.6 MB of memory at
+> the end. See [the 1.0 notes](CHANGELOG.md#100--2026-09-23).
 >
 > Pre-1.0 and maintained by one person: expect breaking changes on a minor bump. See
 > [project status](#project-status).
@@ -228,19 +228,27 @@ An agent that needs to come back to something days later sets it down and ends; 
 brings it back. When an agent gets stuck it says so and you can mark it fixed; when it works
 something out, you can keep that permanently or throw it away.
 
-**It has now run on a real agent CLI.** A throwaway repository with a planted bug, two agents and
-the actual `copilot` binary: the Analyst found `add` returning `a - b`, handed the finding to the
-Developer over MCP, and the Developer fixed it — unattended, end to end. That run found three
-things every test had passed over, because every test used a shell stand-in: no agent CLI could
-authenticate, the Copilot MCP flag in every example does not exist, and Copilot reports no cost at
-all. All three are fixed or documented in v0.22.0.
+**It has run on a real agent CLI, and it has been left alone for two days.**
 
-**What is still not proven is the claim on the tin.** Forty-eight hours unattended, no
-intervention, is the bar this project set for itself, and it has not been run. What is above is
-tested and has been watched working; none of it has been left alone for two days.
+A throwaway repository with a planted bug, two agents and the actual `copilot` binary: the Analyst
+found `add` returning `a - b`, handed the finding to the Developer over MCP, and the Developer
+fixed it — unattended, end to end. That run found three things every test had passed over, because
+every test used a shell stand-in: no agent CLI could authenticate, the Copilot MCP flag in every
+example did not exist, and Copilot reports no cost at all.
 
-There is now a way to *check* that run rather than judge it. `layover doctor` reads a factory's
-recorded history and exits non-zero when something in it would fail an unattended run — a stalled
+Then the soak: **48.46 hours, one process, no intervention.**
+
+| | |
+|---|---|
+| Run outcomes | **1,501 / 1,501 succeeded** — none failed, timed out, halted or was interrupted |
+| Heartbeat | 1,453 runs on a 2-minute schedule; longest gap **183 s**, none over 5 minutes |
+| Real agent chains | **24** two-agent MCP handoffs, one every two hours |
+| After 48 hours | **12.6 MB** memory, **106** handles, **1.2 minutes** of CPU consumed |
+
+It found one more thing, now fixed: Hangars were the only state retention never reached.
+
+`layover doctor` reads a factory's recorded history and exits non-zero when something in it would
+fail an unattended run — a stalled
 chain, a schedule that never fired, a cost total built from runners that reported nothing, a
 Ground Stop left engaged. Every one of those looks like nothing on a dashboard, which is why
 "did the soak pass?" was a judgement call until now. On that first real run it caught a layover

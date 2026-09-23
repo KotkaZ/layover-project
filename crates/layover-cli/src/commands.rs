@@ -11,7 +11,7 @@ use std::sync::Arc;
 use jiff::{Timestamp, ToSpan};
 use layover_core::cost::{RETENTION_DAYS, Window};
 use layover_dashboard::{Dashboard, DashboardState};
-use layover_store::{History, Journal, layout};
+use layover_store::{History, Journal, hangar, layout};
 use layover_tower::{Dispatched, Factory};
 
 use crate::mcp::ServedMcp;
@@ -187,6 +187,13 @@ pub fn serve(
     store.prune(horizon).map_err(|error| error.to_string())?;
     journal.prune(horizon).map_err(|error| error.to_string())?;
     journal.sweep(horizon).map_err(|error| error.to_string())?;
+
+    // Hangars were the one thing retention did not reach, which a 48-hour soak made visible: 1,501
+    // runs left 3,050 files behind and nothing removed them. Worse than the size is what it meant
+    // after ninety days — run records deleted while their transcripts remained, evidence attached
+    // to runs nobody could look up any more.
+    hangar::prune(&state_dir(path, history).join("hangars"), horizon)
+        .map_err(|error| error.to_string())?;
 
     let dashboard = Dashboard::new(DashboardState {
         config_path: path.to_path_buf(),

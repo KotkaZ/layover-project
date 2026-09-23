@@ -27,6 +27,24 @@ impl RunId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// When this identifier was minted, which is when its run began.
+    ///
+    /// A ULID carries a millisecond timestamp in its leading bits, so a run's own name says how
+    /// old it is. That matters because a run's Hangar outlives the process: retention needs a
+    /// directory's age, and asking the *name* is exact where asking the filesystem is a guess — a
+    /// copy, a restore or a backup tool rewrites `mtime`, which would make old work look new or
+    /// new work look expired.
+    ///
+    /// `None` when the identifier was not minted by [`Self::generate`] — anything hand-made, or a
+    /// directory somebody else left in a Hangar. Callers should read that as "do not touch"
+    /// rather than "too old".
+    #[must_use]
+    pub fn minted_at(&self) -> Option<Timestamp> {
+        let ulid: Ulid = self.0.strip_prefix("run_")?.parse().ok()?;
+
+        Timestamp::from_millisecond(i64::try_from(ulid.timestamp_ms()).ok()?).ok()
+    }
 }
 
 impl From<&str> for RunId {
@@ -178,6 +196,51 @@ mod tests {
         assert_ne!(first, second);
         assert!(first.as_str().starts_with("flt_"));
         assert!(ItineraryId::generate().as_str().starts_with("itn_"));
+    }
+
+    #[test]
+    fn a_run_id_says_when_it_was_minted() {
+        // Retention for Hangars reads the age off the directory name rather than off the
+        // filesystem, so this is the thing that decides whether a transcript is kept.
+        let before = Timestamp::now();
+        let run = RunId::generate();
+        let after = Timestamp::now();
+
+        let minted = run.minted_at().expect("a generated id decodes");
+
+        // ULIDs carry whole milliseconds, so the lower bound is rounded down rather than equal.
+        assert!(
+            minted.as_millisecond() >= before.as_millisecond() - 1
+                && minted <= after + jiff::Span::new().milliseconds(1),
+            "minted {minted} is outside {before}..{after}"
+        );
+    }
+
+    #[test]
+    fn a_real_run_id_decodes_to_when_that_run_happened() {
+        // Taken from the 48-hour soak, whose first `analyst` run started on 2026-09-21. A
+        // hand-written expectation rather than a round trip: if the decoding were subtly wrong --
+        // wrong epoch, wrong bit width -- a round trip would agree with itself and still delete
+        // the wrong Hangars.
+        let minted = RunId::from("run_01M31S7S94MCCD56RC8S6TFQ4Y")
+            .minted_at()
+            .expect("decodes");
+
+        let day = minted.to_string();
+        assert!(day.starts_with("2026-09-21"), "decoded to {day}");
+    }
+
+    #[test]
+    fn an_id_not_minted_here_has_no_time_rather_than_a_wrong_one() {
+        // Retention reads this as "do not touch". Returning some default would make a directory
+        // somebody else put in a Hangar look infinitely old and delete it.
+        assert!(RunId::from("my-notes").minted_at().is_none());
+        assert!(RunId::from("run_not-a-ulid").minted_at().is_none());
+        assert!(
+            RunId::from("itn_01M31S7S94MCCD56RC8S6TFQ4Y")
+                .minted_at()
+                .is_none()
+        );
     }
 
     #[test]

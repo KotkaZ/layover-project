@@ -8,14 +8,17 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-layover-core = { path = "../layover-core", version = "0.23.3" }
+layover-core = { path = "../layover-core", version = "1.0.0" }
 jiff = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
-layover-core = { path = "../layover-core", version = "0.23.3" }
+layover-core = { path = "../layover-core", version = "1.0.0" }
+# Only to mint a run id with a chosen timestamp, so retention tests can age a Hangar without
+# waiting ninety days or touching the filesystem clock.
+ulid = { workspace = true }
 
 [lints]
 workspace = true

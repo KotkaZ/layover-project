@@ -2,11 +2,63 @@
 
 Notable changes per release. Format follows [Keep a Changelog](https://keepachangelog.com/1.1.0/).
 
-**Pre-1.0: a minor bump may break things.** Crate versions track releases of what is built; the
-*first runnable release* — the milestone where a factory actually runs — has not happened yet.
-See [project status](README.md#project-status).
+**Semantic versioning from 1.0.** A breaking change to the configuration format, the HTTP API, the
+MCP tool surface or the on-disk layout requires a major bump. See [project
+status](README.md#project-status).
 
 ## [Unreleased]
+
+## [1.0.0] — 2026-09-23
+
+Layover runs a factory unattended for two days without being touched. That was the bar this
+project set for itself, and it has now been cleared rather than asserted.
+
+### The evidence
+
+A soak ran from **2026-09-21 08:47 UTC to 2026-09-23 08:47 UTC** on 0.23.3 — 48.46 hours, one
+process, no intervention.
+
+| | |
+|---|---|
+| Run outcomes | **1,501 / 1,501 succeeded** — none failed, timed out, halted or was interrupted |
+| Heartbeat | **1,453** runs on a 2-minute schedule; median gap 120 s, longest 183 s, none over 5 min |
+| Real agent chains | **24** two-agent handoffs over MCP, one every two hours, driving the real Copilot CLI |
+| Memory after 48 h | **12.6 MB** working set, **106** handles, **19** threads |
+| CPU consumed | **1.2 minutes**, total |
+
+The two agents worked against a throwaway repository and independently reached the same
+conclusions about it two days apart, which is the behaviour the whole design is for.
+
+### Fixed
+
+- **Hangars were never pruned.** Run history, help requests and the cost ledger all respect the
+  ninety-day horizon. The per-run directories holding each run's prompt and transcript did not, so
+  a factory grew without bound — and past ninety days it kept transcripts for runs whose records
+  had been deleted, which is evidence attached to nothing.
+
+  Found by the soak, which is the argument for having run one: 1,501 runs left 3,050 files behind
+  and nothing removed them.
+
+  Pruning reads a run's age from **its own identifier** rather than from the filesystem. A run id
+  is a ULID and carries the millisecond it was minted, so the name is exact where `mtime` is a
+  guess that a copy, a restore or a backup tool would get wrong.
+
+  Two things are deliberately never pruned: an agent's `memory.md`, which sits beside the run
+  directories, and any directory Layover did not mint. The first would silently reset what an
+  agent had worked out; the second is somebody else's, and its age is unknown.
+
+### What 1.0 means
+
+Everything in the decision log is built, the reference factory has been proven end to end against
+a real agent CLI, all seven crates are on crates.io, and the soak has been run and passed.
+
+It does **not** mean the design is finished. It means the version number stops apologising: from
+here a breaking change requires a major bump, and the safety rails — Hops, Fuel, the run cap, the
+Reserve, Ground Stop — are a stable contract.
+
+One honest limit, unchanged and documented: **Copilot CLI reports no cost**, only
+`premiumRequests`. Fuel and the Reserve cannot bind a Copilot factory; `max_runs` and
+`timeout_sec` are what hold. `layover doctor` says so rather than showing a confident `$0.00`.
 
 ## [0.23.3] — 2026-09-21
 
@@ -706,7 +758,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v0.23.3...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/KotkaZ/layover-project/compare/v0.23.3...v1.0.0
 [0.23.3]: https://github.com/KotkaZ/layover-project/compare/v0.23.2...v0.23.3
 [0.23.2]: https://github.com/KotkaZ/layover-project/compare/v0.23.1...v0.23.2
 [0.23.1]: https://github.com/KotkaZ/layover-project/compare/v0.23.0...v0.23.1
