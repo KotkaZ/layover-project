@@ -124,7 +124,15 @@ pub struct RunRecord {
     /// Tokens consumed, as far as they are known.
     #[serde(default)]
     pub usage: TokenUsage,
+    /// The process's exit code, when it exited on its own and the platform reported one.
+    ///
+    /// Absent for a run that never started, one still going, one the supervisor killed, and one
+    /// recorded by a release that did not keep it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
     /// Why it ended, for the outcomes where that is not obvious.
+    ///
+    /// For a failure, how the process exited and the line of its output most likely to say why.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
     /// What the run could not get past, when it asked for help.
@@ -170,6 +178,7 @@ impl RunRecord {
             usd: 0.0,
             source: CostSource::Unreported,
             usage: TokenUsage::default(),
+            exit_code: None,
             detail: None,
             blocked_on: None,
             pid: None,

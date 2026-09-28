@@ -214,6 +214,20 @@ Every supervised execution, newest first, filterable by window, outcome and agen
 `halted` is deliberately not coloured like a crash. A rail stopping work is the system doing its
 job, and colouring it red teaches people to ignore red.
 
+A run that exited on its own carries its **exit code**. A `failed` one also carries a one-line
+`detail`: how the process exited and the line of its output most likely to be the reason —
+the last line that says *error* or *failed*, or failing that the last thing it printed:
+
+```text
+exited with code 1: Error: Failed to read MCP config file "…\mcp.json": The system cannot find
+the path specified.
+```
+
+The line is picked, not summarised — Layover calls no model — and it is redacted and capped at
+300 characters before it is written, because a transcript is where a CLI that failed to
+authenticate prints what it tried. The whole transcript stays in the run's Hangar. Hover a row to
+read the detail.
+
 A run whose cost the runner never reported shows **not reported**, never `$0.00`. The two are
 different facts, and the difference decides whether the budget rail is working.
 
@@ -303,7 +317,7 @@ The files are plain text, one JSON object per line, and are meant to be read:
 $ tail -1 .layover/history/runs-2026-09-16.jsonl
 {"run":"run_01K...","itinerary":"itn_01K...","agent":"developer","pipeline":"development",
  "outcome":"succeeded","started_at":"2026-09-16T10:00:00Z","finished_at":"2026-09-16T10:04:30Z",
- "usd":1.25,"source":"reported","usage":{"input":18402,"output":3100,...}}
+ "usd":1.25,"source":"reported","usage":{"input":18402,"output":3100,...},"exit_code":0}
 ```
 
 ## Why it looks like this

@@ -30,6 +30,7 @@ pub mod clock;
 pub mod cost;
 pub mod dispatch;
 pub mod factory;
+pub mod outcome;
 pub mod runtime;
 pub mod spawn;
 pub mod state;

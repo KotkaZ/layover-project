@@ -631,7 +631,10 @@ pub struct Run {
     /// Null when the runner reported no cost, which the Tower logs loudly.
     #[serde(default)]
     pub cost_usd: Option<f64>,
-    /// Why the run ended, for the outcomes where that is not self-evident.
+    /// Why the run ended, for the outcomes where that is not self-evident. For a failure, how
+    /// the process exited and the line of its output most likely to say why — picked from the
+    /// transcript, redacted and capped — so a run that failed in one second says what it
+    /// said without anybody opening its Hangar.
     #[serde(default)]
     pub detail: Option<String>,
     /// How long the run took. Null while it is still going, and also null if the clock moved
@@ -639,7 +642,9 @@ pub struct Run {
     /// an absent one, because somebody will average it.
     #[serde(default)]
     pub duration_sec: Option<i64>,
-    /// Process exit code, when there was one.
+    /// Process exit code, when the process exited on its own and the platform reported one.
+    /// Null for a run still going, one that never started, and one the Tower ended for a
+    /// timeout or a Ground Stop.
     #[serde(default)]
     pub exit_code: Option<i32>,
     /// When the process exited; null while it is still running.

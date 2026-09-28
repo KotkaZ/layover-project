@@ -123,7 +123,7 @@ pub fn run(record: &RunRecord) -> Run {
         started_at: record.started_at.to_string(),
         finished_at: record.finished_at.map(|at| at.to_string()),
         duration_sec: record.duration_secs(),
-        exit_code: None,
+        exit_code: record.exit_code,
         // Null rather than zero when nothing was reported. A zero would be indistinguishable
         // from a run that genuinely cost nothing, and the difference decides whether the budget
         // rail is working.

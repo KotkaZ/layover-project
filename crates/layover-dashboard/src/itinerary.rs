@@ -224,6 +224,7 @@ mod tests {
             usd,
             source: CostSource::Reported,
             usage: TokenUsage::default(),
+            exit_code: None,
             detail: None,
             blocked_on: None,
             pid: None,

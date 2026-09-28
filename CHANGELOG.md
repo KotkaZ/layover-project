@@ -23,6 +23,12 @@ status](README.md#project-status).
   cannot open. An agent's own relative `work_dir` is now resolved against the factory, as the
   configuration reference always said, rather than against wherever the Tower was started.
 
+- **A run record lost the reason a run failed.** A run that died in one second showed
+  `exit_code: null` and `detail: null`; the reason was only in its Hangar's `transcript.log`.
+  Every run that exits on its own now records its exit code, and a failed one records how it
+  exited and the line of its output most likely to be the reason — the last line naming an error,
+  or else the last line it printed — redacted and capped at 300 characters.
+
 ## [1.0.0] — 2026-09-23
 
 Layover runs a factory unattended for two days without being touched. That was the bar this

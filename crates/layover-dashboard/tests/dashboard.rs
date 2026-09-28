@@ -360,6 +360,27 @@ async fn history_reaches_the_runs_endpoint() {
 }
 
 #[tokio::test]
+async fn a_failed_run_says_how_it_exited_and_why() {
+    // A run that failed in one second showed `exit_code: null` and `detail: null`, and the reason
+    // was only in a transcript on disk. Somebody triaging from the dashboard had nothing to go on.
+    let factory = Factory::new("exit-code");
+    factory.write_run(
+        r#"{"run":"run_x","itinerary":"itn_1","agent":"developer","outcome":"failed","started_at":"2026-09-16T10:00:00Z","finished_at":"2026-09-16T10:00:01Z","source":"unreported","exit_code":1,"detail":"exited with code 1: Failed to read MCP config file"}"#,
+    );
+
+    let (_, body) = call(factory.router(), "/runs?window=all_time").await;
+    let run = &json(&body)["runs"][0];
+
+    assert_eq!(run["exit_code"], 1, "{run}");
+    assert!(
+        run["detail"]
+            .as_str()
+            .is_some_and(|detail| detail.contains("MCP config")),
+        "{run}"
+    );
+}
+
+#[tokio::test]
 async fn an_unreported_cost_is_null_rather_than_zero() {
     // A zero is indistinguishable from a run that genuinely cost nothing, and the difference is
     // what decides whether the budget rail is working at all.

@@ -909,7 +909,10 @@ components:
         exit_code:
           type: [integer, "null"]
           format: int32
-          description: Process exit code, when there was one.
+          description: |
+            Process exit code, when the process exited on its own and the platform reported one.
+            Null for a run still going, one that never started, and one the Tower ended for a
+            timeout or a Ground Stop.
         cost_usd:
           type: [number, "null"]
           format: double
@@ -919,7 +922,11 @@ components:
           description: Where `cost_usd` came from.
         detail:
           type: [string, "null"]
-          description: Why the run ended, for the outcomes where that is not self-evident.
+          description: |
+            Why the run ended, for the outcomes where that is not self-evident. For a failure, how
+            the process exited and the line of its output most likely to say why — picked from the
+            transcript, redacted and capped — so a run that failed in one second says what it
+            said without anybody opening its Hangar.
         blocked_on:
           type: [string, "null"]
           description: |

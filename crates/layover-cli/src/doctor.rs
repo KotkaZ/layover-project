@@ -572,6 +572,7 @@ entry = "analyst"
             usd: 0.0,
             source,
             usage: layover_core::cost::TokenUsage::default(),
+            exit_code: None,
             detail: None,
             blocked_on: None,
             pid: None,

@@ -46,6 +46,7 @@ use layover_store::Journal;
 
 use crate::barriers::{Abandoned, Barriers};
 use crate::dispatch::{Refusal, authorise, declared_env, declared_values};
+use crate::outcome::{detail_for, outcome_of};
 use crate::runtime::Chains;
 use crate::spawn::{self, Plan};
 use crate::state::{Ledger, Live};
@@ -357,7 +358,8 @@ impl Factory {
                 output: reported.output_tokens,
                 ..TokenUsage::default()
             },
-            detail: detail_for(ended),
+            exit_code: finished.exit_code,
+            detail: detail_for(ended, finished.exit_code, &transcript),
             blocked_on: None,
             pid: None,
         });
@@ -398,6 +400,7 @@ impl Factory {
             usd: 0.0,
             source: CostSource::Unreported,
             usage: TokenUsage::default(),
+            exit_code: None,
             detail: Some(why.to_owned()),
             blocked_on: None,
             pid: None,
@@ -851,34 +854,6 @@ fn combine(mut arrived: Vec<Flight>) -> Flight {
     first
 }
 
-/// How a run is recorded, given how it ended and what it said.
-///
-/// `halted` and `timed_out` are deliberately not `failed`: a rail stopping work is the system
-/// doing its job, and colouring it like a crash teaches people to ignore the colour.
-const fn outcome_of(ended: Ended, succeeded: bool) -> Outcome {
-    match ended {
-        Ended::TimedOut => Outcome::TimedOut,
-        Ended::Halted => Outcome::Halted,
-        Ended::Exited if succeeded => Outcome::Succeeded,
-        Ended::Exited => Outcome::Failed,
-    }
-}
-
-/// A line explaining an outcome that is not self-evident.
-///
-/// `succeeded` and `failed` speak for themselves — the agent did or did not do the thing. The
-/// other two are the supervisor's doing rather than the agent's, and a list that does not say so
-/// reads as though the agent chose to stop.
-fn detail_for(ended: Ended) -> Option<String> {
-    match ended {
-        Ended::Exited => None,
-        Ended::TimedOut => {
-            Some("the run outlived `timeout_sec` and its process tree was ended".to_owned())
-        }
-        Ended::Halted => Some("a Ground Stop was engaged and the run was ended".to_owned()),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1011,6 +986,58 @@ entry = "worker"
             ),
             "{result:?}"
         );
+    }
+
+    /// The one run this factory recorded, read back from history as the dashboard would.
+    fn the_recorded_run(factory: &Factory) -> RunRecord {
+        let text = std::fs::read_dir(factory.history_dir())
+            .expect("a history directory")
+            .filter_map(Result::ok)
+            .filter_map(|entry| std::fs::read_to_string(entry.path()).ok())
+            .collect::<String>();
+        let line = text.lines().last().expect("one record");
+        serde_json::from_str(line).expect("a run record")
+    }
+
+    #[test]
+    fn a_failed_run_records_its_exit_code_and_the_reason_it_gave() {
+        // The failure that prompted this left `exit_code: null` and `detail: null` on a run that
+        // died in one second. The reason was only in the Hangar's transcript, which nobody reads
+        // from a dashboard.
+        let temp = Temp::new("failed-why");
+        let script = if cfg!(windows) {
+            "echo starting up& echo Error: the token for ado has expired& echo cleaning up& exit 4"
+        } else {
+            "echo starting up; echo Error: the token for ado has expired; echo cleaning up; exit 4"
+        };
+        let factory = factory(&temp, &shell(script));
+        let flight = flight();
+
+        factory.run_flight(&mut itinerary(&flight), None, &flight);
+
+        let record = the_recorded_run(&factory);
+        assert_eq!(record.outcome, Outcome::Failed);
+        assert_eq!(record.exit_code, Some(4));
+        let detail = record.detail.expect("a failure says why");
+        assert!(detail.contains('4'), "{detail}");
+        assert!(
+            detail.contains("the token for ado has expired"),
+            "the error line, not merely the last line: {detail}"
+        );
+    }
+
+    #[test]
+    fn a_successful_run_records_exit_code_zero_and_needs_no_explanation() {
+        let temp = Temp::new("succeeded-code");
+        let factory = factory(&temp, &shell("echo fine"));
+        let flight = flight();
+
+        factory.run_flight(&mut itinerary(&flight), None, &flight);
+
+        let record = the_recorded_run(&factory);
+        assert_eq!(record.outcome, Outcome::Succeeded);
+        assert_eq!(record.exit_code, Some(0));
+        assert_eq!(record.detail, None);
     }
 
     #[test]
