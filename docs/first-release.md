@@ -27,8 +27,9 @@ context differently, and whatever arrives last reads as the current instruction.
 instruction; everything above it is context for carrying it out. The handover sits immediately
 above the body because "you are continuing work that did not finish" only means something next to
 what the work is, and learnings sit above the handover so a recovery instruction is never buried
-under twenty-five lines of accumulated advice. Implemented in `payload.rs`, with the order pinned
-by a test rather than left to whoever edits next.
+under twenty-five lines of accumulated advice. Who sent the flight was added later, directly above
+the body, because it is part of the message rather than context for it. Implemented in
+`payload.rs`, with the order pinned by a test rather than left to whoever edits next.
 
 **Why memory is injected rather than fetched.** The alternative — an agent calling
 `layover_memory_read()` when it wants its own notes — is cheaper and explicit, and it fails

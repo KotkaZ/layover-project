@@ -65,6 +65,16 @@ impl fmt::Display for LayoverId {
     }
 }
 
+/// Reads an identifier that came from outside — storage, a URL path.
+///
+/// Not validated, for the same reason as [`crate::flight::FlightId`]: this names a layover, it
+/// does not certify that one exists.
+impl From<&str> for LayoverId {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+}
+
 /// Where a booked layover has got to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]

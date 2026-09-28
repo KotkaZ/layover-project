@@ -32,13 +32,27 @@ two places to look when asking what an agent may start, which is one too many.
 ## What a run is given
 
 A run is a fresh process that remembers nothing. What it knows comes entirely from its payload,
-in this order — instructions, **memory**, **learnings**, handover, and the message that woke it
-last, because whatever arrives last reads as the current instruction.
+in this order — instructions, **memory**, **learnings**, handover, **who sent the flight**, and the
+message that woke it last, because whatever arrives last reads as the current instruction.
 
 | | |
 |---|---|
 | **Memory** | The tail of `memory.md` from this agent's Hangar, capped at 4 KB and saying so when it was cut |
 | **Learnings** | What earlier runs of *this agent* worked out and that still applies |
+| **Sender** | Who sent the flight, from the Tower's record of it — never from the body |
+
+The sender is stated in a `== WHO SENT THIS ==` section directly above the body, as one of four
+kinds, because the same words mean different things from each:
+
+| Sent by | The run is told |
+|---|---|
+| An agent | `` `reviewer` sent this — another agent in this factory, not a person. `` |
+| A person, from the dashboard or `POST /flights` | `A person sent this, from the dashboard or the HTTP API.` |
+| A pipeline's schedule | `` Nobody sent this by hand: the `review-bot` pipeline's schedule fired, and nobody is watching this run. `` |
+| A layover coming due | `` Nobody sent this just now: it is work set down earlier (`lay_…`) that has come due, … `` |
+
+A flight released by a **join** carries no such section: its body already labels every flight it
+folds together (`` ## From `tester` ``), and one name above them would be wrong about the rest.
 
 Both are **injected, not fetched.** An agent could call `layover_memory_read` when it wants its
 notes — cheaper, explicit, and it fails silently: an agent that forgets to call simply has no

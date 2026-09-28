@@ -206,7 +206,8 @@ impl Factory {
 
     /// Runs one flight to completion, recording what happened.
     ///
-    /// `sender` is `None` for a human trigger.
+    /// `sender` is `None` for work that entered the mesh from outside it: a person, a schedule, a
+    /// resumed layover. The run is told who sent the flight, from `flight.from`.
     ///
     /// # Errors
     ///
@@ -217,6 +218,20 @@ impl Factory {
         itinerary: &mut Itinerary,
         sender: Option<&AgentName>,
         flight: &Flight,
+    ) -> Dispatched {
+        self.run(itinerary, sender, flight, Some(&flight.from))
+    }
+
+    /// Runs one flight, telling the run who sent it when that is one sender.
+    ///
+    /// `origin` is `None` for a released join: its body already labels each flight it carries,
+    /// and naming one sender above them would be wrong about the rest.
+    fn run(
+        &self,
+        itinerary: &mut Itinerary,
+        sender: Option<&AgentName>,
+        flight: &Flight,
+        origin: Option<&layover_core::flight::Origin>,
     ) -> Dispatched {
         let authorised = match authorise(
             &self.config,
@@ -262,7 +277,14 @@ impl Factory {
             })
         });
 
-        let plan = match self.plan_for(&authorised, &hangar, flight, &flags, token.as_deref()) {
+        let plan = match self.plan_for(
+            &authorised,
+            &hangar,
+            flight,
+            origin,
+            &flags,
+            token.as_deref(),
+        ) {
             Ok(plan) => plan,
             Err(why) => {
                 self.revoke(token.as_deref());
@@ -572,6 +594,7 @@ impl Factory {
         authorised: &crate::dispatch::Authorised<'_>,
         hangar: &Path,
         flight: &Flight,
+        origin: Option<&layover_core::flight::Origin>,
         flags: &Flags,
         token: Option<&str>,
     ) -> Result<Plan, String> {
@@ -583,6 +606,7 @@ impl Factory {
             memory: self.memory_of(&authorised.name).as_deref(),
             brief: &self.brief_for(&authorised.name),
             handover: None,
+            origin,
             body: &flight.body,
         });
 
@@ -769,7 +793,7 @@ impl Factory {
                     &queued.flags,
                 );
 
-                let Some(flight) = self.past_the_barrier(&queued.flight, report) else {
+                let Some((flight, joined)) = self.past_the_barrier(&queued.flight, report) else {
                     done.push(queued.flight);
                     continue;
                 };
@@ -778,10 +802,11 @@ impl Factory {
                 // accounted against the same Hops, Fuel and run cap; minting a fresh itinerary
                 // per flight would reset all three and a loop between two agents would never end.
                 let sender = flight.from.agent().cloned();
+                let origin = (!joined).then_some(&flight.from);
                 let result = self
                     .chains
                     .with(&flight.itinerary, &self.config.defaults, |chain| {
-                        self.run_flight(chain, sender.as_ref(), &flight)
+                        self.run(chain, sender.as_ref(), &flight, origin)
                     })
                     .unwrap_or_else(|| {
                         Dispatched::Failed("the itinerary ledger was poisoned".to_owned())
@@ -822,17 +847,21 @@ impl Factory {
     /// agent without a join fire it twice; for a publisher that means two pull requests.
     ///
     /// Returns `None` when nothing should run: the flight was parked, or it arrived after an `any`
-    /// join had already fired.
+    /// join had already fired. Otherwise the flight to run, and whether it folds several flights
+    /// together — in which case its body names each sender and the payload names none.
     fn past_the_barrier(
         &self,
         flight: &Flight,
         report: &mut impl FnMut(&Flight, &Dispatched),
-    ) -> Option<Flight> {
+    ) -> Option<(Flight, bool)> {
         match self.barriers.deliver(&self.graph, flight.clone()) {
             // The common case: the destination declares no join at all.
-            None => Some(flight.clone()),
-            Some(Delivery::Direct(direct)) => Some(*direct),
-            Some(Delivery::Ready(arrived)) => Some(combine(arrived)),
+            None => Some((flight.clone(), false)),
+            Some(Delivery::Direct(direct)) => Some((*direct, false)),
+            Some(Delivery::Ready(arrived)) => {
+                let joined = arrived.len() > 1;
+                Some((combine(arrived), joined))
+            }
             Some(Delivery::Parked { waiting_for }) => {
                 report(flight, &Dispatched::Parked { waiting_for });
                 None
@@ -1869,6 +1898,53 @@ join = "all"
         assert!(payload.contains("17 tests pass"), "{payload}");
         assert!(payload.contains("From `reviewer`"), "{payload}");
         assert!(payload.contains("no blocking comments"), "{payload}");
+        assert!(
+            !payload.contains("WHO SENT THIS"),
+            "a join labels each sender in its body; one name above them would be wrong: {payload}"
+        );
+    }
+
+    #[test]
+    fn a_run_is_told_which_agent_sent_its_flight() {
+        // The book and the routing notes tell prompt authors to rely on sender identity. Only a
+        // join ever stated it, so factories wrote `FROM <agent>` into every body by hand.
+        let temp = Temp::new("told-sender");
+        let factory = pair(&temp);
+        let chain = ItineraryId::generate();
+
+        let mut handed_over = false;
+        factory.drain_with(
+            vec![queued_to(&chain, Origin::Human, "analyst", 4)],
+            &mut |_| {},
+            &mut |_, _| {},
+            |_| {
+                if handed_over {
+                    return Vec::new();
+                }
+                handed_over = true;
+                vec![queued_to(
+                    &chain,
+                    Origin::Agent(AgentName::new("analyst")),
+                    "developer",
+                    3,
+                )]
+            },
+        );
+
+        let payload_of = |agent: &str| {
+            std::fs::read_dir(temp.0.join(".layover").join("hangars").join(agent))
+                .expect("a Hangar")
+                .filter_map(Result::ok)
+                .map(|entry| entry.path().join("prompt.md"))
+                .find(|path| path.exists())
+                .and_then(|path| std::fs::read_to_string(path).ok())
+                .expect("a composed payload")
+        };
+
+        let developer = payload_of("developer");
+        assert!(developer.contains("`analyst` sent this"), "{developer}");
+        let analyst = payload_of("analyst");
+        assert!(analyst.contains("A person sent this"), "{analyst}");
     }
 
     #[test]

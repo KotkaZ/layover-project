@@ -177,7 +177,7 @@ fn resume_due(
         // whatever happens to be first in the route map.
         let flight = Flight::new(
             ItineraryId::generate(),
-            Origin::Human,
+            Origin::Resumed(layover.id.clone()),
             layover.agent.clone(),
             body,
             config.defaults.max_hops,
@@ -271,9 +271,8 @@ fn trigger(config: &Config, journal: &Journal, name: &PipelineName) -> Result<St
 
     let flight = Flight::new(
         ItineraryId::generate(),
-        // A schedule is not a person, but it is not an agent either, and `Origin` exists to answer
-        // "is there an upstream edge to check?". For a clock there is not.
-        Origin::Human,
+        // A clock is not a person, and the run it wakes is told so: nobody is watching.
+        Origin::Schedule(name.clone()),
         pipeline.entry.clone(),
         String::new(),
         config.defaults.max_hops,
@@ -370,7 +369,11 @@ trigger = { every = "1h" }
         assert_eq!(pending[0].flight.hops_remaining, 4);
         assert_eq!(
             pending[0].flight.from,
-            Origin::Human,
+            Origin::Schedule(PipelineName::new("sweep")),
+            "a run woken by a clock is told so"
+        );
+        assert!(
+            pending[0].flight.from.agent().is_none(),
             "a clock has no upstream edge to check"
         );
 
@@ -472,6 +475,11 @@ resumes = true
         );
         assert_eq!(pending[0].flight.hops_remaining, 4);
         assert_eq!(pending[0].pipeline, Some(PipelineName::new("follow_up")));
+        assert!(
+            matches!(pending[0].flight.from, Origin::Resumed(_)),
+            "the resumed run is told it is picking up work set down earlier: {:?}",
+            pending[0].flight.from
+        );
 
         let _ = std::fs::remove_dir_all(&root);
     }

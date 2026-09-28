@@ -15,12 +15,20 @@
 //! 3. Memory          what this agent wrote down for itself, tail-capped
 //! 4. Brief           what earlier runs learned, and how to ask for help
 //! 5. Handover        only when this run follows an interrupted one, or a human steer
-//! 6. Flight body     the message that woke it -- last
+//! 6. Sender          who sent the flight -- from the Tower's record, not from the body
+//! 7. Flight body     the message that woke it -- last
 //! ```
 //!
 //! The body is last because it is the instruction; everything above is context for carrying it
 //! out. The handover sits immediately above the body because it frames *this attempt* — "you are
 //! continuing work that did not finish" only means anything next to what the work is.
+//!
+//! The sender sits directly above the body because it is part of the message: the same words mean
+//! different things from a reviewer, from a person at the dashboard and from a clock. It comes from
+//! the flight's recorded origin, which the agent that sent it cannot forge — prompt authors were
+//! told to rely on sender identity, and before this only a released join ever stated it. A joined
+//! flight still states nothing here, because its body already labels each of its senders and one
+//! name above them would be wrong about the rest.
 //!
 //! Learnings go above the handover rather than below, so a recovery instruction is never buried
 //! under twenty-five lines of accumulated advice.
@@ -35,6 +43,7 @@
 use std::fmt::Write as _;
 
 use crate::agent::AgentName;
+use crate::flight::Origin;
 
 /// How much of an agent's memory is injected.
 ///
@@ -64,6 +73,10 @@ pub struct Run<'a> {
     /// Why this run follows another, from [`crate::handover::Handover::brief`]. Empty for an
     /// ordinary dispatch.
     pub handover: Option<&'a str>,
+    /// Who sent the flight that woke this agent, as the Tower recorded it.
+    ///
+    /// `None` for a released join, whose body already labels each flight it carries.
+    pub origin: Option<&'a Origin>,
     /// The message that woke this agent.
     pub body: &'a str,
 }
@@ -91,8 +104,37 @@ pub fn compose(run: &Run<'_>) -> String {
         write_section(&mut out, handover);
     }
 
+    if let Some(origin) = run.origin {
+        write_origin(&mut out, origin);
+    }
+
     write_body(&mut out, run.body);
     out
+}
+
+/// States who sent the flight, in words that say what kind of sender it was.
+fn write_origin(out: &mut String, origin: &Origin) {
+    out.push_str("== WHO SENT THIS ==\n");
+    let _ = match origin {
+        Origin::Agent(name) => writeln!(
+            out,
+            "`{name}` sent this — another agent in this factory, not a person.\n"
+        ),
+        Origin::Human => writeln!(
+            out,
+            "A person sent this, from the dashboard or the HTTP API.\n"
+        ),
+        Origin::Schedule(pipeline) => writeln!(
+            out,
+            "Nobody sent this by hand: the `{pipeline}` pipeline's schedule fired, and nobody is \
+             watching this run.\n"
+        ),
+        Origin::Resumed(layover) => writeln!(
+            out,
+            "Nobody sent this just now: it is work set down earlier (`{layover}`) that has come \
+             due, picked up by a pipeline that resumes layovers.\n"
+        ),
+    };
 }
 
 /// States who the agent is.
@@ -159,6 +201,9 @@ fn write_body(out: &mut String, body: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::flight::Origin;
+    use crate::layover::LayoverId;
+    use crate::pipeline::PipelineName;
 
     fn agent() -> AgentName {
         AgentName::new("tester")
@@ -171,6 +216,7 @@ mod tests {
             memory: None,
             brief: "",
             handover: None,
+            origin: None,
             body,
         }
     }
@@ -179,12 +225,14 @@ mod tests {
     #[test]
     fn the_sections_arrive_in_the_settled_order() {
         let name = agent();
+        let sender = Origin::Agent(AgentName::new("SENDER"));
         let run = Run {
             agent: &name,
             instructions: "INSTRUCTIONS",
             memory: Some("MEMORY"),
             brief: "BRIEF",
             handover: Some("HANDOVER"),
+            origin: Some(&sender),
             body: "BODY",
         };
 
@@ -202,9 +250,69 @@ mod tests {
             "a recovery instruction must not be buried under accumulated advice"
         );
         assert!(
-            at("HANDOVER") < at("BODY"),
+            at("HANDOVER") < at("SENDER"),
+            "who sent the flight is part of the flight, so it sits with the body"
+        );
+        assert!(
+            at("SENDER") < at("BODY"),
             "the message that woke the agent reads as the current instruction, so it goes last"
         );
+    }
+
+    fn sent_by(origin: &Origin) -> String {
+        let name = agent();
+        compose(&Run {
+            origin: Some(origin),
+            ..minimal(&name, "Fix the retry policy.")
+        })
+    }
+
+    #[test]
+    fn a_flight_from_an_agent_names_the_agent() {
+        // The book tells prompt authors to rely on sender identity. Before this, only a join said
+        // who anything was from, and factories hand-rolled a `FROM <agent>` line into every body.
+        let text = sent_by(&Origin::Agent(AgentName::new("analyst")));
+
+        assert!(text.contains("== WHO SENT THIS =="), "{text}");
+        assert!(text.contains("`analyst`"), "{text}");
+        assert!(text.contains("another agent"), "{text}");
+        assert!(text.trim_end().ends_with("Fix the retry policy."), "{text}");
+    }
+
+    #[test]
+    fn a_flight_from_a_person_says_so() {
+        let text = sent_by(&Origin::Human);
+
+        assert!(text.contains("A person sent this"), "{text}");
+        assert!(text.contains("dashboard or the HTTP API"), "{text}");
+    }
+
+    #[test]
+    fn a_scheduled_flight_names_its_pipeline_and_says_nobody_is_watching() {
+        // A run woken by a clock should not write its answer as though somebody asked.
+        let text = sent_by(&Origin::Schedule(PipelineName::new("nightly")));
+
+        assert!(text.contains("`nightly`"), "{text}");
+        assert!(text.contains("schedule"), "{text}");
+        assert!(text.contains("nobody is watching"), "{text}");
+    }
+
+    #[test]
+    fn a_resumed_layover_says_it_is_work_set_down_earlier() {
+        let text = sent_by(&Origin::Resumed(LayoverId::from("lay_01TEST")));
+
+        assert!(text.contains("set down earlier"), "{text}");
+        assert!(text.contains("lay_01TEST"), "{text}");
+    }
+
+    #[test]
+    fn a_joined_flight_is_left_to_label_its_own_senders() {
+        // A released join carries several flights, each already labelled with who sent it.
+        // Naming one sender above them would be wrong about the rest.
+        let name = agent();
+        let text = compose(&minimal(&name, "## From `tester`\n\npass"));
+
+        assert!(!text.contains("WHO SENT THIS"), "{text}");
     }
 
     #[test]

@@ -71,6 +71,15 @@ status](README.md#project-status).
   as `book/src/learning.md` said. They now go to the journal, and a run that filed one records its
   summary as `blocked_on`, which had never been set.
 
+- **A woken agent was not told who sent its flight.** The payload held only the body; only a
+  released join labelled its senders, although `book/src/prompts.md` and `docs/routing.md` told
+  prompt authors to rely on sender identity, so factories hand-rolled a `FROM <agent>` line into
+  every body. Every run is now told who sent its flight in a `== WHO SENT THIS ==` section directly
+  above the body: an agent by name, a person at the dashboard or API, a pipeline's schedule, or a
+  layover coming due. `Origin` gains `Schedule` and `Resumed`, which used to be recorded as
+  `Human`. A released join is unchanged. On disk those two are written as `"from":"human"` with an
+  optional `via` field, so a 1.0.0 binary still reads — and does not drop — queued work.
+
 ## [1.0.0] — 2026-09-23
 
 Layover runs a factory unattended for two days without being touched. That was the bar this

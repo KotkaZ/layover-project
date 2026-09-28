@@ -127,6 +127,23 @@ the thing an agent is told would stop being reviewable. The rails around it all 
 failure mode is silent: an undeclared flag is an error rather than false, because treating it as
 false would let a typo delete a section of instructions without anyone noticing.
 
+**Why a run is told who sent its flight, and in which words.** The prompt guide and the routing
+notes told authors that sender identity is how an agent tells its inputs apart, but the payload
+held only the body, so factories wrote `FROM <agent>` into every body by hand — an identity the
+sender asserts, which is the thing §4.2 of the architecture exists to rule out. The Tower already
+records who sent each flight, so the payload states it above the body. It says what *kind* of
+sender it was, because "fix the retry policy" means one thing from a reviewer and another from a
+clock nobody is watching; that needed `Origin` to stop recording a schedule and a resumed layover as
+a person. A released join states nothing there: its body already labels each flight it folds
+together, and naming one sender above them would be wrong about the rest.
+
+**Why a schedule is stored as a person with a note beside it.** The richer `Origin` could not simply
+be written as new variants. A 1.0.0 binary reading the queue drops a line it cannot parse and then
+rewrites the queue without it, so a downgrade would silently lose scheduled and resumed work. The
+on-disk flight keeps the two senders 1.0.0 knows and puts the rest in an optional `via` field it
+ignores: a downgrade loses a label, never the work, and the state directory's layout — whose bump
+would be a breaking change — stays as it is.
+
 **Why prompt flags are checked per entry point rather than per factory.** A run carries the flags
 of the one pipeline that triggered it, never the union of every pipeline in the factory. Checking
 a prompt against that union looks equivalent and is not: a second pipeline that reaches the same

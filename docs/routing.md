@@ -83,7 +83,9 @@ normally. See [`examples/workitem-factory/`](../examples/workitem-factory/README
 
 The residual sharp edge: a direct flight can wake an agent while a barrier for that same agent
 still holds a partial rendezvous. That is intended — they are independent causes — but the run
-that wakes must not assume it is seeing everything. Sender identity is how it tells.
+that wakes must not assume it is seeing everything. Sender identity is how it tells: a released
+join labels each flight it carries with its sender, and any other flight arrives under a line
+naming who sent it — an agent, a person, a schedule or a resumed layover.
 
 ### Abandoning a barrier
 

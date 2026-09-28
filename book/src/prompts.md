@@ -127,7 +127,10 @@ remembers nothing of it, so a prompt has to account for that:
 
 - **Say how the agent can tell why it was woken.** An agent behind a rendezvous receives several
   flights at once; one behind both a join and an ordinary edge can be woken either way. Sender
-  identity is how it tells them apart.
+  identity is how it tells them apart: every run is told who sent its flight — an agent by name, a
+  person, a schedule or a layover coming due — in a `== WHO SENT THIS ==` section above the body,
+  and a released join labels each flight it carries. There is no need to write `FROM <agent>` into
+  a body by hand. See [what a run is given](./tools.md#what-a-run-is-given).
 - **Say what to write down.** `memory.md` is the agent's entire sense of self across time. A
   scheduled agent that forgets what it already reported will report it again every hour forever.
 - **Make optional work explicit rather than conditional.** `join = "all"` waits for every declared

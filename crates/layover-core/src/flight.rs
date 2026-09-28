@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
 use crate::agent::AgentName;
+use crate::layover::LayoverId;
+use crate::pipeline::PipelineName;
 
 /// Identifier of one supervised CLI execution.
 ///
@@ -118,23 +120,38 @@ impl ItineraryId {
 /// Who sent a flight.
 ///
 /// Sender identity is mandatory rather than optional: an agent behind a rendezvous receives
-/// several flights at once and must be able to tell them apart.
+/// several flights at once and must be able to tell them apart, and every run is told who woke it.
+///
+/// Only [`Origin::Agent`] has an upstream edge for the route map to check. The others — a person,
+/// a clock, a layover coming due — are ways work *enters* the mesh, and used to be recorded as
+/// `Human` alike, so a run woken by a schedule was told nothing it could use.
+///
+/// # On disk
+///
+/// A 1.0.0 binary knows only `human` and `agent`, and its queue reader silently drops a line it
+/// cannot parse — and then rewrites the queue without it. So a schedule and a layover are written
+/// as `"from": "human"` with the detail in a `via` field that 1.0.0 ignores: a downgrade loses the
+/// label, never the work. See [`Flight`]'s serialisation.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Origin {
-    /// Injected over the HTTP API by a human.
+    /// A person, through the dashboard or the HTTP API.
     Human,
     /// Sent by an agent via the MCP control channel.
     Agent(AgentName),
+    /// Fired by the named pipeline's schedule.
+    Schedule(PipelineName),
+    /// A layover that came due and was picked up by a resuming pipeline.
+    Resumed(LayoverId),
 }
 
 impl Origin {
-    /// Returns the sending agent, or `None` for a human entry point.
+    /// Returns the sending agent, or `None` for work that entered the mesh from outside it.
     #[must_use]
     pub fn agent(&self) -> Option<&AgentName> {
         match self {
-            Self::Human => None,
             Self::Agent(name) => Some(name),
+            Self::Human | Self::Schedule(_) | Self::Resumed(_) => None,
         }
     }
 }
@@ -145,6 +162,7 @@ impl Origin {
 /// Tower, keyed by itinerary, because a wrapped CLI is a black box that could otherwise claim
 /// any budget it liked.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(from = "wire::Flight", into = "wire::Flight")]
 pub struct Flight {
     /// Unique identifier.
     pub id: FlightId,
@@ -180,6 +198,89 @@ impl Flight {
             body: body.into(),
             hops_remaining,
             sent_at: Timestamp::now(),
+        }
+    }
+}
+
+/// The shape a flight is stored in, which a 1.0.0 binary can still read.
+mod wire {
+    use jiff::Timestamp;
+    use serde::{Deserialize, Serialize};
+
+    use super::{FlightId, ItineraryId, Origin};
+    use crate::agent::AgentName;
+    use crate::layover::LayoverId;
+    use crate::pipeline::PipelineName;
+
+    /// The two senders 1.0.0 understands.
+    #[derive(Deserialize, Serialize)]
+    #[serde(rename_all = "snake_case")]
+    pub(super) enum Sender {
+        Human,
+        Agent(AgentName),
+    }
+
+    /// How work that no agent sent entered the mesh, when it was not a person.
+    #[derive(Deserialize, Serialize)]
+    #[serde(rename_all = "snake_case")]
+    pub(super) enum Via {
+        Schedule(PipelineName),
+        Resumed(LayoverId),
+    }
+
+    #[derive(Deserialize, Serialize)]
+    pub(super) struct Flight {
+        id: FlightId,
+        itinerary: ItineraryId,
+        from: Sender,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        via: Option<Via>,
+        to: AgentName,
+        body: String,
+        hops_remaining: u32,
+        sent_at: Timestamp,
+    }
+
+    impl From<Flight> for super::Flight {
+        fn from(wire: Flight) -> Self {
+            let from = match (wire.from, wire.via) {
+                (Sender::Agent(name), _) => Origin::Agent(name),
+                (Sender::Human, Some(Via::Schedule(pipeline))) => Origin::Schedule(pipeline),
+                (Sender::Human, Some(Via::Resumed(layover))) => Origin::Resumed(layover),
+                (Sender::Human, None) => Origin::Human,
+            };
+
+            Self {
+                id: wire.id,
+                itinerary: wire.itinerary,
+                from,
+                to: wire.to,
+                body: wire.body,
+                hops_remaining: wire.hops_remaining,
+                sent_at: wire.sent_at,
+            }
+        }
+    }
+
+    impl From<super::Flight> for Flight {
+        fn from(flight: super::Flight) -> Self {
+            let (from, via) = match flight.from {
+                Origin::Agent(name) => (Sender::Agent(name), None),
+                Origin::Human => (Sender::Human, None),
+                Origin::Schedule(pipeline) => (Sender::Human, Some(Via::Schedule(pipeline))),
+                Origin::Resumed(layover) => (Sender::Human, Some(Via::Resumed(layover))),
+            };
+
+            Self {
+                id: flight.id,
+                itinerary: flight.itinerary,
+                from,
+                via,
+                to: flight.to,
+                body: flight.body,
+                hops_remaining: flight.hops_remaining,
+                sent_at: flight.sent_at,
+            }
         }
     }
 }
@@ -250,5 +351,86 @@ mod tests {
             Origin::Agent("planner".into()).agent(),
             Some(&AgentName::from("planner"))
         );
+    }
+
+    #[test]
+    fn a_clock_and_a_layover_have_no_upstream_edge_either() {
+        assert!(
+            Origin::Schedule(PipelineName::new("nightly"))
+                .agent()
+                .is_none()
+        );
+        assert!(Origin::Resumed(LayoverId::from("lay_1")).agent().is_none());
+    }
+
+    fn sent(from: Origin) -> Flight {
+        Flight::new(
+            ItineraryId::generate(),
+            from,
+            AgentName::new("worker"),
+            "go",
+            4,
+        )
+    }
+
+    #[test]
+    fn every_origin_survives_a_round_trip_through_storage() {
+        for origin in [
+            Origin::Human,
+            Origin::Agent(AgentName::new("analyst")),
+            Origin::Schedule(PipelineName::new("nightly")),
+            Origin::Resumed(LayoverId::from("lay_01TEST")),
+        ] {
+            let flight = sent(origin);
+            let json = serde_json::to_string(&flight).expect("serialises");
+            let read: Flight = serde_json::from_str(&json).expect("deserialises");
+            assert_eq!(read, flight, "{json}");
+        }
+    }
+
+    /// The flight as a 1.0.0 binary declares it, which is what has to keep parsing.
+    #[derive(Deserialize)]
+    #[allow(dead_code)]
+    struct OneZeroFlight {
+        id: FlightId,
+        itinerary: ItineraryId,
+        from: OneZeroOrigin,
+        to: AgentName,
+        body: String,
+        hops_remaining: u32,
+        sent_at: Timestamp,
+    }
+
+    #[derive(Deserialize, Debug, PartialEq)]
+    #[serde(rename_all = "snake_case")]
+    enum OneZeroOrigin {
+        Human,
+        Agent(AgentName),
+    }
+
+    #[test]
+    fn a_scheduled_flight_is_stored_in_a_shape_1_0_can_still_read() {
+        // 1.0.0 drops a queue line it cannot parse and then rewrites the queue without it. A new
+        // variant on disk would turn a downgrade into lost work; a field it ignores loses a label.
+        for origin in [
+            Origin::Schedule(PipelineName::new("nightly")),
+            Origin::Resumed(LayoverId::from("lay_01TEST")),
+        ] {
+            let json = serde_json::to_string(&sent(origin)).expect("serialises");
+            let old: OneZeroFlight = serde_json::from_str(&json)
+                .unwrap_or_else(|error| panic!("1.0.0 cannot read {json}: {error}"));
+            assert_eq!(old.from, OneZeroOrigin::Human, "{json}");
+        }
+    }
+
+    #[test]
+    fn a_flight_written_by_1_0_still_reads() {
+        let json = r#"{"id":"flt_1","itinerary":"itn_1","from":{"agent":"analyst"},"to":"developer","body":"go","hops_remaining":3,"sent_at":"2026-09-20T10:00:00Z"}"#;
+        let read: Flight = serde_json::from_str(json).expect("reads");
+        assert_eq!(read.from, Origin::Agent(AgentName::new("analyst")));
+
+        let json = r#"{"id":"flt_2","itinerary":"itn_1","from":"human","to":"developer","body":"go","hops_remaining":3,"sent_at":"2026-09-20T10:00:00Z"}"#;
+        let read: Flight = serde_json::from_str(json).expect("reads");
+        assert_eq!(read.from, Origin::Human);
     }
 }
