@@ -588,6 +588,31 @@ Agents should ask rather than guess on any of these.
      silent fallback is the state the project is in today.
    - **A resumed layover**, which opens a new itinerary about an old one's pull request: new
      worktree from the pull request's branch, or the old itinerary's kept tree.
+9. **Letting Fuel and the Reserve bind on Copilot usage.** Copilot CLI reports no dollars and no
+   tokens, so every Copilot run is `unreported` and Fuel cannot bind a Copilot factory. It does
+   report usage — verified on 1.0.88, one run of `gpt-5.6-sol`:
+   `session.usage_checkpoint` with `"totalPremiumRequests": 1, "totalNanoAiu": 38444460000`, and a
+   final `result` with `"usage": {"premiumRequests": 1, …}`. Two ways to make that bind, and both
+   change what a rail means:
+   - **Count premium requests as their own budget** — `max_premium_requests` per itinerary and a
+     premium-request ceiling on the Reserve. Deterministic like `max_runs` and needs no price, but
+     it is a new axis beside dollars, and a factory mixing runners then has two budgets that
+     neither sees the other's spend.
+   - **Price them** — `[rates.copilot] usd_per_premium_request = …` (or per AI unit), producing a
+     `rate_card` figure that debits Fuel and the Reserve like any other, labelled as an estimate.
+     One budget in one currency, and the existing provenance machinery already says "this is a
+     guess". The cost is that a rate-card figure would start *refusing* runs, which today only a
+     reported figure does, and that Layover ships no prices by decision — the operator supplies
+     the rate.
+
+   *Recommendation:* price them, parsed from the last `session.usage_checkpoint` (falling back to
+   `result.usage.premiumRequests`), with the rate supplied by the operator and no default; and
+   record the raw counts on the run whether or not a rate is set, so `doctor` and the dashboard
+   show usage even where Fuel still cannot bind. Prefer premium requests over nano-AIU as the unit,
+   because that is the unit Copilot is billed and budgeted in. This presupposes the Tower debits
+   rate-card estimates, which it does not do for any runner today, and that the Reserve is checked
+   at dispatch — which, as of this writing, nothing in the Tower does either; both need deciding
+   alongside this.
 
 ## Beyond the first runnable release
 

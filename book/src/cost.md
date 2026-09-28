@@ -53,7 +53,7 @@ Every run's cost carries a `CostSource`:
 | `rate_card` | Layover derived it from token counts and published prices. An estimate. |
 | `unreported` | The runner said nothing, or said something that cannot be believed. The figure is zero and means nothing. |
 
-### Copilot CLI does not report cost at all
+### Copilot CLI reports usage, not cost
 
 Verified against the real CLI, not assumed. With `--output-format json`, Copilot CLI's final
 `result` event carries this:
@@ -63,10 +63,23 @@ Verified against the real CLI, not assumed. With `--output-format json`, Copilot
   "usage": { "premiumRequests": 1, "totalApiDurationMs": 44778, "sessionDurationMs": 56109 } }
 ```
 
-No dollars, and no token counts either — so there is nothing for a rate card to work from. Every
-Copilot run is therefore `unreported`, and **Fuel cannot bind a Copilot factory**. What is
-actually holding such a factory back is `max_runs`, the deterministic cap that needs no
-cooperation from the runner, and the wall-clock `timeout_sec`.
+and, as of 1.0.88, the stream also carries `session.usage_checkpoint` events with running totals:
+
+```json
+{ "type": "session.usage_checkpoint",
+  "data": { "totalNanoAiu": 38444460000, "totalPremiumRequests": 1, … } }
+```
+
+Premium requests and AI units, but no dollars and no token counts — so neither the runner-reported
+path nor a token-priced rate card can use it. Layover does not read either figure today: every
+Copilot run is `unreported`, and **Fuel cannot bind a Copilot factory**. What is actually holding
+such a factory back is `max_runs`, the deterministic cap that needs no cooperation from the
+runner, and the wall-clock `timeout_sec`.
+
+Letting Fuel and the Reserve bind on premium requests — a budget counted in them, or a rate that
+prices them — would change what two rails mean, so it is written up as open question 9 in
+[`decisions.md`](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md#still-open)
+rather than decided here.
 
 That is a real limit rather than a bug, and the important thing is that it is visible: `layover
 doctor` reports the share of runs that measured nothing, and raises it to a warning once a quarter

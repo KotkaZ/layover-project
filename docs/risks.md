@@ -73,6 +73,15 @@ measurement.
 what actually holds, and an operator has to look at `measured_share` to know whether Fuel is
 metering or merely appearing to.
 
+Copilot CLI is the sharpest case and, it turns out, not a runner that reports nothing: verified on
+1.0.88, its JSON stream carries `session.usage_checkpoint` events with `totalPremiumRequests` and
+`totalNanoAiu`, and its final `result` event `usage.premiumRequests`. Usage, not dollars, and not
+tokens — so neither the runner-reported path nor today's token-priced rate card can use it, and
+every Copilot run is `unreported`. Whether Fuel and the Reserve should bind on it is a change to
+two rails and is open question 9 in [`decisions.md`](decisions.md#still-open). Note also that the
+Tower applies no rate card at all today: `rate_card` figures exist in the ledger's vocabulary, and
+nothing in the supervisor produces one.
+
 ### 5. Spend that no per-chain budget can see
 
 **Severity: high. Mitigated.**
