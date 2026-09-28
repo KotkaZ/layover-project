@@ -24,6 +24,16 @@ fn check_mcp_servers(config: &Config, found: &mut Vec<Diagnostic>) {
                 )));
             }
 
+            // Every run is handed one MCP configuration, and Layover's own server is in it under
+            // this name. A declared server by the same name would replace it, and the agent would
+            // lose the only way it has to send, report or ask for help.
+            if server == "layover" {
+                found.push(Diagnostic::error(format!(
+                    "{at} is named `layover`, which is reserved for Layover's own server; every \
+                     run is given it under that name. Call this one something else"
+                )));
+            }
+
             match spec.transport() {
                 Err(reason) => found.push(Diagnostic::error(format!("{at} {reason}"))),
                 Ok(McpTransport::Stdio { command: [] }) => {
@@ -237,6 +247,27 @@ mod tests {
         );
 
         assert_mentions(&errors(&config), "empty `command`");
+    }
+
+    #[test]
+    fn a_server_named_layover_is_refused() {
+        // It would replace Layover's own server in the run's configuration, and the agent would
+        // lose `layover_send`, `layover_report` and `layover_help` with nothing saying why.
+        let config = parse(
+            r#"
+            [agents.kusto]
+            runner = "claude"
+            description = "queries"
+            prompt = "query"
+            entry = true
+            access = "read-only"
+
+            [agents.kusto.mcp.layover]
+            url = "https://example.com/mcp/"
+            "#,
+        );
+
+        assert_mentions(&errors(&config), "reserved for Layover's own server");
     }
 
     #[test]

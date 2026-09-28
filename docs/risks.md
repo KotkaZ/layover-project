@@ -314,3 +314,21 @@ missing prompt is still reported as missing rather than as an attack.
 plant a symlink can also set `runners.*.command`, which is arbitrary code by design. It lands now
 because it becomes load-bearing the moment agents write their own prompts, and doing it then would
 mean doing it under pressure.
+
+### 21. An HTTP MCP server declared with `env_from` receives no credential
+
+**What could happen.** `env_from` on a `url` server puts the named variable into the agent CLI's
+environment, where a remote server cannot see it. There is no way to say "send this as the
+`Authorization` header", so a server like the reference factory's `ado` is reached
+unauthenticated. The agent then either fails against it or — worse — works against whatever an
+anonymous caller is allowed to see and reports that as the whole picture.
+
+**What was done.** Nothing yet, deliberately: guessing a header shape per server would write a
+convention into the configuration format that nobody chose. Every declared server now reaches the
+run, and its credentials are named rather than written (see the decision log), so the gap is only
+the missing header mapping. The documentation says plainly that `env_from` does nothing for a `url`
+server.
+
+**What is proposed.** Open question 7 in [`decisions.md`](decisions.md#still-open): a
+`headers_from` table of header templates that name variables, expanded by the CLI from its own
+environment, so the secret is still never written down.

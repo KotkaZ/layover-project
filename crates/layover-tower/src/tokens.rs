@@ -1,4 +1,7 @@
-//! Per-run tokens, and the configuration file that tells a child where to find Layover.
+//! Per-run tokens: the identity a child proves itself with.
+//!
+//! The configuration file that tells a child where to find Layover is written by
+//! [`crate::mcp_config`].
 //!
 //! # Why the token is the identity
 //!
@@ -19,13 +22,11 @@
 //! either a bug or a child that outlived its supervisor.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use layover_core::agent::AgentName;
 use layover_core::flight::{ItineraryId, RunId};
 use layover_mcp::Session;
-use serde_json::json;
 
 /// The environment variable a child finds its token in.
 pub const TOKEN_VAR: &str = "LAYOVER_RUN_TOKEN";
@@ -101,44 +102,6 @@ impl Tokens {
     }
 }
 
-/// Writes the MCP configuration a runner's flag points at.
-///
-/// # Errors
-///
-/// Returns an error when the file cannot be written.
-pub fn write_config(
-    hangar: &Path,
-    format: &str,
-    endpoint: &str,
-    token: &str,
-) -> std::io::Result<PathBuf> {
-    let path = hangar.join("mcp.json");
-
-    // `claude_json` is the shape Claude Code, Copilot CLI and Codex all accept: a map of server
-    // name to how to reach it. The dialect is named in the runner rather than assumed, because
-    // the moment a fourth CLI wants something else this has to branch and the config should
-    // already say which it wanted.
-    let body = match format {
-        "codex_toml" => format!(
-            "[mcp_servers.layover]\nurl = \"{endpoint}\"\nheaders = {{ Authorization = \"Bearer {token}\" }}\n"
-        ),
-        // Default rather than refuse: an unknown dialect is a factory that will not start, and the
-        // common shape is far more likely to work than nothing at all.
-        _ => serde_json::to_string_pretty(&json!({
-            "mcpServers": {
-                "layover": {
-                    "url": endpoint,
-                    "headers": { "Authorization": format!("Bearer {token}") },
-                }
-            }
-        }))
-        .unwrap_or_default(),
-    };
-
-    std::fs::write(&path, body)?;
-    Ok(path)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -206,50 +169,5 @@ mod tests {
         registry.revoke(&first);
 
         assert!(registry.resolve(&second).is_some());
-    }
-
-    #[test]
-    fn the_written_config_carries_the_endpoint_and_the_token() {
-        let dir = std::env::temp_dir().join(format!("layover-mcpcfg-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
-
-        let path = write_config(&dir, "claude_json", "http://127.0.0.1:7878/mcp", "lvt_abc")
-            .expect("writes");
-        let text = std::fs::read_to_string(&path).expect("reads");
-
-        assert!(text.contains("http://127.0.0.1:7878/mcp"), "{text}");
-        assert!(text.contains("Bearer lvt_abc"), "{text}");
-        assert!(text.contains("layover"), "{text}");
-
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn an_unknown_dialect_falls_back_rather_than_refusing() {
-        // An unrecognised dialect is a factory that will not start. The common shape is far more
-        // likely to work than nothing at all, and the runner named the dialect it wanted so the
-        // mistake is visible.
-        let dir = std::env::temp_dir().join(format!("layover-mcpcfg2-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
-
-        let path = write_config(&dir, "something_new", "http://x/mcp", "lvt_1").expect("writes");
-        let text = std::fs::read_to_string(&path).expect("reads");
-
-        assert!(text.contains("mcpServers"), "{text}");
-
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn codex_gets_the_dialect_it_asked_for() {
-        let dir = std::env::temp_dir().join(format!("layover-mcpcfg3-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
-
-        let path = write_config(&dir, "codex_toml", "http://x/mcp", "lvt_1").expect("writes");
-        let text = std::fs::read_to_string(&path).expect("reads");
-
-        assert!(text.contains("[mcp_servers.layover]"), "{text}");
-
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }

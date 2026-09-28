@@ -179,6 +179,17 @@ values safe in a committed file, `env_from` names variables forwarded from the T
 environment, and validation *refuses* a literal whose name looks like a credential. A warning
 would not do — the failure is a key in git history, which is not undone by noticing later.
 
+**Why a declared server's credential is named in the run's configuration rather than written.**
+Declaring servers in `layover.toml` only helps if they reach the run, and the one channel into a
+CLI's MCP setup is the configuration file the Tower hands it — which lives in the run's Hangar
+under `.layover/`. Writing an `env_from` value there would move the secret from git history to a
+directory anything on the machine can read. The Tower already puts the value in the child's
+environment, and every supported dialect can say "read it from there": `${NAME}` in the JSON that
+Claude Code and Copilot CLI read, `env_vars = ["NAME"]` in Codex's TOML. So the file names the
+variable and never holds it. Verified against Copilot CLI 1.0.88, which also passes its whole
+environment to the stdio servers it starts; Codex passes only an allow-list, which is why naming
+the variable is not optional there.
+
 **Why parallel instances needed only a workspace change.** "One pipeline instance per pull
 request" sounds like it needs an instance concept, and it does not: every trigger already mints
 its own itinerary with its own Hops, Fuel, barriers and flags, because barriers are keyed by
@@ -493,6 +504,24 @@ Agents should ask rather than guess on any of these.
 4. **A code of conduct.** Absent deliberately; the argument for adding it strengthens the moment a
    first outside contributor appears.
 5. **Continuity.** A bus factor of one, stated plainly rather than solved.
+6. **How a Codex run is told about MCP servers.** `codex exec -c` accepts only a dotted
+   `key=value` override — `-c mcp_servers.layover.url="…"` — and has no flag that reads a file, so
+   the documented `mcp = { flag = "-c", format = "codex_toml" }` wiring passes a path Codex refuses
+   and every Codex run with MCP fails before it starts. Layover writes the right *content*
+   (`[mcp_servers.<name>]` tables, with `env_vars` and `bearer_token_env_var` so no secret is in
+   the file) but nothing can hand it over. The options: expand the file into one `-c` pair per key
+   (no secret needs to reach the command line, since the token and credentials are all named by
+   variable); point `CODEX_HOME` at a per-run directory, which would also hide the operator's own
+   Codex login; or drop Codex MCP wiring until Codex reads a file. *Recommendation:* the `-c`
+   expansion, as a new `format = "codex_overrides"` so the runner still says what it wants, tested
+   against a real `codex exec` before it ships.
+7. **Credentials for an HTTP MCP server.** `env_from` on a `url` server puts the variable in the
+   agent CLI's environment, which a remote server cannot read, and there is no way to say "send
+   this variable as the `Authorization` header". The reference factory's `ado` server declares
+   `ADO_PAT` and would reach Azure DevOps unauthenticated. Both Claude Code and Copilot CLI expand
+   `${NAME}` in `headers`, so a `headers_from = { Authorization = "Bearer ${ADO_PAT}" }` — names
+   only, validated like `env` — would keep the secret out of every file. *Recommendation:* add it,
+   and until then have `validate` warn that `env_from` on a `url` server does nothing.
 
 ## Beyond the first runnable release
 

@@ -51,7 +51,7 @@ use crate::outcome::{detail_for, outcome_of};
 use crate::runtime::Chains;
 use crate::spawn::{self, Plan};
 use crate::state::{Ledger, Live};
-use crate::tokens::{self, ENDPOINT_VAR, TOKEN_VAR, Tokens};
+use crate::tokens::{ENDPOINT_VAR, TOKEN_VAR, Tokens};
 use crate::wait::{Ended, wait_for};
 
 /// What happened to one piece of work the factory picked up.
@@ -585,7 +585,7 @@ impl Factory {
         std::fs::create_dir_all(&work_dir)
             .map_err(|error| format!("could not make the working directory: {error}"))?;
 
-        let mcp_config = self.wire_mcp(runner, hangar, token, &mut env)?;
+        let mcp_config = self.wire_mcp(runner, &authorised.agent.mcp, hangar, token, &mut env)?;
 
         Ok(Plan {
             agent: authorised.name.clone(),
@@ -601,6 +601,10 @@ impl Factory {
 
     /// Writes this run's MCP configuration and tells the child where to find it.
     ///
+    /// The configuration names Layover's own server and every server the agent declares; see
+    /// [`crate::mcp_config`] for why the declared servers' credentials are named rather than
+    /// written.
+    ///
     /// Returns `None` when there is nothing to wire — no endpoint, no token, or a runner whose CLI
     /// cannot be told about an MCP server. The environment variables go in regardless of whether
     /// the runner takes a flag: a CLI that reads `LAYOVER_MCP_URL` directly, and any tool the
@@ -608,6 +612,7 @@ impl Factory {
     fn wire_mcp(
         &self,
         runner: &layover_core::config::Runner,
+        servers: &BTreeMap<String, layover_core::mcp::McpServer>,
         hangar: &Path,
         token: Option<&str>,
         env: &mut BTreeMap<String, String>,
@@ -626,7 +631,7 @@ impl Factory {
         std::fs::create_dir_all(hangar)
             .map_err(|error| format!("could not make the Hangar: {error}"))?;
 
-        tokens::write_config(hangar, &wiring.format, endpoint, token)
+        crate::mcp_config::write_config(hangar, &wiring.format, endpoint, token, servers)
             .map(Some)
             .map_err(|error| format!("could not write the MCP configuration: {error}"))
     }

@@ -44,6 +44,21 @@ status](README.md#project-status).
   exited and the line of its output most likely to be the reason — the last line naming an error,
   or else the last line it printed — redacted and capped at 300 characters.
 
+- **An agent's declared MCP servers never reached it.** `[agents.<name>.mcp.<server>]` validated
+  and the book said it worked, but the `mcp.json` a run was handed named only Layover's own server;
+  a declared server's only effect was to forward its environment variables. The run's
+  configuration now carries every declared server in the runner's dialect — `"type": "stdio"` with
+  `command`, `args` and `env`, or `"type": "http"` with `url`, for `claude_json`; one
+  `[mcp_servers.<name>]` table each for `codex_toml`, now written to `mcp.toml`. No credential
+  value is written: an `env_from` name becomes `"${NAME}"` or `env_vars = ["NAME"]`, read from the
+  environment the Tower already gives the child. Layover's own entry gains `"type": "http"`, which
+  Claude Code requires for a `url`. `layover validate` refuses an agent server named `layover`.
+  Confirmed against Copilot CLI 1.0.88, which listed and called a declared server's tool.
+
+  Two gaps this made visible are recorded as open questions rather than guessed at: `codex exec
+  -c` does not accept a file, so Codex MCP wiring cannot work as documented; and an HTTP server
+  has no way to receive an `env_from` credential as a header.
+
 ## [1.0.0] — 2026-09-23
 
 Layover runs a factory unattended for two days without being touched. That was the bar this

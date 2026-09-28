@@ -80,7 +80,13 @@ a token minted for it alone. The child is told about both in two ways:
 |---|---|
 | `LAYOVER_MCP_URL` | The endpoint, in the child's environment |
 | `LAYOVER_RUN_TOKEN` | Its token, in the child's environment |
-| `mcp.json` in the run's Hangar | The same two, in the shape the CLI's MCP-config flag expects |
+| `mcp.json` (or `mcp.toml`) in the run's Hangar | The same two, in the shape the CLI's MCP-config flag expects, **plus every MCP server the agent declares** |
+
+The declared servers are written beside Layover's own so the agent actually has them; their
+credentials are named, never written — see [MCP servers](./configuration.md#mcp-servers). The run
+token itself is in the `claude_json` file, because that is where the CLI looks for a header; it is
+minted for this run alone and revoked the moment the run ends. The `codex_toml` file names the
+variable it is in instead (`bearer_token_env_var`).
 
 Which file is written depends on the runner's `mcp.format`. The flag is appended to the command
 unless the command places `{mcp}` itself:
@@ -96,6 +102,13 @@ command = ["codex", "exec", "--model", "{model}", "{mcp}", "-"]
 mcp     = { flag = "-c", format = "codex_toml" }
 # runs: codex exec --model <model> -c <hangar>/mcp.toml -
 ```
+
+> **Known not to work with the current Codex CLI.** `codex exec -c` takes a `key=value` override,
+> not a path, so a Codex run wired this way is refused before it starts. The file Layover writes
+> is the right shape — one `[mcp_servers.<name>]` table per server — but Codex has no flag that
+> reads one. Recorded as an open question in
+> [`decisions.md`](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md#still-open);
+> Claude Code and Copilot CLI are unaffected.
 
 `prefix` is prepended to the path. Copilot CLI's `--additional-mcp-config` takes *either* a JSON
 string or a file path and tells them apart by a leading `@`; without it the path is parsed as JSON

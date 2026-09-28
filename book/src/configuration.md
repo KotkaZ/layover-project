@@ -210,6 +210,36 @@ env_from = ["ADO_PAT"]
 
 Give exactly one of `command` (stdio) or `url` (HTTP).
 
+**Every declared server reaches the run.** Each run is handed one MCP configuration — the file the
+runner's `mcp.flag` points at — and it names Layover's own server under `layover` and every server
+the agent declares beside it, in the runner's dialect:
+
+```json
+{
+  "mcpServers": {
+    "kusto":   { "type": "stdio", "command": "agency", "args": ["mcp", "kusto"],
+                 "env": { "KUSTO_CLUSTER": "ic3-aria-eus2",
+                          "AZURE_CLIENT_SECRET": "${AZURE_CLIENT_SECRET}" } },
+    "layover": { "type": "http", "url": "http://127.0.0.1:…/mcp", "headers": { … } }
+  }
+}
+```
+
+The name `layover` is **reserved**: `layover validate` refuses an agent server called that, because
+it would replace the one server every run needs to send, report and ask for help.
+
+**No credential value is written into that file.** It lives in the run's Hangar under `.layover/`,
+and the whole point of `env_from` is that a secret never sits in a file. The Tower puts each
+`env_from` value into the agent CLI's environment and the configuration only *names* it —
+`"${NAME}"` for `claude_json`, which Claude Code and Copilot CLI both expand from their own
+environment, and `env_vars = ["NAME"]` for `codex_toml`. Copilot CLI additionally passes its whole
+environment to the stdio servers it starts; Codex passes only a short allow-list plus `env_vars`,
+which is why they are named.
+
+For a `url` server `env_from` only puts the variable in the agent CLI's environment. A remote server
+cannot read that, and there is not yet a way to turn it into a request header — see the open
+questions in [`decisions.md`](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md#still-open).
+
 **`env` is for values that are safe in a committed file** — a cluster name, a region. Anything
 that authenticates goes in `env_from`, which names variables the Tower forwards from *its own*
 environment at spawn time, so the value never appears in `layover.toml`.
