@@ -142,6 +142,10 @@ pub type QueueFlight = Arc<dyn Fn(Queued) -> Result<(), String> + Send + Sync>;
 /// Where work set down goes.
 pub type BookLayover = Arc<dyn Fn(Layover) -> Result<(), String> + Send + Sync>;
 
+/// Where a request for help goes.
+pub type AskForHelp =
+    Arc<dyn Fn(layover_core::help::HelpRequest) -> Result<(), String> + Send + Sync>;
+
 /// Everything a tool call needs, wired to a real factory.
 ///
 /// Owns rather than borrows, because this has to live in an HTTP handler that outlives any
@@ -151,6 +155,7 @@ pub struct FactoryRuntime {
     graph: Arc<RouteGraph>,
     queue: QueueFlight,
     book: BookLayover,
+    ask: AskForHelp,
     read_learnings: ReadLearnings,
     write_learnings: WriteLearnings,
     hangars: PathBuf,
@@ -175,6 +180,8 @@ pub struct Wiring {
     pub queue: QueueFlight,
     /// Where work set down goes.
     pub book: BookLayover,
+    /// Where a request for help goes: the journal, which is what the dashboard and `doctor` read.
+    pub ask: AskForHelp,
     /// How to read what the factory has learned.
     pub read_learnings: ReadLearnings,
     /// How to write it back.
@@ -190,6 +197,7 @@ impl FactoryRuntime {
             graph: wiring.graph,
             queue: wiring.queue,
             book: wiring.book,
+            ask: wiring.ask,
             read_learnings: wiring.read_learnings,
             write_learnings: wiring.write_learnings,
             hangars: wiring.hangars,
@@ -291,6 +299,7 @@ impl Runtime for FactoryRuntime {
     fn help(
         &self,
         session: &Session,
+        blocker: layover_core::help::Blocker,
         summary: &str,
         detail: &str,
         fatal: bool,
@@ -299,15 +308,17 @@ impl Runtime for FactoryRuntime {
             session.agent.clone(),
             session.run.clone(),
             session.itinerary.clone(),
-            layover_core::help::Blocker::Other,
+            blocker,
             summary,
             detail,
             jiff::Timestamp::now(),
         );
         request.fatal = fatal;
 
-        let path = self.agent_dir(&session.agent).join("help.jsonl");
-        append_json(&path, &request).map_err(|detail| ToolError::Unavailable { detail })
+        // To the journal, which is what the dashboard's help tab, `doctor` and the run record's
+        // `blocked_on` read. Written to the agent's Hangar instead, a request reached nobody: the
+        // one channel meant to reach a person was the one nothing looked at.
+        (self.ask)(request).map_err(|detail| ToolError::Unavailable { detail })
     }
 
     fn memory_read(&self, session: &Session) -> Result<String, ToolError> {
@@ -593,6 +604,7 @@ mode = "spawn"
         runtime: FactoryRuntime,
         sent: Arc<Mutex<Vec<Queued>>>,
         booked: Arc<Mutex<Vec<Layover>>>,
+        asked: Arc<Mutex<Vec<layover_core::help::HelpRequest>>>,
         learnings: Arc<Mutex<Learnings>>,
         defaults: layover_core::config::Defaults,
         dir: PathBuf,
@@ -612,6 +624,9 @@ mode = "spawn"
             let sink = Arc::clone(&sent);
             let booked: Arc<Mutex<Vec<Layover>>> = Arc::new(Mutex::new(Vec::new()));
             let shelf = Arc::clone(&booked);
+            let asked: Arc<Mutex<Vec<layover_core::help::HelpRequest>>> =
+                Arc::new(Mutex::new(Vec::new()));
+            let inbox = Arc::clone(&asked);
             let learnings: Arc<Mutex<Learnings>> = Arc::new(Mutex::new(Learnings::new()));
             let reading = Arc::clone(&learnings);
             let writing = Arc::clone(&learnings);
@@ -633,6 +648,13 @@ mode = "spawn"
                             .push(layover);
                         Ok(())
                     }),
+                    ask: Arc::new(move |request| {
+                        inbox
+                            .lock()
+                            .map_err(|_| "poisoned".to_owned())?
+                            .push(request);
+                        Ok(())
+                    }),
                     read_learnings: Arc::new(move || {
                         Ok(reading.lock().map_err(|_| "poisoned".to_owned())?.clone())
                     }),
@@ -643,6 +665,7 @@ mode = "spawn"
                 }),
                 sent,
                 booked,
+                asked,
                 learnings,
                 defaults,
                 dir,
@@ -655,6 +678,10 @@ mode = "spawn"
 
         fn booked(&self) -> Vec<Layover> {
             self.booked.lock().expect("not poisoned").clone()
+        }
+
+        fn asked(&self) -> Vec<layover_core::help::HelpRequest> {
+            self.asked.lock().expect("not poisoned").clone()
         }
 
         fn learnings(&self) -> Learnings {
@@ -686,6 +713,36 @@ mode = "spawn"
             flags: BTreeMap::from([("run_e2e".to_owned(), true)]),
             ..session(agent, 3)
         }
+    }
+
+    #[test]
+    fn a_help_request_is_filed_under_the_category_the_agent_chose() {
+        // Every request used to be filed as `other`, and into the agent's Hangar, where neither
+        // the dashboard nor `doctor` looks. It now goes wherever the runtime is wired to send it,
+        // which in a real factory is the journal.
+        let fixture = Fixture::new("help");
+        let caller = session("analyst", 3);
+
+        fixture
+            .runtime
+            .help(
+                &caller,
+                layover_core::help::Blocker::Access,
+                "the ADO token expired",
+                "401 on every call",
+                true,
+            )
+            .expect("files it");
+
+        let asked = fixture.asked();
+        assert_eq!(asked.len(), 1);
+        assert_eq!(asked[0].blocker, layover_core::help::Blocker::Access);
+        assert_eq!(asked[0].run, caller.run, "attributed to the run that asked");
+        assert!(asked[0].fatal);
+        assert!(
+            !fixture.dir.join("analyst").join("help.jsonl").exists(),
+            "not into the Hangar, where nothing reads it"
+        );
     }
 
     #[test]

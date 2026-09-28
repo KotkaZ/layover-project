@@ -14,7 +14,7 @@ applied was whether an agent could do its job without it.
 | `layover_send` | Send work to another agent. **The only way work moves** — and sending is what starts the agent you send to, so there is no separate spawn. |
 | `layover_peers` | Who you may send to, and what each is for. Worth calling before deciding where work goes rather than guessing at names. |
 | `layover_report` | Say what you concluded. The account of a run that survives it. |
-| `layover_help` | Say something is in the way. The channel that stops a quiet failure travelling downstream. |
+| `layover_help` | Say something is in the way, and which kind of thing: `blocker` is one of `access`, `tooling`, `ambiguity`, `environment`, `decision` or `other`. The channel that stops a quiet failure travelling downstream. |
 | `layover_memory_read` | Read your own notes in full. |
 | `layover_memory_write` | Add to your own notes, for future runs of you. |
 | `layover_status` | What this chain has left: how many messages, how much budget. |

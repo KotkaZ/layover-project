@@ -367,7 +367,7 @@ impl Factory {
             },
             exit_code: finished.exit_code,
             detail: detail_for(ended, finished.exit_code, &transcript),
-            blocked_on: None,
+            blocked_on: self.blocked_on(run, started_at),
             pid: None,
         });
 
@@ -380,6 +380,35 @@ impl Factory {
             usd: reported.usd,
             source: reported.source,
         }
+    }
+
+    /// What a run asked a person for help with, if it asked: the one line that stops a run which
+    /// succeeded while stuck on something from looking exactly like a clean one.
+    ///
+    /// A fatal request wins over a limitation, because it says more about how the run went.
+    /// Best-effort like the rest of history: an unreadable journal leaves the field empty rather
+    /// than failing to record the run.
+    fn blocked_on(&self, run: &layover_core::RunId, since: Timestamp) -> Option<String> {
+        let span = layover_core::cost::Span {
+            window: layover_core::cost::Window::AllTime,
+            start: Some(since),
+            end: Timestamp::now()
+                .checked_add(jiff::SignedDuration::from_secs(1))
+                .unwrap_or(Timestamp::MAX),
+            reckoned_in: None,
+            horizon: since,
+        };
+        let filter = layover_store::HelpFilter {
+            run: Some(run.clone()),
+            ..layover_store::HelpFilter::default()
+        };
+
+        let asked = self.journal.help(&span, &filter).ok()?;
+        asked
+            .iter()
+            .find(|request| request.fatal)
+            .or_else(|| asked.first())
+            .map(|request| request.summary.clone())
     }
 
     /// The record for a run whose process never came into being.
@@ -1051,6 +1080,43 @@ entry = "worker"
         assert_eq!(record.outcome, Outcome::Succeeded);
         assert_eq!(record.exit_code, Some(0));
         assert_eq!(record.detail, None);
+    }
+
+    #[test]
+    fn a_run_that_asked_for_help_says_what_it_was_blocked_on() {
+        // Without this a run that succeeded while stuck on a credential looks exactly like a
+        // clean one on a list. A fatal request says more about the run than a limitation does.
+        let temp = Temp::new("blocked-on");
+        let factory = factory(&temp, &shell("echo x"));
+        let run = layover_core::RunId::generate();
+        let since = Timestamp::now();
+
+        for (summary, fatal) in [
+            ("one linked file was unreadable", false),
+            ("the ADO token expired", true),
+        ] {
+            let mut request = layover_core::help::HelpRequest::new(
+                AgentName::new("worker"),
+                run.clone(),
+                ItineraryId::generate(),
+                layover_core::help::Blocker::Access,
+                summary,
+                "",
+                Timestamp::now(),
+            );
+            request.fatal = fatal;
+            factory.journal.ask(&request).expect("files it");
+        }
+
+        assert_eq!(
+            factory.blocked_on(&run, since).as_deref(),
+            Some("the ADO token expired")
+        );
+        assert_eq!(
+            factory.blocked_on(&layover_core::RunId::generate(), since),
+            None,
+            "another run's request is not this run's blocker"
+        );
     }
 
     #[test]

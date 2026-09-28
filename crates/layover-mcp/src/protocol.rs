@@ -17,6 +17,7 @@
 //! So a refusal comes back as a result with `isError: true` and text the agent can act on. The
 //! agent reads it, and can try something else — which is the entire point of telling it.
 
+use layover_core::help::Blocker;
 use layover_core::tools::Tool;
 use std::fmt::Write as _;
 
@@ -164,6 +165,11 @@ fn schema_for(tool: Tool) -> Value {
             "properties": {
                 "summary": { "type": "string", "description": "One line naming what is in the way." },
                 "detail": { "type": "string", "description": "What you tried, what happened, and what you need." },
+                "blocker": {
+                    "type": "string",
+                    "enum": Blocker::ALL.iter().map(|blocker| blocker.slug()).collect::<Vec<_>>(),
+                    "description": blocker_description(),
+                },
                 "fatal": { "type": "boolean", "description": "True if this stopped the work; false if it merely limited it." },
             },
         }),
@@ -244,11 +250,12 @@ fn run_tool(
                 .get("detail")
                 .and_then(Value::as_str)
                 .unwrap_or_default();
+            let blocker = blocker(arguments)?;
             let fatal = arguments
                 .get("fatal")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
-            runtime.help(session, summary, detail, fatal)?;
+            runtime.help(session, blocker, summary, detail, fatal)?;
             Ok("Recorded. A human will see this.".to_owned())
         }
 
@@ -295,6 +302,48 @@ fn required<'a>(arguments: &'a Value, field: &str) -> Result<&'a str, ToolError>
         })
 }
 
+/// Every category, as an agent reads the choice in a tool's schema.
+fn blocker_description() -> String {
+    let kinds = Blocker::ALL
+        .iter()
+        .map(|blocker| format!("`{blocker}`: {}", blocker.describe()))
+        .collect::<Vec<_>>()
+        .join("; ");
+    format!("What kind of thing is in the way. Defaults to `other`. {kinds}.")
+}
+
+/// Reads the optional `blocker` argument of `layover_help`.
+///
+/// Absent means `other`: an agent that asks for help without categorising it has still asked, and
+/// refusing would lose the one message meant to reach a person. A value that is not a category is
+/// refused, though, with the ones that exist — filing it as `other` would hide the mistake, and a
+/// refusal without the list would have the agent guess again.
+fn blocker(arguments: &Value) -> Result<Blocker, ToolError> {
+    match arguments.get("blocker") {
+        None | Some(Value::Null) => Ok(Blocker::Other),
+        Some(value) => value
+            .as_str()
+            .map(str::trim)
+            .and_then(Blocker::from_slug)
+            .ok_or_else(|| {
+                let known = Blocker::ALL
+                    .iter()
+                    .map(|blocker| format!("`{blocker}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let given = value
+                    .as_str()
+                    .map_or_else(|| value.to_string(), str::to_owned);
+                ToolError::BadArguments {
+                    detail: format!(
+                        "`{given}` is not a blocker category. Use one of {known}, or leave \
+                         `blocker` out for `other`. Nothing was filed; call layover_help again."
+                    ),
+                }
+            }),
+    }
+}
+
 /// Renders the peer list for an agent to read.
 fn describe_peers(peers: &[Peer]) -> String {
     if peers.is_empty() {
@@ -331,6 +380,7 @@ mod tests {
     use super::*;
     use layover_core::agent::AgentName;
     use layover_core::flight::{ItineraryId, RunId};
+    use layover_core::help::Blocker;
     use std::cell::RefCell;
 
     #[derive(Default)]
@@ -338,6 +388,7 @@ mod tests {
         sent: RefCell<Vec<(String, String)>>,
         reported: RefCell<Vec<String>>,
         helped: RefCell<Vec<(String, bool)>>,
+        blockers: RefCell<Vec<Blocker>>,
         written: RefCell<Vec<String>>,
         booked: RefCell<Vec<String>>,
         learned: RefCell<Vec<String>>,
@@ -372,8 +423,16 @@ mod tests {
             Ok(())
         }
 
-        fn help(&self, _: &Session, summary: &str, _: &str, fatal: bool) -> Result<(), ToolError> {
+        fn help(
+            &self,
+            _: &Session,
+            blocker: Blocker,
+            summary: &str,
+            _: &str,
+            fatal: bool,
+        ) -> Result<(), ToolError> {
             self.helped.borrow_mut().push((summary.to_owned(), fatal));
+            self.blockers.borrow_mut().push(blocker);
             Ok(())
         }
 
@@ -596,7 +655,14 @@ mod tests {
             fn report(&self, _: &Session, _: &str, _: &str) -> Result<(), ToolError> {
                 Ok(())
             }
-            fn help(&self, _: &Session, _: &str, _: &str, _: bool) -> Result<(), ToolError> {
+            fn help(
+                &self,
+                _: &Session,
+                _: Blocker,
+                _: &str,
+                _: &str,
+                _: bool,
+            ) -> Result<(), ToolError> {
                 Ok(())
             }
             fn memory_read(&self, _: &Session) -> Result<String, ToolError> {
@@ -647,6 +713,81 @@ mod tests {
         );
 
         assert!(!spy.helped.borrow()[0].1);
+    }
+
+    #[test]
+    fn help_carries_the_category_the_agent_chose() {
+        // The brief lists six categories and the book documents a `blocker` field, but the schema
+        // had no such field, so every request was filed as `other` and the dashboard's filter by
+        // category found nothing.
+        let spy = Spy::default();
+        let result = call_tool(
+            "layover_help",
+            &json!({ "summary": "the ADO token expired", "blocker": "access", "fatal": true }),
+            &spy,
+        );
+
+        assert_eq!(result["isError"], json!(false), "{result}");
+        assert_eq!(spy.blockers.borrow().as_slice(), [Blocker::Access]);
+    }
+
+    #[test]
+    fn help_without_a_category_is_filed_as_other() {
+        let spy = Spy::default();
+        call_tool("layover_help", &json!({ "summary": "something odd" }), &spy);
+
+        assert_eq!(spy.blockers.borrow().as_slice(), [Blocker::Other]);
+    }
+
+    #[test]
+    fn an_unknown_category_is_refused_with_the_ones_that_exist() {
+        // Filing it as `other` would hide the mistake; refusing without saying what is allowed
+        // would have the agent guess again.
+        let spy = Spy::default();
+        let result = call_tool(
+            "layover_help",
+            &json!({ "summary": "stuck", "blocker": "vibes" }),
+            &spy,
+        );
+
+        assert_eq!(result["isError"], json!(true), "{result}");
+        let text = text_of(&result);
+        assert!(text.contains("vibes"), "{text}");
+        for blocker in Blocker::ALL {
+            assert!(
+                text.contains(blocker.slug()),
+                "{blocker} not offered: {text}"
+            );
+        }
+        assert!(spy.helped.borrow().is_empty(), "nothing may be filed");
+    }
+
+    #[test]
+    fn the_help_schema_offers_every_category() {
+        let reply = handle(
+            &request("tools/list", json!({})),
+            &session(),
+            &Spy::default(),
+        )
+        .expect("replies");
+        let tools = reply.result.expect("a result")["tools"].clone();
+        let help = tools
+            .as_array()
+            .expect("a list")
+            .iter()
+            .find(|tool| tool["name"] == "layover_help")
+            .expect("layover_help is offered")
+            .clone();
+
+        let offered: Vec<&str> = help["inputSchema"]["properties"]["blocker"]["enum"]
+            .as_array()
+            .expect("an enum")
+            .iter()
+            .filter_map(Value::as_str)
+            .collect();
+        let known: Vec<&str> = Blocker::ALL.iter().map(|blocker| blocker.slug()).collect();
+
+        assert_eq!(offered, known);
     }
 
     #[test]

@@ -14,6 +14,7 @@ use std::collections::BTreeMap;
 
 use layover_core::agent::AgentName;
 use layover_core::flight::{ItineraryId, RunId};
+use layover_core::help::Blocker;
 use layover_core::pipeline::PipelineName;
 
 /// Who is calling, as the Tower knows them.
@@ -131,12 +132,15 @@ pub trait Runtime {
 
     /// Records that this run could not get past something.
     ///
+    /// `blocker` is the category the agent chose, or [`Blocker::Other`] when it chose none.
+    ///
     /// # Errors
     ///
     /// Returns [`ToolError`] when the request cannot be stored.
     fn help(
         &self,
         session: &Session,
+        blocker: Blocker,
         summary: &str,
         detail: &str,
         fatal: bool,

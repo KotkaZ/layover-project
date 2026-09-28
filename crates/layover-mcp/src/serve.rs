@@ -150,7 +150,14 @@ mod tests {
             Ok(())
         }
 
-        fn help(&self, _: &Session, _: &str, _: &str, _: bool) -> Result<(), ToolError> {
+        fn help(
+            &self,
+            _: &Session,
+            _: layover_core::help::Blocker,
+            _: &str,
+            _: &str,
+            _: bool,
+        ) -> Result<(), ToolError> {
             Ok(())
         }
 

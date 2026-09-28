@@ -21,6 +21,15 @@ So an agent can file a request, and it appears on the dashboard with a count on 
 That last one is easy to lose and worth keeping. An agent can finish its task and still have been
 unable to check one thing — worth reporting, and not an outage.
 
+The agent chooses the category by passing `blocker` to `layover_help` — the brief every run is given
+lists the six and says which field carries one. Left out, a request is filed as `other`. A value
+that is not a category is **refused**, with the list of the ones that exist, rather than quietly
+filed as `other`: that would hide the mistake from the dashboard's filter, which is the thing the
+category is for.
+
+Requests go to the journal, beside run history, which is what the dashboard's help tab, `layover
+doctor` and the run record read.
+
 The categories are measured rather than imagined. In a working prototype's help file, five of six
 entries were permission or access failures: a denied tool guard, a denied git read, an HTTP 422,
 a TLS handshake.
@@ -38,7 +47,8 @@ Four rules, each of which exists because of a specific failure:
 - **Say whether it stopped you.** See above.
 
 A run that asked for help carries `blocked_on` — one line, independent of whether it succeeded, so
-a blocked run does not look identical to a clean one on a list.
+a blocked run does not look identical to a clean one on a list. It is the summary of the request
+that run filed, a fatal one in preference to a limitation.
 
 ## Learnings
 

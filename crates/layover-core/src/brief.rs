@@ -145,7 +145,9 @@ fn write_help(out: &mut String) {
         "- Say whether it stopped you or merely limited you. Finishing the work while being \
          unable to check one thing is worth reporting and is not an outage.\n",
     );
-    out.push_str("\nCategories:\n");
+    out.push_str(
+        "\nCategories — pass the one that fits as `blocker`, or leave it out for `other`:\n",
+    );
     for blocker in Blocker::ALL {
         let _ = writeln!(out, "- `{blocker}` — {}", blocker.describe());
     }
@@ -384,5 +386,9 @@ mod tests {
         for blocker in Blocker::ALL {
             assert!(brief.contains(blocker.describe()), "{blocker} unexplained");
         }
+        assert!(
+            brief.contains("`blocker`"),
+            "an agent offered categories has to be told which field carries one"
+        );
     }
 }

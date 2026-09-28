@@ -63,6 +63,7 @@ impl ServedMcp {
 
         let queueing = Arc::clone(journal);
         let booking = Arc::clone(journal);
+        let asking = Arc::clone(journal);
         let reading = Arc::clone(journal);
         let writing = Arc::clone(journal);
 
@@ -80,6 +81,11 @@ impl ServedMcp {
                 booking
                     .book(layover)
                     .map_err(|error| format!("the layover could not be set down: {error}"))
+            }),
+            ask: Arc::new(move |request| {
+                asking
+                    .ask(&request)
+                    .map_err(|error| format!("the request could not be filed: {error}"))
             }),
             read_learnings: Arc::new(move || {
                 reading
@@ -377,6 +383,43 @@ to = "developer"
             journal.pending().expect("readable").is_empty(),
             "a refused send must queue nothing"
         );
+
+        drop(served);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_help_request_over_the_wire_reaches_the_journal_the_dashboard_reads() {
+        // It used to land in the agent's Hangar, where neither the help tab nor `doctor` looks,
+        // and always as `other`.
+        let root = temp("help");
+        let journal = Arc::new(Journal::open(root.join("journal")).expect("opens"));
+        let served = ServedMcp::start(&factory(), &root, &journal).expect("binds");
+
+        let tokens = Arc::new(layover_tower::Tokens::new());
+        let token = tokens.mint(
+            layover_core::RunId::generate(),
+            layover_core::agent::AgentName::new("analyst"),
+            layover_core::flight::ItineraryId::generate(),
+            3,
+        );
+        served.resolve_against(Arc::clone(&tokens));
+
+        let response = post(
+            &served.endpoint,
+            &token,
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/call",
+                "params":{"name":"layover_help",
+                          "arguments":{"summary":"the ADO token expired","blocker":"access"}}}"#,
+        );
+        assert!(response.contains("A human will see this"), "{response}");
+
+        let span = layover_core::cost::Window::AllTime.resolve(&jiff::Zoned::now());
+        let filed = journal
+            .help(&span, &layover_store::HelpFilter::default())
+            .expect("readable");
+        assert_eq!(filed.len(), 1, "one request, in the journal");
+        assert_eq!(filed[0].blocker, layover_core::help::Blocker::Access);
 
         drop(served);
         let _ = std::fs::remove_dir_all(&root);

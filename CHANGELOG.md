@@ -59,6 +59,18 @@ status](README.md#project-status).
   -c` does not accept a file, so Codex MCP wiring cannot work as documented; and an HTTP server
   has no way to receive an `env_from` credential as a header.
 
+- **`layover_help` could not carry the category it asks for.** Every run's brief lists six
+  categories and the book documents a `blocker` field, but the tool's schema had no such field and
+  the runtime hard-coded `other`, so every request was filed as `other`. `blocker` is now an
+  optional enum in the schema; a value that is not a category is refused with a readable
+  `isError` naming the ones that exist, and a request without one is `other`. The brief says which
+  field carries the category.
+
+  Fixing it exposed that the requests reached nobody at all: they were appended to the agent's
+  Hangar, while the dashboard's help tab, `layover doctor` and the run record all read the journal,
+  as `book/src/learning.md` said. They now go to the journal, and a run that filed one records its
+  summary as `blocked_on`, which had never been set.
+
 ## [1.0.0] — 2026-09-23
 
 Layover runs a factory unattended for two days without being touched. That was the bar this

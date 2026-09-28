@@ -401,6 +401,13 @@ ninety-day horizon as run history. Learnings are state, rewritten as they are re
 revoked, and exempt from retention entirely — a confirmed learning that expired for being ninety
 days old would be the one thing in the system that got worse the longer it was right.
 
+**Why an unknown help category is refused rather than filed as `other`.** The category is optional,
+because an agent that asks for help without classifying it has still asked, and refusing would
+lose the one message meant to reach a person. But a value that is *not* a category is a mistake
+somebody should see: filed as `other`, it would vanish from the dashboard's filter — the thing the
+category exists for — and nobody would learn that the prompt names a category Layover does not
+have. The refusal lists the six, so the agent's second attempt is right.
+
 **Why Slots queue where every other rail refuses.** Hops bounds depth, Fuel and the Reserve bound
 money, the run cap bounds a chain's total — and none of them bounds how many agent CLIs are alive
 at one instant, which is the number that takes a machine down. The gap surfaced by writing a real
