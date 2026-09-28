@@ -57,14 +57,19 @@ impl Tokens {
         itinerary: ItineraryId,
         hops_remaining: u32,
     ) -> String {
-        let token = format!("lvt_{}", RunId::generate().as_str().replace("run_", ""));
-
-        let session = Session {
+        self.mint_for(Session {
             run,
             agent,
             itinerary,
             hops_remaining,
-        };
+            pipeline: None,
+            flags: std::collections::BTreeMap::new(),
+        })
+    }
+
+    /// Mints a token for a run whose identity, chain and flags the Tower has already assembled.
+    pub fn mint_for(&self, session: Session) -> String {
+        let token = format!("lvt_{}", RunId::generate().as_str().replace("run_", ""));
 
         if let Ok(mut live) = self.live.lock() {
             live.insert(token.clone(), session);

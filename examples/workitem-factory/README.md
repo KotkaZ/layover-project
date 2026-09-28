@@ -262,6 +262,12 @@ Note that both pipelines declare all three flags with **the same defaults**. The
 are shared, so the same `@include(run_e2e)` line is read by whichever pipeline reaches the tester.
 `layover validate` warns when two pipelines disagree.
 
+A flag set when the work is triggered — `POST /flights` with `"flags": {"run_e2e": true}`, or the
+dashboard's trigger dialog — holds for the **whole chain**: the analyst's hand-off to the developer,
+every turn of the review loop, and the publisher. When the publisher sets the work down and
+`follow_up` picks it up days later, the follow-up keeps the values the chain was triggered with
+for every flag `follow_up` declares, which is why it declares all three.
+
 ## 6. What this example assumes but does not configure
 
 Honest gaps, so nobody discovers them at runtime:

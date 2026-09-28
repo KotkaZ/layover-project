@@ -81,8 +81,8 @@ agents write their own prompts — which is a stated goal, and by then it is loa
 This is the rule that catches the mistake nobody sees coming.
 
 A run receives the flags of the **one pipeline that triggered it** — never the union of every
-pipeline in the factory. So a prompt is only safe if every flag it tests is declared by *each*
-entry point that can reach that agent:
+pipeline in the factory — with the values chosen when it was triggered. So a prompt is only safe
+if every flag it tests is declared by *each* entry point that can reach that agent:
 
 ```toml
 [pipelines.development]
@@ -104,9 +104,21 @@ error: agent `tester` tests flag `run_e2e` in its prompt, but pipeline `nightly`
 Checking against the union of all flags would have passed that factory, and the nightly run would
 have failed at the moment it composed the prompt — hours later, with nobody watching.
 
+"Can reach" includes **spawn edges**. A chain opened over a `mode = "spawn"` route carries the
+flags of the chain that spawned it, so a spawned reviewer's prompt is composed from the spawning
+pipeline's declarations exactly as a hand-off's would be, and is checked against them.
+
 The same rule applies to a bare `entry = true` agent. It is triggered without a pipeline, so no
 flags exist to supply, and any conditional prompt downstream of it is unreachable in practice.
 `layover validate` says so.
+
+### The preview is the run
+
+`layover prompt <agent> --pipeline <name> --flag name=value` renders the instructions a run
+triggered that way receives, and a run triggered that way — from the dashboard, `POST /flights`, or
+a flight its chain sends later — receives exactly that text. See
+[a flag holds for the whole chain](./pipelines.md#a-flag-holds-for-the-whole-chain) for where each
+run's values come from.
 
 ## Writing prompts for fresh runs
 

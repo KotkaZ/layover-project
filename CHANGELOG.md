@@ -10,6 +10,21 @@ status](README.md#project-status).
 
 ### Fixed
 
+- **Flags chosen at trigger time were ignored.** `POST /flights` with
+  `{"pipeline":"p","flags":{"flag_x":true}}` was accepted and stored, and the run was composed from
+  the pipeline's defaults anyway, so it received `off.md` while `layover prompt --flag flag_x=true`
+  showed `on.md`. The stored flags were never read.
+
+  A chain's flags now reach every run it causes. The first run uses what the trigger chose; a
+  flight an agent sends carries its chain's pipeline and flags on the queued flight, so they
+  survive a Tower restart; a chain opened over a `mode = "spawn"` edge inherits both the flags and
+  the pipeline of the chain that spawned it, where it used to merge every pipeline's defaults with
+  the last declaration winning; and a layover records the booking chain's flags so its follow-up
+  keeps their values for every flag the resuming pipeline declares. A flight to a bare
+  `entry = true` agent takes the first declaration of each flag, as `layover prompt` without
+  `--pipeline` always did. Prompt-flag validation now follows spawn edges, because a spawned agent
+  is composed from the spawning pipeline's declarations.
+
 - **A relative `--config` broke every run.** The factory root stayed relative, so every path a
   child was handed — its Hangar, the `@…/mcp.json` its CLI was pointed at, the `{prompt}` file —
   was relative to the Tower's working directory. The child runs in its agent's `work_dir`, resolved

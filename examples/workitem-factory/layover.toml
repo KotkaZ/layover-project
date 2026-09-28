@@ -301,7 +301,9 @@ to   = "follower"
 
 # A resumed chain can reach the same agents the original did, so it has to offer the same flags or
 # their prompts cannot be composed. Validation checks this per entry point rather than against the
-# union of all pipelines, which is why it catches it here and not on `development`.
+# union of all pipelines, which is why it catches it here and not on `development`. The *values* a
+# resumed run sees are the ones the booking chain was triggered with; these defaults fill in only
+# a flag that chain never had.
 [pipelines.follow_up.flags]
 deep_analysis = { default = false, description = "Widen the investigation beyond the reported symptom" }
 run_e2e       = { default = false, description = "Also run the remote end-to-end suite before approving" }

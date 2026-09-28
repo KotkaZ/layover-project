@@ -22,14 +22,19 @@ use crate::flight::Flight;
 use crate::pipeline::PipelineName;
 
 /// A flight waiting to be dispatched, with the instructions needed to dispatch it.
+///
+/// `pipeline` and `flags` belong to the *chain*, not to this one flight. The first flight of a
+/// chain carries what the trigger chose; every flight the chain sends afterwards — a hand-off, a
+/// spawned chain, a resumed layover — carries the same, so a queue read back after a restart still
+/// knows how the work it holds was asked for.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Queued {
     /// The flight itself.
     pub flight: Flight,
-    /// The pipeline it was triggered through, when one was named rather than a bare agent.
+    /// The pipeline that opened this flight's chain, when one did rather than a bare agent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pipeline: Option<PipelineName>,
-    /// Every flag the pipeline declares, resolved to the value this run will see.
+    /// Every flag the chain's pipeline declares, resolved to the value its runs see.
     ///
     /// Resolved, not merely the ones the operator changed: a default that shifts between queueing
     /// and dispatch would otherwise change the meaning of work already booked.

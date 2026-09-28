@@ -56,7 +56,9 @@ what makes checking every forty-five minutes affordable.
 **Resumed work goes back to the agent that booked it**, not to the pipeline's `entry`. A layover
 records which agent set it down, and sending a follow-up to whatever happens to be a pipeline's
 entry point would hand the publisher's pull request to the analyst. `entry` is still required by
-the schema and is unused by a resuming pipeline; it may declare flags like any other.
+the schema and is unused by a resuming pipeline; it may declare flags like any other, and it must
+declare every flag the resumed agents' prompts test. The **values** come from the chain that booked
+the layover — see [a flag holds for the whole chain](#a-flag-holds-for-the-whole-chain).
 
 **Only a resuming pipeline collects them.** An ordinary schedule never picks up booked work, so a
 factory's hourly sweep cannot quietly start following up somebody else's.
@@ -164,6 +166,32 @@ Rules worth knowing:
   between pipelines, so the same `@include(run_e2e)` line is read by every pipeline that reaches
   that agent. Disagreeing defaults make it mean different things depending on which trigger fired.
   `layover validate` warns.
+
+### A flag holds for the whole chain
+
+The value chosen when work is triggered — `POST /flights` with `"flags": {"run_e2e": true}`, or the
+dashboard's trigger dialog — is the value **every run caused by that trigger** is composed with,
+not only the first:
+
+| Work | Composed with |
+|---|---|
+| The run the trigger wakes | The flags the trigger chose, defaults for the rest |
+| A flight an agent sends on | The same flags as the run that sent it |
+| A chain opened over a `mode = "spawn"` edge | The same flags, **and** the same pipeline, as the chain that spawned it |
+| A resumed [layover](#resuming-booked-work) | The booking chain's values, for every flag the resuming pipeline declares; its defaults for the rest |
+| A scheduled tick | The pipeline's defaults — a clock chooses nothing |
+| A flight to a bare `entry = true` agent | Every flag any pipeline declares, at the default of the first pipeline to declare it |
+
+The flags travel **with the queued work** rather than living only in the Tower's memory, so a chain
+waiting in the queue when the Tower restarts keeps them. An agent never supplies its own: they come
+from the Tower's record of the run, like its identity, because an agent that could turn a flag on
+could turn on the section of its instructions that lets it publish.
+
+A spawned chain also counts towards the pipeline that spawned it — its runs and their cost appear
+under that workflow — because a reviewer spawned by a sweep is unarguably part of the sweep.
+
+`layover prompt <agent> --pipeline <name> --flag …` renders what a run triggered that way receives,
+and the last row is what it renders without `--pipeline`.
 
 ## Entry points
 

@@ -87,6 +87,10 @@ fn collect_referenced_flags(
 }
 
 /// Every flag a reachable agent tests must be declared by the entry point that can reach it.
+///
+/// "Reachable" crosses spawn edges. A spawned chain carries the flags of the chain that spawned
+/// it, so its prompts are composed from the spawning entry point's declarations exactly as a
+/// hand-off's are.
 fn check_flags_are_available_at_every_entry(
     config: &Config,
     referenced: &BTreeMap<AgentName, BTreeSet<String>>,
@@ -99,7 +103,7 @@ fn check_flags_are_available_at_every_entry(
     let graph = RouteGraph::from_config(config);
 
     for entry in entry_points(config) {
-        let reachable = graph.reachable_from([&entry.agent]);
+        let reachable = graph.workflow_from(&entry.agent);
 
         for (agent, flags) in referenced {
             if !reachable.contains(agent) {
@@ -343,6 +347,38 @@ mod tests {
         assert!(
             found.iter().any(|m| m.contains("`nightly`")),
             "a flag must survive every route into the agent, got {found:?}"
+        );
+    }
+
+    #[test]
+    fn a_spawned_agent_needs_its_flags_declared_by_the_pipeline_that_spawns_it() {
+        // A spawned chain inherits the flags of the chain that spawned it, so its prompt is
+        // composed from that pipeline's declarations. Checking only the edges a chain continues
+        // over would pass this factory and fail the first time the sweep spawned a tester.
+        let config = config(
+            r#"
+            [agents.scanner]
+            runner = "claude"
+            prompt = "scan"
+
+            [agents.tester]
+            runner = "claude"
+            prompt_file = "tester.md"
+
+            [[routes]]
+            from = "scanner"
+            to = "tester"
+            mode = "spawn"
+
+            [pipelines.sweep]
+            entry = "scanner"
+            "#,
+        );
+
+        let found = errors(&config, &tester_source());
+        assert!(
+            found.iter().any(|m| m.contains("`sweep`")),
+            "a spawn edge carries the spawner's flags, got {found:?}"
         );
     }
 

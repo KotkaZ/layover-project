@@ -11,7 +11,7 @@
 //! That is why itineraries are held here and looked up by identifier rather than constructed per
 //! flight.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -35,10 +35,16 @@ pub struct Chains {
     live: Mutex<HashMap<String, Itinerary>>,
     /// Which pipeline each chain was triggered through.
     ///
-    /// Held here rather than carried on every flight because only the *first* flight of a chain
-    /// knows: a flight an agent sends has no pipeline of its own, and labelling only the first hop
-    /// would leave the rest of a chain looking like it belonged to nothing.
+    /// Held here as well as on every queued flight, because this is what a run looks up; the
+    /// queued copy is what lets a chain keep its attribution across a restart, when this map
+    /// starts empty.
     pipelines: Mutex<HashMap<String, PipelineName>>,
+    /// The flags each chain was triggered with.
+    ///
+    /// Recorded from the first queued flight that carries any, exactly like the pipeline. Without
+    /// it every run composed its prompt from the pipeline's defaults, so a flag an operator set at
+    /// trigger time was accepted, stored, and then ignored.
+    flags: Mutex<HashMap<String, BTreeMap<String, bool>>>,
 }
 
 impl Chains {
@@ -78,19 +84,32 @@ impl Chains {
         self.live.lock().map_or(0, |live| live.len())
     }
 
-    /// Remembers which pipeline opened a chain.
+    /// Remembers how a chain was opened: the pipeline it came in through and its flags.
     ///
-    /// Only the first flight of a chain carries one, so this is recorded once and read by every
-    /// run after it.
-    pub fn opened_by(&self, id: &ItineraryId, pipeline: Option<&PipelineName>) {
-        let Some(pipeline) = pipeline else {
-            return;
-        };
-
-        if let Ok(mut known) = self.pipelines.lock() {
+    /// Called for every queued flight. The first to carry a pipeline, and the first to carry any
+    /// flags, decides; later flights of the same chain carry the same values anyway, and a chain
+    /// whose flags changed halfway through would compose two different prompts for one piece of
+    /// work.
+    pub fn opened_by(
+        &self,
+        id: &ItineraryId,
+        pipeline: Option<&PipelineName>,
+        flags: &BTreeMap<String, bool>,
+    ) {
+        if let Some(pipeline) = pipeline
+            && let Ok(mut known) = self.pipelines.lock()
+        {
             known
                 .entry(id.as_str().to_owned())
                 .or_insert_with(|| pipeline.clone());
+        }
+
+        if !flags.is_empty()
+            && let Ok(mut known) = self.flags.lock()
+        {
+            known
+                .entry(id.as_str().to_owned())
+                .or_insert_with(|| flags.clone());
         }
     }
 
@@ -98,6 +117,12 @@ impl Chains {
     #[must_use]
     pub fn pipeline_of(&self, id: &ItineraryId) -> Option<PipelineName> {
         self.pipelines.lock().ok()?.get(id.as_str()).cloned()
+    }
+
+    /// The flags a chain was triggered with, if it recorded any.
+    #[must_use]
+    pub fn flags_of(&self, id: &ItineraryId) -> Option<BTreeMap<String, bool>> {
+        self.flags.lock().ok()?.get(id.as_str()).cloned()
     }
 }
 
@@ -238,8 +263,13 @@ impl Runtime for FactoryRuntime {
         );
         let id = flight.id.as_str().to_owned();
 
-        (self.queue)(Queued::new(flight, None, std::collections::BTreeMap::new()))
-            .map_err(|detail| ToolError::Unavailable { detail })?;
+        // The chain's pipeline and flags travel with the work, including into a spawned chain. A
+        // flight carrying neither was composed from defaults, which silently undid whatever the
+        // operator chose at trigger time; a spawned chain carrying neither merged every
+        // pipeline's defaults, so the last declaration won.
+        let queued = Queued::new(flight, session.pipeline.clone(), session.flags.clone());
+
+        (self.queue)(queued).map_err(|detail| ToolError::Unavailable { detail })?;
 
         Ok(id)
     }
@@ -342,7 +372,8 @@ impl Runtime for FactoryRuntime {
             now,
             due_at,
             DEFAULT_MAX_CHECKS,
-        );
+        )
+        .with_flags(session.flags.clone());
 
         let when = layover.due_at.to_string();
 
@@ -643,7 +674,70 @@ mode = "spawn"
             agent: AgentName::new(agent),
             itinerary: ItineraryId::generate(),
             hops_remaining: hops,
+            pipeline: None,
+            flags: BTreeMap::new(),
         }
+    }
+
+    /// A session for a run whose chain came in through `build` with `run_e2e` switched on.
+    fn triggered(agent: &str) -> Session {
+        Session {
+            pipeline: Some(PipelineName::new("build")),
+            flags: BTreeMap::from([("run_e2e".to_owned(), true)]),
+            ..session(agent, 3)
+        }
+    }
+
+    #[test]
+    fn a_sent_flight_carries_its_chains_pipeline_and_flags() {
+        // Without these the next run composed its prompt from the pipeline's defaults, silently
+        // undoing whatever the operator chose at trigger time. Carried on the queued flight, not
+        // only remembered in memory, so a restart between the two runs does not lose them.
+        let fixture = Fixture::new("carries-flags");
+
+        fixture
+            .runtime
+            .send(&triggered("analyst"), &AgentName::new("developer"), "go")
+            .expect("the route is drawn");
+
+        let sent = fixture.sent();
+        assert_eq!(sent[0].pipeline, Some(PipelineName::new("build")));
+        assert_eq!(sent[0].flags.get("run_e2e"), Some(&true));
+    }
+
+    #[test]
+    fn a_spawned_chain_inherits_the_flags_and_pipeline_of_the_chain_that_spawned_it() {
+        // A spawned chain has fresh budget, not fresh instructions. With neither carried, it
+        // merged every pipeline's defaults and the last declaration won.
+        let fixture = Fixture::new("spawn-flags");
+        let caller = triggered("analyst");
+
+        fixture
+            .runtime
+            .send(&caller, &AgentName::new("reviewer"), "review #41")
+            .expect("the spawn edge is drawn");
+
+        let sent = fixture.sent();
+        assert_ne!(
+            sent[0].flight.itinerary, caller.itinerary,
+            "still a new chain"
+        );
+        assert_eq!(sent[0].pipeline, Some(PipelineName::new("build")));
+        assert_eq!(sent[0].flags.get("run_e2e"), Some(&true));
+    }
+
+    #[test]
+    fn a_layover_remembers_the_flags_its_chain_was_composed_with() {
+        // The follow-up is about the same work, and the operator's choices about that work were
+        // made when it was triggered.
+        let fixture = Fixture::new("wait-flags");
+
+        fixture
+            .runtime
+            .wait(&triggered("analyst"), "2h", "the review to land")
+            .expect("books");
+
+        assert_eq!(fixture.booked()[0].flags.get("run_e2e"), Some(&true));
     }
 
     #[test]

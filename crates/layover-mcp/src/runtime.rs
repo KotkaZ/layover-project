@@ -10,8 +10,11 @@
 //! So there is deliberately no constructor taking an agent name from a request. The only way to
 //! get a `Session` is to resolve a token that the Tower minted.
 
+use std::collections::BTreeMap;
+
 use layover_core::agent::AgentName;
 use layover_core::flight::{ItineraryId, RunId};
+use layover_core::pipeline::PipelineName;
 
 /// Who is calling, as the Tower knows them.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,6 +30,16 @@ pub struct Session {
     /// Carried here so a tool call can be refused without going back to storage, and so the agent
     /// can be told what it has left rather than discovering it by being refused.
     pub hops_remaining: u32,
+    /// The pipeline that opened this run's chain, when one did.
+    ///
+    /// Carried so that work this run sends on — a hand-off, a spawned chain, a layover — stays
+    /// attributed to the way it came in, in storage as well as in memory.
+    pub pipeline: Option<PipelineName>,
+    /// The flags this run's prompt was composed with.
+    ///
+    /// Held by the Tower like everything else here, never taken from the agent: an agent that
+    /// could set its own flags could turn on the section of its instructions that lets it publish.
+    pub flags: BTreeMap<String, bool>,
 }
 
 /// An agent this one may send to.

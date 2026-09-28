@@ -310,6 +310,31 @@ impl Pipeline {
 
         Ok(Flags(values))
     }
+
+    /// The flags a chain opened through this pipeline carries, given the values it was booked
+    /// with.
+    ///
+    /// Every flag this pipeline declares, valued from `recorded` where it has one and from the
+    /// declared default otherwise. The declared set is this pipeline's, never `recorded`'s:
+    /// validation proves that every flag a prompt reachable from here tests is declared *here*, so
+    /// composing from any other set could fail at runtime on a factory that passed `validate`.
+    ///
+    /// Unlike [`Self::flags_for_run`], a recorded value for a flag this pipeline does not declare
+    /// is dropped rather than refused. The values were chosen when the work was triggered, perhaps
+    /// through another pipeline and before a configuration change; refusing them would strand
+    /// work that is already under way.
+    #[must_use]
+    pub fn flags_carrying(&self, recorded: &BTreeMap<String, bool>) -> Flags {
+        Flags(
+            self.flags
+                .iter()
+                .map(|(name, spec)| {
+                    let value = recorded.get(name).copied().unwrap_or(spec.default);
+                    (name.clone(), value)
+                })
+                .collect(),
+        )
+    }
 }
 
 /// The resolved boolean parameters of a single run.
@@ -335,6 +360,12 @@ impl Flags {
     /// Returns every declared flag and its value.
     pub fn iter(&self) -> impl Iterator<Item = (&str, bool)> {
         self.0.iter().map(|(name, value)| (name.as_str(), *value))
+    }
+
+    /// Returns the flags as a plain map, for storing on work that has not run yet.
+    #[must_use]
+    pub fn to_map(&self) -> BTreeMap<String, bool> {
+        self.0.clone()
     }
 
     /// Returns `true` when no flags are declared.
@@ -818,6 +849,44 @@ mod tests {
         assert_eq!(
             flags.iter().collect::<Vec<_>>(),
             [("a", false), ("b", true)]
+        );
+    }
+
+    #[test]
+    fn carried_flags_keep_their_values_within_this_pipelines_declarations() {
+        // A chain's flags travel with its work: to follow-on flights, spawned chains and resumed
+        // layovers. What the chain was triggered with is honoured; the set of flags is always the
+        // one this pipeline declares, because that is the set validation checked prompts against.
+        let pipeline = pipeline(
+            r#"
+            entry = "follower"
+
+            [flags]
+            run_e2e = { default = false }
+            draft_pr = { default = true }
+            "#,
+        );
+        let recorded = BTreeMap::from([
+            ("run_e2e".to_owned(), true),
+            ("gone_since".to_owned(), true),
+        ]);
+
+        let flags = pipeline.flags_carrying(&recorded);
+
+        assert_eq!(
+            flags.get("run_e2e"),
+            Some(true),
+            "the chain's choice is kept"
+        );
+        assert_eq!(
+            flags.get("draft_pr"),
+            Some(true),
+            "a flag the chain never recorded takes its default"
+        );
+        assert_eq!(
+            flags.get("gone_since"),
+            None,
+            "a flag this pipeline does not declare is dropped, not refused"
         );
     }
 }

@@ -183,15 +183,11 @@ fn resume_due(
             config.defaults.max_hops,
         );
 
-        let flags = pipeline
-            .flags_for_run(&std::collections::BTreeMap::new())
-            .map(|flags| {
-                flags
-                    .iter()
-                    .map(|(flag, value)| (flag.to_owned(), value))
-                    .collect()
-            })
-            .unwrap_or_default();
+        // The booking chain's values, within what this pipeline declares. The operator's choices
+        // about the work were made when it was triggered, and a follow-up composed from the
+        // resuming pipeline's defaults would quietly undo them. The declared set stays this
+        // pipeline's, because that is what validation checked the reachable prompts against.
+        let flags = pipeline.flags_carrying(&layover.flags).to_map();
 
         if let Err(error) = journal.queue(Queued::new(flight, Some(name.clone()), flags)) {
             announce(format!("could not resume {}: {error}", layover.id));
@@ -522,6 +518,67 @@ resumes = true
         assert!(
             !body.contains("anywhere from nowhere to almost finished"),
             "a resumed layover left nothing half-done: {body}"
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_resumed_layover_carries_the_booking_chains_flags() {
+        // The operator switched `deep` on when the work was triggered. The follow-up is the same
+        // work, so it must not quietly revert to the resuming pipeline's default.
+        let root = temp("resume-flags");
+        let journal = Journal::open(root.join("journal")).expect("opens");
+        let config = factory_config(
+            r#"
+[pipelines.follow_up]
+entry = "worker"
+resumes = true
+
+[pipelines.follow_up.flags]
+deep = { default = false }
+draft = { default = true }
+"#,
+        );
+
+        let now = Timestamp::now();
+        journal
+            .book(
+                layover_core::layover::Layover::book(
+                    AgentName::new("worker"),
+                    ItineraryId::generate(),
+                    "comments on pull request 41",
+                    layover_core::handover::Handover::dispatch(Vec::new()),
+                    now,
+                    now,
+                    12,
+                )
+                .with_flags(std::collections::BTreeMap::from([(
+                    "deep".to_owned(),
+                    true,
+                )])),
+            )
+            .expect("books");
+
+        resume_due(
+            &config,
+            &journal,
+            &PipelineName::new("follow_up"),
+            now,
+            &|_| {},
+        )
+        .expect("collects");
+
+        let pending = journal.pending().expect("readable");
+        assert_eq!(
+            pending[0].flags.get("deep"),
+            Some(&true),
+            "the chain's choice"
+        );
+        assert_eq!(
+            pending[0].flags.get("draft"),
+            Some(&true),
+            "a flag the booking chain never had takes the resuming pipeline's default"
         );
 
         let _ = std::fs::remove_dir_all(&root);

@@ -184,6 +184,8 @@ mod tests {
                     agent: AgentName::new("analyst"),
                     itinerary: ItineraryId::generate(),
                     hops_remaining: 3,
+                    pipeline: None,
+                    flags: std::collections::BTreeMap::new(),
                 },
             )),
             runtime: Arc::new(Stub),

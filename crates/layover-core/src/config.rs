@@ -419,6 +419,23 @@ impl Config {
             .flat_map(|pipeline| pipeline.flags.keys().map(String::as_str))
     }
 
+    /// The flags a chain that no pipeline opened is composed with: every flag any pipeline
+    /// declares, at its default.
+    ///
+    /// Where two pipelines disagree about a default, the first declaration wins. `validate` warns
+    /// about the disagreement; what matters here is that `layover prompt` without `--pipeline` and
+    /// a real run make the same choice, so the preview shows what the run will receive.
+    #[must_use]
+    pub fn flags_without_pipeline(&self) -> crate::pipeline::Flags {
+        let mut values: BTreeMap<String, bool> = BTreeMap::new();
+        for pipeline in self.pipelines.values() {
+            for (flag, spec) in &pipeline.flags {
+                values.entry(flag.clone()).or_insert(spec.default);
+            }
+        }
+        crate::pipeline::Flags::new(values)
+    }
+
     /// Returns the pipelines a clock triggers.
     pub fn scheduled_pipelines(&self) -> impl Iterator<Item = (&PipelineName, &Pipeline)> {
         self.pipelines

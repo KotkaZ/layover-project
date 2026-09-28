@@ -126,6 +126,9 @@ cannot be charged to a run has no chain to spend from and no agent to be.
 - The flight it queues **continues the caller's chain**. It is not a new itinerary, so it spends
   the same Hops, the same Fuel and the same run cap. Two agents passing work back and forth are
   bounded by the budget the chain started with, not by a fresh one each time round.
+- It carries the chain's **pipeline and flags**, taken from the Tower's record of the run and never
+  from the agent, so the next run is composed with the flags the chain was triggered with. A flight
+  over a spawn edge opens a new itinerary with a fresh budget, and still carries both.
 
 ## Setting work down
 
@@ -167,7 +170,9 @@ its Hops and Fuel are spent, and reviving it would make the second follow-up che
 and the tenth refused. A layover is new work about an old subject, and it is priced that way.
 
 What carries over is context. The run is told which chain set this down, what it was waiting for,
-when, and how many times it has already looked:
+when, and how many times it has already looked — and it is composed with the **flags** the booking
+chain was triggered with, for every flag the resuming pipeline declares, so a follow-up does not
+quietly revert to defaults the operator had overridden:
 
 ```text
 ## You are picking up work that was set down

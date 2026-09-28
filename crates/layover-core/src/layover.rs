@@ -29,6 +29,7 @@
 //! is what an earlier run knew". That type already carries the flights and the progress; a
 //! layover adds only *when* to come back and *what to look for*.
 
+use std::collections::BTreeMap;
 use std::fmt;
 
 use jiff::{Timestamp, ToSpan};
@@ -138,6 +139,14 @@ pub struct Layover {
     pub max_checks: u32,
     /// Where it has got to.
     pub standing: Standing,
+    /// The flags the booking chain's prompts were composed with.
+    ///
+    /// A resumed layover is new work about an old subject, and the operator's choices about that
+    /// subject — run the end-to-end suite, open the pull request as a draft — were made when the
+    /// work was triggered. Resuming with the resuming pipeline's defaults instead would quietly
+    /// undo them on the follow-up. Absent in layovers booked before this was recorded.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub flags: BTreeMap<String, bool>,
 }
 
 impl Layover {
@@ -165,7 +174,15 @@ impl Layover {
             checks: 0,
             max_checks,
             standing: Standing::Booked,
+            flags: BTreeMap::new(),
         }
+    }
+
+    /// Records the flags the booking chain was composed with, so its follow-up is too.
+    #[must_use]
+    pub fn with_flags(mut self, flags: BTreeMap<String, bool>) -> Self {
+        self.flags = flags;
+        self
     }
 
     /// Returns `true` when this should be picked up at `now`.

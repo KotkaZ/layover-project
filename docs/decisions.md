@@ -136,6 +136,33 @@ every flag a reachable prompt tests to be declared *there*. The same rule covers
 `entry = true` agent, which supplies no flags at all — any conditional prompt downstream of one is
 unreachable in practice, and saying so at load time is the whole point.
 
+**Why a chain's flags travel with its work.** A flag is a choice somebody makes when they trigger
+work, and it was being honoured for nothing: the trigger stored it, and every run then composed
+its prompt from the pipeline's defaults, so `layover prompt --flag` previewed text no run received.
+Remembering the flags per itinerary in the Tower fixed the first run and nothing after a restart,
+because that memory starts empty. So each queued flight carries its chain's pipeline and flags,
+the way the first flight always did, and the Tower records them from whichever flight it sees
+first. The values come from the Tower's record of the run — the token's session — and never from
+the agent, because an agent that could set a flag could switch on the section of its instructions
+that lets it publish.
+
+**Why a spawned chain belongs to the pipeline that spawned it.** A spawn edge gives a chain fresh
+Hops, Fuel and a run cap; it was also giving it no pipeline, so its prompts were composed from
+every pipeline's defaults merged — the last declaration winning on a clash — and its runs and cost
+belonged to no workflow. The first contradicted the operator, the second contradicted the rule
+that workflow membership crosses spawn edges. A spawned chain now inherits both the flags and the
+pipeline of the chain that spawned it, and prompt-flag validation follows spawn edges for the same
+reason: the spawned agent is composed from the spawning entry point's declarations.
+
+**Why a resumed layover takes its flag values from the chain that booked it.** The follow-up is the
+same work, and the choices about that work — run the end-to-end suite, keep the pull request a
+draft — were made when it was triggered; resuming from the resuming pipeline's defaults undid them
+days later with nobody watching. But the *set* of flags stays the resuming pipeline's, because
+validation proves the prompts reachable from there test only what it declares; composing from the
+booking chain's set instead could fail at runtime on a factory that passed `validate`. So the
+layover records the booking chain's flags, and the resumed run takes those values for the flags
+the resuming pipeline declares and its defaults for the rest.
+
 **Why the overlap warning reads a cron expression's minute field.** A schedule that outruns its
 own work accumulates concurrent runs rather than queueing, so the check needs a lower bound on how
 often a pipeline can fire. `every` states it outright. Cron does not, but the common footguns —

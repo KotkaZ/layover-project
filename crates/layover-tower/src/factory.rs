@@ -42,6 +42,7 @@ use layover_core::pipeline::Flags;
 use layover_core::prompt::{PromptDir, resolve};
 use layover_core::queue::Queued;
 use layover_core::run::{Outcome, RunRecord};
+use layover_mcp::Session;
 use layover_store::Journal;
 
 use crate::barriers::{Abandoned, Barriers};
@@ -243,19 +244,25 @@ impl Factory {
             .join(authorised.name.to_string())
             .join(run.as_str());
 
+        // Resolved once per run and used twice: to compose this run's prompt, and in the token's
+        // session, so that whatever this run sends on carries exactly the flags it was given.
+        let flags = self.flags_for(itinerary.id());
+
         // Minted before the plan is assembled, because the plan is where the token becomes an
         // argument and an environment variable. It is revoked on every path out of this function:
         // a token that outlives its run is a finished process that can still send work.
         let token = self.endpoint.as_ref().map(|_| {
-            self.tokens.mint(
-                run.clone(),
-                authorised.name.clone(),
-                itinerary.id().clone(),
-                authorised.hops_remaining,
-            )
+            self.tokens.mint_for(Session {
+                run: run.clone(),
+                agent: authorised.name.clone(),
+                itinerary: itinerary.id().clone(),
+                hops_remaining: authorised.hops_remaining,
+                pipeline: self.chains.pipeline_of(itinerary.id()),
+                flags: flags.to_map(),
+            })
         });
 
-        let plan = match self.plan_for(&authorised, &hangar, flight, token.as_deref()) {
+        let plan = match self.plan_for(&authorised, &hangar, flight, &flags, token.as_deref()) {
             Ok(plan) => plan,
             Err(why) => {
                 self.revoke(token.as_deref());
@@ -478,14 +485,14 @@ impl Factory {
     fn instructions_for(
         &self,
         authorised: &crate::dispatch::Authorised<'_>,
-        flight: &Flight,
+        flags: &Flags,
     ) -> Result<String, String> {
         match authorised.agent.prompt_spec() {
             Ok(PromptSpec::Inline(text)) => Ok(text),
             Ok(PromptSpec::File(file)) => {
                 let source = PromptDir::new(self.root.join(&self.config.layover.prompt_dir));
 
-                resolve(&source, &file, &self.flags_for(flight)).map_err(|error| {
+                resolve(&source, &file, flags).map_err(|error| {
                     format!(
                         "agent `{}`: cannot read its prompt `{}`: {error}",
                         authorised.name,
@@ -500,32 +507,29 @@ impl Factory {
         }
     }
 
-    /// The prompt flags in force for a flight, taken from the pipeline that began its chain.
+    /// The prompt flags in force for a chain: what it was triggered with, within what its
+    /// pipeline declares.
     ///
-    /// A flag exists so one prompt serves two pipelines — a nightly run that reads further back
-    /// than a quick one. Resolving with defaults regardless of pipeline would silently give every
-    /// run the same prompt and make the flag decorative.
-    fn flags_for(&self, flight: &Flight) -> Flags {
+    /// A flag exists so an operator can choose, at trigger time, what a run is told — run the
+    /// end-to-end suite, open the pull request as a draft. This used to resolve every run from
+    /// the pipeline's *defaults*, so a flag set on `POST /flights` was accepted, stored and never
+    /// read, and `layover prompt --flag` previewed something no run would receive.
+    ///
+    /// The chain's recorded values win. The declared set is the pipeline's, because that is the
+    /// set validation checked every reachable prompt against. A chain no pipeline opened — a
+    /// flight to a bare `entry = true` agent — gets every declared flag at its default, which is
+    /// exactly what `layover prompt` shows without `--pipeline`.
+    fn flags_for(&self, itinerary: &layover_core::flight::ItineraryId) -> Flags {
+        let recorded = self.chains.flags_of(itinerary).unwrap_or_default();
         let pipeline = self
             .chains
-            .pipeline_of(&flight.itinerary)
-            .and_then(|name| self.config.pipelines.get(&name).cloned());
+            .pipeline_of(itinerary)
+            .and_then(|name| self.config.pipelines.get(&name));
 
         match pipeline {
-            Some(pipeline) => pipeline
-                .flags_for_run(&BTreeMap::new())
-                .unwrap_or_else(|_| Flags::new(BTreeMap::new())),
-            // No pipeline began this chain — a flight sent straight to an agent. Every declared
-            // flag falls back to its default, which is what `layover prompt` shows without
-            // `--pipeline`.
-            None => Flags::new(
-                self.config
-                    .pipelines
-                    .values()
-                    .flat_map(|pipeline| pipeline.flags.iter())
-                    .map(|(flag, spec)| (flag.clone(), spec.default))
-                    .collect(),
-            ),
+            Some(pipeline) => pipeline.flags_carrying(&recorded),
+            None if !recorded.is_empty() => Flags::new(recorded),
+            None => self.config.flags_without_pipeline(),
         }
     }
 
@@ -539,9 +543,10 @@ impl Factory {
         authorised: &crate::dispatch::Authorised<'_>,
         hangar: &Path,
         flight: &Flight,
+        flags: &Flags,
         token: Option<&str>,
     ) -> Result<Plan, String> {
-        let instructions = self.instructions_for(authorised, flight)?;
+        let instructions = self.instructions_for(authorised, flags)?;
 
         let payload = compose(&Run {
             agent: &authorised.name,
@@ -721,11 +726,14 @@ impl Factory {
 
                 unqueue(&queued.flight);
 
-                // Recorded before anything runs, because only this first flight knows which
-                // pipeline opened the chain: a flight an agent sends carries none, and every run
-                // after this one reads the answer from here.
-                self.chains
-                    .opened_by(&queued.flight.itinerary, queued.pipeline.as_ref());
+                // Recorded before anything runs, because this is where a chain's pipeline and flags
+                // enter the process: from the trigger for a fresh chain, from the queued flight for
+                // one resumed after a restart. Every run after this one reads them from here.
+                self.chains.opened_by(
+                    &queued.flight.itinerary,
+                    queued.pipeline.as_ref(),
+                    &queued.flags,
+                );
 
                 let Some(flight) = self.past_the_barrier(&queued.flight, report) else {
                     done.push(queued.flight);

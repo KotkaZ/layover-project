@@ -448,12 +448,7 @@ fn resolve_flags(
             .map_err(|error| error.to_string());
     }
 
-    let mut values: BTreeMap<String, bool> = BTreeMap::new();
-    for pipeline in config.pipelines.values() {
-        for (flag, spec) in &pipeline.flags {
-            values.entry(flag.clone()).or_insert(spec.default);
-        }
-    }
+    let mut values: BTreeMap<String, bool> = config.flags_without_pipeline().to_map();
 
     for (flag, value) in overrides {
         if !values.contains_key(&flag) {
