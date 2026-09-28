@@ -80,6 +80,17 @@ status](README.md#project-status).
   `Human`. A released join is unchanged. On disk those two are written as `"from":"human"` with an
   optional `via` field, so a 1.0.0 binary still reads — and does not drop — queued work.
 
+- **A resumed layover carried only its `because` text.** `resume_due` built the handover with
+  nothing in it, so a follow-up knew only the line the earlier run was waiting for, while
+  `book/src/tools.md` and the reference factory's `follower.md` promised it would learn which work
+  item this was and what the earlier chain concluded. A layover now records the message that woke
+  the run that booked it and which run that was; the resumed run is handed that message and the
+  run's last `layover_report`, each quoted and cut to 2,000 characters.
+
+  Reports reached nobody either: `layover_report` appended them to the agent's Hangar while the
+  dashboard's report view read the journal. They now go to the journal, where a resumed layover
+  and `GET /reports/{run}` find them.
+
 ## [1.0.0] — 2026-09-23
 
 Layover runs a factory unattended for two days without being touched. That was the bar this

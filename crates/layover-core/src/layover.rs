@@ -37,7 +37,7 @@ use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
 use crate::agent::AgentName;
-use crate::flight::ItineraryId;
+use crate::flight::{ItineraryId, RunId};
 use crate::handover::Handover;
 
 /// Identifier of a booked layover.
@@ -157,6 +157,12 @@ pub struct Layover {
     /// undo them on the follow-up. Absent in layovers booked before this was recorded.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub flags: BTreeMap<String, bool>,
+    /// The run that set this down, so its report can be handed to the run that picks it up.
+    ///
+    /// Looked up when the layover is resumed rather than copied when it is booked, because a run
+    /// usually reports *after* it books: the conclusion does not exist yet at that moment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run: Option<RunId>,
 }
 
 impl Layover {
@@ -185,6 +191,7 @@ impl Layover {
             max_checks,
             standing: Standing::Booked,
             flags: BTreeMap::new(),
+            run: None,
         }
     }
 
@@ -192,6 +199,13 @@ impl Layover {
     #[must_use]
     pub fn with_flags(mut self, flags: BTreeMap<String, bool>) -> Self {
         self.flags = flags;
+        self
+    }
+
+    /// Records the run that set this down, so what it reported can be handed on.
+    #[must_use]
+    pub fn booked_in(mut self, run: RunId) -> Self {
+        self.run = Some(run);
         self
     }
 

@@ -274,6 +274,7 @@ impl Factory {
                 hops_remaining: authorised.hops_remaining,
                 pipeline: self.chains.pipeline_of(itinerary.id()),
                 flags: flags.to_map(),
+                flight: Some(flight.clone()),
             })
         });
 

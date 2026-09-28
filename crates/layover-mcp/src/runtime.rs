@@ -13,7 +13,7 @@
 use std::collections::BTreeMap;
 
 use layover_core::agent::AgentName;
-use layover_core::flight::{ItineraryId, RunId};
+use layover_core::flight::{Flight, ItineraryId, RunId};
 use layover_core::help::Blocker;
 use layover_core::pipeline::PipelineName;
 
@@ -41,6 +41,11 @@ pub struct Session {
     /// Held by the Tower like everything else here, never taken from the agent: an agent that
     /// could set its own flags could turn on the section of its instructions that lets it publish.
     pub flags: BTreeMap<String, bool>,
+    /// The flight that woke this run, as it was delivered.
+    ///
+    /// Kept so that work this run sets down can tell whoever picks it up what it was about. `None`
+    /// where the Tower did not say — a session built by hand in a test.
+    pub flight: Option<Flight>,
 }
 
 /// An agent this one may send to.

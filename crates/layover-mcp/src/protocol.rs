@@ -469,6 +469,7 @@ mod tests {
             hops_remaining: 3,
             pipeline: None,
             flags: std::collections::BTreeMap::new(),
+            flight: None,
         }
     }
 

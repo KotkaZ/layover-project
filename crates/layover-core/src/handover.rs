@@ -313,6 +313,21 @@ impl Handover {
                      see whether the thing it was waiting for has happened, and to act on it if \
                      it has. If it has not, set the work down again rather than waiting.\n\n",
                 );
+
+                // What the run that set this down was asked, and what it concluded. The reason a
+                // layover is not a bare schedule is that the later run should arrive knowing which
+                // work this is; without these it knew only the one line of `waiting_for`.
+                for flight in &self.flights {
+                    out.push_str("The message that woke the run that set this down:\n\n");
+                    write_quoted(&mut out, &excerpt(&flight.body));
+                }
+                if !self.progress.is_empty() {
+                    out.push_str("What that run reported before it finished:\n\n");
+                    for note in &self.progress {
+                        write_quoted(&mut out, &excerpt(note));
+                    }
+                }
+                return out;
             }
         }
 
@@ -339,6 +354,47 @@ impl Handover {
 
         out
     }
+}
+
+/// Longest a piece of carried context may be, in bytes, before it is cut.
+///
+/// A resumed run is handed the message that woke the run that set its work down, and what that run
+/// reported. Both come from agents and neither has a useful upper bound — a join's body can hold
+/// several verdicts, a report runs to twelve thousand characters — while the handover joins a
+/// payload that already runs to tens of kilobytes. The start is kept, because that is where both a
+/// work item and a report's conclusion are stated.
+pub const MAX_CARRIED: usize = 2_000;
+
+/// Cuts carried context to [`MAX_CARRIED`] on a character boundary, saying that it did.
+#[must_use]
+pub fn excerpt(text: &str) -> String {
+    let text = text.trim();
+    if text.len() <= MAX_CARRIED {
+        return text.to_owned();
+    }
+
+    let mut end = MAX_CARRIED;
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+
+    format!(
+        "{}\n[cut to {MAX_CARRIED} characters; the rest is in the earlier run's Hangar]",
+        text[..end].trim_end()
+    )
+}
+
+/// Writes `text` as a quoted block, so it reads as something an earlier run was told or said and
+/// not as part of this run's instructions.
+fn write_quoted(out: &mut String, text: &str) {
+    for line in text.lines() {
+        if line.trim().is_empty() {
+            out.push_str(">\n");
+        } else {
+            let _ = writeln!(out, "> {line}");
+        }
+    }
+    out.push('\n');
 }
 
 /// Whether the child process from the interrupted run has been confirmed gone.
@@ -677,5 +733,63 @@ mod tests {
 
         assert_eq!(handover.flights.len(), 1);
         assert_eq!(handover.flights[0].body, "implement the retry policy");
+    }
+
+    fn resumption() -> Resumption {
+        Resumption {
+            booked_by: ItineraryId::generate(),
+            waiting_for: "comments on pull request 41".to_owned(),
+            booked_at: "2026-09-19T09:56:18Z".parse().expect("valid"),
+            checks: 0,
+        }
+    }
+
+    #[test]
+    fn a_resumed_run_is_told_what_woke_the_booking_run_and_what_it_concluded() {
+        // The point of a layover over a bare schedule is that the later run arrives knowing which
+        // work this is and what the earlier chain concluded. It used to be told only the one line
+        // the earlier run was waiting for.
+        let brief = Handover::resumed(resumption(), vec![flight()])
+            .with_progress(vec![
+                "Opened pull request 41 for work item 4821\n\nDraft, awaiting review.".to_owned(),
+            ])
+            .brief();
+
+        assert!(brief.contains("comments on pull request 41"), "{brief}");
+        assert!(
+            brief.contains("> implement the retry policy"),
+            "the message that woke the run that set this down: {brief}"
+        );
+        assert!(
+            brief.contains("> Opened pull request 41 for work item 4821"),
+            "what that run reported: {brief}"
+        );
+        assert!(
+            !brief.contains("anywhere from nowhere to almost finished"),
+            "a layover ended cleanly: {brief}"
+        );
+    }
+
+    #[test]
+    fn a_resumed_run_with_nothing_carried_is_told_only_what_it_was_waiting_for() {
+        let brief = Handover::resumed(resumption(), Vec::new()).brief();
+
+        assert!(brief.contains("comments on pull request 41"), "{brief}");
+        assert!(!brief.contains("woke the run"), "{brief}");
+        assert!(!brief.contains("reported"), "{brief}");
+    }
+
+    #[test]
+    fn carried_context_is_capped_and_says_so() {
+        let long = format!("START {}", "é".repeat(MAX_CARRIED));
+        let cut = excerpt(&long);
+
+        assert!(
+            cut.starts_with("START"),
+            "the start is where a work item is stated"
+        );
+        assert!(cut.contains("[cut to"), "{cut}");
+        assert!(cut.len() < long.len());
+        assert_eq!(excerpt("short"), "short");
     }
 }

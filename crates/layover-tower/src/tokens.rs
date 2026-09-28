@@ -65,6 +65,7 @@ impl Tokens {
             hops_remaining,
             pipeline: None,
             flags: std::collections::BTreeMap::new(),
+            flight: None,
         })
     }
 

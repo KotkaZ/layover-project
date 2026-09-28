@@ -199,7 +199,9 @@ and the tenth refused. A layover is new work about an old subject, and it is pri
 What carries over is context. The run is told which chain set this down, what it was waiting for,
 when, and how many times it has already looked — and it is composed with the **flags** the booking
 chain was triggered with, for every flag the resuming pipeline declares, so a follow-up does not
-quietly revert to defaults the operator had overridden:
+quietly revert to defaults the operator had overridden. It is also handed the two things that say
+*which work this is*: the message that woke the run that set it down, and what that run reported
+with `layover_report`, each quoted and cut to 2,000 characters:
 
 ```text
 ## You are picking up work that was set down
@@ -212,7 +214,21 @@ It was set down at 2026-09-19T09:56:18Z, and this is check 1.
 Nothing was left half-done: the earlier run ended cleanly. Your job is to see whether the thing
 it was waiting for has happened, and to act on it if it has. If it has not, set the work down
 again rather than waiting.
+
+The message that woke the run that set this down:
+
+> Publish work item 4821: the retry policy fix.
+
+What that run reported before it finished:
+
+> Opened draft pull request 41
+>
+> Branch fix/retry-4821; tests green.
 ```
+
+The report is looked up when the work is picked up, not when it is set down, because a run usually
+reports *after* it books a layover. A run that never reported leaves that part out; how much the
+follow-up knows is exactly as much as the earlier run chose to write down.
 
 That last paragraph is the opposite of what a *recovered* run is told, and deliberately so. A
 recovered run may have half-applied a side effect and is warned to check before repeating

@@ -146,6 +146,9 @@ pub type BookLayover = Arc<dyn Fn(Layover) -> Result<(), String> + Send + Sync>;
 pub type AskForHelp =
     Arc<dyn Fn(layover_core::help::HelpRequest) -> Result<(), String> + Send + Sync>;
 
+/// Where a run's report on itself goes.
+pub type FileReport = Arc<dyn Fn(layover_core::report::Report) -> Result<(), String> + Send + Sync>;
+
 /// Everything a tool call needs, wired to a real factory.
 ///
 /// Owns rather than borrows, because this has to live in an HTTP handler that outlives any
@@ -156,6 +159,7 @@ pub struct FactoryRuntime {
     queue: QueueFlight,
     book: BookLayover,
     ask: AskForHelp,
+    file: FileReport,
     read_learnings: ReadLearnings,
     write_learnings: WriteLearnings,
     hangars: PathBuf,
@@ -182,6 +186,8 @@ pub struct Wiring {
     pub book: BookLayover,
     /// Where a request for help goes: the journal, which is what the dashboard and `doctor` read.
     pub ask: AskForHelp,
+    /// Where a run's report goes: the journal, which the dashboard and a resumed layover read.
+    pub file: FileReport,
     /// How to read what the factory has learned.
     pub read_learnings: ReadLearnings,
     /// How to write it back.
@@ -198,6 +204,7 @@ impl FactoryRuntime {
             queue: wiring.queue,
             book: wiring.book,
             ask: wiring.ask,
+            file: wiring.file,
             read_learnings: wiring.read_learnings,
             write_learnings: wiring.write_learnings,
             hangars: wiring.hangars,
@@ -292,8 +299,9 @@ impl Runtime for FactoryRuntime {
             jiff::Timestamp::now(),
         );
 
-        let path = self.agent_dir(&session.agent).join("reports.jsonl");
-        append_json(&path, &report).map_err(|detail| ToolError::Unavailable { detail })
+        // To the journal, which the dashboard's report view and a resumed layover read. Written to
+        // the agent's Hangar instead, a report was the account of a run that nobody could find.
+        (self.file)(report).map_err(|detail| ToolError::Unavailable { detail })
     }
 
     fn help(
@@ -370,10 +378,19 @@ impl Runtime for FactoryRuntime {
                 detail: format!("`{until}` is further away than this factory can plan for"),
             })?;
 
-        // The handover carries no flights and no progress. A layover is not a recovery: the run
-        // that booked it finished, so there is nothing half-done to hand over — what the later run
-        // needs is why it is here, which `waiting_for` carries.
-        let handover = Handover::dispatch(Vec::new());
+        // What the later run needs is which work this is: the message that woke the run setting
+        // it down, cut to size. Its report is looked up when the layover is resumed, because a
+        // run usually reports after it books and its conclusion does not exist yet.
+        let woke = session
+            .flight
+            .iter()
+            .map(|flight| {
+                let mut carried = flight.clone();
+                carried.body = layover_core::handover::excerpt(&flight.body);
+                carried
+            })
+            .collect();
+        let handover = Handover::dispatch(woke);
 
         let layover = Layover::book(
             session.agent.clone(),
@@ -384,7 +401,8 @@ impl Runtime for FactoryRuntime {
             due_at,
             DEFAULT_MAX_CHECKS,
         )
-        .with_flags(session.flags.clone());
+        .with_flags(session.flags.clone())
+        .booked_in(session.run.clone());
 
         let when = layover.due_at.to_string();
 
@@ -533,25 +551,6 @@ impl FactoryRuntime {
     }
 }
 
-/// Appends one JSON record to a file, creating it if needed.
-fn append_json<T: serde::Serialize>(path: &std::path::Path, value: &T) -> Result<(), String> {
-    use std::io::Write as _;
-
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-    }
-
-    let mut line = serde_json::to_string(value).map_err(|error| error.to_string())?;
-    line.push('\n');
-
-    std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-        .and_then(|mut file| file.write_all(line.as_bytes()))
-        .map_err(|error| error.to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -605,6 +604,7 @@ mode = "spawn"
         sent: Arc<Mutex<Vec<Queued>>>,
         booked: Arc<Mutex<Vec<Layover>>>,
         asked: Arc<Mutex<Vec<layover_core::help::HelpRequest>>>,
+        filed: Arc<Mutex<Vec<layover_core::report::Report>>>,
         learnings: Arc<Mutex<Learnings>>,
         defaults: layover_core::config::Defaults,
         dir: PathBuf,
@@ -627,6 +627,9 @@ mode = "spawn"
             let asked: Arc<Mutex<Vec<layover_core::help::HelpRequest>>> =
                 Arc::new(Mutex::new(Vec::new()));
             let inbox = Arc::clone(&asked);
+            let filed: Arc<Mutex<Vec<layover_core::report::Report>>> =
+                Arc::new(Mutex::new(Vec::new()));
+            let cabinet = Arc::clone(&filed);
             let learnings: Arc<Mutex<Learnings>> = Arc::new(Mutex::new(Learnings::new()));
             let reading = Arc::clone(&learnings);
             let writing = Arc::clone(&learnings);
@@ -655,6 +658,13 @@ mode = "spawn"
                             .push(request);
                         Ok(())
                     }),
+                    file: Arc::new(move |report| {
+                        cabinet
+                            .lock()
+                            .map_err(|_| "poisoned".to_owned())?
+                            .push(report);
+                        Ok(())
+                    }),
                     read_learnings: Arc::new(move || {
                         Ok(reading.lock().map_err(|_| "poisoned".to_owned())?.clone())
                     }),
@@ -666,6 +676,7 @@ mode = "spawn"
                 sent,
                 booked,
                 asked,
+                filed,
                 learnings,
                 defaults,
                 dir,
@@ -682,6 +693,10 @@ mode = "spawn"
 
         fn asked(&self) -> Vec<layover_core::help::HelpRequest> {
             self.asked.lock().expect("not poisoned").clone()
+        }
+
+        fn filed(&self) -> Vec<layover_core::report::Report> {
+            self.filed.lock().expect("not poisoned").clone()
         }
 
         fn learnings(&self) -> Learnings {
@@ -703,6 +718,7 @@ mode = "spawn"
             hops_remaining: hops,
             pipeline: None,
             flags: BTreeMap::new(),
+            flight: None,
         }
     }
 
@@ -1229,6 +1245,9 @@ mode = "spawn"
 
     #[test]
     fn a_report_is_written_where_it_can_be_found_afterwards() {
+        // "Where it can be found" used to be the agent's Hangar, which neither the dashboard's
+        // report view nor a resumed layover reads. It goes wherever the runtime is wired to file
+        // it, which in a real factory is the journal.
         let fixture = Fixture::new("report");
         let who = session("analyst", 3);
 
@@ -1237,9 +1256,46 @@ mode = "spawn"
             .report(&who, "Found the cause", "It was the cache all along.")
             .expect("writes");
 
-        let written = std::fs::read_to_string(fixture.dir.join("analyst").join("reports.jsonl"))
-            .expect("a report file");
-        assert!(written.contains("Found the cause"), "{written}");
+        let filed = fixture.filed();
+        assert_eq!(filed.len(), 1);
+        assert_eq!(filed[0].headline, "Found the cause");
+        assert_eq!(filed[0].run, who.run, "attributed to the run that wrote it");
+        assert!(!fixture.dir.join("analyst").join("reports.jsonl").exists());
+    }
+
+    #[test]
+    fn a_layover_carries_what_woke_the_run_that_booked_it() {
+        // A resumed run should arrive knowing which work this is. The run that booked the layover
+        // knows — it is in the flight that woke it — so the layover keeps it, and names the run so
+        // its report can be found when the work is picked up.
+        let fixture = Fixture::new("wait-context");
+        let woke = Flight::new(
+            ItineraryId::generate(),
+            Origin::Agent(AgentName::new("developer")),
+            AgentName::new("analyst"),
+            format!("Work item 4821: fix the retry policy.{}", "x".repeat(5_000)),
+            3,
+        );
+        let caller = Session {
+            flight: Some(woke),
+            ..session("analyst", 3)
+        };
+
+        fixture
+            .runtime
+            .wait(&caller, "2h", "comments on pull request 41")
+            .expect("books");
+
+        let booked = &fixture.booked()[0];
+        assert_eq!(booked.run.as_ref(), Some(&caller.run));
+        assert_eq!(booked.handover.flights.len(), 1);
+        let carried = &booked.handover.flights[0].body;
+        assert!(carried.starts_with("Work item 4821"), "{carried}");
+        assert!(
+            carried.len() < 3_000,
+            "cut to size before it is stored: {} bytes",
+            carried.len()
+        );
     }
 
     #[test]

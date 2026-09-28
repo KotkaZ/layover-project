@@ -465,6 +465,18 @@ one's context, not its process. Checks back off and eventually expire, because s
 on a human who has moved on must stop costing money, and the difference between waiting patiently
 and leaking is a count.
 
+**Why a resumed run is handed what woke the booking run and what it reported, cut to size.** A
+layover's whole case over a bare schedule is that the later run arrives knowing which work this is,
+and it was handed one line — what the earlier run said it was waiting for. The two things the Tower
+holds without interpreting anything are the message that woke the run that set the work down,
+which is where a work item is named, and that run's own `layover_report`, which is where it says
+what it concluded; a transcript summary would need a model, and the last lines of output are
+usually the middle of a thought. The message is captured when the layover is booked, the report
+looked up when it is resumed because a run usually reports after it books. Each is quoted, so it
+reads as something an earlier run was told or said rather than as instructions, and cut to 2,000
+characters from the start, because both state their point first and the handover joins a payload
+that already runs to tens of kilobytes.
+
 **Why a workflow is a view over pipelines rather than a new concept.** A factory with three
 pipelines was drawn as one graph, and a reader looking at it reasonably concluded that Layover
 models a single, very confused process. The pipelines were always separate workflows — a nightly

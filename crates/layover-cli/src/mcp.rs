@@ -64,6 +64,7 @@ impl ServedMcp {
         let queueing = Arc::clone(journal);
         let booking = Arc::clone(journal);
         let asking = Arc::clone(journal);
+        let filing = Arc::clone(journal);
         let reading = Arc::clone(journal);
         let writing = Arc::clone(journal);
 
@@ -86,6 +87,11 @@ impl ServedMcp {
                 asking
                     .ask(&request)
                     .map_err(|error| format!("the request could not be filed: {error}"))
+            }),
+            file: Arc::new(move |report| {
+                filing
+                    .file(&report)
+                    .map_err(|error| format!("the report could not be filed: {error}"))
             }),
             read_learnings: Arc::new(move || {
                 reading

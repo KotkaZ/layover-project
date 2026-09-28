@@ -146,7 +146,8 @@ fn run_loop(factory: &Factory, journal: &Journal, stop: &AtomicBool, announce: &
 /// that way.
 ///
 /// What carries over is context, not budget: the resumed run is told which chain set this down,
-/// what it was waiting for, and how many times it has looked.
+/// what it was waiting for, how many times it has looked, the message that woke the run that set it
+/// down, and what that run reported — each cut to size.
 fn resume_due(
     config: &Config,
     journal: &Journal,
@@ -160,6 +161,13 @@ fn resume_due(
         .ok_or_else(|| format!("`{name}` is not declared"))?;
 
     let due = journal.due(now).map_err(|error| error.to_string())?;
+    // Everything still kept, up to a moment past now: a report filed an instant ago must be found.
+    let everything = layover_core::cost::Window::AllTime.resolve(
+        &Timestamp::now()
+            .checked_add(jiff::SignedDuration::from_mins(1))
+            .unwrap_or(now)
+            .to_zoned(jiff::tz::TimeZone::UTC),
+    );
     let mut resumed = 0;
 
     for layover in due {
@@ -170,7 +178,21 @@ fn resume_due(
             checks: layover.checks,
         };
 
-        let body = Handover::resumed(resumption, Vec::new()).brief();
+        // What the run that set this down concluded. Looked up now rather than stored at booking,
+        // because a run usually reports after it books.
+        let reported = layover
+            .run
+            .as_ref()
+            .and_then(|run| journal.report_for(&everything, run.as_str()).ok().flatten())
+            .map(|report| {
+                format!("{}\n\n{}", report.headline.trim(), report.body.trim())
+                    .trim()
+                    .to_owned()
+            });
+
+        let body = Handover::resumed(resumption, layover.handover.flights.clone())
+            .with_progress(reported.into_iter().collect())
+            .brief();
 
         // The layover names the agent to come back to; the pipeline only says that this factory
         // collects them. Sending to the pipeline's entry agent instead would hand a follow-up to
@@ -587,6 +609,80 @@ draft = { default = true }
             pending[0].flags.get("draft"),
             Some(&true),
             "a flag the booking chain never had takes the resuming pipeline's default"
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_resumed_run_is_told_what_the_booking_run_was_asked_and_what_it_reported() {
+        // `follower.md` promises the resumed agent learns which work item this is and what the
+        // earlier chain concluded. It used to be handed only the line it was waiting for.
+        let root = temp("resume-context");
+        let journal = Journal::open(root.join("journal")).expect("opens");
+        let config = factory_config(
+            r#"
+[pipelines.follow_up]
+entry = "worker"
+resumes = true
+"#,
+        );
+
+        let now = Timestamp::now();
+        let booking_run = layover_core::RunId::generate();
+        let chain = ItineraryId::generate();
+        let woke = Flight::new(
+            chain.clone(),
+            Origin::Agent(AgentName::new("developer")),
+            AgentName::new("worker"),
+            "Publish work item 4821: the retry policy fix.",
+            3,
+        );
+
+        journal
+            .book(
+                layover_core::layover::Layover::book(
+                    AgentName::new("worker"),
+                    chain.clone(),
+                    "comments on pull request 41",
+                    layover_core::handover::Handover::dispatch(vec![woke]),
+                    now,
+                    now,
+                    12,
+                )
+                .booked_in(booking_run.clone()),
+            )
+            .expect("books");
+        journal
+            .file(&layover_core::report::Report::new(
+                booking_run,
+                AgentName::new("worker"),
+                chain,
+                "Opened draft pull request 41",
+                "Branch fix/retry-4821; tests green.",
+                now.checked_sub(jiff::SignedDuration::from_mins(1))
+                    .expect("in range"),
+            ))
+            .expect("files the report");
+
+        resume_due(
+            &config,
+            &journal,
+            &PipelineName::new("follow_up"),
+            now,
+            &|_| {},
+        )
+        .expect("collects");
+
+        let body = journal.pending().expect("readable")[0].flight.body.clone();
+        assert!(body.contains("work item 4821"), "what woke it: {body}");
+        assert!(
+            body.contains("Opened draft pull request 41"),
+            "its report: {body}"
+        );
+        assert!(
+            body.contains("fix/retry-4821"),
+            "the report's detail: {body}"
         );
 
         let _ = std::fs::remove_dir_all(&root);
