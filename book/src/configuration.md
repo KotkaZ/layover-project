@@ -8,7 +8,7 @@ a human is still watching.
 | Key | Default | Meaning |
 |---|---|---|
 | `state_dir` | `.layover/state` | One hangar per agent: memory, transcripts, run history. |
-| `work_dir` | `workspace` | The shared working directory agents operate in. |
+| `work_dir` | `workspace` | The shared working directory agents operate in, relative to this file. |
 | `logbook` | `.layover/logbook.md` | Shared memory. All writes serialised by the Tower. |
 | `prompt_dir` | `prompts` | What `prompt_file` paths resolve against, relative to this file. |
 | `http_addr` | `127.0.0.1:7878` | Where the API binds. Loopback by default, deliberately. **Not yet honoured** — `layover serve --addr` sets the bind address today. |
@@ -189,7 +189,7 @@ prompt_file = "tester.md"
 | `entry` | `false` | Whether a human may send flights straight here. |
 | `resident` | `false` | Pin the agent resident rather than transient. Not built. |
 | `fuel_usd` | — | Fuel override for itineraries that *start* at this agent. |
-| `work_dir` | — | Work somewhere other than the shared `work_dir`. |
+| `work_dir` | — | Work somewhere other than the shared `work_dir`. Relative to this file; an absolute path is used as written. |
 | `recovery` | `automatic` | `manual` if repeating this agent's work would do damage. See [Recovery](./recovery.md). |
 
 ### MCP servers

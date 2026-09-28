@@ -131,11 +131,17 @@ pub struct Factory {
 impl Factory {
     /// Opens a factory rooted at `root`, which is where `.layover/` lives.
     ///
+    /// The root is made absolute here, once. Every path a child is handed — its Hangar, its MCP
+    /// configuration, its `{prompt}` file, its working directory — is built from it, and the child
+    /// runs somewhere else: a relative root yields paths the child resolves against its own
+    /// `work_dir` rather than the Tower's, and finds nothing there.
+    ///
     /// # Errors
     ///
-    /// Returns an error when the state directory cannot be created.
+    /// Returns an error when the root cannot be made absolute or the state directory cannot be
+    /// created.
     pub fn new(config: Config, root: impl Into<PathBuf>) -> std::io::Result<Self> {
-        let root = root.into();
+        let root = std::path::absolute(root.into())?;
         let graph = RouteGraph::from_config(&config);
         let live = Ledger::open(root.join(".layover").join("state").join("runs"))?;
         let journal = Journal::open(root.join(".layover").join("journal"))
@@ -558,11 +564,15 @@ impl Factory {
             .get(&authorised.runner)
             .ok_or_else(|| format!("runner `{}` vanished", authorised.runner))?;
 
-        let work_dir = authorised
-            .agent
-            .work_dir
-            .clone()
-            .unwrap_or_else(|| self.root.join(&self.config.layover.work_dir));
+        // Joined to the root even when the agent names its own: `work_dir` is documented as
+        // relative to the configuration file, and an absolute one replaces the root outright.
+        let work_dir = self.root.join(
+            authorised
+                .agent
+                .work_dir
+                .as_deref()
+                .unwrap_or(&self.config.layover.work_dir),
+        );
 
         std::fs::create_dir_all(&work_dir)
             .map_err(|error| format!("could not make the working directory: {error}"))?;
@@ -1799,5 +1809,69 @@ join = "all"
         let drained = factory.drain(vec![direct], |_| {}, |_, _| {});
 
         assert_eq!(drained.ran, 1, "a human trigger bypasses the barrier");
+    }
+
+    #[test]
+    fn an_agents_relative_work_dir_is_resolved_against_the_factory_not_the_tower() {
+        // `work_dir` on an agent is documented as relative to the configuration file. Joined to
+        // nothing, it was relative to wherever the Tower happened to be started, so the same
+        // factory ran its agent in a different folder depending on who launched it.
+        let temp = Temp::new("agent-workdir");
+        let print_cwd = if cfg!(windows) {
+            r#"["cmd", "/c", "cd"]"#
+        } else {
+            r#"["sh", "-c", "pwd"]"#
+        };
+        let text = format!(
+            r#"
+[defaults]
+runner = "shell"
+timeout_sec = 30
+
+[runners.shell]
+command = {print_cwd}
+
+[agents.worker]
+prompt = "work"
+entry = true
+work_dir = "layover-agent-elsewhere"
+"#
+        );
+
+        let config: Config = toml::from_str(&text).expect("parses");
+        let factory = Factory::new(config, &temp.0).expect("opens");
+        factory.drain(
+            vec![queued_to(
+                &ItineraryId::generate(),
+                Origin::Human,
+                "worker",
+                4,
+            )],
+            |_| {},
+            |_, _| {},
+        );
+
+        let transcript = std::fs::read_dir(temp.0.join(".layover").join("hangars").join("worker"))
+            .expect("a Hangar")
+            .filter_map(Result::ok)
+            .map(|entry| entry.path().join(spawn::TRANSCRIPT_FILE))
+            .find(|path| path.exists())
+            .and_then(|path| std::fs::read_to_string(path).ok())
+            .expect("a transcript");
+
+        assert!(
+            temp.0.join("layover-agent-elsewhere").is_dir(),
+            "the agent's directory belongs under the factory"
+        );
+        assert!(
+            transcript.contains("layover-agent-elsewhere")
+                && transcript.contains(
+                    temp.0
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .expect("a name")
+                ),
+            "the run should have been in the factory's folder: {transcript}"
+        );
     }
 }

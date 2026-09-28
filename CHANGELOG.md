@@ -8,6 +8,21 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A relative `--config` broke every run.** The factory root stayed relative, so every path a
+  child was handed — its Hangar, the `@…/mcp.json` its CLI was pointed at, the `{prompt}` file —
+  was relative to the Tower's working directory. The child runs in its agent's `work_dir`, resolved
+  them there, and failed in a second: `Failed to read MCP config file …\mcp.json: The system cannot
+  find the path specified.` The default `--config layover.toml` with the default
+  `work_dir = "workspace"` failed the same way, so a plain `layover serve` could run nothing.
+
+  `serve`, `run` and `autostart` now make the configuration path absolute before anything is
+  derived from it, the Tower does the same to the root it is given, and `serve` prints the absolute
+  paths it is using. `std::path::absolute` rather than `canonicalize`, whose `\\?\` form many CLIs
+  cannot open. An agent's own relative `work_dir` is now resolved against the factory, as the
+  configuration reference always said, rather than against wherever the Tower was started.
+
 ## [1.0.0] — 2026-09-23
 
 Layover runs a factory unattended for two days without being touched. That was the bar this

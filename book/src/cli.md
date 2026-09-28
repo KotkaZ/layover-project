@@ -3,6 +3,13 @@
 Eight commands. `--config` (or `-c`) is global and defaults to `layover.toml` in the working
 directory, so it can go before or after the subcommand.
 
+`serve`, `run` and `autostart` make that path **absolute** before doing anything else, and every
+path a run is handed — its Hangar, the `mcp.json` its CLI is pointed at, the `{prompt}` file — is
+built from it. A child runs in its agent's `work_dir`, not in the directory the Tower was started
+from, so a relative path would be resolved against the wrong folder and the run would fail before
+it began. The paths `serve` prints are the absolute ones, so the output names the factory it is
+actually running.
+
 ```sh
 layover --help
 layover <command> --help

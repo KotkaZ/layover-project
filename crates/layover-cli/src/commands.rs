@@ -38,6 +38,23 @@ fn load(path: &Path) -> Result<(Config, PromptDir), Failure> {
     Ok((config, source))
 }
 
+/// Makes a path the Tower was given absolute, once, before anything is derived from it.
+///
+/// Every path a child receives — its Hangar, the `mcp.json` it is pointed at, the `{prompt}` file
+/// — is built from the directory holding `layover.toml`. Left relative, those paths are relative
+/// to the *Tower's* working directory, and the child runs in its agent's `work_dir`, so it resolves
+/// them against the wrong folder and fails before doing anything. With the default
+/// `--config layover.toml` that was every run of every agent.
+///
+/// `std::path::absolute` rather than `canonicalize`: on Windows the latter returns a `\\?\`
+/// verbatim path, which many CLIs cannot open, and it fails outright for a path that does not
+/// exist yet.
+fn absolute(path: &Path) -> Result<PathBuf, Failure> {
+    std::path::absolute(path)
+        .map(|absolute| strip_verbatim(&absolute))
+        .map_err(|error| format!("could not make {} absolute: {error}", path.display()))
+}
+
 /// Renders an error and the chain of causes beneath it.
 ///
 /// `ConfigError` says *what* failed; the source underneath says *why*. Printing only the outer
@@ -149,6 +166,11 @@ pub fn serve(
     watch_only: bool,
     no_auth: bool,
 ) -> Result<String, Failure> {
+    let path = absolute(path)?;
+    let path = path.as_path();
+    let history = history.map(absolute).transpose()?;
+    let history = history.as_deref();
+
     // Load once up front purely to fail early. A dashboard whose route map cannot be drawn is a
     // confusing way to discover the factory definition is broken.
     let (config, _) = load(path)?;
@@ -463,10 +485,7 @@ pub fn autostart(config: &Path, output: Option<&Path>, show: bool) -> Result<Str
 
     let binary = std::env::current_exe()
         .map_err(|error| format!("could not find this executable: {error}"))?;
-    let config = config.canonicalize().map_or_else(
-        |_| config.to_path_buf(),
-        |path| strip_verbatim(path.as_path()),
-    );
+    let config = absolute(config)?;
 
     let entry = Autostart::new(strip_verbatim(&binary), &config);
     let rendered = entry.render(platform);
@@ -555,6 +574,8 @@ fn strip_verbatim(path: &Path) -> PathBuf {
 ///
 /// Returns a failure when the factory does not load or its state cannot be opened.
 pub fn run(path: &Path, dry_run: bool) -> Result<String, Failure> {
+    let path = absolute(path)?;
+    let path = path.as_path();
     let (config, _) = load(path)?;
     let root = path.parent().unwrap_or_else(|| Path::new("."));
 
