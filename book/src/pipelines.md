@@ -78,15 +78,25 @@ workspace = "per-itinerary"
 | Value | Meaning |
 |---|---|
 | `shared` | Every itinerary works in the one `work_dir`. The default. |
-| `per-itinerary` | Each itinerary gets its own git worktree, named after the itinerary. |
+| `per-itinerary` | Meant to give each itinerary its own git worktree, named after the itinerary. **Declared, not yet enforced.** |
 
-With `shared`, two instances that both reach a `read-write` agent edit the same files at the same
-time. That fails in the way hardest to notice — plausible output built from two unrelated changes.
-`per-itinerary` is what makes parallel instances safe.
+> **`per-itinerary` does nothing yet.** It is accepted, and `layover explain` says beside the
+> pipeline that it is not in force: every itinerary still works in the shared `work_dir`. What an
+> implementation has to settle first — which commit a worktree starts from, what happens to a
+> developer's uncommitted change, when a worktree is removed, and what to do when `work_dir` is
+> not a git repository — is recorded as an open question in
+> [`decisions.md`](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md#still-open).
 
-`layover validate` warns when a pipeline sets `overlap = "allow"`, uses `shared` and reaches a
-writer, because two instances will then edit the same files with nobody watching. A pipeline left
-on the default cannot reach that state, so nothing is said about it.
+Two instances that both reach a `read-write` agent therefore edit the same files at the same time,
+whatever `workspace` says. That fails in the way hardest to notice — plausible output built from
+two unrelated changes. Until isolation exists, the protection is to not run two at once: leave a
+schedule on the default `overlap = "skip"`, and do not trigger a second instance of a writing
+pipeline by hand while one is still going.
+
+`layover validate` warns when a pipeline sets `overlap = "allow"` and reaches a writer, because two
+instances will then edit the same files with nobody watching — and it no longer stays quiet because
+the pipeline also says `per-itinerary`. A pipeline left on the default cannot reach that state, so
+nothing is said about it.
 
 Setting both `every` and `cron` is an error rather than a silent choice between them.
 
@@ -121,9 +131,9 @@ Every skip is reported, because a schedule quietly skipping every tick because i
 overruns looks exactly like a schedule that is running fine — and the difference is that nothing
 is happening.
 
-`overlap = "allow"` is the right answer when instances genuinely cannot interfere: a
-`per-itinerary` workspace, or agents that only read. `layover validate` warns when you set it and
-a writer is reachable on a shared workspace.
+`overlap = "allow"` is the right answer when instances genuinely cannot interfere: agents that
+only read, and — once it is enforced — a `per-itinerary` workspace. `layover validate` warns when
+you set it and a writer is reachable.
 
 `layover validate` also warns when an interval is shorter than `timeout_sec`:
 

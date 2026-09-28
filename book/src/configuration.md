@@ -168,8 +168,8 @@ argument — several CLIs read an empty string in `argv` as a positional.
 [agents.tester]
 description = "Builds the change and runs the suite, then returns a verdict"
 purpose     = """
-Route here to find out whether the change works. Gets its own worktree, so it may build and run
-freely. Judges behaviour, never style.
+Route here to find out whether the change works. Builds and runs the suite, and does not edit the
+code it is judging. Judges behaviour, never style.
 """
 runner      = "codex"
 model       = "o4-mini"
@@ -185,7 +185,7 @@ prompt_file = "tester.md"
 | `model` | optional | Model identifier passed to the runner. |
 | `prompt` | one of | Instructions, written inline. |
 | `prompt_file` | one of | Instructions from a file, which may [compose others](./prompts.md). |
-| `access` | `read-write` | `read-only` agents get a git worktree snapshot, not the live tree. |
+| `access` | `read-write` | `read-only` is meant to give the agent a git worktree snapshot. **Declared, not yet enforced** — see below. |
 | `entry` | `false` | Whether a human may send flights straight here. |
 | `resident` | `false` | Pin the agent resident rather than transient. Not built. |
 | `fuel_usd` | — | Fuel override for itineraries that *start* at this agent. |
@@ -262,16 +262,24 @@ and nothing else. `layover validate` warns when one is missing.
 
 ### Workspace access
 
-`read-only` means the agent gets a **git worktree at the current commit** instead of the live
-shared workspace. That is real enforcement, not an advisory flag, and it solves two problems at
-once: the inspector cannot disturb work in progress, and it is not reading a tree that moves
-under it.
+> **Not enforced yet.** `access` is accepted and shown everywhere an agent is described, but
+> nothing acts on it: **every agent runs in its `work_dir`**, and a `read-only` agent can write
+> there exactly as a `read-write` one can. `layover explain` says so beside the agent list.
 
-It does **not** mean the filesystem is read-only. A read-only tester can build, run the suite and
-write whatever it likes inside its own checkout.
+What `read-only` is designed to mean is that the agent gets a **git worktree at the current
+commit** instead of the live shared workspace, so an inspector cannot disturb work in progress and
+is not reading a tree that moves under it. It would not make the filesystem read-only: a tester
+could still build and run the suite inside its own checkout. Before that can be built, several
+things have to be settled that the design does not yet say — above all, that a snapshot at the
+current commit would not contain a developer's *uncommitted* change, which is exactly what the
+tester and reviewer are asked to judge. They are recorded as open questions in
+[`decisions.md`](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md#still-open).
+
+Until then, treat `access` as a statement of intent that prompts should repeat ("do not edit
+product code"), not as a guarantee.
 
 Fanning out to two `read-write` agents is a warning: they share one working directory and will
-overwrite each other.
+overwrite each other. The same is true of any two agents today, whatever their `access`.
 
 ### Bounding width, not just depth
 

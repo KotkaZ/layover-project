@@ -139,8 +139,8 @@ prompt_file = "developer.md"
 [agents.tester]
 description = "Builds the change and runs the suite, then returns a verdict"
 purpose     = """
-Route here to find out whether the change works. Gets its own worktree, so it may build and run
-freely. Judges behaviour, never style.
+Route here to find out whether the change works. Builds and runs the suite, and does not edit the
+code it is judging. Judges behaviour, never style.
 """
 runner      = "codex"
 access      = "read-only"
@@ -197,8 +197,10 @@ description = "Take a request through investigation, development and review to a
 entry       = "analyst"
 trigger     = "manual"
 
-# One instance per request. Each itinerary gets its own git worktree, so several pull requests
-# can be in flight at once without the developer in one overwriting the developer in another.
+# One instance per request. Each itinerary is to get its own git worktree, so several pull
+# requests can be in flight at once without the developer in one overwriting the developer in
+# another. Declared, not yet enforced -- every itinerary still shares `workspace`, and `layover
+# explain` says so -- so for now run one development instance at a time.
 workspace   = "per-itinerary"
 
 [pipelines.development.flags]
@@ -213,7 +215,8 @@ entry       = "pr_scanner"
 trigger     = { every = "1h" }
 
 # A schedule fires whether or not the last instance finished, and runs are reentrant, so this one
-# needs isolation even more than the manual pipeline does.
+# needs isolation even more than the manual pipeline does. Not enforced yet; the default
+# `overlap = "skip"` is what actually keeps two instances apart today.
 workspace   = "per-itinerary"
 
 [pipelines.review-bot.flags]

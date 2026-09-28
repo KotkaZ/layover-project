@@ -154,13 +154,17 @@ is the cost of explicit memory, and prompts must account for it.
 access = "read-only"     # read-only | read-write (default)
 ```
 
-Read-only agents receive a **git worktree at the current commit** rather than the live shared
-workspace. This is real enforcement rather than an advisory flag, and it solves a second problem
-at the same time: an agent reading the tree while a sibling writes to it would otherwise be
-working against a moving target.
+> **Declared, not yet enforced.** Nothing creates a worktree today: every agent runs in its
+> `work_dir`, and a `read-only` agent can write there like any other. The open questions in
+> [`decisions.md`](decisions.md#still-open) record what has to be settled first.
 
-This makes the common fan-out shape safe — several agents inspecting concurrently while at most
-one writes. **Two concurrent read-write agents remain unsafe**; see [`risks.md`](risks.md).
+The design is that read-only agents receive a **git worktree at the current commit** rather than
+the live shared workspace, so an agent reading the tree while a sibling writes to it is not working
+against a moving target, and cannot disturb it.
+
+That would make the common fan-out shape safe — several agents inspecting concurrently while at
+most one writes. It does not yet, so today **any two concurrent agents share one tree**, and two
+concurrent read-write agents are unsafe whatever is built; see [`risks.md`](risks.md).
 
 ## 6. Putting it together
 

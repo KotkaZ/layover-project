@@ -134,8 +134,11 @@ impl Tool {
 
     /// Whether this tool changes anything outside the run that called it.
     ///
-    /// Used to decide what a read-only agent may do: an agent given a worktree snapshot so it
-    /// cannot disturb anyone should not be able to disturb anyone through a tool either.
+    /// Descriptive only: nothing refuses these to a `read-only` agent, and nothing should. `access`
+    /// is about the working tree, and a read-only agent still has to hand work on, write its own
+    /// notes and set work down — most of the reference factory's agents are read-only and send.
+    /// Nothing calls this today; it is kept so that anything that does want to tell looking from
+    /// acting asks one place rather than keeping a list of its own.
     #[must_use]
     pub const fn writes(self) -> bool {
         matches!(
@@ -257,7 +260,7 @@ mod tests {
     }
 
     #[test]
-    fn a_read_only_agent_can_be_told_which_tools_would_change_things() {
+    fn which_tools_change_things_is_stated_in_one_place() {
         assert!(Tool::Send.writes());
         assert!(Tool::MemoryWrite.writes());
         assert!(!Tool::Peers.writes());

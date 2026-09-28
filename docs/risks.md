@@ -19,21 +19,26 @@ documented as such.
 
 ### 2. Shared workspace contention
 
-**Severity: high. Partially mitigated.**
+**Severity: high. Not mitigated.**
 
-Concurrent read-write agents share one working directory and *will* clobber each other's files.
-There is no locking and no merge strategy.
+Concurrent agents share one working directory and *will* clobber each other's files. There is no
+locking and no merge strategy.
 
-*Partial mitigation:* agents now declare `access = "read-only" | "read-write"`, and read-only
-agents receive a git worktree snapshot rather than the live tree — see
-[`routing.md`](routing.md#5-workspace-access). This fully covers the common fan-out shape where
-several agents inspect concurrently and at most one writes.
+*Declared but not built:* agents declare `access = "read-only" | "read-write"` and pipelines
+`workspace = "shared" | "per-itinerary"`, and the design gives a read-only agent — and each
+itinerary of a `per-itinerary` pipeline — its own git worktree. **Nothing creates one yet**: every
+agent runs in its `work_dir` whatever it declares — see [`routing.md`](routing.md#5-workspace-access).
+Until then, a read-only inspector reading the tree while the developer writes to it is working
+against a moving target, and two instances of one writing pipeline edit the same files. `layover
+explain` says so, and `validate` no longer treats `per-itinerary` as isolation when it warns about
+overlapping schedules. What an implementation must settle is in the open questions in
+[`decisions.md`](decisions.md#still-open).
 
-*Still unresolved:* **two concurrent read-write agents remain unsafe.** The route map does not
-prevent that shape, and the load-time check only looks *within* one route's fan-out. A sequential
-hand-off between two writers — a developer sending finished work to a publisher that commits it —
-is not flagged at all, even though the sender's process may still be alive when the receiver
-starts. Nothing today guarantees the sender has exited.
+*Unresolved even once built:* **two concurrent read-write agents remain unsafe.** The route map
+does not prevent that shape, and the load-time check only looks *within* one route's fan-out. A
+sequential hand-off between two writers — a developer sending finished work to a publisher that
+commits it — is not flagged at all, even though the sender's process may still be alive when the
+receiver starts. Nothing today guarantees the sender has exited.
 
 ### 3. Blocking chains hold processes open
 

@@ -1,7 +1,7 @@
 # Reviewing every pull request assigned to you
 
 Every half hour, look at what is assigned to you in Azure DevOps and review each one — **one
-agent per pull request**, working in parallel, each with its own budget and its own worktree.
+agent per pull request**, each with its own budget.
 
 ```mermaid
 flowchart LR
@@ -21,12 +21,14 @@ item's, so "review everything assigned to me" quietly becomes "review however ma
 the money runs out" — and *which* ones is whichever happened to be quickest. A sweep that silently
 skips the important pull request is worse than one that does not run.
 
-**Every reviewer would share one workspace.** `workspace = "per-itinerary"` isolates one sweep
-from the next, not one reviewer from its siblings.
+**Every reviewer would share one workspace.** `workspace = "per-itinerary"` is meant to isolate one
+sweep from the next, not one reviewer from its siblings — and it is declared, not yet enforced, so
+today every sweep and every reviewer share `workspace`. The reviewers are read-only in intent,
+which is what makes that tolerable here.
 
-A `mode = "spawn"` route opens a **sibling itinerary** per flight instead. Each gets its own Fuel, its own hop
-budget, its own worktree, and each draws on the factory-wide Reserve — so the total is still
-bounded, but by a number that means something.
+A `mode = "spawn"` route opens a **sibling itinerary** per flight instead. Each gets its own Fuel,
+its own hop budget, and each draws on the factory-wide Reserve — so the total is still bounded, but
+by a number that means something.
 
 ## What stops fifty pull requests taking the machine down
 

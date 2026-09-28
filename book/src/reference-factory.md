@@ -46,7 +46,7 @@ It is the smallest factory that exercises everything awkward:
 
 The default `max_hops = 8` is enough for this factory's happy path and **not enough for a single
 round of rework**. The first rejection would exhaust the chain and leave half-repaired work in
-that itinerary's worktree with nothing left to finish it.
+the workspace with nothing left to finish it.
 
 That is not a bug in the defaults; it is what happens when a loop meets a depth budget. The
 example carries the arithmetic, and a regression test pins it:

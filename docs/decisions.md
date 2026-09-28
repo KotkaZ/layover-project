@@ -47,10 +47,12 @@ more robust and less useful. Write safety is recovered by serializing writes thr
 rather than by the storage format.
 
 **Why workspace contention is only partly mediated.** Full locking or per-run worktrees for every
-agent are real work and would delay proving the core concept. Read-only agents get a worktree
-snapshot, which makes the common fan-out shape safe for free; two concurrent read-write agents
-remain unsafe and the risk is recorded in
-[`risks.md`](risks.md#2-shared-workspace-contention) rather than forgotten.
+agent are real work and would delay proving the core concept. The decision was that read-only
+agents get a worktree snapshot, which would make the common fan-out shape safe for free; two
+concurrent read-write agents remain unsafe and the risk is recorded in
+[`risks.md`](risks.md#2-shared-workspace-contention) rather than forgotten. *The snapshot is not
+built yet* — every agent runs in its `work_dir` — and what building it has to settle is open
+question 8 below.
 
 **Why fan-in is a join on the receiving node rather than a pipeline definition.** Two edges into
 one agent would otherwise fire it twice, on the first arrival rather than the last — duplicate
@@ -211,9 +213,10 @@ the variable is not optional there.
 request" sounds like it needs an instance concept, and it does not: every trigger already mints
 its own itinerary with its own Hops, Fuel, barriers and flags, because barriers are keyed by
 `(itinerary_id, to_agent)` and Fuel is per chain. The single thing instances actually shared was
-the working directory. `workspace = "per-itinerary"` gives each a git worktree and the rest was
-already true. Left as opt-in because a worktree per itinerary costs disk and setup time, and a
-single-instance pipeline wants neither.
+the working directory. `workspace = "per-itinerary"` is to give each a git worktree, and the rest
+was already true. Left as opt-in because a worktree per itinerary costs disk and setup time, and a
+single-instance pipeline wants neither. *Not built yet*: the setting is accepted and does nothing,
+which `layover explain` says; see open question 8.
 
 **Why autostart generates rather than installs.** A lights-out factory that stops at every reboot
 is not lights-out, so the Tower has to survive one. But registering a service writes to the
@@ -558,6 +561,33 @@ Agents should ask rather than guess on any of these.
    `${NAME}` in `headers`, so a `headers_from = { Authorization = "Bearer ${ADO_PAT}" }` — names
    only, validated like `env` — would keep the secret out of every file. *Recommendation:* add it,
    and until then have `validate` warn that `env_from` on a `url` server does nothing.
+8. **What a worktree is, before any is built.** `access = "read-only"` and `workspace =
+   "per-itinerary"` are declared everywhere and implemented nowhere: every agent runs in its
+   `work_dir`. The decisions above settle *that* they get worktrees; these settle *how*, and each
+   changes what the reference factory does:
+   - **Which tree a read-only snapshot starts from.** "The current commit" does not contain a
+     developer's *uncommitted* change, which is exactly what the tester and reviewer are asked to
+     judge. Either the developer must commit before handing off (a prompt rule, fragile), or the
+     snapshot is taken from the working tree including uncommitted changes (a copy, not a
+     worktree), or read-only agents in a chain share that chain's writer's tree read-only.
+     *Recommendation:* in a `per-itinerary` pipeline, read-only agents run in the itinerary's own
+     worktree — the tree they are judging — and a separate snapshot is only taken for a
+     `read-only` agent in a `shared` pipeline, from `HEAD` plus a note in its payload that
+     uncommitted work is not visible.
+   - **One per itinerary, or one per run.** Per run is safest and costs a checkout per test run;
+     per itinerary is cheaper and lets a loop's reviewer see the tester's build.
+     *Recommendation:* per itinerary for `per-itinerary` pipelines, per run for a read-only agent
+     in a `shared` one.
+   - **Cleanup.** When the itinerary goes quiet — no run live, no barrier parked, nothing queued —
+     or only after a retention period, so a stalled chain's tree can be inspected. And what happens
+     to a branch the worktree created. *Recommendation:* keep it until the itinerary is quiet and a
+     day has passed, prune with Hangars, never delete a branch with unpushed commits.
+   - **A `work_dir` that is not a git repository.** Refuse at load for a factory that declares
+     either setting, fall back to the shared tree with a warning, or copy. *Recommendation:*
+     `validate` errors when `work_dir` is not a repository and isolation is declared, because a
+     silent fallback is the state the project is in today.
+   - **A resumed layover**, which opens a new itinerary about an old one's pull request: new
+     worktree from the pull request's branch, or the old itinerary's kept tree.
 
 ## Beyond the first runnable release
 

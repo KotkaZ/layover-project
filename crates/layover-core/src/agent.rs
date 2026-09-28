@@ -50,12 +50,14 @@ impl From<&str> for AgentName {
 
 /// Whether an agent may write to the shared workspace.
 ///
-/// Read-only agents are given a worktree snapshot rather than the live tree, which is real
-/// enforcement rather than an advisory flag.
+/// **Declared, not yet enforced.** The design gives a read-only agent a git worktree snapshot
+/// instead of the live tree; nothing builds one yet, so every agent runs in its `work_dir`
+/// whatever this says. `layover explain` says so, and the open questions in `docs/decisions.md`
+/// record what an implementation has to settle first.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Access {
-    /// Receives a read-only snapshot of the workspace.
+    /// Meant to receive a read-only snapshot of the workspace. Not yet enforced.
     ReadOnly,
     /// Works directly in the shared workspace.
     #[default]

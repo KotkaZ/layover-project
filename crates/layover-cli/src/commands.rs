@@ -335,6 +335,13 @@ pub fn explain(path: &Path) -> Result<String, Failure> {
                 spec.description.as_deref().unwrap_or("")
             );
         }
+        if pipeline.workspace.is_isolated() {
+            let _ = writeln!(
+                out,
+                "      workspace = \"per-itinerary\" is declared but not enforced: every itinerary \
+                 works in the same work_dir"
+            );
+        }
     }
 
     out.push_str("\nAgents\n");
@@ -347,6 +354,19 @@ pub fn explain(path: &Path) -> Result<String, Failure> {
                 layover_core::Access::ReadWrite => "read-write",
             },
             agent.description_or_placeholder()
+        );
+    }
+
+    // Said once, under the list it qualifies. `explain` is where an operator checks what they
+    // wrote means, and `[read-only]` on its own reads as a guarantee Layover does not yet give.
+    if config
+        .agents
+        .values()
+        .any(|agent| agent.access == layover_core::Access::ReadOnly)
+    {
+        out.push_str(
+            "  note: read-only is not enforced yet. Every agent runs in its work_dir, and nothing \
+             stops a read-only agent writing there.\n",
         );
     }
 
@@ -742,6 +762,39 @@ mod tests {
         assert!(output.contains("--flag run_e2e=false"), "{output}");
         assert!(output.contains("tester [read-only]"), "{output}");
         assert!(output.contains("[join = all]"), "{output}");
+    }
+
+    #[test]
+    fn explain_says_plainly_that_workspace_isolation_is_not_enforced() {
+        // `read-only` and `workspace = "per-itinerary"` are declared and not implemented: every
+        // agent runs in its `work_dir`. `explain` is where an operator checks what they wrote
+        // means, so it must not let either read as a guarantee.
+        let output = explain(&example("workitem-factory/layover.toml")).expect("explains");
+
+        assert!(
+            output.contains("read-only is not enforced"),
+            "the agents list must say so: {output}"
+        );
+        assert!(
+            output.contains("per-itinerary") && output.contains("not enforced"),
+            "each isolated pipeline must say so: {output}"
+        );
+    }
+
+    #[test]
+    fn explain_says_nothing_about_isolation_a_factory_does_not_ask_for() {
+        let path =
+            std::env::temp_dir().join(format!("layover-explain-plain-{}.toml", std::process::id()));
+        std::fs::write(
+            &path,
+            "[runners.x]\ncommand = [\"x\"]\n\n[agents.a]\nrunner = \"x\"\nprompt = \"go\"\nentry = true\n",
+        )
+        .expect("writes");
+
+        let output = explain(&path).expect("explains");
+        let _ = std::fs::remove_file(&path);
+
+        assert!(!output.contains("not enforced"), "{output}");
     }
 
     #[test]

@@ -13,7 +13,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::EventStream;
 
-/// Whether an agent writes to the shared workspace or gets a snapshot.
+/// Whether an agent is declared to write to the shared workspace or only to read it. Declared,
+/// not yet enforced: every agent runs in its working directory whatever this says.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Access {
     /// `read-only`
@@ -798,9 +799,9 @@ pub struct WindowSpan {
     pub zone: Option<String>,
 }
 
-/// Whether instances of one pipeline share a working directory or get one each. A schedule
-/// fires whether or not the last instance finished, so anything reaching a read-write agent
-/// wants its own.
+/// Whether instances of one pipeline are declared to share a working directory or to get one
+/// each. `per-itinerary` is declared, not yet enforced: every instance still works in the
+/// shared working directory.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Workspace {
     /// `shared`

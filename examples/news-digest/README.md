@@ -15,8 +15,9 @@ Two agents, one route, no joins and no fan-out.
 
 Finding what matters and writing it up are different jobs, and an agent doing both does both
 worse. The scout reads widely and keeps almost nothing; the mailman trusts that judgement and
-spends its attention on the prose. Splitting them also means the scout can be `read-only` — it
-gets a worktree snapshot and cannot touch the live tree.
+spends its attention on the prose. Splitting them also means the scout can be `read-only` — in
+intent for now: the worktree snapshot that would stop it touching the live tree is declared and not
+yet built.
 
 It is the same split as [the reference factory](../workitem-factory/README.md), at the smallest
 scale it makes sense at.

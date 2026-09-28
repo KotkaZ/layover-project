@@ -615,7 +615,9 @@ components:
 
     Access:
       type: string
-      description: Whether an agent writes to the shared workspace or gets a snapshot.
+      description: |
+        Whether an agent is declared to write to the shared workspace or only to read it. Declared,
+        not yet enforced: every agent runs in its working directory whatever this says.
       enum: [read-only, read-write]
 
     Join:
@@ -749,9 +751,9 @@ components:
     Workspace:
       type: string
       description: |
-        Whether instances of one pipeline share a working directory or get one each. A schedule
-        fires whether or not the last instance finished, so anything reaching a read-write agent
-        wants its own.
+        Whether instances of one pipeline are declared to share a working directory or to get one
+        each. `per-itinerary` is declared, not yet enforced: every instance still works in the
+        shared working directory.
       enum: [shared, per-itinerary]
 
     Pipeline:

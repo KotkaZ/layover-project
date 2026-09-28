@@ -61,9 +61,9 @@ description = "Also review pull requests still marked as drafts"
 default     = false
 
 # `mode = "spawn"` is what makes this a fan-out over an unknown number of items. Each flight over
-# this edge opens its *own* itinerary, so every reviewer gets its own Fuel, its own hop budget and
-# its own worktree. An ordinary `async` edge would put all of them on one budget, and the sweep
-# would stop partway through with no way to say which pull requests it skipped.
+# this edge opens its *own* itinerary, so every reviewer gets its own Fuel and its own hop budget.
+# An ordinary `async` edge would put all of them on one budget, and the sweep would stop partway
+# through with no way to say which pull requests it skipped.
 #
 # It is still a route, because the route map is the single source of truth for who may reach whom.
 # A spawn outside it would be an unchecked edge into a fully funded fresh chain.

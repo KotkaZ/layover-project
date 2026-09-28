@@ -46,9 +46,9 @@ prompt_file = "mailman.md"
 description = "A twice-daily digest, at eight and at six"
 entry       = "scout"
 trigger     = { cron = "0 8,18 * * *" }
-# Two instances can never overlap at twelve hours apart, but the mailman writes, so each run gets
-# its own worktree anyway. The cost is a checkout; the alternative is a rare corruption that only
-# shows up when a schedule changes.
+# Two instances can never overlap at twelve hours apart, but the mailman writes, so each run is
+# meant to get its own worktree anyway. The cost is a checkout; the alternative is a rare corruption
+# that only shows up when a schedule changes. Declared, not yet enforced.
 workspace   = "per-itinerary"
 
 [pipelines.digest.flags.deep]

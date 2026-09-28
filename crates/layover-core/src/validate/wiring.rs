@@ -89,9 +89,13 @@ fn check_url(at: &str, url: &str, found: &mut Vec<Diagnostic>) {
 /// Warns when a pipeline that can overlap itself would share a working directory.
 ///
 /// A scheduled pipeline with `overlap = "allow"` fires whether or not the previous instance has
-/// finished, so two instances can be live at once with nobody watching. If they share `work_dir`
-/// and any reachable agent is `read-write`, they edit the same files at the same time — which
-/// fails in the way hardest to notice: plausible output built from two unrelated changes.
+/// finished, so two instances can be live at once with nobody watching. If any reachable agent is
+/// `read-write`, they edit the same files at the same time — which fails in the way hardest to
+/// notice: plausible output built from two unrelated changes.
+///
+/// `workspace = "per-itinerary"` does **not** silence this. It is declared and not yet enforced —
+/// every itinerary works in the same `work_dir` — and a validator that went quiet because a setting
+/// *says* isolation would be vouching for a safety property nothing provides.
 ///
 /// A pipeline left on the default `overlap = "skip"` is **not** flagged, because it cannot reach
 /// this state: the Tower misses the tick rather than starting a second copy. Warning about it
@@ -99,13 +103,12 @@ fn check_url(at: &str, url: &str, found: &mut Vec<Diagnostic>) {
 /// reading.
 ///
 /// Manual pipelines are deliberately not flagged either. A human choosing to start a second
-/// instance knows they did. `workspace = "per-itinerary"` is still the right answer when you want
-/// one instance per pull request; it is documented rather than nagged about.
+/// instance knows they did.
 fn check_parallel_instances_are_isolated(config: &Config, found: &mut Vec<Diagnostic>) {
     let graph = RouteGraph::from_config(config);
 
     for (name, pipeline) in config.scheduled_pipelines() {
-        if pipeline.workspace.is_isolated() || !pipeline.allows_overlap() {
+        if !pipeline.allows_overlap() {
             continue;
         }
 
@@ -126,9 +129,10 @@ fn check_parallel_instances_are_isolated(config: &Config, found: &mut Vec<Diagno
         }
 
         found.push(Diagnostic::warning(format!(
-            "pipeline `{name}` sets `overlap = \"allow\"`, reaches read-write \
-             agent(s) {} and uses `workspace = \"shared\"`; two instances would edit the same \
-             files at once. Set `workspace = \"per-itinerary\"` to give each its own worktree",
+            "pipeline `{name}` sets `overlap = \"allow\"` and reaches read-write agent(s) {}; \
+             two instances would edit the same files at once. Workspace isolation \
+             (`workspace = \"per-itinerary\"`) is not enforced yet, so every instance shares the \
+             working directory; leave `overlap` at `skip` until it is",
             writers.join(", ")
         )));
     }
@@ -146,8 +150,9 @@ fn check_agent_work_dirs(config: &Config, found: &mut Vec<Diagnostic>) {
             )));
         }
 
-        // A per-agent directory is outside whatever isolation a pipeline arranges, so a writer
-        // pointed at one is shared across every itinerary whatever the pipeline says.
+        // A per-agent directory is shared across every itinerary whatever a pipeline declares —
+        // and per-itinerary isolation is not enforced yet in any case — so a writer pointed at
+        // one is written to by every instance of every pipeline.
         if agent.access == Access::ReadWrite {
             found.push(Diagnostic::warning(format!(
                 "agent `{name}` is read-write and has its own `work_dir`, which sits outside any \
@@ -357,7 +362,32 @@ mod tests {
     }
 
     #[test]
-    fn per_itinerary_isolation_makes_parallel_instances_safe() {
+    fn per_itinerary_is_not_yet_isolation_so_an_overlapping_writer_still_warns() {
+        // `workspace = "per-itinerary"` is declared and not enforced: every itinerary works in the
+        // shared `work_dir`. Staying silent here because the setting *says* isolation would be a
+        // validator vouching for a safety property nothing provides.
+        let config = parse(&format!(
+            r#"
+            [reserve]
+            fuel_usd = 500.0
+
+            {WRITER}
+
+            [pipelines.development]
+            entry = "analyst"
+            trigger = {{ every = "1h" }}
+            overlap = "allow"
+            workspace = "per-itinerary"
+            "#
+        ));
+
+        let found = warnings(&config);
+        assert_mentions(&found, "two instances would edit the same files");
+        assert_mentions(&found, "not enforced");
+    }
+
+    #[test]
+    fn a_skipping_schedule_needs_no_isolation_whatever_its_workspace_says() {
         let config = parse(&format!(
             r#"
             [reserve]

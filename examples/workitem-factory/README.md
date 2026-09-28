@@ -58,7 +58,8 @@ flowchart TD
     class layover lay
 ```
 
-Blue agents are `read-only` and get a worktree snapshot; orange ones are `read-write`. The two
+Blue agents are declared `read-only` and orange ones `read-write` — a declaration that is not yet
+enforced; see §5.3. The two
 purple nodes are rendezvous barriers, not agents — nothing runs there. The green node is not an
 agent either: it is work **set down**, waiting for a resuming pipeline to pick it up.
 
@@ -210,16 +211,16 @@ intermediary gate agent, and the developer decides for itself whether to loop or
 
 `developer` and `publisher` are `read-write`; everything else is `read-only`.
 
-Read-only is not an advisory flag — those agents get a git worktree at the current commit instead
-of the live tree. That does two things at once: it stops an inspector from disturbing work in
-progress, and it stops the inspector from reading a tree that is moving under it.
+**That is a declaration, not yet enforcement.** The design gives read-only agents a git worktree
+instead of the live tree; nothing builds one yet, so every agent here runs in the one `workspace`
+and the prompts carry the rule instead — the tester and investigator are told to change nothing.
+The two `workspace = "per-itinerary"` pipelines likewise still share that directory, so do not run
+two development instances at once. What a worktree has to settle first, starting with the fact
+that one taken at the current commit would not contain the developer's uncommitted change, is
+open question 8 in [`docs/decisions.md`](../../docs/decisions.md#still-open).
 
-**Read-only does not mean the filesystem is read-only.** The tester gets its own checkout and can
-build, run the suite and write whatever artefacts it likes in there. It simply cannot touch the
-developer's tree.
-
-Both fan-outs therefore target two read-only agents, which is the shape the load-time check
-approves. Fanning out to two writers would warn, because they share one working directory.
+Both fan-outs target two read-only agents, which is the shape the load-time check approves.
+Fanning out to two writers would warn, because they share one working directory.
 
 ### 5.4 The rework loop must re-dispatch both branches
 

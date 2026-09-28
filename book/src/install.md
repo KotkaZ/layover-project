@@ -188,7 +188,7 @@ already spent money to find out.
 
 ## Why not Docker
 
-Layover spawns agent CLIs as child processes, gives them a git worktree of *your* workspace, and
+Layover spawns agent CLIs as child processes, runs them in *your* workspace, and
 relies on *your* provider credentials and MCP configuration. A container would have to be handed
 all three, at which point it has your filesystem and your secrets and has bought you nothing. It
 is a local-first supervisor; run it locally.

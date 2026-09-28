@@ -119,7 +119,8 @@ fn exactly_one_agent_writes_during_development() {
         assert_eq!(
             config.agents[&AgentName::from(inspector)].access,
             Access::ReadOnly,
-            "`{inspector}` inspects, so it must get a worktree snapshot rather than the live tree"
+            "`{inspector}` inspects, so it is declared read-only; the declaration is what a \
+             worktree snapshot will be keyed on once one is built"
         );
     }
 

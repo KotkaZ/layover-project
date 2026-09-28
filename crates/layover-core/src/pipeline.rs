@@ -207,14 +207,18 @@ pub enum Workspace {
     /// per itinerary costs disk and setup time.
     #[default]
     Shared,
-    /// Each itinerary gets its own git worktree, named after the itinerary.
+    /// Each itinerary is meant to get its own git worktree, named after the itinerary.
     ///
-    /// This is what makes several instances of one pipeline safe to run at once.
+    /// **Declared, not yet enforced**: nothing creates the worktree, so every itinerary still
+    /// works in the shared `work_dir`. Accepted so factories can say what they need; `layover
+    /// explain` says it is not in force, and validation does not treat it as isolation.
     PerItinerary,
 }
 
 impl Workspace {
-    /// Returns `true` when each itinerary is isolated from the others.
+    /// Returns `true` when the pipeline *asks* for each itinerary to be isolated.
+    ///
+    /// Not a statement that it is: see [`Workspace::PerItinerary`].
     #[must_use]
     pub fn is_isolated(&self) -> bool {
         matches!(self, Self::PerItinerary)

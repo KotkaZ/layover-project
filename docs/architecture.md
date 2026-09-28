@@ -68,7 +68,7 @@ carries budget across a causal chain, and *Ground Stop* says exactly what a kill
 | Fan-in | Declarative rendezvous joins on the receiving node |
 | Failure routing | An ordinary edge; the agent decides, the Tower does not evaluate conditions |
 | Join scope | A barrier constrains the upstreams it names; any other permitted sender bypasses it |
-| Workspace access | Per-agent `read-only` / `read-write`; read-only agents get a worktree snapshot |
+| Workspace access | Per-agent `read-only` / `read-write`; read-only agents are to get a worktree snapshot — declared, not yet built |
 | Reference scenario | [`examples/workitem-factory/`](../examples/workitem-factory/README.md) — the shape the first runnable release is sized against |
 
 ## 4. Two central insights

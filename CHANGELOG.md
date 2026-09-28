@@ -91,6 +91,18 @@ status](README.md#project-status).
   dashboard's report view read the journal. They now go to the journal, where a resumed layover
   and `GET /reports/{run}` find them.
 
+- **`read-only` and per-itinerary workspaces were documented as enforced and are not.** Nothing
+  creates a worktree: every agent runs in its `work_dir` whatever its `access` or its pipeline's
+  `workspace` says, while the configuration reference called read-only "real enforcement, not an
+  advisory flag" and the reference factory's tester and investigator prompts told agents they had
+  a snapshot of their own. The documentation, the examples and those prompts now say plainly that
+  both are declared and not yet enforced; `layover explain` says so beside the agents and each
+  isolated pipeline; and `validate` no longer treats `per-itinerary` as isolation when it warns
+  about a schedule that can overlap itself. What an implementation must settle first — including
+  that a snapshot at the current commit would not contain a developer's uncommitted change — is
+  written up as an open question. `Tool::writes` no longer claims to decide what a read-only agent
+  may do; nothing calls it.
+
 ## [1.0.0] — 2026-09-23
 
 Layover runs a factory unattended for two days without being touched. That was the bar this
