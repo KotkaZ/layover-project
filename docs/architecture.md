@@ -65,6 +65,7 @@ carries budget across a causal chain, and *Ground Stop* says exactly what a kill
 | Verification | `cargo xtask verify`, run identically by CI |
 | Dogfooding | Ship an example factory; never point one at Layover's own source |
 | Model shape | **Permission mesh**, not a pipeline engine — agents decide routing |
+| Route scope | A route may name the pipelines whose chains may use it; an unscoped route is global. Still a permission, never an order |
 | Fan-in | Declarative rendezvous joins on the receiving node |
 | Failure routing | An ordinary edge; the agent decides, the Tower does not evaluate conditions |
 | Join scope | A barrier constrains the upstreams it names; any other permitted sender bypasses it |
@@ -198,6 +199,23 @@ request/response was superseded by rendezvous joins.
 
 An edge absent from `[[routes]]` means the flight is refused. Direction is explicit:
 `planner → coder` does not imply `coder → planner`.
+
+A route may also be scoped to pipelines:
+
+```toml
+[[routes]]
+from      = "reviewer"
+to        = "planner"
+pipelines = ["nightly"]   # only chains the nightly pipeline started may use this edge
+```
+
+Absent, a route is global — every chain may use it, which is what every route meant before scopes
+existed. Present, only chains belonging to one of those pipelines may. A chain belongs to the
+pipeline whose trigger started its work: a spawned chain inherits it, a resumed layover belongs to
+the resuming pipeline but is held to what its booking chain could reach, and a flight sent
+straight to an `entry = true` agent belongs to none and uses global routes only. The Tower records
+which pipeline a chain belongs to; no agent can name one. See
+[`routing.md`](routing.md#8-scoping-routes-to-workflows).
 
 Route validation runs at config load, not at first flight — unknown agent names and unreachable
 entry points must fail fast, while a human is still watching.

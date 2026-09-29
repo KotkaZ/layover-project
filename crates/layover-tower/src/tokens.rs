@@ -66,6 +66,7 @@ impl Tokens {
             pipeline: None,
             flags: std::collections::BTreeMap::new(),
             flight: None,
+            within: std::collections::BTreeSet::new(),
         })
     }
 

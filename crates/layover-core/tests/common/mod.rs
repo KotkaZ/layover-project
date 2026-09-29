@@ -7,6 +7,8 @@
 //! expected rather than a sign of dead code.
 #![allow(dead_code)]
 
+pub mod scoped;
+
 use std::path::{Path, PathBuf};
 
 use layover_core::{Config, PromptDir};

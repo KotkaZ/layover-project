@@ -42,6 +42,7 @@ use layover_core::pipeline::Flags;
 use layover_core::prompt::{PromptDir, resolve};
 use layover_core::queue::Queued;
 use layover_core::run::{Outcome, RunRecord};
+use layover_core::scope::RouteMap;
 use layover_mcp::Session;
 use layover_store::Journal;
 
@@ -120,7 +121,7 @@ pub struct Drained {
 /// A running factory.
 pub struct Factory {
     config: Config,
-    graph: RouteGraph,
+    routes: RouteMap,
     root: PathBuf,
     live: Ledger,
     journal: Journal,
@@ -144,14 +145,14 @@ impl Factory {
     /// created.
     pub fn new(config: Config, root: impl Into<PathBuf>) -> std::io::Result<Self> {
         let root = std::path::absolute(root.into())?;
-        let graph = RouteGraph::from_config(&config);
+        let routes = RouteMap::from_config(&config);
         let live = Ledger::open(root.join(".layover").join("state").join("runs"))?;
         let journal = Journal::open(root.join(".layover").join("journal"))
             .map_err(|error| std::io::Error::other(error.to_string()))?;
 
         Ok(Self {
             config,
-            graph,
+            routes,
             root,
             live,
             journal,
@@ -179,10 +180,19 @@ impl Factory {
         Arc::clone(&self.tokens)
     }
 
-    /// The route map this factory is enforcing.
+    /// The route map this factory is enforcing, drawn whole: every route, whatever its pipeline.
+    ///
+    /// For reporting. No flight is checked against this — each is checked against its own chain's
+    /// graph, from [`Factory::routes`].
     #[must_use]
-    pub const fn graph(&self) -> &RouteGraph {
-        &self.graph
+    pub fn graph(&self) -> &RouteGraph {
+        self.routes.everything()
+    }
+
+    /// The route map resolved per pipeline, which is what every route check here consults.
+    #[must_use]
+    pub const fn routes(&self) -> &RouteMap {
+        &self.routes
     }
 
     /// The factory definition this is running.
@@ -233,9 +243,14 @@ impl Factory {
         flight: &Flight,
         origin: Option<&layover_core::flight::Origin>,
     ) -> Dispatched {
+        // The chain's own graph: its pipeline's routes, narrowed by any work it resumes. Read from
+        // the Tower's record of the chain, which queued work carries across a restart.
+        let scope = self.chains.scope_of(itinerary.id());
+        let graph = self.routes.for_scope(&scope);
+
         let authorised = match authorise(
             &self.config,
-            &self.graph,
+            &graph,
             itinerary,
             sender,
             flight,
@@ -272,9 +287,10 @@ impl Factory {
                 agent: authorised.name.clone(),
                 itinerary: itinerary.id().clone(),
                 hops_remaining: authorised.hops_remaining,
-                pipeline: self.chains.pipeline_of(itinerary.id()),
+                pipeline: scope.pipeline.clone(),
                 flags: flags.to_map(),
                 flight: Some(flight.clone()),
+                within: scope.within.clone(),
             })
         });
 
@@ -792,6 +808,7 @@ impl Factory {
                     &queued.flight.itinerary,
                     queued.pipeline.as_ref(),
                     &queued.flags,
+                    &queued.within,
                 );
 
                 let Some((flight, joined)) = self.past_the_barrier(&queued.flight, report) else {
@@ -834,9 +851,11 @@ impl Factory {
         // Nothing is running and nothing is queued, so any barrier still holding work is waiting
         // for something that will never arrive. Giving up loudly beats a silent permanent stall,
         // which is the worst outcome in this system: a failure at least says something happened.
-        let abandoned = self
-            .barriers
-            .abandon_unreachable(&self.graph, &BTreeSet::new());
+        let abandoned = self.barriers.abandon_unreachable(
+            &self.routes,
+            |id| self.chains.scope_of(id),
+            &BTreeSet::new(),
+        );
 
         Drained { ran, abandoned }
     }
@@ -855,7 +874,12 @@ impl Factory {
         flight: &Flight,
         report: &mut impl FnMut(&Flight, &Dispatched),
     ) -> Option<(Flight, bool)> {
-        match self.barriers.deliver(&self.graph, flight.clone()) {
+        // A join applies only in its scope, so the barrier is looked up in the chain's own graph:
+        // a flight in a pipeline the join is not scoped to goes straight through.
+        let graph = self
+            .routes
+            .for_scope(&self.chains.scope_of(&flight.itinerary));
+        match self.barriers.deliver(&graph, flight.clone()) {
             // The common case: the destination declares no join at all.
             None => Some((flight.clone(), false)),
             Some(Delivery::Direct(direct)) => Some((*direct, false)),

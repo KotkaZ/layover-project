@@ -11,20 +11,20 @@
 //! That is why itineraries are held here and looked up by identifier rather than constructed per
 //! flight.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use layover_core::agent::AgentName;
 use layover_core::config::Config;
 use layover_core::flight::{Flight, ItineraryId, Origin};
-use layover_core::graph::RouteGraph;
 use layover_core::handover::Handover;
 use layover_core::itinerary::Itinerary;
 use layover_core::layover::Layover;
 use layover_core::learning::{Impact, Learnings, Proposal, Uptake};
 use layover_core::pipeline::PipelineName;
 use layover_core::queue::Queued;
+use layover_core::scope::{ChainScope, RouteMap};
 use layover_mcp::{Peer, Runtime, Session, ToolError};
 
 /// The itineraries a running factory is accounting against.
@@ -45,6 +45,11 @@ pub struct Chains {
     /// it every run composed its prompt from the pipeline's defaults, so a flag an operator set at
     /// trigger time was accepted, stored, and then ignored.
     flags: Mutex<HashMap<String, BTreeMap<String, bool>>>,
+    /// The pipelines each chain must also stay within, for a chain resuming another's work.
+    ///
+    /// Recorded from queued work like the pipeline, so a restart cannot widen a resumed chain's
+    /// reach by forgetting where its work came from.
+    within: Mutex<HashMap<String, BTreeSet<Option<PipelineName>>>>,
 }
 
 impl Chains {
@@ -95,7 +100,16 @@ impl Chains {
         id: &ItineraryId,
         pipeline: Option<&PipelineName>,
         flags: &BTreeMap<String, bool>,
+        within: &BTreeSet<Option<PipelineName>>,
     ) {
+        if !within.is_empty()
+            && let Ok(mut known) = self.within.lock()
+        {
+            known
+                .entry(id.as_str().to_owned())
+                .or_insert_with(|| within.clone());
+        }
+
         if let Some(pipeline) = pipeline
             && let Ok(mut known) = self.pipelines.lock()
         {
@@ -123,6 +137,21 @@ impl Chains {
     #[must_use]
     pub fn flags_of(&self, id: &ItineraryId) -> Option<BTreeMap<String, bool>> {
         self.flags.lock().ok()?.get(id.as_str()).cloned()
+    }
+
+    /// Which routes a chain may use: its pipeline's, narrowed by any work it resumes.
+    ///
+    /// A chain this process has not recorded belongs to no pipeline, and so gets the global
+    /// routes only — the narrowest answer, which is the safe one to give by default.
+    #[must_use]
+    pub fn scope_of(&self, id: &ItineraryId) -> ChainScope {
+        let within = self
+            .within
+            .lock()
+            .ok()
+            .and_then(|known| known.get(id.as_str()).cloned())
+            .unwrap_or_default();
+        ChainScope::new(self.pipeline_of(id), within)
     }
 }
 
@@ -155,7 +184,7 @@ pub type FileReport = Arc<dyn Fn(layover_core::report::Report) -> Result<(), Str
 /// particular call and is shared across threads.
 pub struct FactoryRuntime {
     config: Arc<Config>,
-    graph: Arc<RouteGraph>,
+    routes: Arc<RouteMap>,
     queue: QueueFlight,
     book: BookLayover,
     ask: AskForHelp,
@@ -174,8 +203,9 @@ pub struct FactoryRuntime {
 pub struct Wiring {
     /// The factory definition.
     pub config: Arc<Config>,
-    /// Its route map.
-    pub graph: Arc<RouteGraph>,
+    /// Its route map, resolved per pipeline. A call is answered from the calling chain's own
+    /// graph, never from the whole factory's.
+    pub routes: Arc<RouteMap>,
     /// Where agents' own notes live.
     pub hangars: PathBuf,
     /// The factory's shared memory.
@@ -200,7 +230,7 @@ impl FactoryRuntime {
     pub fn new(wiring: Wiring) -> Self {
         Self {
             config: wiring.config,
-            graph: wiring.graph,
+            routes: wiring.routes,
             queue: wiring.queue,
             book: wiring.book,
             ask: wiring.ask,
@@ -215,7 +245,8 @@ impl FactoryRuntime {
 
 impl Runtime for FactoryRuntime {
     fn peers(&self, session: &Session) -> Vec<Peer> {
-        self.graph
+        let graph = self.routes_for(session);
+        graph
             .successors(&session.agent)
             .map(|name| Peer {
                 name: name.clone(),
@@ -224,7 +255,7 @@ impl Runtime for FactoryRuntime {
                     .agents
                     .get(name)
                     .and_then(|agent| agent.description.clone()),
-                spawns: self.graph.is_spawn(&session.agent, name),
+                spawns: graph.is_spawn(&session.agent, name),
             })
             .collect()
     }
@@ -234,7 +265,12 @@ impl Runtime for FactoryRuntime {
             return Err(ToolError::NoSuchAgent { agent: to.clone() });
         }
 
-        if !self.graph.permits(&session.agent, to) {
+        // The calling chain's own graph: its pipeline's routes, narrowed by any work it resumes. An
+        // edge only another workflow has is refused exactly like one the map does not draw — the
+        // agent is told to ask `layover_peers`, which lists only what this chain may reach.
+        let graph = self.routes_for(session);
+
+        if !graph.permits(&session.agent, to) {
             return Err(ToolError::NotPermitted {
                 from: session.agent.clone(),
                 to: to.clone(),
@@ -244,7 +280,7 @@ impl Runtime for FactoryRuntime {
         // A spawn edge is the one case where Hops do not apply: it is not continuing this chain,
         // it is starting another. Checking the caller's remaining Hops would refuse a fan-out for
         // a budget the new chain does not draw on.
-        let spawns = self.graph.is_spawn(&session.agent, to);
+        let spawns = graph.is_spawn(&session.agent, to);
 
         // Refused here as well as at dispatch, because being told now is worth more than being
         // told later: the agent can report what it could not pass on, rather than finishing
@@ -282,7 +318,11 @@ impl Runtime for FactoryRuntime {
         // flight carrying neither was composed from defaults, which silently undid whatever the
         // operator chose at trigger time; a spawned chain carrying neither merged every
         // pipeline's defaults, so the last declaration won.
-        let queued = Queued::new(flight, session.pipeline.clone(), session.flags.clone());
+        //
+        // So does its scope, taken from the session and never from the call: a spawn gives a chain
+        // a fresh budget, not a fresh set of permissions.
+        let queued = Queued::new(flight, session.pipeline.clone(), session.flags.clone())
+            .narrowed_by(session.within.clone());
 
         (self.queue)(queued).map_err(|detail| ToolError::Unavailable { detail })?;
 
@@ -402,7 +442,11 @@ impl Runtime for FactoryRuntime {
             DEFAULT_MAX_CHECKS,
         )
         .with_flags(session.flags.clone())
-        .booked_in(session.run.clone());
+        .booked_in(session.run.clone())
+        .booked_within(ChainScope::new(
+            session.pipeline.clone(),
+            session.within.clone(),
+        ));
 
         let when = layover.due_at.to_string();
 
@@ -545,6 +589,17 @@ fn parse_wait(text: &str) -> Option<i64> {
 }
 
 impl FactoryRuntime {
+    /// The graph the calling chain may use, from the Tower's record of it.
+    fn routes_for(
+        &self,
+        session: &Session,
+    ) -> std::borrow::Cow<'_, layover_core::graph::RouteGraph> {
+        self.routes.for_scope(&ChainScope::new(
+            session.pipeline.clone(),
+            session.within.clone(),
+        ))
+    }
+
     /// Where one agent's own files live.
     fn agent_dir(&self, agent: &AgentName) -> PathBuf {
         self.hangars.join(agent.to_string())
@@ -613,7 +668,7 @@ mode = "spawn"
     impl Fixture {
         fn new(name: &str) -> Self {
             let config: Config = toml::from_str(FACTORY).expect("the fixture factory parses");
-            let graph = RouteGraph::from_config(&config);
+            let routes = RouteMap::from_config(&config);
             let defaults = config.defaults.clone();
             let dir =
                 std::env::temp_dir().join(format!("layover-rt-{name}-{}", std::process::id()));
@@ -637,7 +692,7 @@ mode = "spawn"
             Self {
                 runtime: FactoryRuntime::new(Wiring {
                     config: Arc::new(config),
-                    graph: Arc::new(graph),
+                    routes: Arc::new(routes),
                     hangars: dir.clone(),
                     logbook: dir.join("logbook.md"),
                     queue: Arc::new(move |queued| {
@@ -719,6 +774,7 @@ mode = "spawn"
             pipeline: None,
             flags: BTreeMap::new(),
             flight: None,
+            within: std::collections::BTreeSet::new(),
         }
     }
 

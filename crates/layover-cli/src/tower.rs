@@ -211,7 +211,21 @@ fn resume_due(
         // pipeline's, because that is what validation checked the reachable prompts against.
         let flags = pipeline.flags_carrying(&layover.flags).to_map();
 
-        if let Err(error) = journal.queue(Queued::new(flight, Some(name.clone()), flags)) {
+        // The resumed chain belongs to this pipeline, but may use only the routes the chain that
+        // set the work down could also use. Otherwise any chain could reach another workflow's
+        // agents by booking a layover and waiting for this pipeline to collect it. A layover booked
+        // before its scope was recorded has nothing to narrow by, and resumes as it always did.
+        let within = layover
+            .scope
+            .as_ref()
+            .map(|booked| {
+                layover_core::scope::ChainScope::resuming(Some(name.clone()), booked).within
+            })
+            .unwrap_or_default();
+
+        if let Err(error) =
+            journal.queue(Queued::new(flight, Some(name.clone()), flags).narrowed_by(within))
+        {
             announce(format!("could not resume {}: {error}", layover.id));
             continue;
         }
@@ -683,6 +697,72 @@ resumes = true
         assert!(
             body.contains("fix/retry-4821"),
             "the report's detail: {body}"
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_resumed_chain_is_held_to_what_the_booking_chain_could_reach() {
+        // Any agent may book a layover and a resuming pipeline collects them all. Without the
+        // narrowing, work an Eagle Eye chain set down would come back with the follow-up
+        // pipeline's routes, including every DevForge edge.
+        let root = temp("resume-narrowed");
+        let journal = Journal::open(root.join("journal")).expect("opens");
+        let config = factory_config(
+            r#"
+[pipelines.follow_up]
+entry = "worker"
+resumes = true
+"#,
+        );
+
+        let now = Timestamp::now();
+        let book = |scope: Option<layover_core::scope::ChainScope>| {
+            let layover = layover_core::layover::Layover::book(
+                AgentName::new("worker"),
+                ItineraryId::generate(),
+                "later",
+                layover_core::handover::Handover::dispatch(Vec::new()),
+                now,
+                now,
+                12,
+            );
+            let layover = match scope {
+                Some(scope) => layover.booked_within(scope),
+                None => layover,
+            };
+            journal.book(layover).expect("books");
+        };
+        book(Some(layover_core::scope::ChainScope::of(Some(
+            PipelineName::new("eagle-eye"),
+        ))));
+        book(None);
+
+        resume_due(
+            &config,
+            &journal,
+            &PipelineName::new("follow_up"),
+            now,
+            &|_| {},
+        )
+        .expect("collects");
+
+        let pending = journal.pending().expect("readable");
+        assert_eq!(pending.len(), 2);
+        assert!(
+            pending
+                .iter()
+                .all(|queued| { queued.pipeline == Some(PipelineName::new("follow_up")) })
+        );
+        assert!(
+            pending.iter().any(|queued| queued.within
+                == std::collections::BTreeSet::from([Some(PipelineName::new("eagle-eye"))])),
+            "{pending:?}"
+        );
+        assert!(
+            pending.iter().any(|queued| queued.within.is_empty()),
+            "a layover booked before scopes were recorded resumes as it always did"
         );
 
         let _ = std::fs::remove_dir_all(&root);

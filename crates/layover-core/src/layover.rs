@@ -39,6 +39,7 @@ use ulid::Ulid;
 use crate::agent::AgentName;
 use crate::flight::{ItineraryId, RunId};
 use crate::handover::Handover;
+use crate::scope::ChainScope;
 
 /// Identifier of a booked layover.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
@@ -163,6 +164,15 @@ pub struct Layover {
     /// usually reports *after* it books: the conclusion does not exist yet at that moment.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run: Option<RunId>,
+    /// Which routes the chain that set this down could use.
+    ///
+    /// The resumed chain belongs to the resuming pipeline but may use only what this scope also
+    /// permits, so setting work down and waiting cannot carry a chain into another workflow's
+    /// routes. Taken from the Tower's record of the booking run, never from the agent. `None` for
+    /// a layover booked before this was recorded, which resumes with the resuming pipeline's
+    /// routes as it always did.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<ChainScope>,
 }
 
 impl Layover {
@@ -192,7 +202,15 @@ impl Layover {
             standing: Standing::Booked,
             flags: BTreeMap::new(),
             run: None,
+            scope: None,
         }
+    }
+
+    /// Records which routes the booking chain could use, so its follow-up is held to them.
+    #[must_use]
+    pub fn booked_within(mut self, scope: ChainScope) -> Self {
+        self.scope = Some(scope);
+        self
     }
 
     /// Records the flags the booking chain was composed with, so its follow-up is too.

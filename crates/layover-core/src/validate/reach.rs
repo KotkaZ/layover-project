@@ -5,7 +5,9 @@ use std::collections::BTreeMap;
 use crate::agent::AgentName;
 use crate::config::Config;
 use crate::graph::RouteGraph;
+use crate::pipeline::PipelineName;
 use crate::route::Join;
+use crate::scope::RouteMap;
 
 use super::Diagnostic;
 
@@ -32,25 +34,54 @@ pub(super) fn check_entry_points(config: &Config, found: &mut Vec<Diagnostic>) {
 /// The hop finding measures *shortest* paths, so it proves an agent is out of reach and never
 /// proves one is in reach. A factory whose agents loop spends far more hops than the shortest
 /// path suggests, and no static check can know how many times a loop will turn.
+///
+/// # Per pipeline
+///
+/// A chain can use only its own pipeline's routes, so each way in is walked over its own scoped
+/// graph: a pipeline from its entry, and a chain no pipeline opened from each `entry = true`
+/// agent over the global routes. An agent is out of reach when no way in reaches it, and its hop
+/// depth is the shortest any way in manages — the same best case the check has always taken. For
+/// a factory that scopes nothing every graph is the same graph, so the findings are exactly what
+/// they were before routes had scopes.
 pub(super) fn check_every_agent_is_within_reach(config: &Config, found: &mut Vec<Diagnostic>) {
-    let graph = RouteGraph::from_config(config);
+    let routes = RouteMap::from_config(config);
 
-    // Spawn targets count as entry points here. Each begins a fresh itinerary with a full hop
-    // budget, so measuring its depth from the trigger that eventually caused it would warn that a
-    // chain is cut when that chain has not even started yet.
-    let mut entries: Vec<&AgentName> = config.entry_agents().collect();
-    entries.extend(graph.spawn_targets());
-    entries.sort();
-    entries.dedup();
-    if entries.is_empty() {
+    let mut nearest: BTreeMap<AgentName, u32> = BTreeMap::new();
+    let mut barriers: BTreeMap<AgentName, BTreeMap<AgentName, u32>> = BTreeMap::new();
+    let mut seeded = false;
+
+    for (pipeline, starts) in ways_in(config) {
+        let graph = routes.for_pipeline(pipeline);
+
+        // Spawn targets count as entry points here. Each begins a fresh itinerary with a full hop
+        // budget, so measuring its depth from the trigger that eventually caused it would warn
+        // that a chain is cut when that chain has not even started yet. A spawned chain keeps its
+        // pipeline, so it is seeded in the same scope.
+        let mut entries = starts;
+        entries.extend(graph.spawn_targets());
+        entries.sort();
+        entries.dedup();
+        if entries.is_empty() {
+            continue;
+        }
+        seeded = true;
+
+        let distances = graph.distances_from(entries);
+        for (agent, &distance) in &distances {
+            let best = nearest.entry(agent.clone()).or_insert(distance);
+            *best = (*best).min(distance);
+        }
+        record_barrier_upstreams(config, graph, &distances, &mut barriers);
+    }
+
+    if !seeded {
         return;
     }
 
-    let distances = graph.distances_from(entries);
     let max_hops = config.defaults.max_hops;
 
     for name in config.agents.keys() {
-        let Some(&distance) = distances.get(name) else {
+        let Some(&distance) = nearest.get(name) else {
             found.push(Diagnostic::warning(format!(
                 "agent `{name}` cannot be reached from any entry point"
             )));
@@ -68,7 +99,60 @@ pub(super) fn check_every_agent_is_within_reach(config: &Config, found: &mut Vec
         }
     }
 
-    check_joins_can_be_satisfied(config, &graph, &distances, max_hops, found);
+    check_joins_can_be_satisfied(&barriers, max_hops, found);
+}
+
+/// Every way work enters the mesh, as the scope its chains run in and the agents they start at.
+///
+/// The unscoped way in is always listed, even with no `entry = true` agent, so that the spawn
+/// targets of global spawn routes are seeded exactly as they were before routes had scopes.
+fn ways_in(config: &Config) -> Vec<(Option<&PipelineName>, Vec<&AgentName>)> {
+    let direct = config
+        .agents
+        .iter()
+        .filter(|(_, agent)| agent.entry)
+        .map(|(name, _)| name)
+        .collect();
+
+    std::iter::once((None, direct))
+        .chain(
+            config
+                .pipelines
+                .iter()
+                .map(|(name, pipeline)| (Some(name), vec![&pipeline.entry])),
+        )
+        .collect()
+}
+
+/// Notes how close each upstream of an `all` barrier gets in one scope, keeping the best.
+///
+/// Only the scopes in which the barrier exists count, because a join applies only in its scope.
+fn record_barrier_upstreams(
+    config: &Config,
+    graph: &RouteGraph,
+    distances: &BTreeMap<AgentName, u32>,
+    barriers: &mut BTreeMap<AgentName, BTreeMap<AgentName, u32>>,
+) {
+    for target in config.agents.keys() {
+        let Some(spec) = graph.join_for(target) else {
+            continue;
+        };
+        if spec.join != Join::All {
+            continue;
+        }
+
+        for upstream in &spec.upstreams {
+            let Some(&distance) = distances.get(upstream) else {
+                continue;
+            };
+            let best = barriers
+                .entry(target.clone())
+                .or_default()
+                .entry(upstream.clone())
+                .or_insert(distance);
+            *best = (*best).min(distance);
+        }
+    }
 }
 
 /// Warns about a barrier no chain is long enough to fill.
@@ -83,25 +167,12 @@ pub(super) fn check_every_agent_is_within_reach(config: &Config, found: &mut Vec
 /// best case. It will not catch every under-sized budget — nothing static can, once loops are
 /// involved — but what it does report is always real.
 fn check_joins_can_be_satisfied(
-    config: &Config,
-    graph: &RouteGraph,
-    distances: &BTreeMap<AgentName, u32>,
+    barriers: &BTreeMap<AgentName, BTreeMap<AgentName, u32>>,
     max_hops: u32,
     found: &mut Vec<Diagnostic>,
 ) {
-    for target in config.agents.keys() {
-        let Some(spec) = graph.join_for(target) else {
-            continue;
-        };
-        if spec.join != Join::All {
-            continue;
-        }
-
-        for upstream in &spec.upstreams {
-            let Some(&distance) = distances.get(upstream) else {
-                continue;
-            };
-
+    for (target, upstreams) in barriers {
+        for (upstream, &distance) in upstreams {
             let delivery = distance + 2;
             if delivery > max_hops {
                 found.push(Diagnostic::warning(format!(

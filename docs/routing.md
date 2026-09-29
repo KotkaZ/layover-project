@@ -220,3 +220,93 @@ you, because nothing can know how many times a loop will turn.
 Getting it wrong is not a clean failure. Hops running out mid-repair leaves half-finished work in
 the shared workspace and no run alive to clean it up — see open question 11 in
 [`decisions.md`](decisions.md). Do the arithmetic; the example above shows it worked through.
+
+## 8. Scoping routes to workflows
+
+A factory with several pipelines is several workflows sharing some agents. With one mesh for the
+whole factory, every chain may use every route, so the only thing keeping a review sweep away from
+the agent that pushes code is a sentence in a prompt — and the sweep's reviewer reads untrusted
+pull request text. A route may therefore name the pipelines whose chains may use it:
+
+```toml
+[[routes]]
+from      = "eagle"
+to        = ["azurix", "sherlock", "golddigger"]
+pipelines = ["eagle-eye"]          # a bare string or a list, like `from` and `to`
+```
+
+It is still a permission and nothing more: it says who *may* send to whom **within** those
+workflows, never in what order. The mesh stays a mesh.
+
+| `pipelines` | Which chains may use the route |
+|---|---|
+| absent | **Every chain** — a global route, which is what every route meant before scopes existed |
+| `"p"` or `["p", "q"]` | Only chains belonging to one of the named pipelines |
+| `[]` | Refused by `validate`: it would mean either "nobody" or "everybody", and neither is safe to guess |
+
+The same `from -> to` pair may appear in several routes with different scopes; the union applies.
+Mode and join are properties of a route *in its scope*, so two routes a chain could use together
+must agree about any pair they share. `validate` refuses two overlapping routes of which only one
+spawns, a spawn into a barrier another route declares in the same scope, and two joins onto one
+agent in the same scope. (A disagreement between two *global* routes predates scopes and is
+reported as it always was.)
+
+### Which pipeline a chain belongs to
+
+Always the Tower's answer — recorded when the chain begins, carried on queued work so it survives
+a restart, and handed to each run in its token's session. No MCP tool accepts a pipeline, and a
+`pipeline` field in a tool call's arguments is ignored.
+
+| The chain begins with | It belongs to |
+|---|---|
+| A pipeline's trigger: dashboard, `POST /flights`, a schedule | That pipeline |
+| A flight an agent sends | Its sender's chain, so its pipeline |
+| A `mode = "spawn"` flight | A **new** chain that inherits the spawning chain's pipeline |
+| A resumed layover | The **resuming** pipeline — narrowed, see below |
+| A flight sent straight to an `entry = true` agent | **No pipeline**: global routes only |
+
+**A spawn inherits** because it gives a chain a fresh budget, not fresh permissions. Eagle Eye's
+reviews are spawned one per pull request; were a spawned chain to lose its pipeline, it would lose
+every route scoped to Eagle Eye and could do nothing.
+
+**A resumed chain is narrowed.** Any agent may book a layover, and a resuming pipeline collects
+every layover that comes due. Given the resuming pipeline's routes outright, a chain could reach
+another workflow's agents by setting its work down and waiting — an Eagle Eye reviewer books a
+layover, and a DevForge follow-up wakes it with a route to the agent that pushes code. So a layover
+records its booking chain's scope, and the resumed chain belongs to the resuming pipeline (its
+flags, joins, spawn edges and labelling) but may use an edge only when every pipeline it descends
+from permits it too. For the ordinary case, a follow-up resuming its own workflow's work, the two
+permit the same edges and nothing is lost. A layover booked before this was recorded resumes as it
+always did.
+
+**A direct trigger gets global routes only.** It belongs to no pipeline, so `validate` warns when
+an `entry = true` agent's every outgoing route is scoped: triggered directly, it could send
+nothing.
+
+### Joins in scope
+
+A join applies only in its scope. A barrier scoped to one pipeline parks that pipeline's flights;
+a chain in another pipeline that may reach the same agent from the same upstream goes straight
+through, as it would to any agent with no join. When the Tower decides whether a parked barrier
+can still complete (§3, *Abandoning a barrier*), it asks what the barrier's **own chain** could
+still reach — an upstream only another workflow's route leads to cannot deliver to it.
+
+### What validation checks per workflow
+
+Each check that asks "what can a chain reach" asks it of each way in over that way in's own graph:
+a pipeline from its entry over its scoped routes, a direct trigger from its agent over the global
+ones.
+
+- An agent no way in reaches is reported unreachable, and hop depth is the best any way in manages
+  — the same best case the checks have always taken.
+- A pipeline must declare the flags of every prompt its **own** routes reach, and no others. A
+  review sweep that shares an agent with a build workflow no longer declares the build's flags
+  unless its routes reach an agent that tests them.
+- A scoped route whose sender no chain of its pipelines can wake is reported as dead. For a
+  pipeline that `resumes`, work goes back to whichever agent booked the layover rather than to
+  `entry`, and any agent may book one — so any agent some chain can wake counts as a starting point
+  there. The hop and reach checks above keep measuring a resuming pipeline from its `entry`, as
+  they always have.
+
+For a factory that scopes nothing, every one of these graphs is the same graph, and every finding
+is exactly what it was.

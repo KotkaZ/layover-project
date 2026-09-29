@@ -16,7 +16,7 @@
 use std::sync::Arc;
 
 use layover_core::config::Config;
-use layover_core::graph::RouteGraph;
+use layover_core::scope::RouteMap;
 use layover_mcp::{Served, Session, Sessions};
 use layover_store::Journal;
 use layover_tower::{FactoryRuntime, Tokens, Wiring};
@@ -70,7 +70,7 @@ impl ServedMcp {
 
         let runtime = FactoryRuntime::new(Wiring {
             config: Arc::new(config.clone()),
-            graph: Arc::new(RouteGraph::from_config(config)),
+            routes: Arc::new(RouteMap::from_config(config)),
             hangars,
             logbook: root.join(&config.layover.logbook),
             queue: Arc::new(move |queued| {

@@ -346,3 +346,31 @@ server.
 **What is proposed.** Open question 7 in [`decisions.md`](decisions.md#still-open): a
 `headers_from` table of header templates that name variables, expanded by the CLI from its own
 environment, so the secret is still never written down.
+
+### 22. Workflows that share agents share more than routes
+
+**Severity: high before scoping; medium with it. Partially mitigated.**
+
+**What could happen.** A factory's workflows share agents — a review sweep and a build workflow
+both use the same reviewer — and with one route map for the whole factory, every chain could use
+every route. A reviewer reading untrusted pull request text in the sweep had the build workflow's
+route to the agent that pushes code, because the build workflow needed it for self-review. Only a
+sentence in a prompt kept the two apart, and a prompt is exactly what an injection overrides.
+
+**What was done.** Routes can be scoped to pipelines ([`routing.md`](routing.md#8-scoping-routes-to-workflows)).
+A chain may use only global routes and those scoped to its own pipeline; a spawned chain inherits
+its pipeline; a resumed layover is held to what the chain that booked it could reach, so setting
+work down cannot carry a chain into another workflow. The pipeline comes from the Tower's record
+and queued work, never from a tool call. The route check refuses the edge whatever the prompt says.
+
+**What is still open.**
+- **Scoping is opt-in.** A factory that scopes nothing has exactly the isolation it had before —
+  none — and a global route is usable by every workflow.
+- **An agent's memory, its learnings and the Logbook are per agent or per factory, not per
+  workflow.** A reviewer that notes something in `memory.md` during the sweep reads it back during
+  the build. That is a channel an injection can write to and a later chain in another workflow will
+  be handed; it carries text, not permissions, but text is what an injection is made of.
+- **The working directory is shared**, whatever the routes say — see risk 2.
+- **The Tower trusts its own files.** A chain's pipeline is read from the queue under `.layover/`.
+  Anything able to rewrite that file can relabel queued work; an agent is not meant to be able to,
+  but nothing stops an agent whose `work_dir` contains the factory's state directory.

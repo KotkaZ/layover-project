@@ -488,7 +488,66 @@ them: the route map drew every route, cost broke down by agent and by model but 
 and `RunCost` did not even carry the pipeline that a `RunRecord` already recorded. Nothing new was
 needed in the model; what was missing was that the boundary the model already had was invisible
 everywhere it mattered. Scoping is a view concern, so `Scope` lives in the diagram module rather
-than becoming a fourth thing to configure.
+than becoming a fourth thing to configure. *Later amended:* routes gained a `pipelines` scope (see
+below), which is a permission on the route rather than a view setting. The diagram's `Scope` is
+still a view concern; it now draws a workflow over the routes its chains may actually use.
+
+**Why routes can be scoped to pipelines, and why that keeps the mesh a mesh.** One mesh for the
+whole factory meant every chain could use every route, and a real factory's workflows share agents.
+Karl's review sweep spawns a reviewer per pull request; the build workflow lets the same reviewer
+hand work to the only agent that pushes code, for its self-review. The sweep's reviewer reads
+untrusted pull request text, and the route map permitted it that edge — only a prompt said not to.
+A second cost was quieter: the per-workflow map drew agents a workflow never uses, and a pipeline
+had to declare every flag of every prompt the shared mesh let it reach. A scope says *who may reach
+whom within a workflow*, so every question the mesh answered is still answered by an edge, and
+nothing about order is introduced — agents still decide where work goes. The scope sits on the
+route, not on the pipeline, so that `[[routes]]` stays the one place that says who may reach whom
+and pipelines stay thin: an entry agent, a trigger, some booleans.
+
+**Why an unscoped route stays global.** Every route written before scopes existed has to mean what
+it meant, and the common case — a factory with one workflow, or routes every workflow shares —
+should not have to name anything. Narrowing is opt-in and additive: a route gains a scope, never
+loses one. `pipelines = []` is refused rather than read either way, because "no pipelines" is a
+route nothing may use and "global" is the widest permission there is; a typo in either direction
+would be silent.
+
+**Why a spawned chain inherits its pipeline.** A spawn exists to give per-item work its own budget
+— Hops, Fuel, run cap. It was never meant to change what the work may do. A spawned chain that lost
+its pipeline would lose every route scoped to the workflow that spawned it, and one that was
+granted a different pipeline would be exactly the widening scopes exist to prevent.
+
+**Why a resumed layover is narrowed rather than simply re-scoped.** A resuming pipeline collects
+every layover that comes due, and any agent may book one, so the obvious rule — the resumed chain
+uses the resuming pipeline's routes — let a chain reach another workflow's agents by setting its
+work down and waiting: a sweep's reviewer, talked into booking a layover by the text it was
+reviewing, is woken by the build follow-up with a route to the agent that pushes code, and the
+handover even quotes the text that talked it into it. Three alternatives were weighed. Keeping the
+booking chain's pipeline would be simplest and safe, but it changes which pipeline follow-up work
+is labelled, costed and flagged under — a behaviour change for every factory that resumes, scoped
+or not. Letting `resumes` list the pipelines it collects from is explicit, but safe only for an
+operator who knows to write it. So the resumed chain belongs to the resuming pipeline as before —
+its flags, joins, spawn edges and labelling — and may use an edge only when every pipeline it
+descends from also permits it. The ordinary follow-up, resuming its own workflow's work, loses
+nothing because both permit the same edges; an unscoped factory is unaffected because every graph
+is the same graph; and the ancestry is a set, so a layover set down a hundred times narrows no
+further than once. The narrowing is recorded by the Tower on the layover and on queued work, never
+taken from an agent.
+
+**What was rejected for scoping.** A route table per pipeline would have been a second route map to
+keep agreeing with the first, and a copy of every shared route per workflow. A deny-list (`except =
+[...]`) fails open: a pipeline added later would silently gain every route nobody thought to
+exclude it from. Scoping by agent groups or tags would have added a fourth concept to configure
+for what pipelines already name. And sequencing — "in this workflow, `a` then `b`" — was never on
+the table: it is the pipeline engine the route map deliberately is not.
+
+**Why validation takes the best case across a pipeline's ways in.** The reach, hop and join checks
+have always proved only the negative: an agent *no* way in can wake, a depth *no* way in can
+afford. Scoped, each way in is walked over its own graph and the findings merged by that same best
+case, so a factory that scopes nothing gets exactly the findings it always had. The one new check
+that looks for something *dead* — a scoped route no chain of its pipelines can wake — treats every
+agent any chain can wake as a possible start for a resuming pipeline, because resumed work goes
+back to whoever booked it and any agent may book; a warning that is not true is one people stop
+reading.
 
 **Why workflow membership crosses spawn edges when reachability does not.** The two ask different
 questions. `reachable_from` asks what could still deliver into *this* itinerary, and a spawned
@@ -613,6 +672,19 @@ Agents should ask rather than guess on any of these.
    rate-card estimates, which it does not do for any runner today, and that the Reserve is checked
    at dispatch — which, as of this writing, nothing in the Tower does either; both need deciding
    alongside this.
+10. **Two global routes that disagree about one edge.** Scoped routes that a chain could use
+    together must agree about `mode` and `join` for any pair they share, and `validate` refuses
+    them when they do not. Two *global* routes naming the same pair, one spawning and one not, were
+    never checked: the edge silently spawns. It was left alone so that no existing factory's
+    findings changed. *Recommendation:* report it as the error it is at the next major version,
+    with the same message the scoped case uses.
+11. **Checking a resumed chain against what it can actually reach.** Validation measures a
+    resuming pipeline's reach, hop depth and flags from its `entry`, as it always has — but resumed
+    work goes back to whichever agent booked the layover, and the chain is narrowed by its booking
+    pipeline. So a resumed agent whose prompt tests a flag the resuming pipeline does not declare
+    still fails at composition, not at load. *Recommendation:* for each resuming pipeline, check
+    the flags of every agent any chain can wake (the same starting set the dead-route check uses);
+    it can only add findings, which is why it waits for a major version.
 
 ## Beyond the first runnable release
 

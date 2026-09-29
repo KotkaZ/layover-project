@@ -147,7 +147,10 @@ cannot be charged to a run has no chain to spend from and no agent to be.
 
 `layover_send` is checked against the same route map and the same itinerary the supervisor uses:
 
-- An edge the map does not draw is refused, and the agent is told to call `layover_peers`.
+- An edge the map does not draw is refused, and the agent is told to call `layover_peers`. So is
+  an edge only **another workflow's** routes draw: the check is against the caller's own chain's
+  routes — the global ones and those scoped to its pipeline — and `layover_peers` lists exactly
+  those. Neither tool accepts a pipeline; one named in the arguments is ignored.
 - A chain with no Hops left is told to finish and report rather than send, while it can still do
   something about it.
 - The flight it queues **continues the caller's chain**. It is not a new itinerary, so it spends
@@ -155,7 +158,8 @@ cannot be charged to a run has no chain to spend from and no agent to be.
   bounded by the budget the chain started with, not by a fresh one each time round.
 - It carries the chain's **pipeline and flags**, taken from the Tower's record of the run and never
   from the agent, so the next run is composed with the flags the chain was triggered with. A flight
-  over a spawn edge opens a new itinerary with a fresh budget, and still carries both.
+  over a spawn edge opens a new itinerary with a fresh budget, and still carries both — so the
+  spawned chain may use the same workflow's routes, and no others.
 
 ## Setting work down
 
@@ -195,6 +199,11 @@ following up somebody else's work.
 The resumed run gets a **new chain with a fresh budget**. The chain that booked the layover is over;
 its Hops and Fuel are spent, and reviving it would make the second follow-up cheaper than the first
 and the tenth refused. A layover is new work about an old subject, and it is priced that way.
+
+It gets **no new permissions**, though. The new chain belongs to the resuming pipeline, but may use
+a route only when the pipeline whose chain set the work down permits it too. Any agent may call
+`layover_wait`, and a resuming pipeline collects whatever comes due, so without this a chain could
+reach another workflow's agents by setting its work down and waiting to be woken there.
 
 What carries over is context. The run is told which chain set this down, what it was waiting for,
 when, and how many times it has already looked — and it is composed with the **flags** the booking

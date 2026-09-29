@@ -8,7 +8,8 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use crate::agent::AgentName;
 use crate::config::Config;
-use crate::route::Join;
+use crate::pipeline::PipelineName;
+use crate::route::{Join, Route};
 
 /// The rendezvous condition attached to a receiving agent.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,16 +36,40 @@ pub struct RouteGraph {
 }
 
 impl RouteGraph {
-    /// Builds a graph from a factory definition.
+    /// Builds a graph of **every** route, whatever pipelines it is scoped to.
+    ///
+    /// This is the factory drawn as one map, for questions about the factory as a whole — the
+    /// whole-factory diagram, what any chain could possibly do. It is not what any one chain may
+    /// use: a chain uses the graph of its own pipeline, from [`RouteGraph::for_pipeline`] or
+    /// [`crate::scope::RouteMap`]. For a factory that scopes nothing the two are the same graph.
     ///
     /// Routes that name several senders and several receivers expand to the full cross product,
     /// which is what makes `from = ["a", "b"]` with `to = "c"` a rendezvous and `from = "a"` with
     /// `to = ["b", "c"]` a fan-out.
     #[must_use]
     pub fn from_config(config: &Config) -> Self {
+        Self::from_routes(config.routes.iter())
+    }
+
+    /// Builds the graph a chain belonging to `pipeline` may use: every global route, and every
+    /// route scoped to that pipeline.
+    ///
+    /// `None` is a chain no pipeline opened, which gets global routes only.
+    #[must_use]
+    pub fn for_pipeline(config: &Config, pipeline: Option<&PipelineName>) -> Self {
+        Self::from_routes(
+            config
+                .routes
+                .iter()
+                .filter(|route| route.applies_to(pipeline)),
+        )
+    }
+
+    /// Builds a graph from exactly these routes.
+    fn from_routes<'a>(routes: impl IntoIterator<Item = &'a Route>) -> Self {
         let mut graph = Self::default();
 
-        for route in &config.routes {
+        for route in routes {
             for from in &route.from {
                 for to in &route.to {
                     graph
@@ -78,6 +103,36 @@ impl RouteGraph {
         }
 
         graph
+    }
+
+    /// Keeps only the edges `other` also permits.
+    ///
+    /// For a chain resuming work another pipeline set down: it may use a route only when both the
+    /// pipeline resuming it and every pipeline it descends from permit it — see
+    /// [`crate::scope::ChainScope`]. Spawn edges and joins stay this graph's own, because they
+    /// describe how *this* chain's pipeline delivers, and `other` only narrows who it may reach.
+    #[must_use]
+    pub fn restricted_to(&self, other: &Self) -> Self {
+        let keep = |edges: &BTreeMap<AgentName, BTreeSet<AgentName>>| {
+            edges
+                .iter()
+                .map(|(from, tos)| {
+                    let kept: BTreeSet<AgentName> = tos
+                        .iter()
+                        .filter(|to| other.permits(from, to))
+                        .cloned()
+                        .collect();
+                    (from.clone(), kept)
+                })
+                .filter(|(_, tos)| !tos.is_empty())
+                .collect()
+        };
+
+        Self {
+            edges: keep(&self.edges),
+            spawns: keep(&self.spawns),
+            joins: self.joins.clone(),
+        }
     }
 
     /// Returns `true` when this edge opens a new itinerary rather than continuing one.
@@ -116,9 +171,17 @@ impl RouteGraph {
     /// developer really is in the triage pipeline and the follow-up pipeline.
     #[must_use]
     pub fn workflow_from(&self, entry: &AgentName) -> BTreeSet<AgentName> {
-        let mut seen: BTreeSet<AgentName> = BTreeSet::new();
-        let mut queue = VecDeque::from([entry.clone()]);
-        seen.insert(entry.clone());
+        self.workflow_from_all([entry])
+    }
+
+    /// [`RouteGraph::workflow_from`], from several starting agents at once.
+    #[must_use]
+    pub fn workflow_from_all<'a>(
+        &self,
+        sources: impl IntoIterator<Item = &'a AgentName>,
+    ) -> BTreeSet<AgentName> {
+        let mut seen: BTreeSet<AgentName> = sources.into_iter().cloned().collect();
+        let mut queue: VecDeque<AgentName> = seen.iter().cloned().collect();
 
         while let Some(current) = queue.pop_front() {
             for next in self.successors(&current) {

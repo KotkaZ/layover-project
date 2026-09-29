@@ -8,6 +8,24 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+### Added
+
+- **Routes can be scoped to the pipelines whose chains may use them.** `[[routes]]` accepts
+  `pipelines = "name"` or a list. A chain may use the global routes and those scoped to its own
+  pipeline, and nothing else: `layover_send` along another workflow's edge is refused with the
+  usual "call layover_peers" answer, and `layover_peers` lists only what the chain may reach. A
+  route without `pipelines` is global, so every existing factory behaves and validates exactly as
+  it did. Which pipeline a chain belongs to is the Tower's record, carried on queued work across a
+  restart: a spawned chain inherits it, a flight sent straight to an `entry = true` agent belongs to
+  none, and a resumed layover belongs to the resuming pipeline but is held to what the chain that
+  booked it could reach — so a chain cannot enter another workflow by setting its work down. Joins
+  apply only in their scope, and barrier abandonment asks what the barrier's own chain can reach.
+
+  `validate` refuses an unknown pipeline, `pipelines = []`, and overlapping routes that disagree
+  about spawning or joins; runs the reach, hop, join and flag checks per pipeline, so a pipeline
+  no longer declares flags for agents its routes cannot reach; and warns about a scoped route no
+  chain of its scope can use and an `entry = true` agent a direct trigger would strand.
+
 ### Fixed
 
 - **Flags chosen at trigger time were ignored.** `POST /flights` with

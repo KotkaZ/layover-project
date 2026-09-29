@@ -4,14 +4,16 @@
 //! typo three agents deep has already spent money to find out. Errors block startup; warnings
 //! describe shapes that are legal but known to be hazardous.
 //!
-//! The checks are grouped by what they are about — agents, routes, reach, pipelines and prompts —
-//! and each group lives in its own file so that any one of them fits comfortably in view.
+//! The checks are grouped by what they are about — agents, routes, route scopes, reach, pipelines
+//! and prompts — and each group lives in its own file so that any one of them fits comfortably in
+//! view.
 
 mod agents;
 mod pipelines;
 mod prompts;
 mod reach;
 mod routes;
+mod scopes;
 mod wiring;
 
 use crate::config::Config;
@@ -86,6 +88,7 @@ pub fn validate(config: &Config) -> Vec<Diagnostic> {
     routes::check_joins_are_unambiguous(config, &mut found);
     routes::check_read_write_fan_out(config, &mut found);
     routes::check_spawns_do_not_join(config, &mut found);
+    scopes::check_route_scopes(config, &mut found);
     reach::check_every_agent_is_within_reach(config, &mut found);
     pipelines::check_pipelines(config, &mut found);
     wiring::check_mcp_and_workspaces(config, &mut found);

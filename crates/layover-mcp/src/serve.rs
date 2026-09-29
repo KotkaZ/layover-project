@@ -194,6 +194,7 @@ mod tests {
                     pipeline: None,
                     flags: std::collections::BTreeMap::new(),
                     flight: None,
+                    within: std::collections::BTreeSet::new(),
                 },
             )),
             runtime: Arc::new(Stub),

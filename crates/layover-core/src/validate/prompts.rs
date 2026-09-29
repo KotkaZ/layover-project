@@ -12,9 +12,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::agent::{AgentName, PromptSpec};
 use crate::config::Config;
-use crate::graph::RouteGraph;
-use crate::pipeline::Flags;
+use crate::pipeline::{Flags, PipelineName};
 use crate::prompt::{PromptSource, referenced_flags, resolve};
+use crate::scope::RouteMap;
 use crate::tools::unknown_tools_in;
 
 use super::Diagnostic;
@@ -88,9 +88,13 @@ fn collect_referenced_flags(
 
 /// Every flag a reachable agent tests must be declared by the entry point that can reach it.
 ///
-/// "Reachable" crosses spawn edges. A spawned chain carries the flags of the chain that spawned
-/// it, so its prompts are composed from the spawning entry point's declarations exactly as a
-/// hand-off's are.
+/// "Reachable" is over the routes that entry point's chains may use: a pipeline's own scoped
+/// graph, or the global routes for a bare `entry = true` agent. A pipeline therefore need not
+/// declare flags for agents its routes cannot reach — which is what spared a review sweep from
+/// declaring every flag of the build workflow it shares an agent with.
+///
+/// It crosses spawn edges. A spawned chain carries the flags of the chain that spawned it, so its
+/// prompts are composed from the spawning entry point's declarations exactly as a hand-off's are.
 fn check_flags_are_available_at_every_entry(
     config: &Config,
     referenced: &BTreeMap<AgentName, BTreeSet<String>>,
@@ -100,10 +104,12 @@ fn check_flags_are_available_at_every_entry(
         return;
     }
 
-    let graph = RouteGraph::from_config(config);
+    let routes = RouteMap::from_config(config);
 
     for entry in entry_points(config) {
-        let reachable = graph.workflow_from(&entry.agent);
+        let reachable = routes
+            .for_pipeline(entry.pipeline)
+            .workflow_from(&entry.agent);
 
         for (agent, flags) in referenced {
             if !reachable.contains(agent) {
@@ -128,6 +134,8 @@ fn check_flags_are_available_at_every_entry(
 /// One way work can enter the mesh, and the flags a run entering that way would carry.
 struct Entry<'a> {
     agent: AgentName,
+    /// The pipeline its chains belong to, whose routes they may use.
+    pipeline: Option<&'a PipelineName>,
     available: BTreeSet<&'a str>,
     label: String,
 }
@@ -138,6 +146,7 @@ fn entry_points(config: &Config) -> Vec<Entry<'_>> {
         .iter()
         .map(|(name, pipeline)| Entry {
             agent: pipeline.entry.clone(),
+            pipeline: Some(name),
             available: pipeline.flags.keys().map(String::as_str).collect(),
             label: format!("pipeline `{name}`"),
         })
@@ -152,6 +161,7 @@ fn entry_points(config: &Config) -> Vec<Entry<'_>> {
             .filter(|(_, agent)| agent.entry)
             .map(|(name, _)| Entry {
                 agent: name.clone(),
+                pipeline: None,
                 available: BTreeSet::new(),
                 label: format!("`entry = true` on agent `{name}`"),
             }),

@@ -14,7 +14,7 @@
 //! Storing only the [`Flight`] loses both, silently: the operator sets `run_e2e`, the dialog
 //! reports success, and the run — whenever it happens — is composed as though they had not.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -40,6 +40,13 @@ pub struct Queued {
     /// and dispatch would otherwise change the meaning of work already booked.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub flags: BTreeMap<String, bool>,
+    /// Pipelines whose routes the chain must also stay within, when it resumes work another
+    /// chain set down — see [`crate::scope::ChainScope`]. Carried here, like the pipeline, so a
+    /// Tower restarted with this work still queued cannot widen what the chain may reach.
+    ///
+    /// A `null` entry is an ancestor chain no pipeline opened. Empty for every other chain.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub within: BTreeSet<Option<PipelineName>>,
 }
 
 impl Queued {
@@ -54,7 +61,15 @@ impl Queued {
             flight,
             pipeline,
             flags,
+            within: BTreeSet::new(),
         }
+    }
+
+    /// Records the pipelines the chain must also stay within.
+    #[must_use]
+    pub fn narrowed_by(mut self, within: BTreeSet<Option<PipelineName>>) -> Self {
+        self.within = within;
+        self
     }
 }
 

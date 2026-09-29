@@ -10,6 +10,7 @@
 //! - [`prompt`] — composing an agent's instructions from files, conditional on flags
 //! - [`config`] — parsing a factory definition from `layover.toml`
 //! - [`graph`] — the route map as a directed graph
+//! - [`scope`] — which routes a chain may use, resolved per pipeline
 //! - [`mod@validate`] — load-time checks that fail before a human stops watching
 //! - [`flight`] — the message envelope
 //! - [cost] — the ledger, rate cards and the factory-wide Fuel Reserve
@@ -41,6 +42,7 @@ pub mod queue;
 pub mod report;
 pub mod route;
 pub mod run;
+pub mod scope;
 pub mod slots;
 pub mod stall;
 pub mod tools;
@@ -72,6 +74,7 @@ pub use prompt::{PromptDir, PromptError, PromptMap, PromptSource};
 pub use report::Report;
 pub use route::{Join, Mode, Route};
 pub use run::{Outcome, RunRecord};
+pub use scope::{ChainScope, RouteMap};
 pub use slots::{Admission, Slots};
 pub use stall::Stall;
 pub use validate::{Diagnostic, Severity, validate, validate_prompts};

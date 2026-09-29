@@ -23,8 +23,9 @@ use std::sync::Mutex;
 
 use layover_core::agent::AgentName;
 use layover_core::barrier::{Barrier, BarrierKey, Delivery};
-use layover_core::flight::Flight;
+use layover_core::flight::{Flight, ItineraryId};
 use layover_core::graph::RouteGraph;
+use layover_core::scope::{ChainScope, RouteMap};
 
 /// A barrier that will never complete, and the work it was holding.
 #[derive(Debug, Clone)]
@@ -93,9 +94,14 @@ impl Barriers {
     /// `live_agents` is who is currently running or queued to run. A barrier is dead when none of
     /// its missing upstreams can be reached from any of them — at which point waiting is not
     /// patience, it is a hang.
+    ///
+    /// "Reached" is over the barrier's own chain's routes, found through `scope_of`: an upstream
+    /// only another workflow's route leads to cannot deliver to this chain's barrier, and treating
+    /// it as reachable would keep a dead barrier parked.
     pub fn abandon_unreachable(
         &self,
-        graph: &RouteGraph,
+        routes: &RouteMap,
+        scope_of: impl Fn(&ItineraryId) -> ChainScope,
         live_agents: &BTreeSet<AgentName>,
     ) -> Vec<Abandoned> {
         let Ok(mut held) = self.live.lock() else {
@@ -107,7 +113,11 @@ impl Barriers {
         held.retain(|key, barrier| {
             // A barrier that has already woken its agent is not waiting for anything; leaving it
             // in place is what lets the next wave reset it.
-            if barrier.has_released() || barrier.is_reachable(graph, live_agents) {
+            if barrier.has_released() {
+                return true;
+            }
+            let graph = routes.for_scope(&scope_of(&key.itinerary));
+            if barrier.is_reachable(&graph, live_agents) {
                 return true;
             }
 
@@ -188,6 +198,11 @@ from = ["tester", "reviewer"]
 to = "publisher"
 join = "all"
 "#;
+
+    fn routes() -> RouteMap {
+        let config: Config = toml::from_str(FACTORY).expect("parses");
+        RouteMap::from_config(&config)
+    }
 
     fn graph() -> RouteGraph {
         let config: Config = toml::from_str(FACTORY).expect("the fixture factory parses");
@@ -289,7 +304,11 @@ join = "all"
         barriers.deliver(&graph, flight(&chain, "tester", "publisher"));
 
         // Nothing is running that could ever reach `reviewer`.
-        let given_up = barriers.abandon_unreachable(&graph, &live(&["publisher"]));
+        let given_up = barriers.abandon_unreachable(
+            &routes(),
+            |_| ChainScope::of(None),
+            &live(&["publisher"]),
+        );
 
         assert_eq!(given_up.len(), 1);
         assert_eq!(given_up[0].missing, [AgentName::new("reviewer")]);
@@ -314,7 +333,11 @@ join = "all"
         barriers.deliver(&graph, flight(&chain, "tester", "publisher"));
 
         // `developer` is live and can still reach `reviewer`.
-        let given_up = barriers.abandon_unreachable(&graph, &live(&["developer"]));
+        let given_up = barriers.abandon_unreachable(
+            &routes(),
+            |_| ChainScope::of(None),
+            &live(&["developer"]),
+        );
 
         assert!(
             given_up.is_empty(),
@@ -334,7 +357,11 @@ join = "all"
         barriers.deliver(&graph, flight(&chain, "tester", "publisher"));
         barriers.deliver(&graph, flight(&chain, "reviewer", "publisher"));
 
-        let given_up = barriers.abandon_unreachable(&graph, &live(&["publisher"]));
+        let given_up = barriers.abandon_unreachable(
+            &routes(),
+            |_| ChainScope::of(None),
+            &live(&["publisher"]),
+        );
 
         assert!(given_up.is_empty(), "a released barrier waits for nothing");
         assert_eq!(barriers.count(), 1);

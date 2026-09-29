@@ -23,6 +23,36 @@ trigger     = { every = "1h" }
 Pipelines are deliberately thin. They do not describe a sequence of steps, so adding one does not
 turn the permission mesh into a pipeline engine.
 
+## Which routes a pipeline's chains may use
+
+Every chain belongs to the pipeline that started its work — and may use the global routes and the
+routes scoped to that pipeline, nothing else:
+
+```toml
+[[routes]]
+from      = "azurix"
+to        = "eagle"
+mode      = "spawn"
+pipelines = "eagle-eye"        # only Eagle Eye's chains may use this
+```
+
+A pipeline still says nothing about *order*; a scoped route is a permission within a workflow, not
+a step in one. The scope lives on the route rather than on the pipeline so that the route map
+stays the one place that says who may reach whom.
+
+| Work | Belongs to |
+|---|---|
+| A trigger from the dashboard, `POST /flights` or a schedule | The pipeline triggered |
+| A flight an agent sends | Its chain's pipeline |
+| A chain opened over a `mode = "spawn"` edge | The spawning chain's pipeline |
+| A resumed layover | The resuming pipeline, held to what the booking chain could use — see [below](#resuming-booked-work) |
+| A flight sent straight to an `entry = true` agent | No pipeline: global routes only |
+
+Scoping also narrows what `validate` asks of a pipeline. Reach, hop depth and flag declarations are
+checked over each pipeline's own routes, so a pipeline need not declare flags for agents its routes
+cannot reach. See [Configuration](./configuration.md#scoping-a-route-to-workflows) for the syntax
+and the rules two overlapping routes must follow.
+
 ## Triggers
 
 | Form | Meaning |
@@ -62,6 +92,13 @@ the layover — see [a flag holds for the whole chain](#a-flag-holds-for-the-who
 
 **Only a resuming pipeline collects them.** An ordinary schedule never picks up booked work, so a
 factory's hourly sweep cannot quietly start following up somebody else's.
+
+**A resumed chain is held to what its booking chain could reach.** It belongs to the resuming
+pipeline — its flags, its joins, its place on the dashboard — but may use a route only when the
+pipeline whose chain set the work down permits it too. A resuming pipeline collects every layover
+that comes due, whoever booked it, so without this a review sweep could reach the build workflow's
+agents by setting its work down and waiting for the follow-up to wake it. When a follow-up resumes
+its own workflow's work, both pipelines permit the same routes and nothing changes.
 
 ## Running several instances at once
 
@@ -198,7 +235,8 @@ from the Tower's record of the run, like its identity, because an agent that cou
 could turn on the section of its instructions that lets it publish.
 
 A spawned chain also counts towards the pipeline that spawned it — its runs and their cost appear
-under that workflow — because a reviewer spawned by a sweep is unarguably part of the sweep.
+under that workflow, and it may use that workflow's scoped routes — because a reviewer spawned by a
+sweep is unarguably part of the sweep.
 
 `layover prompt <agent> --pipeline <name> --flag …` renders what a run triggered that way receives,
 and the last row is what it renders without `--pipeline`.
@@ -210,6 +248,10 @@ An agent is an entry point when a pipeline names it, **or** when it is marked `e
 These are different things. `entry = true` is a bare permission — useful for an agent you want to
 poke by hand. A pipeline is a named trigger that also carries a schedule and flags, and it is the
 normal way in.
+
+A flight sent straight to an `entry = true` agent belongs to no pipeline, so it may use global
+routes only. `validate` warns when every route out of such an agent is scoped, because triggered
+that way it could send nothing.
 
 A factory with neither cannot be triggered at all, which is an error.
 

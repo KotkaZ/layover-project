@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 
 use crate::agent::{Access, AgentName};
 use crate::config::Config;
+use crate::route::Route;
 
 use super::Diagnostic;
 
@@ -26,7 +27,7 @@ pub(super) fn check_routes_name_known_agents(config: &Config, found: &mut Vec<Di
 }
 
 pub(super) fn check_joins_are_unambiguous(config: &Config, found: &mut Vec<Diagnostic>) {
-    let mut join_targets: BTreeMap<&AgentName, usize> = BTreeMap::new();
+    let mut join_targets: BTreeMap<&AgentName, Vec<usize>> = BTreeMap::new();
 
     for (index, route) in config.routes.iter().enumerate() {
         if !route.is_join() {
@@ -46,15 +47,38 @@ pub(super) fn check_joins_are_unambiguous(config: &Config, found: &mut Vec<Diagn
         }
 
         for target in &route.to {
-            *join_targets.entry(target).or_default() += 1;
+            join_targets.entry(target).or_default().push(index);
         }
     }
 
-    for (target, count) in join_targets {
-        if count > 1 {
-            found.push(Diagnostic::error(format!(
-                "agent `{target}` is the target of {count} join routes; which barrier applies is undefined"
-            )));
+    for (target, indices) in join_targets {
+        let routes: Vec<&Route> = indices.iter().map(|&index| &config.routes[index]).collect();
+
+        // A factory that scopes none of these keeps exactly the finding it always had.
+        if routes.iter().all(|route| !route.is_scoped()) {
+            if routes.len() > 1 {
+                found.push(Diagnostic::error(format!(
+                    "agent `{target}` is the target of {} join routes; which barrier applies is undefined",
+                    routes.len()
+                )));
+            }
+            continue;
+        }
+
+        // A join is a property of the route in its scope, so two joins onto one agent are only
+        // ambiguous where some chain could meet both.
+        for (a, first) in routes.iter().enumerate() {
+            for (b, second) in routes.iter().enumerate().skip(a + 1) {
+                if first.overlaps(second) {
+                    found.push(Diagnostic::error(format!(
+                        "routes {} and {} are both joins onto `{target}` {}; which barrier applies \
+                         there is undefined",
+                        indices[a],
+                        indices[b],
+                        super::scopes::where_both(first, second)
+                    )));
+                }
+            }
         }
     }
 }

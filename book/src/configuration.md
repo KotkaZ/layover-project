@@ -323,8 +323,49 @@ timeout_sec = 3600
 | `mode` | `async` (default) or `spawn`, which opens a fresh itinerary per flight. `request_response` was superseded by joins. |
 | `join` | `all` or `any`. Parks flights until the condition is met. |
 | `timeout_sec` | Backstop for a barrier that never completes. |
+| `pipelines` | The pipelines whose chains may use the route. A bare string or a list. Absent means every chain may — see below. |
 
 Direction is explicit. An edge absent from `[[routes]]` means the flight is refused.
+
+### Scoping a route to workflows
+
+A factory with several pipelines is several workflows, and they usually share agents. Without a
+scope every chain may use every route, so a review sweep can reach anything the build workflow
+can — held back only by what its prompts say, while it reads untrusted pull request text.
+
+```toml
+# DevForge may hand bob work from eagle; Eagle Eye spawns an eagle per pull request and may not.
+[[routes]]
+from      = "eagle"
+to        = ["bob", "sherlock"]
+pipelines = ["devforge", "devforge-follow-up"]
+
+[[routes]]
+from      = "azurix"
+to        = "eagle"
+mode      = "spawn"
+pipelines = "eagle-eye"
+
+[[routes]]
+from      = "eagle"
+to        = ["azurix", "sherlock"]
+pipelines = "eagle-eye"
+```
+
+- **Absent** `pipelines` makes a route **global**: every chain may use it, exactly as before scopes
+  existed. A factory that scopes nothing behaves and validates exactly as it did.
+- **Scoped**, only chains belonging to one of the named pipelines may use it. A chain started by
+  `eagle-eye` that asks to send `eagle -> bob` is refused like any edge the map does not draw, and
+  `layover_peers` does not list it.
+- The same pair may appear in several routes; the union applies. Two routes one chain could use
+  together must agree about `mode` and `join` for any pair they share, and `validate` says so when
+  they do not.
+- `pipelines = []` and an unknown pipeline name are errors.
+
+A spawned chain keeps its pipeline, a resumed layover belongs to the resuming pipeline but may use
+only what the chain that booked it could, and a flight sent straight to an `entry = true` agent
+belongs to no pipeline and may use global routes only. The rules, and why, are in
+[`routing.md`](https://github.com/KotkaZ/layover-project/blob/main/docs/routing.md#8-scoping-routes-to-workflows).
 
 ### What a join does while the factory runs
 
@@ -377,12 +418,18 @@ truth for who may reach whom — a spawn outside it would be an unchecked edge i
 funded chain. A route may not both spawn and join: a barrier waits for upstreams within one
 itinerary, so each spawned chain would arrive alone and park forever. Validation rejects it.
 
+The spawned chain keeps the pipeline of the chain that spawned it, and with it that pipeline's
+scoped routes: a spawn gives a chain a fresh budget, not a fresh set of permissions.
+
 ### Rendezvous joins
 
 A join is a property of the **receiving** node. It says *which inputs this agent needs together* —
 not *when this agent is allowed to run*. A flight from any sender the barrier does not name
 bypasses it entirely and wakes the agent on its own, which is what lets a joined agent also be an
 entry point.
+
+A scoped join applies only in its scope: a chain in another pipeline that may reach the same agent
+goes straight through.
 
 Two rules fall out of failure handling:
 

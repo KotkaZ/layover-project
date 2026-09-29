@@ -2,8 +2,8 @@
 
 use crate::agent::Access;
 use crate::config::Config;
-use crate::graph::RouteGraph;
 use crate::mcp::{McpTransport, looks_like_a_secret};
+use crate::scope::RouteMap;
 
 use super::Diagnostic;
 
@@ -105,14 +105,17 @@ fn check_url(at: &str, url: &str, found: &mut Vec<Diagnostic>) {
 /// Manual pipelines are deliberately not flagged either. A human choosing to start a second
 /// instance knows they did.
 fn check_parallel_instances_are_isolated(config: &Config, found: &mut Vec<Diagnostic>) {
-    let graph = RouteGraph::from_config(config);
+    let routes = RouteMap::from_config(config);
 
     for (name, pipeline) in config.scheduled_pipelines() {
         if !pipeline.allows_overlap() {
             continue;
         }
 
-        let writers: Vec<String> = graph
+        // Only what this pipeline's own chains can reach: an instance of it cannot use a route
+        // scoped to another workflow, however many agents the two share.
+        let writers: Vec<String> = routes
+            .for_pipeline(Some(name))
             .reachable_from([&pipeline.entry])
             .into_iter()
             .filter(|agent| {
