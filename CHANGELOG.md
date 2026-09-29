@@ -8,6 +8,21 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-09-29
+
+Workflows that share agents can now keep their routes apart, and nine defects found running a real
+factory on Windows are fixed. Three of them stopped a factory doing what its configuration said:
+flags chosen at trigger time, a relative `--config`, and an agent's declared MCP servers.
+
+**Compatibility.** Everything new is optional: `pipelines` on a route and on the HTTP `Route`,
+`blocker` on `layover_help`, and `layover graph --pipeline`. Queued work and layovers written by
+1.1 still read in 1.0.0. Two validation errors are new, each for a factory that could not run as
+written: an agent MCP server named `layover`, which would collide with Layover's own; and a
+spawned agent that tests a flag its spawning pipeline does not declare, which now inherits that
+pipeline's flags instead of borrowing another pipeline's default. One warning is no longer
+suppressed: `workspace = "per-itinerary"` isolates nothing yet, so a schedule that can overlap its
+own writers is warned about, and `validate --strict` fails on it.
+
 ### Added
 
 - **Routes can be scoped to the pipelines whose chains may use them.** `[[routes]]` accepts
@@ -878,7 +893,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/KotkaZ/layover-project/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/KotkaZ/layover-project/compare/v0.23.3...v1.0.0
 [0.23.3]: https://github.com/KotkaZ/layover-project/compare/v0.23.2...v0.23.3
 [0.23.2]: https://github.com/KotkaZ/layover-project/compare/v0.23.1...v0.23.2
