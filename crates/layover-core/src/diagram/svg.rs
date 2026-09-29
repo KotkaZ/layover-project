@@ -11,6 +11,12 @@ use crate::diagram::layout::{Edge, EdgeStyle, Layout, Node, NodeKind, Shape};
 
 /// How far below a node the hook begins.
 const HOOK: f64 = 26.0;
+/// Radius of the rounded corners where a return path turns into and out of its lane.
+const BEND: f64 = 14.0;
+/// How far in from its source's right-hand corner a return path leaves the underside.
+const LEAVE_INSET: f64 = 18.0;
+/// How far below its source a return path turns towards the gap right of the column.
+const SHELF: f64 = 10.0;
 /// How far above the lane an edge label sits.
 const LABEL_LIFT: f64 = 6.0;
 
@@ -154,10 +160,20 @@ fn render_edge(out: &mut String, layout: &Layout, edge: &Edge) {
         "arrow"
     };
 
-    let (path, label_at) = if edge.back {
+    let (path, label_at) = if edge.beside {
+        beside_path(from, to, edge)
+    } else if edge.back {
         return_path(from, to, edge)
     } else {
         forward_path(from, to, edge.from_y, edge.to_y)
+    };
+
+    // A two-way line carries the same arrowhead at its start, which `auto-start-reverse` turns to
+    // point back into the node the line leaves.
+    let start = if edge.both {
+        format!(r#" marker-start="url(#{marker})""#)
+    } else {
+        String::new()
     };
 
     // A scoped edge on the whole-factory map says which workflows may use it: classed so a
@@ -165,12 +181,12 @@ fn render_edge(out: &mut String, layout: &Layout, edge: &Edge) {
     if edge.scopes.is_empty() {
         let _ = writeln!(
             out,
-            r#"  <path class="{class}" d="{path}" marker-end="url(#{marker})"/>"#
+            r#"  <path class="{class}" d="{path}"{start} marker-end="url(#{marker})"/>"#
         );
     } else {
         let _ = writeln!(
             out,
-            r#"  <path class="{class} scoped" d="{path}" marker-end="url(#{marker})"><title>only in {}</title></path>"#,
+            r#"  <path class="{class} scoped" d="{path}"{start} marker-end="url(#{marker})"><title>only in {}</title></path>"#,
             escape(&edge.scopes.join(", "))
         );
     }
@@ -205,6 +221,42 @@ fn forward_path(from: &Node, to: &Node, from_y: f64, to_y: f64) -> (String, (f64
     )
 }
 
+/// An edge between two agents in the same column, drawn beside it.
+///
+/// Neighbours are joined by a straight connector through the gap between them. Agents further
+/// apart get an arc out to the right that leaves and arrives near the ends facing each other, so
+/// it hugs the column instead of cutting across the boxes between them. The layout decides how far
+/// out it swings, which is what keeps it inside the drawing and out of the next column.
+fn beside_path(from: &Node, to: &Node, edge: &Edge) -> (String, (f64, f64)) {
+    let downwards = from.y < to.y;
+
+    if let Some(bulge) = edge.bulge {
+        let x = from.x + from.w;
+        let (y1, y2) = if downwards {
+            (from.y + from.h * 0.8, to.y + to.h * 0.2)
+        } else {
+            (from.y + from.h * 0.2, to.y + to.h * 0.8)
+        };
+        // Control points at 4/3 of the bulge put the curve's furthest point exactly at the bulge.
+        let control = x + bulge * 4.0 / 3.0;
+        return (
+            format!("M {x:.1} {y1:.1} C {control:.1} {y1:.1} {control:.1} {y2:.1} {x:.1} {y2:.1}"),
+            (x + bulge + 12.0, f64::midpoint(y1, y2)),
+        );
+    }
+
+    let x = edge.gutter.unwrap_or_else(|| from.centre().0);
+    let (y1, y2) = if downwards {
+        (from.y + from.h, to.y)
+    } else {
+        (from.y, to.y + to.h)
+    };
+    (
+        format!("M {x:.1} {y1:.1} L {x:.1} {y2:.1}"),
+        (x + 16.0, f64::midpoint(y1, y2) + 4.0),
+    )
+}
+
 /// A return path: out of the bottom, back leftwards through its own lane, and up into the
 /// target's underside.
 ///
@@ -215,9 +267,8 @@ fn forward_path(from: &Node, to: &Node, from_y: f64, to_y: f64) -> (String, (f64
 /// The lane depth comes from the layout, which is what guarantees the curve stays inside the
 /// reported extent instead of being clipped off the bottom.
 fn return_path(from: &Node, to: &Node, edge: &Edge) -> (String, (f64, f64)) {
-    let (fx, fy) = (f64::midpoint(from.x, from.x + from.w), from.y + from.h);
     let ty = to.y + to.h;
-    let floor = edge.floor.unwrap_or(fy.max(ty) + 34.0);
+    let floor = edge.floor.unwrap_or((from.y + from.h).max(ty) + 34.0);
 
     // Climb in a gutter left of the target's column rather than straight up into its underside.
     // Columns stack several agents, so a vertical segment on the column centre runs through
@@ -230,14 +281,42 @@ fn return_path(from: &Node, to: &Node, edge: &Edge) -> (String, (f64, f64)) {
     let gutter = edge.gutter.unwrap_or_else(|| (to.x - 44.0).max(12.0));
     let corner = edge.hook_x.unwrap_or(to.x + 26.0);
 
+    // Out from under the source's right-hand corner, into the gap right of its column, down that
+    // gap, along the lane, up the gutter and into the target — straight runs with rounded
+    // corners.
+    //
+    // Two earlier shapes failed. One cubic curve with its control points on the lane never reaches
+    // the lane: its lowest point sits a quarter of the way short, so with a lane just below the
+    // deepest box the curve ran behind that box. And dropping straight down from the source ran
+    // through every box below it in the same column, showing between them as a short vertical line
+    // that reads as a route between neighbours.
+    let right = from.x + from.w;
+    let bottom = from.y + from.h;
+    let leave = right - LEAVE_INSET;
+    let shelf = bottom + SHELF;
+    let exit = edge.exit_x.unwrap_or(right + 20.0);
+    let bend = BEND
+        .min((exit - leave - SHELF) / 2.0)
+        .min((floor - shelf) / 2.0)
+        .min((exit - gutter).abs() / 2.0);
     (
         format!(
-            "M {fx:.1} {fy:.1} \
-             C {fx:.1} {floor:.1} {gutter:.1} {floor:.1} {gutter:.1} {:.1} \
+            "M {leave:.1} {bottom:.1} Q {leave:.1} {shelf:.1} {:.1} {shelf:.1} \
+             L {:.1} {shelf:.1} Q {exit:.1} {shelf:.1} {exit:.1} {:.1} \
+             L {exit:.1} {:.1} Q {exit:.1} {floor:.1} {:.1} {floor:.1} \
+             L {:.1} {floor:.1} Q {gutter:.1} {floor:.1} {gutter:.1} {:.1} \
+             L {gutter:.1} {:.1} \
              Q {gutter:.1} {ty:.1} {corner:.1} {ty:.1}",
+            leave + SHELF,
+            exit - bend,
+            shelf + bend,
+            floor - bend,
+            exit - bend,
+            gutter + bend,
+            floor - bend,
             ty + HOOK
         ),
-        (f64::midpoint(fx, gutter), floor - LABEL_LIFT),
+        (f64::midpoint(exit, gutter), floor - LABEL_LIFT),
     )
 }
 
@@ -451,10 +530,14 @@ mod tests {
             style: EdgeStyle::Plain,
             scopes: Vec::new(),
             back: false,
+            both: false,
+            beside: false,
+            bulge: None,
             from_y: 0.0,
             to_y: 0.0,
             gutter: None,
             hook_x: None,
+            exit_x: None,
             floor: None,
         });
 

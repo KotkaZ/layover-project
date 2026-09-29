@@ -27,6 +27,8 @@ use crate::graph::RouteGraph;
 use crate::pipeline::PipelineName;
 use crate::route::Join;
 
+mod tidy;
+
 /// Width of a node box.
 const NODE_W: f64 = 168.0;
 /// Height of a node box.
@@ -52,6 +54,10 @@ const GUTTER_STEP: f64 = 18.0;
 const GUTTER_MIN: f64 = 12.0;
 /// Closest to a node''s right edge that a return path may hook in.
 const CORNER_MARGIN: f64 = 20.0;
+/// How far right of its column a return path drops.
+const EXIT_INSET: f64 = 20.0;
+/// How much further right each additional return leaving the same column drops.
+const EXIT_STEP: f64 = 12.0;
 
 /// What a node represents.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -151,7 +157,20 @@ pub struct Edge {
     /// How to draw it.
     pub style: EdgeStyle,
     /// True when the edge points back towards the entry, which makes it a return path.
+    ///
+    /// Strictly backwards: an edge between two agents in the same column is [`Self::beside`]
+    /// instead, because a loop under the whole drawing is a long way round for two neighbours.
     pub back: bool,
+    /// True when one line stands for a route in each direction, drawn with an arrowhead at both
+    /// ends. Only two plain routes are merged: a join or a spawn says something the other
+    /// direction does not, and so does a scope that differs.
+    pub both: bool,
+    /// True when both ends sit in the same column.
+    pub beside: bool,
+    /// For an edge [`Self::beside`] its column between agents that are not next to each other,
+    /// how far right of the column it swings out. `None` for neighbours, which are joined by a
+    /// straight connector through the gap between them.
+    pub bulge: Option<f64>,
     /// Where on the source''s right edge this leaves, as an absolute y.
     ///
     /// Edges all left from the node''s centre, so several going to different places overlapped
@@ -161,13 +180,19 @@ pub struct Edge {
     pub from_y: f64,
     /// Where on the target''s left edge this arrives, as an absolute y.
     pub to_y: f64,
-    /// For a return path, the x it climbs at. `None` for a forward edge.
+    /// For a return path, the x it climbs at; for a connector between neighbours in one column,
+    /// the x it runs at. `None` for a forward edge.
     ///
     /// Distinct per edge even when several return to the same agent. Sharing one gutter put four
     /// curves on the same vertical line with their labels stacked on top of each other.
     pub gutter: Option<f64>,
     /// For a return path, where it hooks into the target''s underside.
     pub hook_x: Option<f64>,
+    /// For a return path, the x it drops at, in the gap right of the column it leaves.
+    ///
+    /// Dropping straight down from the source ran through every box below it in the same column,
+    /// and between the boxes the line looked like a route between neighbours.
+    pub exit_x: Option<f64>,
     /// For a return path, the depth it dips to. `None` for a forward edge.
     ///
     /// Computed here rather than in the renderer because it decides how tall the drawing is, and
@@ -229,6 +254,7 @@ impl Layout {
         let mut layout = Self::default();
         layout.place(config, live, &graph, &layers, scope, members.as_ref());
         layout.connect(config, &graph, scope, members.as_ref());
+        tidy::pair_up(&mut layout.edges);
         layout.order_by_barycentre();
         layout.size();
         layout
@@ -341,10 +367,14 @@ impl Layout {
                 label: None,
                 style: EdgeStyle::Entry,
                 back: false,
+                both: false,
+                beside: false,
+                bulge: None,
                 from_y: 0.0,
                 to_y: 0.0,
                 gutter: None,
                 hook_x: None,
+                exit_x: None,
                 floor: None,
                 scopes: Vec::new(),
             });
@@ -396,17 +426,23 @@ impl Layout {
                         }
                     };
 
-                    let back = self.layer_of(&pair.0) >= self.layer_of(&pair.1);
+                    let (from_layer, to_layer) = (self.layer_of(&pair.0), self.layer_of(&pair.1));
+                    let beside = from_layer == to_layer && pair.0 != pair.1;
+                    let back = from_layer > to_layer || (from_layer == to_layer && !beside);
                     self.edges.push(Edge {
                         from: pair.0,
                         to: pair.1,
                         label,
                         style,
                         back,
+                        both: false,
+                        beside,
+                        bulge: None,
                         from_y: 0.0,
                         to_y: 0.0,
                         gutter: None,
                         hook_x: None,
+                        exit_x: None,
                         floor: None,
                         scopes: scopes
                             .get(&(from.clone(), to.clone()))
@@ -440,7 +476,7 @@ impl Layout {
             let incoming: Vec<f64> = self
                 .edges
                 .iter()
-                .filter(|edge| edge.to == node.id && !edge.back)
+                .filter(|edge| edge.to == node.id && !edge.back && !edge.beside)
                 .filter_map(|edge| positions.get(&edge.from).copied())
                 .collect();
 
@@ -491,14 +527,15 @@ impl Layout {
             node.y += (tallest - bottoms[&node.layer]) / 2.0;
         }
 
-        let deepest = self.route_returns(tallest);
+        let (deepest, exits) = self.route_returns(tallest);
         self.assign_ports();
+        let beside = tidy::route_beside(&self.nodes, &mut self.edges);
 
         self.width = self
             .nodes
             .iter()
             .map(|node| node.x + node.w)
-            .fold(0.0_f64, f64::max)
+            .fold(beside.max(exits), f64::max)
             + MARGIN;
         self.height = tallest.max(deepest) + MARGIN;
     }
@@ -523,7 +560,7 @@ impl Layout {
         let mut leaving: BTreeMap<String, Vec<usize>> = BTreeMap::new();
         let mut arriving: BTreeMap<String, Vec<usize>> = BTreeMap::new();
         for (index, edge) in self.edges.iter().enumerate() {
-            if edge.back {
+            if edge.back || edge.beside {
                 continue;
             }
             leaving.entry(edge.from.clone()).or_default().push(index);
@@ -564,12 +601,13 @@ impl Layout {
         }
     }
 
-    /// Gives each return path its own lane below the drawing, and reports the deepest one.
+    /// Gives each return path its own lane below the drawing, and reports the deepest one and
+    /// the rightmost point any of them drops at.
     ///
     /// Lanes rather than one shared depth: two loops at the same height would be drawn on top of
     /// each other, and a review loop is the structure on a route map most worth being able to
     /// follow with a finger.
-    fn route_returns(&mut self, floor_start: f64) -> f64 {
+    fn route_returns(&mut self, floor_start: f64) -> (f64, f64) {
         let mut lanes: Vec<(String, String)> = self
             .edges
             .iter()
@@ -594,8 +632,16 @@ impl Layout {
         // How many returns already aim at each target, so edges sharing one can be fanned apart
         // rather than stacked on a single vertical line.
         let mut per_target: BTreeMap<String, usize> = BTreeMap::new();
+        // How many returns already leave each column, so their drops do not share a line either.
+        let mut per_column: BTreeMap<usize, usize> = BTreeMap::new();
+        let columns: BTreeMap<String, (usize, f64)> = self
+            .nodes
+            .iter()
+            .map(|node| (node.id.clone(), (node.layer, node.x + node.w)))
+            .collect();
 
         let mut deepest = floor_start;
+        let mut widest = 0.0_f64;
         for (index, key) in lanes.iter().enumerate() {
             let depth = floor_start + RETURN_GAP * (precise(index) + 1.0);
             deepest = deepest.max(depth);
@@ -608,6 +654,14 @@ impl Layout {
             let gutter = (left - GUTTER_INSET - GUTTER_STEP * precise(nth)).max(GUTTER_MIN);
             let hook = left + width * 0.25 + width * 0.2 * precise(nth);
 
+            let (layer, right) = columns.get(&key.0).copied().unwrap_or((0, 0.0));
+            let leaving = per_column.entry(layer).or_insert(0);
+            // Capped short of the next column, whose boxes a drop must not run through.
+            let exit = (right + EXIT_INSET + EXIT_STEP * precise(*leaving))
+                .min(right + COL_GAP - EXIT_INSET / 2.0);
+            *leaving += 1;
+            widest = widest.max(exit);
+
             if let Some(edge) = self
                 .edges
                 .iter_mut()
@@ -616,9 +670,10 @@ impl Layout {
                 edge.floor = Some(depth);
                 edge.gutter = Some(gutter);
                 edge.hook_x = Some(hook.min(left + width - CORNER_MARGIN));
+                edge.exit_x = Some(exit);
             }
         }
-        deepest
+        (deepest, widest)
     }
 }
 

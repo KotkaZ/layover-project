@@ -86,8 +86,12 @@ fn the_whole_factory_map_marks_which_edges_belong_to_which_workflows() {
     let shared = everything
         .edges
         .iter()
-        .find(|edge| edge.from == "a_eagle" && edge.to == "a_sherlock")
+        .find(|edge| {
+            (edge.from == "a_eagle" && edge.to == "a_sherlock")
+                || (edge.from == "a_sherlock" && edge.to == "a_eagle")
+        })
         .expect("drawn once");
+    assert!(shared.both, "each may send to the other");
     assert_eq!(
         shared.scopes,
         ["devforge", "devforge-follow-up", "eagle-eye"],

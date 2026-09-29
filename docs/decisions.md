@@ -604,6 +604,18 @@ Only flags whose meaning is certain are read — `--model`, and Copilot CLI's `-
 and `--context` — because a display that guessed at unknown flags would state a wrong model with
 the same confidence as a right one.
 
+**Why a route each way is drawn as one line.** Most routes in a real factory come in reciprocal
+pairs, and the layered layout drew every reverse direction as a return path: a loop under the
+whole diagram in a lane of its own. A twenty-route workflow became eleven loops stacked four
+hundred pixels deep, crossing everything on the way, and the map stopped answering the question it
+exists for. Merging a pair into one two-headed line loses nothing — the line says exactly "either
+may send to the other" — so long as only *plain* pairs are merged: a join, a spawn or a differing
+scope makes one direction mean something the other does not, and each keeps its own arrow. A route
+between two agents in the same column gets a short connector or arc beside the column for the same
+reason; only a route that genuinely runs backwards still goes round the bottom. A hover-to-trace
+view alone was considered and not chosen as the fix: interaction helps someone who already knows
+which agent to ask about, and a map has to be readable before anyone touches it.
+
 ---
 
 ## Still open

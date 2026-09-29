@@ -19,6 +19,21 @@ status](README.md#project-status).
   the declared model alone, and was `null` for every agent whose runner fixed it. A factory whose
   command lines name no model is drawn exactly as before.
 
+- **A busy route map is drawn without the tangle.** A pair of plain routes in opposite directions
+  is one line with an arrowhead at each end, and a route between two agents in the same column is a
+  short connector or arc beside the column, rather than each being a loop under the whole map. A
+  join, a spawn or a scope that differs between the two directions keeps its own arrow. A real
+  twenty-route workflow went from eleven loops to one.
+
+### Fixed
+
+- **A return path ran behind and through the boxes it was routed around.** It dropped straight down
+  from the bottom of its source, through every box below it in the same column — showing between
+  them as a short vertical line that read as a route between neighbours — and was drawn as one
+  curve whose lowest point sits a quarter of the way short of its lane, so a lane just below the
+  deepest box put the curve behind that box. It now leaves into the gap right of its column, runs
+  down that gap, along its lane and up the gutter, with rounded corners.
+
 ## [1.1.0] — 2026-09-29
 
 Workflows that share agents can now keep their routes apart, and nine defects found running a real

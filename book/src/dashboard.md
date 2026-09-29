@@ -153,6 +153,9 @@ Read it as: pipelines on the left, work flowing right, one column per hop.
 | Thick indigo arrow | A pipeline feeding its entry agent |
 | Blue arrow labelled `all` or `any` | An upstream the barrier waits for |
 | Dashed violet arrow | A permitted sender the barrier *does not* name |
+| Line with an arrowhead at each end | A route each way: either agent may send to the other |
+| Short line or arc beside a column | A route between two agents in the same column |
+| Line under the whole map | A route back towards the way in: out to the right of its column, along a lane of its own, and up into the agent it returns to |
 | Arrow labelled with pipeline names | A route only those workflows' chains may use — on the whole-factory map only |
 | Green, amber, red fill | Running, waiting at a barrier, last run failed |
 
@@ -164,6 +167,12 @@ any other permitted sender wakes the agent directly and leaves the parked flight
 the reference factory the analyst's work item reaches the developer that way, while the tester's
 and the reviewer's verdicts queue at the barrier — which is what lets one agent be both a join
 target and an ordinary destination.
+
+Most routes in a real factory come in pairs — an analyst asks an investigator and hears back — so
+a pair of plain routes is drawn as **one line with an arrowhead at each end**. Only plain routes
+are paired: a join, a spawn, or a scope that differs between the two directions says something the
+other direction does not, so each keeps its own arrow. The review loop into a barrier, for
+instance, is still drawn out and back.
 
 ### What each box says
 
