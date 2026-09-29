@@ -549,6 +549,15 @@ agent any chain can wake as a possible start for a resuming pipeline, because re
 back to whoever booked it and any agent may book; a warning that is not true is one people stop
 reading.
 
+**Why the dashboard still draws one diagram per workflow once routes are scoped.** Scopes invite a
+combined map with each edge styled by workflow, and the page does not draw one. Separate diagrams
+were chosen because a combined one reads as a single confused process, and scoping makes that
+worse, not better: the reader now has to filter edges by colour to see what one workflow can do,
+which is the separation the per-workflow diagram does for them. So each workflow is drawn over its
+own routes and nothing else. The whole-factory picture still exists for the question it answers —
+"what may anything reach, anywhere" — as `layover graph` and `GET /graph` without a pipeline, and
+there a scoped edge is labelled with its pipelines, so it is never mistaken for a global one.
+
 **Why workflow membership crosses spawn edges when reachability does not.** The two ask different
 questions. `reachable_from` asks what could still deliver into *this* itinerary, and a spawned
 chain never can — that is what stops a dead barrier being kept alive by an agent that could not
