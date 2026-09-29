@@ -644,7 +644,20 @@ components:
           description: Which runner invokes this agent's CLI.
         model:
           type: [string, "null"]
-          description: Model identifier passed to the runner.
+          description: |
+            The model this agent runs on: read from the command line Layover will run, so a model
+            fixed in the runner's command is reported as readily as one the agent declares. Null
+            when the command line names none and the CLI picks its own.
+        reasoning_effort:
+          type: [string, "null"]
+          description: |
+            How hard the model is asked to reason, from a `--reasoning-effort` flag on the command
+            line. Null when the command line does not set it.
+        context:
+          type: [string, "null"]
+          description: |
+            The context-window tier, from a `--context` flag on the command line, such as
+            `long_context`. Null when the command line does not set it.
         access:
           $ref: "#/components/schemas/Access"
           description: Whether the agent writes to the shared workspace.

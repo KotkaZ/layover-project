@@ -86,6 +86,8 @@ impl Api for Stub {
                 purpose: None,
                 runner: Some("claude".to_owned()),
                 model: None,
+                reasoning_effort: None,
+                context: None,
                 access: Access::ReadOnly,
                 entry: false,
                 resident: false,

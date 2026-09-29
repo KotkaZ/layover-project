@@ -8,6 +8,17 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+### Added
+
+- **The route map says which model each agent runs on.** Under an agent's name is its model, and
+  under that its context tier, such as `long context`; hovering shows its reasoning effort, runner,
+  access and description. They are read from the command line Layover will run for the agent — its
+  runner's `command` with its `model` filled in — so a model fixed in the runner is shown as readily
+  as one the agent declares. Only `--model` and Copilot CLI's `--reasoning-effort` and `--context`
+  are read. `GET /agents` reports the same as `model`, `reasoning_effort` and `context`; `model` was
+  the declared model alone, and was `null` for every agent whose runner fixed it. A factory whose
+  command lines name no model is drawn exactly as before.
+
 ## [1.1.0] — 2026-09-29
 
 Workflows that share agents can now keep their routes apart, and nine defects found running a real

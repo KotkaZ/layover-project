@@ -11,6 +11,7 @@
 //! - [`config`] — parsing a factory definition from `layover.toml`
 //! - [`graph`] — the route map as a directed graph
 //! - [`scope`] — which routes a chain may use, resolved per pipeline
+//! - [`model`] — which model an agent runs on, read from its command line
 //! - [`mod@validate`] — load-time checks that fail before a human stops watching
 //! - [`flight`] — the message envelope
 //! - [cost] — the ledger, rate cards and the factory-wide Fuel Reserve
@@ -35,6 +36,7 @@ pub mod itinerary;
 pub mod layover;
 pub mod learning;
 pub mod mcp;
+pub mod model;
 pub mod payload;
 pub mod pipeline;
 pub mod prompt;
@@ -67,6 +69,7 @@ pub use itinerary::{Denial, Itinerary};
 pub use layover::{Layover, LayoverId};
 pub use learning::{Impact, Learning, LearningId, Learnings, Proposal, Uptake};
 pub use mcp::{McpServer, McpTransport};
+pub use model::ModelChoice;
 pub use pipeline::{
     FlagError, FlagSpec, Flags, Pipeline, PipelineName, Schedule, Trigger, TriggerError, Workspace,
 };

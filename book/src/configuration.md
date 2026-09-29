@@ -160,6 +160,19 @@ default and nothing would say the declaration was ignored.
 A bare `"{model}"` argument disappears when no model is set, rather than becoming an empty
 argument — several CLIs read an empty string in `argv` as a positional.
 
+The dashboard, `GET /agents` and the tooltips on the route map report which model each agent
+runs on by reading this command line with the agent's `model` filled in. A model you fix in the
+command itself — one runner per model is a common shape — is therefore reported as readily as one
+an agent declares. Only flags whose meaning is certain are read: `--model` (or `--model=…`), and
+Copilot CLI's `--reasoning-effort` and `--context`. Nothing else is guessed at, so a CLI that
+spells these differently shows only a model the agent declares.
+
+```toml
+[runners.copilot-deep]
+command = ["copilot", "--model", "claude-opus-5.5", "--reasoning-effort", "xhigh",
+           "--context", "long_context", "--output-format", "json"]
+```
+
 `mcp` says how this runner is told where Layover's MCP server is.
 
 ## `[agents.*]` — who exists

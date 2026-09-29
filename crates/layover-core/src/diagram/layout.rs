@@ -20,9 +20,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::agent::{Access, AgentName};
+use crate::agent::AgentName;
 use crate::config::Config;
-use crate::diagram::{Activity, Live, Scope};
+use crate::diagram::{Activity, Live, Scope, caption};
 use crate::graph::RouteGraph;
 use crate::pipeline::PipelineName;
 use crate::route::Join;
@@ -31,6 +31,11 @@ use crate::route::Join;
 const NODE_W: f64 = 168.0;
 /// Height of a node box.
 const NODE_H: f64 = 56.0;
+/// Height of a node box when some box in the drawing has a third line to hold.
+///
+/// One height for the whole drawing rather than per node, so the rows of every column still line
+/// up and an edge between two agents in the same row stays straight.
+const TALL_NODE_H: f64 = 70.0;
 /// Horizontal gap between columns.
 const COL_GAP: f64 = 96.0;
 /// Vertical gap between nodes in a column.
@@ -73,8 +78,13 @@ pub struct Node {
     pub id: String,
     /// The name shown on the node.
     pub label: String,
-    /// A second line: a trigger for a pipeline, `read-only` for an agent that has it.
+    /// A second line: a trigger for a pipeline; for an agent, the model its command line names,
+    /// or failing that its context tier and `read-only` when it has either.
     pub subtitle: Option<String>,
+    /// A third line, for an agent whose model took the second: its context tier and `read-only`.
+    pub caption: Option<String>,
+    /// Everything worth knowing about the node, one fact per line, for hovering over it.
+    pub tooltip: Option<String>,
     /// What this node represents.
     pub kind: NodeKind,
     /// How to draw it.
@@ -240,10 +250,13 @@ impl Layout {
             if scope.pipeline().is_some_and(|wanted| wanted != name) {
                 continue;
             }
+            let words = caption::pipeline(name, pipeline);
             columns.entry(0).or_default().push(Node {
                 id: pipeline_id(name),
                 label: name.as_str().to_owned(),
-                subtitle: Some(pipeline.trigger.to_string()),
+                subtitle: words.subtitle,
+                caption: words.caption,
+                tooltip: Some(words.tooltip),
                 kind: NodeKind::Pipeline,
                 shape: Shape::Box,
                 activity: None,
@@ -262,10 +275,13 @@ impl Layout {
             // Agents no pipeline can reach still have to appear — an unreachable agent is
             // precisely the thing somebody opened the diagram to find.
             let layer = layers.get(name).copied().unwrap_or(0) + 1;
+            let words = caption::agent(config, name, agent);
             columns.entry(layer).or_default().push(Node {
                 id: agent_id(name),
                 label: name.as_str().to_owned(),
-                subtitle: (agent.access == Access::ReadOnly).then(|| "read-only".to_owned()),
+                subtitle: words.subtitle,
+                caption: words.caption,
+                tooltip: Some(words.tooltip),
                 kind: NodeKind::Agent,
                 shape: if graph.join_for(name).is_some() {
                     Shape::Gate
@@ -281,11 +297,22 @@ impl Layout {
             });
         }
 
+        let height = if columns
+            .values()
+            .flatten()
+            .any(|node| node.caption.is_some())
+        {
+            TALL_NODE_H
+        } else {
+            NODE_H
+        };
+
         for (layer, mut nodes) in columns {
             let x = MARGIN + precise(layer) * (NODE_W + COL_GAP);
             for (row, node) in nodes.iter_mut().enumerate() {
                 node.x = x;
-                node.y = MARGIN + precise(row) * (NODE_H + ROW_GAP);
+                node.y = MARGIN + precise(row) * (height + ROW_GAP);
+                node.h = height;
             }
             self.nodes.append(&mut nodes);
         }

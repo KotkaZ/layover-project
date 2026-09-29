@@ -591,6 +591,19 @@ only account of a run that has already happened and already cost money, and disc
 a formatting mistake loses the thing entirely. A trimmed report says it was trimmed, so a reader
 knows to look further rather than assuming the agent stopped there.
 
+**Why the model an agent runs on is read from its command line.** The route map and `GET /agents`
+show each agent's model, reasoning effort and context tier. The obvious source was `agent.model`,
+and it was wrong for the factories where the question matters most: those that fix the model in
+the runner command, one runner per model and permission set, and so declare no `model` at all.
+A new `context` or `effort` field was rejected for the reason `{model}` exists instead of a
+`model_flag` field — every CLI spells these differently, and the runner command is already the one
+place that knows how to invoke a given CLI; a second place would disagree with it the first time
+somebody edited one. Reading the command line with the agent's model substituted is also the only
+honest answer: a declared model whose runner has no `{model}` placeholder never reaches the CLI.
+Only flags whose meaning is certain are read — `--model`, and Copilot CLI's `--reasoning-effort`
+and `--context` — because a display that guessed at unknown flags would state a wrong model with
+the same confidence as a right one.
+
 ---
 
 ## Still open

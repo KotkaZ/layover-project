@@ -68,6 +68,10 @@ fn render_node(out: &mut String, node: &Node) {
         r#"  <g class="node {kind}{state}" id="{}" tabindex="0">"#,
         escape(&node.id)
     );
+    // First, so assistive technology announces it as the node's name and a pointer shows it.
+    if let Some(tooltip) = &node.tooltip {
+        let _ = writeln!(out, "    <title>{}</title>", escape(tooltip));
+    }
 
     match node.shape {
         Shape::Box => {
@@ -102,10 +106,10 @@ fn render_node(out: &mut String, node: &Node) {
     }
 
     let (cx, cy) = node.centre();
-    let baseline = if node.subtitle.is_some() {
-        cy - 4.0
-    } else {
-        cy + 5.0
+    let (baseline, sub_at) = match (&node.subtitle, &node.caption) {
+        (_, Some(_)) => (cy - 10.0, cy + 6.0),
+        (Some(_), None) => (cy - 4.0, cy + 13.0),
+        (None, None) => (cy + 5.0, cy + 13.0),
     };
     let _ = writeln!(
         out,
@@ -115,9 +119,16 @@ fn render_node(out: &mut String, node: &Node) {
     if let Some(subtitle) = &node.subtitle {
         let _ = writeln!(
             out,
-            r#"    <text class="sub" x="{cx:.1}" y="{:.1}" text-anchor="middle">{}</text>"#,
-            cy + 13.0,
+            r#"    <text class="sub" x="{cx:.1}" y="{sub_at:.1}" text-anchor="middle">{}</text>"#,
             escape(subtitle)
+        );
+    }
+    if let Some(caption) = &node.caption {
+        let _ = writeln!(
+            out,
+            r#"    <text class="sub caption" x="{cx:.1}" y="{:.1}" text-anchor="middle">{}</text>"#,
+            sub_at + 13.0,
+            escape(caption)
         );
     }
 

@@ -30,12 +30,18 @@ pub enum Access {
 pub struct Agent {
     /// Whether the agent writes to the shared workspace.
     pub access: Access,
+    /// The context-window tier, from a `--context` flag on the command line, such as
+    /// `long_context`. Null when the command line does not set it.
+    #[serde(default)]
+    pub context: Option<String>,
     /// One line saying what the agent is.
     #[serde(default)]
     pub description: Option<String>,
     /// Whether a human may send flights straight to this agent.
     pub entry: bool,
-    /// Model identifier passed to the runner.
+    /// The model this agent runs on: read from the command line Layover will run, so a model
+    /// fixed in the runner's command is reported as readily as one the agent declares. Null
+    /// when the command line names none and the CLI picks its own.
     #[serde(default)]
     pub model: Option<String>,
     /// The key the agent is declared under, and what routes refer to.
@@ -43,6 +49,10 @@ pub struct Agent {
     /// A longer statement of when to route work here.
     #[serde(default)]
     pub purpose: Option<String>,
+    /// How hard the model is asked to reason, from a `--reasoning-effort` flag on the command
+    /// line. Null when the command line does not set it.
+    #[serde(default)]
+    pub reasoning_effort: Option<String>,
     /// Whether the agent is pinned resident rather than transient.
     pub resident: bool,
     /// Which runner invokes this agent's CLI.

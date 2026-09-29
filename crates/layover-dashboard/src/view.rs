@@ -7,6 +7,7 @@
 use layover_core::agent::Access as CoreAccess;
 use layover_core::config::Config;
 use layover_core::cost::{CostSource as CoreSource, Span, Summary, Window};
+use layover_core::model::ModelChoice;
 use layover_core::pipeline::{Schedule, Trigger as CoreTrigger};
 use layover_core::route::Join as CoreJoin;
 use layover_core::run::{Outcome, RunRecord};
@@ -22,18 +23,23 @@ pub fn agents(config: &Config) -> AgentList {
         agents: config
             .agents
             .iter()
-            .map(|(name, agent)| Agent {
-                name: name.to_string(),
-                description: agent.description.clone(),
-                purpose: agent.purpose.clone(),
-                runner: agent.runner.clone(),
-                model: agent.model.clone(),
-                access: match agent.access {
-                    CoreAccess::ReadOnly => Access::ReadOnly,
-                    CoreAccess::ReadWrite => Access::ReadWrite,
-                },
-                entry: agent.entry,
-                resident: agent.resident,
+            .map(|(name, agent)| {
+                let choice = ModelChoice::of(config, name);
+                Agent {
+                    name: name.to_string(),
+                    description: agent.description.clone(),
+                    purpose: agent.purpose.clone(),
+                    runner: agent.runner.clone(),
+                    model: choice.model,
+                    reasoning_effort: choice.reasoning_effort,
+                    context: choice.context,
+                    access: match agent.access {
+                        CoreAccess::ReadOnly => Access::ReadOnly,
+                        CoreAccess::ReadWrite => Access::ReadWrite,
+                    },
+                    entry: agent.entry,
+                    resident: agent.resident,
+                }
             })
             .collect(),
         routes: config

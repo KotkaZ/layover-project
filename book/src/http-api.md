@@ -28,7 +28,7 @@ Point any OpenAPI tool at the file to get a client, a mock server or rendered do
 | Method | Path | Query | Purpose |
 |---|---|---|---|
 | `GET` | `/health` | | Liveness, version, and whether a Ground Stop is engaged. |
-| `GET` | `/agents` | | Every agent and the route map between them. A route's `pipelines` lists the workflows whose chains may use it, and is `null` for a global route. |
+| `GET` | `/agents` | | Every agent and the route map between them. Each agent's `model`, `reasoning_effort` and `context` are read from the command line Layover will run for it, `null` where it sets none. A route's `pipelines` lists the workflows whose chains may use it, and is `null` for a global route. |
 | `GET` | `/pipelines` | | Declared pipelines, their triggers and their flags. |
 | `GET` | `/graph` | `pipeline` | The route map as a rendered diagram, optionally for one workflow — drawn over the routes that workflow's chains may use. |
 | `POST` | `/flights` | | **Queue** work. The Tower starts it within seconds. |

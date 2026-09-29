@@ -13,6 +13,7 @@
 //! nodes, and a layered layout for a graph this small is a few hundred lines that can actually be
 //! unit-tested — which asserting on a JavaScript library's output could not be.
 
+mod caption;
 pub mod layout;
 pub mod mermaid;
 pub mod svg;

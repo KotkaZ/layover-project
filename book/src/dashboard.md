@@ -165,6 +165,25 @@ the reference factory the analyst's work item reaches the developer that way, wh
 and the reviewer's verdicts queue at the barrier — which is what lets one agent be both a join
 target and an ordinary destination.
 
+### What each box says
+
+Under an agent's name is the **model it runs on**, and under that its **context tier** and
+whether it is `read-only`:
+
+```text
+      bob
+ claude-opus-5.5
+  long context
+```
+
+Both are read from the command line Layover will run for that agent — its runner's `command`,
+with the agent's own `model` filled in — so a model fixed in the runner is shown as readily as one
+the agent declares. See [how a runner carries a model](./configuration.md#runners--how-to-invoke-a-cli)
+for which flags are read. An agent whose command line names no model is drawn as it always was.
+
+Hover over a box for the rest: its description, reasoning effort, runner and access. `GET /agents`
+reports the same `model`, `reasoning_effort` and `context` for each agent.
+
 ### One diagram per workflow
 
 A factory usually holds several pipelines, and they are genuinely separate workflows. Drawn
