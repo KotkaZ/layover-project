@@ -612,9 +612,9 @@ exists for. Merging a pair into one two-headed line loses nothing — the line s
 may send to the other" — so long as only *plain* pairs are merged: a join, a spawn or a differing
 scope makes one direction mean something the other does not, and each keeps its own arrow. A route
 between two agents in the same column gets a short connector or arc beside the column for the same
-reason; only a route that genuinely runs backwards still goes round the bottom. A hover-to-trace
-view alone was considered and not chosen as the fix: interaction helps someone who already knows
-which agent to ask about, and a map has to be readable before anyone touches it.
+reason; only a route that genuinely runs backwards still goes round the bottom. Interaction —
+hovering an agent to light its routes — was added too, but not as the fix: it helps someone who
+already knows which agent to ask about, and a map has to be readable before anyone touches it.
 
 ---
 

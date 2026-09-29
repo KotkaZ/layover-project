@@ -125,7 +125,9 @@ code { font-family: ui-monospace, "Cascadia Code", Menlo, monospace; font-size: 
 .node.waiting rect, .node.waiting polygon { fill: color-mix(in srgb, var(--warn) 18%, var(--panel)); stroke: var(--warn); stroke-width: 2.2; }
 .node.failed rect, .node.failed polygon { fill: color-mix(in srgb, var(--bad) 16%, var(--panel)); stroke: var(--bad); stroke-width: 2.2; }
 .node:hover rect, .node:hover polygon { fill: color-mix(in srgb, var(--accent) 10%, var(--panel)); }
-.node { cursor: default; }
+.node { cursor: pointer; }
+.node:focus { outline: none; }
+.node:focus-visible rect, .node:focus-visible polygon { stroke: var(--accent); stroke-dasharray: 4 3; }
 .node .label { font-size: 14px; font-weight: 600; fill: var(--ink); }
 .node .sub { font-size: 10px; fill: var(--muted); }
 
@@ -136,6 +138,27 @@ code { font-family: ui-monospace, "Cascadia Code", Menlo, monospace; font-size: 
 .arrowhead { fill: var(--muted); }
 .arrowhead.bypass { fill: var(--bypass); }
 .edgelabel { font-size: 11px; font-weight: 700; fill: var(--join); }
+
+/* Tracing one agent. Hovering or focusing a box lights its routes and the agents at their other
+   ends and fades the rest; a click pins it. A route is a 1.6px line, so each carries a wide,
+   invisible `hit` path for the pointer to land on. */
+.routemap .route, .routemap .node { transition: opacity 120ms; }
+.routemap.tracing .route:not(.lit) { opacity: 0.1; }
+.routemap.tracing .node:not(.lit) { opacity: 0.3; }
+.routemap .route.lit .edge { stroke-width: 2.4; opacity: 1; }
+.routemap .hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; }
+.node.pinned rect, .node.pinned polygon { stroke: var(--accent); stroke-width: 2.6; }
+.legend .tip { margin-left: auto; font-style: italic; }
+
+/* What a pinned agent runs on and who it talks to, under its workflow's map. */
+.trace { margin-top: 10px; background: var(--panel); border: 1px solid var(--accent); border-radius: 12px; padding: 12px 16px; }
+.trace header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; padding: 0; border: 0; background: none; position: static; }
+.trace header b { font-size: 15px; }
+.trace header .what { font-size: 13px; color: var(--muted); }
+.trace header .actions { margin-left: auto; }
+.trace dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 10px 0 0; font-size: 13px; }
+.trace dt { color: var(--muted); }
+.trace dd { margin: 0; }
 
 .legend { display: flex; gap: 18px; flex-wrap: wrap; list-style: none; padding: 12px 2px 0; margin: 0; font-size: 12px; color: var(--muted); }
 .legend li { display: flex; align-items: center; gap: 7px; }

@@ -7,6 +7,7 @@
 
 use std::fmt::Write as _;
 
+use crate::diagram::caption;
 use crate::diagram::layout::{Edge, EdgeStyle, Layout, Node, NodeKind, Shape};
 
 /// How far below a node the hook begins.
@@ -176,30 +177,43 @@ fn render_edge(out: &mut String, layout: &Layout, edge: &Edge) {
         String::new()
     };
 
-    // A scoped edge on the whole-factory map says which workflows may use it: classed so a
-    // stylesheet can pick it out, and named in a tooltip so it can be read.
-    if edge.scopes.is_empty() {
-        let _ = writeln!(
-            out,
-            r#"  <path class="{class}" d="{path}"{start} marker-end="url(#{marker})"/>"#
-        );
+    // One group per route, naming both ends, so a page can light an agent's routes without
+    // knowing anything about the layout. A scoped edge on the whole-factory map is classed so a
+    // stylesheet can pick it out; its tooltip says which workflows may use it. The wide, invisible
+    // `hit` path is what a pointer actually lands on — a line 1.6 pixels wide is hard to hover.
+    let scoped = if edge.scopes.is_empty() {
+        ""
     } else {
-        let _ = writeln!(
-            out,
-            r#"  <path class="{class} scoped" d="{path}"{start} marker-end="url(#{marker})"><title>only in {}</title></path>"#,
-            escape(&edge.scopes.join(", "))
-        );
-    }
+        " scoped"
+    };
+    let both = if edge.both { " both" } else { "" };
+    let _ = writeln!(
+        out,
+        r#"  <g class="route{both}{scoped}" data-from="{}" data-to="{}">"#,
+        escape(&edge.from),
+        escape(&edge.to)
+    );
+    let _ = writeln!(
+        out,
+        "    <title>{}</title>",
+        escape(&caption::route(&from.label, &to.label, edge))
+    );
+    let _ = writeln!(out, r#"    <path class="hit" d="{path}"/>"#);
+    let _ = writeln!(
+        out,
+        r#"    <path class="{class}{scoped}" d="{path}"{start} marker-end="url(#{marker})"/>"#
+    );
 
     if let Some(label) = &edge.label {
         let _ = writeln!(
             out,
-            r#"  <text class="edgelabel" x="{:.1}" y="{:.1}" text-anchor="middle">{}</text>"#,
+            r#"    <text class="edgelabel" x="{:.1}" y="{:.1}" text-anchor="middle">{}</text>"#,
             label_at.0,
             label_at.1,
             escape(label)
         );
     }
+    out.push_str("  </g>\n");
 }
 
 /// A cubic curve rightwards, flattening into a straight line when the ends are level.

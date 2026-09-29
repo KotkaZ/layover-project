@@ -193,6 +193,20 @@ for which flags are read. An agent whose command line names no model is drawn as
 Hover over a box for the rest: its description, reasoning effort, runner and access. `GET /agents`
 reports the same `model`, `reasoning_effort` and `context` for each agent.
 
+### Tracing one agent
+
+A busy map is easiest to read one agent at a time. **Hover** over an agent — or tab to it — and its
+routes and the agents at their other ends stay lit while everything else fades. **Click** it to
+keep them lit; a panel opens under that workflow's map with what the agent runs on (model,
+reasoning effort, context tier, runner, access) and who it **sends to** and **hears from** in this
+workflow, with a link to its runs. Click it again, click empty space, or press Escape to let go.
+Hovering a single route lights just that route and its two ends, and its tooltip says what it is:
+`analyst ⇄ sherlock`, or `azurix → eagle · spawns a new itinerary · only in eagle-eye`.
+
+"In this workflow" is exact: the panel reads the routes drawn on that workflow's map, which are
+the routes its chains may use, so an agent shared by two workflows shows different neighbours in
+each.
+
 ### One diagram per workflow
 
 A factory usually holds several pipelines, and they are genuinely separate workflows. Drawn

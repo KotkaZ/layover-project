@@ -1,4 +1,4 @@
-//! What the dashboard says about the model each agent runs on.
+//! What the dashboard says about each agent: the model it runs on, and its routes when traced.
 
 use std::fs;
 use std::path::PathBuf;
@@ -25,6 +25,11 @@ impl Factory {
     }
 
     async fn get(&self, path: &str) -> (StatusCode, serde_json::Value) {
+        let (status, body) = self.text(path).await;
+        (status, serde_json::from_str(&body).expect("a JSON body"))
+    }
+
+    async fn text(&self, path: &str) -> (StatusCode, String) {
         let app = router(
             Dashboard::new(DashboardState {
                 config_path: self.0.join("layover.toml"),
@@ -52,7 +57,7 @@ impl Factory {
             .await
             .expect("body")
             .to_bytes();
-        (status, serde_json::from_slice(&bytes).expect("a JSON body"))
+        (status, String::from_utf8_lossy(&bytes).into_owned())
     }
 }
 
@@ -129,4 +134,23 @@ async fn a_workflows_map_names_each_agents_model() {
 
     assert!(svg.contains(">claude-opus-5.5</text>"), "{svg}");
     assert!(svg.contains(">claude-sonnet-5</text>"), "{svg}");
+}
+
+#[tokio::test]
+async fn the_page_can_trace_an_agents_routes() {
+    // Hovering an agent lights its routes and clicking pins them, which is what makes a busy map
+    // readable one agent at a time. The script ships in the binary like everything else.
+    let factory = Factory::new("trace", FACTORY);
+
+    let (status, script) = factory.text("/routemap.js").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(script.contains("function traceable"), "{script}");
+
+    let (_, page) = factory.text("/").await;
+    let map = page.find(r#"<script src="/routemap.js">"#);
+    let app = page.find(r#"<script src="/app.js">"#);
+    assert!(
+        map.zip(app).is_some_and(|(map, app)| map < app),
+        "the tracing script has to load before the page that uses it"
+    );
 }

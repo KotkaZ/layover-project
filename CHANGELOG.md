@@ -25,6 +25,14 @@ status](README.md#project-status).
   join, a spawn or a scope that differs between the two directions keeps its own arrow. A real
   twenty-route workflow went from eleven loops to one.
 
+- **One agent's routes can be traced on the map.** Hovering or focusing an agent lights its routes
+  and neighbours and fades the rest; clicking pins them and opens a panel with its model, reasoning
+  effort, context tier, runner and access, who it sends to and hears from in that workflow, and a
+  link to its runs. Every route has a tooltip saying what it is — `analyst ⇄ sherlock`, or
+  `azurix → eagle · spawns a new itinerary · only in eagle-eye` — and a wide invisible edge to
+  hover. In the SVG each route is a `<g class="route">` naming its ends in `data-from` and
+  `data-to`; a scoped route's tooltip now leads with its ends before `only in …`.
+
 ### Fixed
 
 - **A return path ran behind and through the boxes it was routed around.** It dropped straight down

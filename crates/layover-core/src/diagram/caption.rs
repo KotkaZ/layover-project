@@ -1,4 +1,5 @@
-//! What a node says about itself: the lines inside its box, and the tooltip over it.
+//! What a node says about itself: the lines inside its box, and the tooltip over it — and what a
+//! route says when it is hovered.
 //!
 //! An agent's box names the model it runs on and its context tier, because those are what
 //! somebody reading a route map most often wants and cannot see anywhere else. Everything else —
@@ -10,6 +11,7 @@
 
 use crate::agent::{Access, Agent, AgentName};
 use crate::config::Config;
+use crate::diagram::layout::{Edge, EdgeStyle};
 use crate::model::ModelChoice;
 use crate::pipeline::{Pipeline, PipelineName};
 
@@ -92,6 +94,27 @@ pub(crate) fn pipeline(name: &PipelineName, pipeline: &Pipeline) -> Words {
         caption: None,
         tooltip: tooltip.join("\n"),
     }
+}
+
+/// What a route says when it is hovered: its two ends, and anything that makes it more than a
+/// plain permission.
+pub(crate) fn route(from: &str, to: &str, edge: &Edge) -> String {
+    let arrow = if edge.both { "⇄" } else { "→" };
+    let mut words = vec![format!("{from} {arrow} {to}")];
+    match edge.style {
+        EdgeStyle::Plain => {}
+        EdgeStyle::Entry => words.push("way in".to_owned()),
+        EdgeStyle::Joined => words.push(match &edge.label {
+            Some(condition) => format!("waits at the barrier ({condition})"),
+            None => "waits at the barrier".to_owned(),
+        }),
+        EdgeStyle::Bypass => words.push("bypasses the barrier".to_owned()),
+        EdgeStyle::Spawn => words.push("spawns a new itinerary".to_owned()),
+    }
+    if !edge.scopes.is_empty() {
+        words.push(format!("only in {}", edge.scopes.join(", ")));
+    }
+    words.join(" · ")
 }
 
 /// Cuts text that would overflow its box, and says so with an ellipsis.

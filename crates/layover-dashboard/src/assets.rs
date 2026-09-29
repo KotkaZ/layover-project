@@ -20,6 +20,8 @@ const INDEX: &str = include_str!("assets/index.html");
 const STYLE: &str = include_str!("assets/style.css");
 /// Its behaviour.
 const SCRIPT: &str = include_str!("assets/app.js");
+/// Tracing one agent's routes on the route map.
+const ROUTEMAP: &str = include_str!("assets/routemap.js");
 
 /// Builds the complete server: the JSON API, plus the dashboard on top of it.
 ///
@@ -39,6 +41,10 @@ pub fn router(dashboard: Dashboard, guard: Guard) -> Router {
         .route(
             "/app.js",
             get(|| async { asset("text/javascript", SCRIPT) }),
+        )
+        .route(
+            "/routemap.js",
+            get(|| async { asset("text/javascript", ROUTEMAP) }),
         )
         .merge(api)
         .layer(axum::middleware::from_fn_with_state(

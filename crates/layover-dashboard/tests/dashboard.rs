@@ -431,7 +431,7 @@ async fn the_whole_factory_map_names_the_workflows_a_scoped_edge_belongs_to() {
         .to_owned();
 
     assert!(svg.contains("scoped"), "{svg}");
-    assert!(svg.contains("<title>only in build</title>"), "{svg}");
+    assert!(svg.contains("only in build</title>"), "{svg}");
 }
 
 /// Two workflows sharing `reviewer`: only `build` may hand `bob` work from it.

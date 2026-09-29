@@ -219,6 +219,13 @@ async function loadMap() {
       get(`/graph?pipeline=${encodeURIComponent(pipeline.name)}`)
         .then((map) => {
           canvas.innerHTML = map.mermaid;
+          traceable(canvas, {
+            describe: (name) => agentsByName.get(name),
+            showRuns: (name) => {
+              $("#runs-agent").value = name;
+              showView("runs");
+            },
+          });
           if (map.config_path) $("#config-path").textContent = map.config_path;
         })
         .catch((error) => {
@@ -471,6 +478,8 @@ async function loadCost(selected = "last_30d") {
 // rather than pretending it has already run.
 
 let pipelinesByName = new Map();
+// Agents as `GET /agents` lists them, for the panel a pinned agent opens on the route map.
+let agentsByName = new Map();
 
 /// Sends a JSON body and reads back whatever the Tower says, preferring its own wording for a
 /// failure over a bare status code.
@@ -784,6 +793,7 @@ async function loadPipelines() {
 async function loadAgentNames() {
   try {
     const { agents } = await get("/agents");
+    agentsByName = new Map(agents.map((agent) => [agent.name, agent]));
     $("#agent-names").replaceChildren(
       ...agents.map((agent) => {
         const option = el("option");
