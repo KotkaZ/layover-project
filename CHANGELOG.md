@@ -8,6 +8,19 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-09-29
+
+The route map says which model each agent runs on, draws a busy workflow without the tangle, and
+lets you trace one agent's routes at a time.
+
+**Compatibility.** Nothing in the configuration format, the MCP tools or the on-disk layout
+changes. `GET /agents` gains `reasoning_effort` and `context`, and its `model` is now the model the
+agent's command line selects rather than only the one it declares — the same type, no longer
+`null` for an agent whose runner fixes its model. The drawn map changes shape: each route is a
+`<g class="route">` naming its ends, a pair of plain routes is one line, and a scoped route's
+tooltip leads with its ends before `only in …`. Anything that scraped the old SVG will need to
+look again; `layover graph` without `--svg` prints the same Mermaid as before.
+
 ### Added
 
 - **The route map says which model each agent runs on.** Under an agent's name is its model, and
@@ -927,7 +940,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/KotkaZ/layover-project/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/KotkaZ/layover-project/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/KotkaZ/layover-project/compare/v0.23.3...v1.0.0
 [0.23.3]: https://github.com/KotkaZ/layover-project/compare/v0.23.2...v0.23.3
