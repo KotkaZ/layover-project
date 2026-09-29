@@ -1,0 +1,97 @@
+# Two workflows that share a reviewer, and may not share its routes.
+#
+# `build` takes a task to a change: a planner plans it, a builder makes it, the reviewer checks it
+# and sends it back until it is right. `review-sweep` reviews the team's open pull requests every
+# two hours, one reviewer per pull request. Both use the same reviewer, because a review is a
+# review. Only one of them may hand the builder work. See README.md.
+
+[layover]
+work_dir = "workspace"
+
+[defaults]
+runner   = "copilot"
+# The agent CLI's credential. Only the *name* goes here; the Tower reads the value from its own
+# environment at spawn time.
+env_from = ["GH_TOKEN"]
+max_hops = 8
+fuel_usd = 3.00
+max_concurrent_runs = 3
+# The scanner may spawn reviewers. A reviewer may not spawn anything.
+max_spawn_generations = 1
+
+[reserve]
+fuel_usd     = 30.00
+window_hours = 24
+
+[runners.copilot]
+command = ["copilot", "--allow-all-tools", "--output-format", "json"]
+mcp     = { flag = "--additional-mcp-config", format = "claude_json", prefix = "@" }
+
+[agents.planner]
+description = "Turns a task into a plan the builder can follow"
+prompt      = "Read the task. Write a short plan: what changes, where, and how to tell it worked. Send the plan to the builder."
+access      = "read-only"
+
+[agents.builder]
+description = "Makes the change, and the only agent that edits code"
+prompt      = "Make the change the plan describes, run the tests, and send it to the reviewer. When the reviewer sends it back, fix what it found and send it again."
+access      = "read-write"
+
+[agents.reviewer]
+description = "Reviews one change or one pull request, and says what is wrong with it"
+prompt      = "Review the change you were handed against the repository's conventions. In a build, send your findings back to the builder. In a sweep, post them on the pull request."
+access      = "read-only"
+
+[agents.scanner]
+description = "Lists the open pull requests and opens one review per pull request"
+prompt      = "List the open pull requests nobody has reviewed at their current commit. Spawn one reviewer per pull request, handing it that pull request only."
+access      = "read-only"
+
+[agents.notifier]
+description = "Posts a one-line summary to the team's chat"
+prompt      = "Post the summary you were handed to the team's chat, in one line."
+access      = "read-only"
+
+[pipelines.build]
+description = "Take a task to a reviewed change"
+entry       = "planner"
+
+[pipelines.review-sweep]
+description = "Every two hours, review the open pull requests"
+entry       = "scanner"
+trigger     = { every = "2h" }
+
+# ── Route map ──────────────────────────────────────────────────────
+# `pipelines` says which workflows' chains may use a route. The reviewer reads pull request text
+# written by anyone, and in a build it must be able to send the builder work. Without scopes, that
+# one route would let a sweep's reviewer do it too, and only its prompt would stop a pull request
+# that tells it to.
+
+# Build: plan, make, review, and back to the builder until the reviewer is satisfied.
+[[routes]]
+from      = "planner"
+to        = "builder"
+pipelines = "build"
+
+[[routes]]
+from      = "builder"
+to        = "reviewer"
+pipelines = "build"
+
+[[routes]]
+from      = "reviewer"
+to        = "builder"
+pipelines = "build"
+
+# Review sweep: one itinerary, with its own Fuel, per pull request. A spawned chain belongs to the
+# pipeline that spawned it, so each reviewer is still a sweep's reviewer.
+[[routes]]
+from      = "scanner"
+to        = "reviewer"
+mode      = "spawn"
+pipelines = "review-sweep"
+
+# Global: no `pipelines`, so every chain may use it — what every route meant before scopes.
+[[routes]]
+from = ["builder", "reviewer"]
+to   = "notifier"

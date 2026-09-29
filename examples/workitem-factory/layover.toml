@@ -225,6 +225,10 @@ run_e2e       = { default = false, description = "Also run the remote end-to-end
 draft_pr      = { default = true, description = "Open the pull request as a draft for a human to promote" }
 
 # ── The route map: directed edges ──────────────────────────────────
+#
+# Every route here is global — none says `pipelines` — so every chain may use it. All three ways in
+# feed the same flow, so there is nothing to keep apart. `../build-and-review/` scopes routes to the
+# workflows that may use them, for a factory whose workflows share an agent but not its permissions.
 
 # The scheduled scanner hands work to the same analyst the manual pipeline uses.
 [[routes]]
