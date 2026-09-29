@@ -40,15 +40,36 @@ Describes the factory in prose: its agents, what each one is for, its pipelines 
 triggers, and the route map as a list of edges. The quickest way to check that what you wrote is
 what you meant.
 
+A route [scoped to workflows](./configuration.md#scoping-a-route-to-workflows) carries its scope
+on its line, and once any route is scoped each pipeline also says which agents its chains can
+reach over the routes they may use:
+
+```text
+Pipelines
+  eagle-eye [every 7200s] -> azurix
+      reaches: azurix, eagle, golddigger, sherlock
+...
+Routes
+  eagle -> azurix, sherlock, golddigger  [pipelines = eagle-eye]
+```
+
+A factory with no scoped route prints exactly what it always did.
+
 ## `graph`
 
 ```sh
-layover graph                          # text
-layover graph --svg > factory.svg      # a drawing
+layover graph                                # text
+layover graph --svg > factory.svg            # a drawing
+layover graph --pipeline eagle-eye           # one workflow
 ```
 
 The route map as a diagram. The SVG is the same renderer the dashboard uses, so it needs no
 browser and no JavaScript.
+
+`--pipeline` draws one workflow over the routes its chains may use — global routes and those
+scoped to it — which is the diagram the dashboard shows for that workflow. Without it the whole
+factory is drawn, and a scoped edge is labelled with the pipelines that may use it (in SVG, a
+`scoped` class and a tooltip).
 
 ## `prompt`
 

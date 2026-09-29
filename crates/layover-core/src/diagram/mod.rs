@@ -22,7 +22,7 @@ use std::collections::BTreeMap;
 use crate::agent::AgentName;
 
 pub use layout::{Edge, EdgeStyle, Layout, Node, NodeKind, Shape};
-pub use mermaid::route_map;
+pub use mermaid::{route_map, route_map_for};
 pub use svg::render as render_svg;
 
 /// Which workflow to draw.

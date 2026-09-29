@@ -32,6 +32,7 @@ The binary is called `layover`.
 ```sh
 layover validate --config layover.toml     # check a factory before it runs
 layover explain                            # what can trigger what, and what talks to what
+layover graph --pipeline nightly           # one workflow's route map, as Mermaid
 layover prompt tester --flag run_e2e=true  # what an agent would actually be told
 layover serve                              # run the factory and serve the dashboard
 layover doctor                             # report anything a person should look at

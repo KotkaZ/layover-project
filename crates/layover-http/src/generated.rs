@@ -598,6 +598,10 @@ pub struct Route {
     /// Set when flights on this edge are parked at a rendezvous barrier.
     #[serde(default)]
     pub join: Option<Join>,
+    /// The pipelines whose chains may use this route. Null for a global route, which every
+    /// chain may use — what every route meant before scopes existed.
+    #[serde(default)]
+    pub pipelines: Option<Vec<String>>,
     /// Backstop for a barrier that never completes.
     #[serde(default)]
     pub timeout_sec: Option<i64>,

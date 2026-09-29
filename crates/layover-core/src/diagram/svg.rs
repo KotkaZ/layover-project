@@ -149,10 +149,20 @@ fn render_edge(out: &mut String, layout: &Layout, edge: &Edge) {
         forward_path(from, to, edge.from_y, edge.to_y)
     };
 
-    let _ = writeln!(
-        out,
-        r#"  <path class="{class}" d="{path}" marker-end="url(#{marker})"/>"#
-    );
+    // A scoped edge on the whole-factory map says which workflows may use it: classed so a
+    // stylesheet can pick it out, and named in a tooltip so it can be read.
+    if edge.scopes.is_empty() {
+        let _ = writeln!(
+            out,
+            r#"  <path class="{class}" d="{path}" marker-end="url(#{marker})"/>"#
+        );
+    } else {
+        let _ = writeln!(
+            out,
+            r#"  <path class="{class} scoped" d="{path}" marker-end="url(#{marker})"><title>only in {}</title></path>"#,
+            escape(&edge.scopes.join(", "))
+        );
+    }
 
     if let Some(label) = &edge.label {
         let _ = writeln!(
@@ -428,6 +438,7 @@ mod tests {
             to: "a_ghost".to_owned(),
             label: None,
             style: EdgeStyle::Plain,
+            scopes: Vec::new(),
             back: false,
             from_y: 0.0,
             to_y: 0.0,

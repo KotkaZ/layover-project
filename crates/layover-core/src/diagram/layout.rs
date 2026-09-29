@@ -164,6 +164,11 @@ pub struct Edge {
     /// a renderer that invented its own geometry would draw outside the reported extent — which
     /// is exactly how a review loop ends up clipped off the bottom of the diagram.
     pub floor: Option<f64>,
+    /// The pipelines this edge is scoped to, sorted, on the whole-factory map.
+    ///
+    /// Empty when a global route permits it, because every workflow may use it — and always empty
+    /// on one workflow's map, where every edge drawn is that workflow's by construction.
+    pub scopes: Vec<String>,
 }
 
 /// A laid-out diagram.
@@ -193,9 +198,16 @@ impl Layout {
     }
 
     /// Lays out one workflow, or the whole factory.
+    ///
+    /// One workflow is drawn over the routes its chains may use — global ones and those scoped to
+    /// it — so an agent it shares with another workflow appears with only this workflow's edges,
+    /// and an agent only another workflow's routes reach does not appear at all.
     #[must_use]
     pub fn scoped(config: &Config, live: &Live, scope: &Scope) -> Self {
-        let graph = RouteGraph::from_config(config);
+        let graph = match scope.pipeline() {
+            Some(name) => RouteGraph::for_pipeline(config, Some(name)),
+            None => RouteGraph::from_config(config),
+        };
         let members = scope.pipeline().and_then(|name| {
             config
                 .pipelines
@@ -206,7 +218,7 @@ impl Layout {
 
         let mut layout = Self::default();
         layout.place(config, live, &graph, &layers, scope, members.as_ref());
-        layout.connect(config, &graph, members.as_ref());
+        layout.connect(config, &graph, scope, members.as_ref());
         layout.order_by_barycentre();
         layout.size();
         layout
@@ -284,8 +296,14 @@ impl Layout {
         &mut self,
         config: &Config,
         graph: &RouteGraph,
+        scope: &Scope,
         members: Option<&BTreeSet<AgentName>>,
     ) {
+        let scopes = match scope.pipeline() {
+            Some(_) => BTreeMap::new(),
+            None => edge_scopes(config),
+        };
+
         for (name, pipeline) in &config.pipelines {
             if self.node(&pipeline_id(name)).is_none() {
                 continue;
@@ -301,11 +319,18 @@ impl Layout {
                 gutter: None,
                 hook_x: None,
                 floor: None,
+                scopes: Vec::new(),
             });
         }
 
         let mut drawn = Vec::new();
         for route in &config.routes {
+            if scope
+                .pipeline()
+                .is_some_and(|name| !route.applies_to(Some(name)))
+            {
+                continue;
+            }
             for from in &route.from {
                 for to in &route.to {
                     if members
@@ -356,6 +381,10 @@ impl Layout {
                         gutter: None,
                         hook_x: None,
                         floor: None,
+                        scopes: scopes
+                            .get(&(from.clone(), to.clone()))
+                            .cloned()
+                            .unwrap_or_default(),
                     });
                 }
             }
@@ -564,6 +593,41 @@ impl Layout {
         }
         deepest
     }
+}
+
+/// The pipelines each drawn pair is scoped to, for the whole-factory map.
+///
+/// A pair several routes permit is drawn once, so its scopes are the union of theirs — and a
+/// pair any global route permits is every workflow's, which is recorded as no scopes at all.
+pub(crate) fn edge_scopes(config: &Config) -> BTreeMap<(AgentName, AgentName), Vec<String>> {
+    let mut found: BTreeMap<(AgentName, AgentName), Option<BTreeSet<String>>> = BTreeMap::new();
+
+    for route in &config.routes {
+        for from in &route.from {
+            for to in &route.to {
+                let entry = found
+                    .entry((from.clone(), to.clone()))
+                    .or_insert_with(|| Some(BTreeSet::new()));
+                match (&route.pipelines, entry.as_mut()) {
+                    (None, _) => *entry = None,
+                    (Some(names), Some(scopes)) => {
+                        scopes.extend(names.iter().map(ToString::to_string));
+                    }
+                    (Some(_), None) => {}
+                }
+            }
+        }
+    }
+
+    found
+        .into_iter()
+        .map(|(pair, scopes)| {
+            (
+                pair,
+                scopes.map(|s| s.into_iter().collect()).unwrap_or_default(),
+            )
+        })
+        .collect()
 }
 
 /// Assigns each agent a column by breadth-first distance from the ways in.

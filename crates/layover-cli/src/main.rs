@@ -69,11 +69,15 @@ enum Command {
     ///
     /// Mermaid by default, which is for *portability*: paste it into a README and GitHub draws
     /// it. `--svg` prints the same graph as the dashboard draws it, laid out here rather than by
-    /// a JavaScript library.
+    /// a JavaScript library. `--pipeline` draws one workflow over the routes its chains may use.
     Graph {
         /// Emit SVG instead of Mermaid source.
         #[arg(long)]
         svg: bool,
+
+        /// Draw only this pipeline's workflow.
+        #[arg(long, value_name = "NAME")]
+        pipeline: Option<String>,
     },
 
     /// Run the factory and serve the dashboard.
@@ -178,7 +182,7 @@ fn main() -> ExitCode {
     let result = match cli.command {
         Command::Validate { strict } => commands::validate_config(&cli.config, strict),
         Command::Explain => commands::explain(&cli.config),
-        Command::Graph { svg } => commands::graph(&cli.config, svg),
+        Command::Graph { svg, pipeline } => commands::graph(&cli.config, svg, pipeline.as_deref()),
         Command::Prompt {
             agent,
             pipeline,

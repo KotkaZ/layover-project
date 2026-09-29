@@ -153,6 +153,7 @@ Read it as: pipelines on the left, work flowing right, one column per hop.
 | Thick indigo arrow | A pipeline feeding its entry agent |
 | Blue arrow labelled `all` or `any` | An upstream the barrier waits for |
 | Dashed violet arrow | A permitted sender the barrier *does not* name |
+| Arrow labelled with pipeline names | A route only those workflows' chains may use — on the whole-factory map only |
 | Green, amber, red fill | Running, waiting at a barrier, last run failed |
 
 Amber needs the supervisor: nothing records a parked barrier yet, so today the map shows running
@@ -191,12 +192,25 @@ An agent belonging to two workflows appears in both. That is the honest answer: 
 really is in the triage pipeline and the follow-up pipeline, and hiding it from one would
 misrepresent the factory to make a tidier picture.
 
+Each diagram is drawn over the routes **that workflow's chains may use**: every global route, and
+every route [scoped](./configuration.md#scoping-a-route-to-workflows) to it. A route scoped to
+another workflow is not drawn, and an agent only another workflow's routes reach does not appear.
+So a shared agent appears in each workflow with only that workflow's edges — the review sweep's
+map does not show the reviewer handing work to the builder when only the build workflow may. In a
+factory with no scoped route, every diagram is exactly what it was.
+
+The whole factory in one picture is `GET /graph` without a `pipeline`, or `layover graph`. There
+every route is drawn, and an edge only some workflows may use is labelled with their names — in
+the SVG it carries a `scoped` class and an "only in …" tooltip. The page itself keeps to one
+diagram per workflow, for the reason above.
+
 Cost gains a **By workflow** table for the same reason. Per-agent totals cannot answer "what does
 the nightly sweep cost me" once an agent belongs to more than one.
 
 The diagram is generated per request, so editing `layover.toml` and reloading the page is enough
 to see the change. `layover graph` prints the same graph without a server: Mermaid by default for
-pasting into a README, `--svg` for the version the dashboard draws.
+pasting into a README, `--svg` for the version the dashboard draws, and `--pipeline` for one
+workflow's diagram.
 
 ## Runs
 

@@ -381,6 +381,96 @@ async fn a_failed_run_says_how_it_exited_and_why() {
 }
 
 #[tokio::test]
+async fn a_routes_scope_reaches_the_agents_endpoint_and_a_global_route_has_none() {
+    let factory = Factory::new("route-scope");
+    factory.write_config(SCOPED);
+
+    let (status, body) = call(factory.router(), "/agents").await;
+
+    assert_eq!(status, StatusCode::OK);
+    let routes = json(&body)["routes"].as_array().expect("routes").clone();
+    let scoped = routes
+        .iter()
+        .find(|route| route["to"][0] == "bob")
+        .expect("the scoped route");
+    assert_eq!(scoped["pipelines"], serde_json::json!(["build"]), "{body}");
+    let global = routes
+        .iter()
+        .find(|route| route["to"][0] == "reviewer")
+        .expect("the global route");
+    assert!(global["pipelines"].is_null(), "{body}");
+}
+
+#[tokio::test]
+async fn a_workflows_map_draws_only_what_its_own_routes_reach() {
+    let factory = Factory::new("scoped-map");
+    factory.write_config(SCOPED);
+
+    let (_, body) = call(factory.router(), "/graph?pipeline=sweep").await;
+    let svg = json(&body)["mermaid"]
+        .as_str()
+        .expect("a drawing")
+        .to_owned();
+
+    assert!(svg.contains(r#"id="a_reviewer""#), "{svg}");
+    assert!(
+        !svg.contains(r#"id="a_bob""#),
+        "the sweep's routes never reach bob:\n{svg}"
+    );
+}
+
+#[tokio::test]
+async fn the_whole_factory_map_names_the_workflows_a_scoped_edge_belongs_to() {
+    let factory = Factory::new("scoped-everything");
+    factory.write_config(SCOPED);
+
+    let (_, body) = call(factory.router(), "/graph").await;
+    let svg = json(&body)["mermaid"]
+        .as_str()
+        .expect("a drawing")
+        .to_owned();
+
+    assert!(svg.contains("scoped"), "{svg}");
+    assert!(svg.contains("<title>only in build</title>"), "{svg}");
+}
+
+/// Two workflows sharing `reviewer`: only `build` may hand `bob` work from it.
+const SCOPED: &str = r#"
+[layover]
+work_dir = "work"
+
+[defaults]
+runner = "claude"
+
+[runners.claude]
+command = ["claude", "-p"]
+
+[agents.scanner]
+prompt = "scan"
+
+[agents.reviewer]
+prompt = "review"
+
+[agents.bob]
+prompt = "build"
+
+[pipelines.build]
+entry = "reviewer"
+
+[pipelines.sweep]
+entry = "scanner"
+
+[[routes]]
+from = "scanner"
+to = "reviewer"
+
+[[routes]]
+from = "reviewer"
+to = "bob"
+pipelines = "build"
+"#;
+
+#[tokio::test]
 async fn an_unreported_cost_is_null_rather_than_zero() {
     // A zero is indistinguishable from a run that genuinely cost nothing, and the difference is
     // what decides whether the budget rail is working at all.

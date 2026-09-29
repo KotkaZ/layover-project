@@ -20,8 +20,8 @@ use crate::tower::Tower;
 use layover_core::agent::PromptSpec;
 use layover_core::prompt::resolve;
 use layover_core::{
-    AgentName, Autostart, Config, Diagnostic, Flags, PipelineName, Platform, PromptDir, Severity,
-    Trigger, validate, validate_prompts,
+    AgentName, Autostart, Config, Diagnostic, Flags, PipelineName, Platform, PromptDir, RouteGraph,
+    Severity, Trigger, validate, validate_prompts,
 };
 
 /// Anything that stops a command from finishing.
@@ -125,22 +125,43 @@ fn render(diagnostic: &Diagnostic) -> String {
 /// # Errors
 ///
 /// Returns a message when the definition cannot be loaded.
-/// Prints the factory's route map, as Mermaid source or as SVG.
+/// Prints the factory's route map, or one workflow's, as Mermaid source or as SVG.
 ///
 /// No live state: the CLI is not talking to a running Tower, so this is the topology alone. The
-/// dashboard renders the same functions with the current activity overlaid.
+/// dashboard renders the same functions with the current activity overlaid. One workflow is drawn
+/// over the routes its chains may use, exactly as the dashboard's per-workflow map is.
 ///
 /// # Errors
 ///
-/// Returns [`Failure`] if the configuration cannot be loaded.
-pub fn graph(path: &Path, svg: bool) -> Result<String, Failure> {
+/// Returns [`Failure`] if the configuration cannot be loaded or the pipeline is unknown.
+pub fn graph(path: &Path, svg: bool, pipeline: Option<&str>) -> Result<String, Failure> {
+    use layover_core::diagram::{Layout, Live, Scope, render_svg, route_map_for};
+
     let (config, _) = load(path)?;
-    let live = layover_core::diagram::Live::default();
+    let live = Live::default();
+    let scope = match pipeline {
+        None => Scope::Everything,
+        Some(name) => {
+            let name = PipelineName::from(name);
+            if !config.pipelines.contains_key(&name) {
+                return Err(format!(
+                    "unknown pipeline `{name}`; this factory declares {}",
+                    config
+                        .pipelines
+                        .keys()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
+            Scope::Pipeline(name)
+        }
+    };
 
     Ok(if svg {
-        layover_core::diagram::render_svg(&layover_core::diagram::Layout::build(&config, &live))
+        render_svg(&Layout::scoped(&config, &live, &scope))
     } else {
-        layover_core::diagram::route_map(&config, &live)
+        route_map_for(&config, &live, &scope)
     })
 }
 
@@ -327,6 +348,15 @@ pub fn explain(path: &Path) -> Result<String, Failure> {
         if let Some(description) = &pipeline.description {
             let _ = writeln!(out, "      {description}");
         }
+        // Only where scoping changes the answer: in a factory of global routes every pipeline
+        // may use every route, and the map says what each reaches.
+        if config.routes.iter().any(layover_core::Route::is_scoped) {
+            let reaches = RouteGraph::for_pipeline(&config, Some(name))
+                .workflow_from(&pipeline.entry)
+                .into_iter()
+                .collect::<Vec<_>>();
+            let _ = writeln!(out, "      reaches: {}", join(&reaches));
+        }
         for (flag, spec) in &pipeline.flags {
             let _ = writeln!(
                 out,
@@ -374,10 +404,18 @@ pub fn explain(path: &Path) -> Result<String, Failure> {
     for route in &config.routes {
         let from = join(&route.from);
         let to = join(&route.to);
-        let annotation = match route.join {
+        let mut annotation = match route.join {
             Some(condition) => format!("  [join = {condition:?}]").to_lowercase(),
             None => String::new(),
         };
+        if let Some(pipelines) = &route.pipelines {
+            let names = pipelines
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            let _ = write!(annotation, "  [pipelines = {names}]");
+        }
         let _ = writeln!(out, "  {from} -> {to}{annotation}");
     }
 

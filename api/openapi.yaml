@@ -679,6 +679,14 @@ components:
           type: [integer, "null"]
           format: int64
           description: Backstop for a barrier that never completes.
+        pipelines:
+          type: [array, "null"]
+          description: |
+            The pipelines whose chains may use this route. Null for a global route, which every
+            chain may use — what every route meant before scopes existed.
+          items:
+            type: string
+            description: A pipeline name.
 
     AgentList:
       type: object

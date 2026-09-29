@@ -26,6 +26,13 @@ status](README.md#project-status).
   no longer declares flags for agents its routes cannot reach; and warns about a scoped route no
   chain of its scope can use and an `entry = true` agent a direct trigger would strand.
 
+- **Each workflow's route map is drawn over its own routes.** The dashboard's per-workflow
+  diagrams, `GET /graph?pipeline=` and the new `layover graph --pipeline` show only the routes that
+  workflow's chains may use, so an agent it shares with another workflow appears with only this
+  workflow's edges. The whole-factory map labels a scoped edge with its pipelines. `GET /agents`
+  gives each route its `pipelines` (`null` when global), and `layover explain` prints each route's
+  scope and, once any route is scoped, which agents each pipeline reaches.
+
 ### Fixed
 
 - **Flags chosen at trigger time were ignored.** `POST /flights` with

@@ -47,6 +47,10 @@ pub fn agents(config: &Config) -> AgentList {
                     CoreJoin::Any => Join::Any,
                 }),
                 timeout_sec: route.timeout_sec.and_then(|secs| i64::try_from(secs).ok()),
+                pipelines: route
+                    .pipelines
+                    .as_ref()
+                    .map(|names| names.iter().map(ToString::to_string).collect()),
             })
             .collect(),
     }
