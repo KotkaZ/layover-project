@@ -1,13 +1,16 @@
 //! What a node says about itself: the lines inside its box, and the tooltip over it — and what a
 //! route says when it is hovered.
 //!
-//! An agent's box names the model it runs on and its context tier, because those are what
-//! somebody reading a route map most often wants and cannot see anywhere else. Everything else —
-//! reasoning effort, runner, description — is in the tooltip, because a box wide enough for all of
-//! it would make the diagram twice as wide to say things that are rarely the question.
+//! An agent's box names the model it runs on and the effort it runs it at, then its context tier
+//! and whether it is read-only, because those are what somebody reading a route map most often
+//! wants and cannot see anywhere else. The model and its effort share a line because they are one
+//! choice — how hard *that* model is asked to reason. Runner and description are in the tooltip,
+//! because a box wide enough for them would make the diagram twice as wide to say things that are
+//! rarely the question.
 //!
-//! An agent whose command line names no model is drawn exactly as it was before models were
-//! shown, so a factory that sets none sees no change at all.
+//! Nothing is cut to make room: what does not fit beside something else moves to the next line,
+//! and a box grows a third small line rather than lose a fact. An agent whose command line names
+//! no model or effort is drawn exactly as it was before either was shown.
 
 use crate::agent::{Access, Agent, AgentName};
 use crate::config::Config;
@@ -15,8 +18,9 @@ use crate::diagram::layout::{Edge, EdgeStyle};
 use crate::model::ModelChoice;
 use crate::pipeline::{Pipeline, PipelineName};
 
-/// Longest text a box holds before it is cut short. The tooltip always has the whole of it.
-const FITS: usize = 28;
+/// Longest line a box holds. Measured in the dashboard's font, thirty characters of a model name is
+/// about 130 of the 148 pixels between a box's padding. The tooltip always has the whole of it.
+const FITS: usize = 30;
 
 /// The words for one node.
 pub(crate) struct Words {
@@ -24,6 +28,8 @@ pub(crate) struct Words {
     pub subtitle: Option<String>,
     /// A second small line, when there is more than fits on one.
     pub caption: Option<String>,
+    /// A third, for what fits on neither.
+    pub footnote: Option<String>,
     /// Everything, for hovering.
     pub tooltip: String,
 }
@@ -31,19 +37,34 @@ pub(crate) struct Words {
 /// The words for an agent.
 pub(crate) fn agent(config: &Config, name: &AgentName, agent: &Agent) -> Words {
     let choice = ModelChoice::of(config, name);
-    let rest: Vec<String> = [
+    let effort = choice
+        .reasoning_effort
+        .as_ref()
+        .map(|effort| format!("effort {effort}"));
+    let mut rest: Vec<String> = [
         choice.context_label(),
         (agent.access == Access::ReadOnly).then(|| "read-only".to_owned()),
     ]
     .into_iter()
     .flatten()
     .collect();
-    let rest = (!rest.is_empty()).then(|| fit(&rest.join(" · ")));
 
-    let (subtitle, caption) = match &choice.model {
-        Some(model) => (Some(fit(model)), rest),
-        None => (rest, None),
-    };
+    let mut lines = Vec::new();
+    match (&choice.model, effort) {
+        (Some(model), Some(effort))
+            if model.chars().count() + 3 + effort.chars().count() <= FITS =>
+        {
+            lines.push(format!("{model} · {effort}"));
+        }
+        (model, effort) => {
+            lines.extend(model.as_deref().map(fit));
+            if let Some(effort) = effort {
+                rest.insert(0, effort);
+            }
+        }
+    }
+    lines.extend(pack(&rest));
+    let mut lines = lines.into_iter();
 
     let mut tooltip = vec![name.to_string()];
     if let Some(description) = &agent.description {
@@ -54,7 +75,7 @@ pub(crate) fn agent(config: &Config, name: &AgentName, agent: &Agent) -> Words {
         choice
             .reasoning_effort
             .as_ref()
-            .map(|effort| format!("reasoning {effort}")),
+            .map(|effort| format!("effort {effort}")),
         choice.context_label(),
     ]
     .into_iter()
@@ -74,10 +95,26 @@ pub(crate) fn agent(config: &Config, name: &AgentName, agent: &Agent) -> Words {
     });
 
     Words {
-        subtitle,
-        caption,
+        subtitle: lines.next(),
+        caption: lines.next(),
+        footnote: lines.next(),
         tooltip: tooltip.join("\n"),
     }
+}
+
+/// Joins facts into as few lines as hold them, in order, starting a new line rather than cutting.
+fn pack(facts: &[String]) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    for fact in facts {
+        match lines.last_mut() {
+            Some(line) if line.chars().count() + 3 + fact.chars().count() <= FITS => {
+                line.push_str(" · ");
+                line.push_str(fact);
+            }
+            _ => lines.push(fit(fact)),
+        }
+    }
+    lines
 }
 
 /// The words for a pipeline.
@@ -92,6 +129,7 @@ pub(crate) fn pipeline(name: &PipelineName, pipeline: &Pipeline) -> Words {
     Words {
         subtitle: Some(trigger),
         caption: None,
+        footnote: None,
         tooltip: tooltip.join("\n"),
     }
 }

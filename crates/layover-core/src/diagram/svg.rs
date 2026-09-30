@@ -113,10 +113,11 @@ fn render_node(out: &mut String, node: &Node) {
     }
 
     let (cx, cy) = node.centre();
-    let (baseline, sub_at) = match (&node.subtitle, &node.caption) {
-        (_, Some(_)) => (cy - 10.0, cy + 6.0),
-        (Some(_), None) => (cy - 4.0, cy + 13.0),
-        (None, None) => (cy + 5.0, cy + 13.0),
+    let (baseline, sub_at) = match (&node.subtitle, &node.caption, &node.footnote) {
+        (_, _, Some(_)) => (cy - 16.0, cy),
+        (_, Some(_), None) => (cy - 10.0, cy + 6.0),
+        (Some(_), None, None) => (cy - 4.0, cy + 13.0),
+        (None, None, None) => (cy + 5.0, cy + 13.0),
     };
     let _ = writeln!(
         out,
@@ -130,13 +131,15 @@ fn render_node(out: &mut String, node: &Node) {
             escape(subtitle)
         );
     }
-    if let Some(caption) = &node.caption {
-        let _ = writeln!(
-            out,
-            r#"    <text class="sub caption" x="{cx:.1}" y="{:.1}" text-anchor="middle">{}</text>"#,
-            sub_at + 13.0,
-            escape(caption)
-        );
+    for (line, below) in [(&node.caption, 13.0), (&node.footnote, 26.0)] {
+        if let Some(line) = line {
+            let _ = writeln!(
+                out,
+                r#"    <text class="sub caption" x="{cx:.1}" y="{:.1}" text-anchor="middle">{}</text>"#,
+                sub_at + below,
+                escape(line)
+            );
+        }
     }
 
     out.push_str("  </g>\n");

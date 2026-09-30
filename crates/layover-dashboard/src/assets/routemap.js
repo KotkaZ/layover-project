@@ -146,7 +146,7 @@ function traceable(canvas, { describe, showRuns }) {
       // rather than leaving blank, because blank reads as "Layover does not know".
       const fromCli = "the CLI's own default";
       fact("Model", agent?.model ?? fromCli);
-      fact("Reasoning", agent?.reasoning_effort ?? fromCli);
+      fact("Effort", agent?.reasoning_effort ?? fromCli);
       fact("Context", agent?.context ?? fromCli);
       if (agent) {
         fact("Runner", `${agent.runner ?? "the default runner"} · ${agent.access}`);

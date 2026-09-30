@@ -8,6 +8,14 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+### Added
+
+- **The route map shows each agent's reasoning effort.** It sits beside the model, as
+  `claude-opus-5.5 · effort xhigh`, read from the same `--reasoning-effort` flag `GET /agents`
+  already reported; it was only in the tooltip. A model name too long to share its line puts the
+  effort at the start of the next, and a box grows a third small line rather than cut anything
+  off. The tooltip and the pinned agent's panel say "effort" rather than "reasoning", to match.
+
 ## [1.2.0] — 2026-09-29
 
 The route map says which model each agent runs on, draws a busy workflow without the tangle, and

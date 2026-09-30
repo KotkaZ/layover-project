@@ -38,6 +38,8 @@ const NODE_H: f64 = 56.0;
 /// One height for the whole drawing rather than per node, so the rows of every column still line
 /// up and an edge between two agents in the same row stays straight.
 const TALL_NODE_H: f64 = 70.0;
+/// Height of a node box when some box in the drawing has a fourth line to hold.
+const TALLEST_NODE_H: f64 = 84.0;
 /// Horizontal gap between columns.
 const COL_GAP: f64 = 96.0;
 /// Vertical gap between nodes in a column.
@@ -84,11 +86,14 @@ pub struct Node {
     pub id: String,
     /// The name shown on the node.
     pub label: String,
-    /// A second line: a trigger for a pipeline; for an agent, the model its command line names,
-    /// or failing that its context tier and `read-only` when it has either.
+    /// A second line: a trigger for a pipeline; for an agent, the model its command line names
+    /// and the effort it runs it at, or failing both its context tier and `read-only`.
     pub subtitle: Option<String>,
     /// A third line, for an agent whose model took the second: its context tier and `read-only`.
     pub caption: Option<String>,
+    /// A third small line, for an agent whose model name is too long to share its line with the
+    /// effort, so that nothing is cut off to make room.
+    pub footnote: Option<String>,
     /// Everything worth knowing about the node, one fact per line, for hovering over it.
     pub tooltip: Option<String>,
     /// What this node represents.
@@ -282,6 +287,7 @@ impl Layout {
                 label: name.as_str().to_owned(),
                 subtitle: words.subtitle,
                 caption: words.caption,
+                footnote: words.footnote,
                 tooltip: Some(words.tooltip),
                 kind: NodeKind::Pipeline,
                 shape: Shape::Box,
@@ -307,6 +313,7 @@ impl Layout {
                 label: name.as_str().to_owned(),
                 subtitle: words.subtitle,
                 caption: words.caption,
+                footnote: words.footnote,
                 tooltip: Some(words.tooltip),
                 kind: NodeKind::Agent,
                 shape: if graph.join_for(name).is_some() {
@@ -323,11 +330,10 @@ impl Layout {
             });
         }
 
-        let height = if columns
-            .values()
-            .flatten()
-            .any(|node| node.caption.is_some())
-        {
+        let nodes = || columns.values().flatten();
+        let height = if nodes().any(|node| node.footnote.is_some()) {
+            TALLEST_NODE_H
+        } else if nodes().any(|node| node.caption.is_some()) {
             TALL_NODE_H
         } else {
             NODE_H

@@ -176,29 +176,34 @@ instance, is still drawn out and back.
 
 ### What each box says
 
-Under an agent's name is the **model it runs on**, and under that its **context tier** and
-whether it is `read-only`:
+Under an agent's name is the **model it runs on** and the **reasoning effort** it runs it at, and
+under that its **context tier** and whether it is `read-only`:
 
 ```text
-      bob
- claude-opus-5.5
-  long context
+             bob
+claude-opus-5.5 · effort xhigh
+        long context
 ```
 
-Both are read from the command line Layover will run for that agent — its runner's `command`,
-with the agent's own `model` filled in — so a model fixed in the runner is shown as readily as one
-the agent declares. See [how a runner carries a model](./configuration.md#runners--how-to-invoke-a-cli)
-for which flags are read. An agent whose command line names no model is drawn as it always was.
+The model and its effort share a line because they are one choice: how hard *that* model is asked
+to reason. A model name too long to share its line puts the effort at the start of the next, and a
+box grows a third small line rather than cut anything off.
 
-Hover over a box for the rest: its description, reasoning effort, runner and access. `GET /agents`
-reports the same `model`, `reasoning_effort` and `context` for each agent.
+All of it is read from the command line Layover will run for that agent — its runner's `command`,
+with the agent's own `model` filled in — so a model or effort fixed in the runner is shown as
+readily as a model the agent declares. See
+[how a runner carries a model](./configuration.md#runners--how-to-invoke-a-cli) for which flags are
+read. An agent whose command line names no model or effort is drawn as it always was.
+
+Hover over a box for the rest: its description, runner and access. `GET /agents` reports the same
+`model`, `reasoning_effort` and `context` for each agent.
 
 ### Tracing one agent
 
 A busy map is easiest to read one agent at a time. **Hover** over an agent — or tab to it — and its
 routes and the agents at their other ends stay lit while everything else fades. **Click** it to
 keep them lit; a panel opens under that workflow's map with what the agent runs on (model,
-reasoning effort, context tier, runner, access) and who it **sends to** and **hears from** in this
+effort, context tier, runner, access) and who it **sends to** and **hears from** in this
 workflow, with a link to its runs. Click it again, click empty space, or press Escape to let go.
 Hovering a single route lights just that route and its two ends, and its tooltip says what it is:
 `analyst ⇄ sherlock`, or `azurix → eagle · spawns a new itinerary · only in eagle-eye`.

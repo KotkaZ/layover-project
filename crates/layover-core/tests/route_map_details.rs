@@ -55,11 +55,69 @@ fn layout(text: &str) -> Layout {
 }
 
 #[test]
-fn an_agent_shows_the_model_its_runner_command_fixes() {
+fn an_agent_shows_the_model_and_effort_its_runner_command_fixes() {
+    // Effort sits beside the model because it is how hard that model is run: the two are one
+    // choice, and reading one without the other says half of it.
     let layout = layout(FACTORY);
     let analyst = layout.node("a_analyst").expect("drawn");
 
-    assert_eq!(analyst.subtitle.as_deref(), Some("claude-opus-5.5"));
+    assert_eq!(
+        analyst.subtitle.as_deref(),
+        Some("claude-opus-5.5 · effort xhigh")
+    );
+    assert_eq!(analyst.caption.as_deref(), Some("long context · read-only"));
+}
+
+#[test]
+fn an_agent_whose_command_sets_effort_but_no_model_still_shows_the_effort() {
+    let text = FACTORY.replace(
+        r#"command = ["copilot", "--allow-all-tools"]"#,
+        r#"command = ["copilot", "--allow-all-tools", "--reasoning-effort", "high"]"#,
+    );
+    let layout = layout(&text);
+    let mailman = layout.node("a_mailman").expect("drawn");
+
+    assert_eq!(mailman.subtitle.as_deref(), Some("effort high · read-only"));
+    assert_eq!(mailman.caption, None);
+}
+
+#[test]
+fn a_model_name_too_long_to_share_its_line_moves_the_effort_to_the_next() {
+    // Cutting the line short would drop the effort, which is the part that was asked for; and
+    // what no longer fits beside it gets a line of its own rather than being cut off either.
+    let text = FACTORY.replace("claude-opus-5.5", "claude-opus-5.5-preview");
+    let layout = layout(&text);
+    let analyst = layout.node("a_analyst").expect("drawn");
+
+    assert_eq!(analyst.subtitle.as_deref(), Some("claude-opus-5.5-preview"));
+    assert_eq!(
+        analyst.caption.as_deref(),
+        Some("effort xhigh · long context")
+    );
+    assert_eq!(analyst.footnote.as_deref(), Some("read-only"));
+    assert!(
+        layout.nodes.iter().all(|node| (node.h - 84.0).abs() < 0.01),
+        "every box grows together, so the rows still line up"
+    );
+}
+
+#[test]
+fn no_line_in_a_box_is_longer_than_a_box_is_wide() {
+    // Measured in the dashboard's own font: thirty characters is about 130 of the 148 pixels a
+    // box has between its padding.
+    for text in [
+        FACTORY.to_owned(),
+        FACTORY.replace("claude-opus-5.5", "claude-opus-5.5-preview"),
+    ] {
+        for node in &layout(&text).nodes {
+            for line in [&node.subtitle, &node.caption, &node.footnote]
+                .into_iter()
+                .flatten()
+            {
+                assert!(line.chars().count() <= 30, "{line:?} in {}", node.id);
+            }
+        }
+    }
 }
 
 #[test]
@@ -88,7 +146,7 @@ fn the_tooltip_carries_what_the_box_has_no_room_for() {
 
     for said in [
         "claude-opus-5.5",
-        "reasoning xhigh",
+        "effort xhigh",
         "long context",
         "runner shadow",
     ] {

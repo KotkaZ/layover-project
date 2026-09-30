@@ -132,7 +132,10 @@ async fn a_workflows_map_names_each_agents_model() {
     let (_, body) = factory.get("/graph?pipeline=devforge").await;
     let svg = body["mermaid"].as_str().expect("a drawing");
 
-    assert!(svg.contains(">claude-opus-5.5</text>"), "{svg}");
+    assert!(
+        svg.contains(">claude-opus-5.5 · effort xhigh</text>"),
+        "{svg}"
+    );
     assert!(svg.contains(">claude-sonnet-5</text>"), "{svg}");
 }
 
