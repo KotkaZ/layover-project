@@ -160,6 +160,14 @@ mcp     = { flag = "--additional-mcp-config", format = "claude_json", prefix = "
 command = ["codex", "exec", "{mcp}", "-"]
 mcp     = { flag = "-c", format = "codex_toml" }
 
+# ── What the whole factory may spend, and how Copilot is priced ────
+[reserve]
+fuel_usd     = 100.00     # checked before every run; 0 means unlimited
+window_hours = 24         # in any rolling 24 hours
+
+[copilot]
+usd_per_credit = 0.01     # Copilot reports AI credits, not dollars; this prices them
+
 # ── Agents ─────────────────────────────────────────────────────────
 [agents.planner]
 runner   = "claude"

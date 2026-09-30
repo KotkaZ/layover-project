@@ -308,6 +308,67 @@ that fed it, and a summary that is 90% measured still reports as an estimate. Fo
 Layover ships no rate card: prices change per provider and per context tier, and a stale table
 baked into a release is precisely how the drift happens.
 
+**Why Copilot runs are priced from their credits.** Copilot CLI prints no dollars and no token
+totals, so every Copilot run was `unreported`: Fuel debited nothing, the Reserve counted nothing,
+and a Copilot factory was bounded only by its run cap and its timeout. It does print its usage —
+`session.usage_checkpoint` events with a running total of AI units, `totalNanoAiu` — and GitHub
+publishes the price of that unit: one AI credit is one US cent. So a Copilot run is priced at the
+last checkpoint's credits times `[copilot] usd_per_credit`, and recorded as its own source,
+`copilot_credits`. Three alternatives were weighed and rejected:
+
+- **Premium requests**, the unit this entry's open question once recommended. They are a flat
+  model multiplier per prompt — Opus 5.5 reported 15 for a 47-minute run and for a 6-minute one
+  alike — so a budget in them cannot tell a long run from a short one, which is the one thing a
+  budget is for. Never priced, not even as a fallback when no checkpoint was seen.
+- **A separate budget counted in credits**, beside dollars. Deterministic and needing no price,
+  but a factory mixing runners would have two budgets neither of which saw the other's spend.
+- **A rate card entry**, labelled an estimate. The count is not an estimate — Copilot measured it
+  — and labelling it one would make every Copilot total read as a guess.
+
+The default rate is a named constant rather than something the operator must supply, which looks
+like it breaks "Layover ships no rate card" and does not: that decision is about per-model token
+prices, which drift per provider and per tier; this is the published size of the unit Copilot
+counts in. A factory billed at another rate overrides it, and `validate` refuses zero, negative and
+non-finite rates, because zero would record every Copilot run as free *and* measured. That one AI
+unit is one AI credit is an assumption, from the CLI's own text output labelling them "AI Credits";
+it is why the source is named apart from `reported` — if the assumption is ever wrong, the affected
+runs can be found and repriced.
+
+`copilot_credits` is measured: it debits Fuel and draws on the Reserve like `reported`, counts
+towards `measured_share`, and is not "reported nothing" to `layover doctor`. A total that includes
+it has confidence `copilot_credits`, weaker than `reported` and stronger than `rate_card`, and the
+dashboard names it — "3 of 5 runs priced from Copilot credits" — so the arithmetic stays visible.
+Everything else is unchanged: a last checkpoint that cannot be read, reads as negative or is not an
+integer makes the run `unreported` rather than priced from an earlier total; zero credits beside
+premium requests is silence; and a run killed before its first checkpoint is `unreported`, and
+every total built on it a lower bound.
+
+This changes what an existing Copilot factory does: its `fuel_usd` now refuses work, and so does
+its Reserve.
+
+**Why the Reserve is checked from history, at dispatch, and nothing more yet.** The Reserve was
+configured, validated and drawn on the dashboard, and nothing refused work when it ran out — the
+Tower never consulted it. Pricing Copilot runs made that impossible to leave: a rail an operator
+can now watch fill up has to do something when it is full. So before a run starts, after
+everything about the flight itself and before it counts against the chain's run cap, the Tower adds
+up the measured spend in history over the Reserve's rolling window and refuses at the cap.
+
+History rather than an in-memory tally, because history is where every finished run's cost already
+lives, it survives a restart, and it is what the dashboard's Reserve card reads — so the rail and
+the figure an operator sees cannot disagree. A refusal is written into history as a `halted` run
+whose detail says how much was spent and when the window frees room: a scheduled trigger refused
+before it starts leaves no other trace, and "nothing is running" must not look the same as "nothing
+is allowed to run". It is recorded as a measured zero rather than `unreported`, because it cost
+nothing and that is certain. If history cannot be read the check fails open, as history does
+everywhere else; a factory that stopped because a log file was momentarily unreadable would have
+turned an observability problem into an outage.
+
+Enforcing the Reserve also enforces its documented default, $100 in any rolling 24 hours, on a
+factory that never wrote `[reserve]`; `fuel_usd = 0` is how to say unlimited. Still not built from
+the first-release design: the banner, the warning at 80%, the automatically raised help request,
+and a cap raised by editing `layover.toml` without restarting the Tower — it reads its
+configuration once. Nor does the check see runs still in flight (risk 15).
+
 **Why the run cap is not the same as a cost rail.** Fuel depends on runners voluntarily reporting
 cost and not all of them do, so the deterministic run cap holds when Fuel cannot. What changed is
 that the gap is now *countable* rather than a boolean: an itinerary records how many of its runs
@@ -681,38 +742,13 @@ Agents should ask rather than guess on any of these.
      silent fallback is the state the project is in today.
    - **A resumed layover**, which opens a new itinerary about an old one's pull request: new
      worktree from the pull request's branch, or the old itinerary's kept tree.
-9. **Letting Fuel and the Reserve bind on Copilot usage.** Copilot CLI reports no dollars and no
-   tokens, so every Copilot run is `unreported` and Fuel cannot bind a Copilot factory. It does
-   report usage — verified on 1.0.88, one run of `gpt-5.6-sol`:
-   `session.usage_checkpoint` with `"totalPremiumRequests": 1, "totalNanoAiu": 38444460000`, and a
-   final `result` with `"usage": {"premiumRequests": 1, …}`. Two ways to make that bind, and both
-   change what a rail means:
-   - **Count premium requests as their own budget** — `max_premium_requests` per itinerary and a
-     premium-request ceiling on the Reserve. Deterministic like `max_runs` and needs no price, but
-     it is a new axis beside dollars, and a factory mixing runners then has two budgets that
-     neither sees the other's spend.
-   - **Price them** — `[rates.copilot] usd_per_premium_request = …` (or per AI unit), producing a
-     `rate_card` figure that debits Fuel and the Reserve like any other, labelled as an estimate.
-     One budget in one currency, and the existing provenance machinery already says "this is a
-     guess". The cost is that a rate-card figure would start *refusing* runs, which today only a
-     reported figure does, and that Layover ships no prices by decision — the operator supplies
-     the rate.
-
-   *Recommendation:* price them, parsed from the last `session.usage_checkpoint` (falling back to
-   `result.usage.premiumRequests`), with the rate supplied by the operator and no default; and
-   record the raw counts on the run whether or not a rate is set, so `doctor` and the dashboard
-   show usage even where Fuel still cannot bind. Prefer premium requests over nano-AIU as the unit,
-   because that is the unit Copilot is billed and budgeted in. This presupposes the Tower debits
-   rate-card estimates, which it does not do for any runner today, and that the Reserve is checked
-   at dispatch — which, as of this writing, nothing in the Tower does either; both need deciding
-   alongside this.
-10. **Two global routes that disagree about one edge.** Scoped routes that a chain could use
+9. **Two global routes that disagree about one edge.** Scoped routes that a chain could use
     together must agree about `mode` and `join` for any pair they share, and `validate` refuses
     them when they do not. Two *global* routes naming the same pair, one spawning and one not, were
     never checked: the edge silently spawns. It was left alone so that no existing factory's
     findings changed. *Recommendation:* report it as the error it is at the next major version,
     with the same message the scoped case uses.
-11. **Checking a resumed chain against what it can actually reach.** Validation measures a
+10. **Checking a resumed chain against what it can actually reach.** Validation measures a
     resuming pipeline's reach, hop depth and flags from its `entry`, as it always has — but resumed
     work goes back to whichever agent booked the layover, and the chain is narrowed by its booking
     pipeline. So a resumed agent whose prompt tests a flag the resuming pipeline does not declare

@@ -218,8 +218,9 @@ route map that looks three flights deep can need twenty to be useful. Nothing co
 you, because nothing can know how many times a loop will turn.
 
 Getting it wrong is not a clean failure. Hops running out mid-repair leaves half-finished work in
-the shared workspace and no run alive to clean it up — see open question 11 in
-[`decisions.md`](decisions.md). Do the arithmetic; the example above shows it worked through.
+the shared workspace and no run alive to clean it up — see the open questions in
+[`decisions.md`](decisions.md#still-open), where what a worktree is has yet to be settled. Do the
+arithmetic; the example above shows it worked through.
 
 ## 8. Scoping routes to workflows
 

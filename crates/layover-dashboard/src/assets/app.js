@@ -66,6 +66,11 @@ function provenance(summary) {
   if (summary.estimated_runs > 0) {
     return ["estimate", `${summary.estimated_runs} of ${summary.runs} runs priced from a rate card`];
   }
+  // Measured, so not a warning — but named, because the dollars are Layover's arithmetic on the
+  // credits Copilot reported, and a price per credit that turned out wrong has to be findable.
+  if (summary.credit_runs > 0) {
+    return ["", `${summary.credit_runs} of ${summary.runs} runs priced from Copilot credits`];
+  }
   return ["", `${summary.runs} runs, all measured`];
 }
 

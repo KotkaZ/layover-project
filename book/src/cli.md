@@ -181,6 +181,7 @@ The failures it looks for are the quiet ones — the ones that look like nothing
 | Open help requests | The channel that reaches a person is the one nobody is there to read |
 | Expired layovers | Work set down that nothing ever picked up |
 | A Ground Stop left engaged | The factory is up, the dashboard is green, and nothing is running |
+| The Reserve refusing work | A factory that may not spend any more looks exactly like one with nothing to do |
 
 Findings come in three weights. A **fault** means work was lost or money cannot be accounted for; a
 **warning** means something is wrong and a person should look; a **note** is worth knowing and does

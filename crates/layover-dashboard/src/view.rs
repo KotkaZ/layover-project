@@ -161,6 +161,7 @@ fn status(outcome: Outcome) -> RunStatus {
 fn source(source: CoreSource) -> CostSource {
     match source {
         CoreSource::Reported => CostSource::Reported,
+        CoreSource::CopilotCredits => CostSource::CopilotCredits,
         CoreSource::RateCard => CostSource::RateCard,
         CoreSource::Unreported => CostSource::Unreported,
     }
@@ -179,6 +180,7 @@ pub fn summary(summary: &Summary) -> CostSummary {
         },
         unreported_runs: i32::try_from(summary.unreported_runs).unwrap_or(i32::MAX),
         estimated_runs: i32::try_from(summary.estimated_runs).unwrap_or(i32::MAX),
+        credit_runs: i32::try_from(summary.credit_runs).unwrap_or(i32::MAX),
         confidence: source(summary.confidence()),
         measured_share: summary.measured_share(),
     }

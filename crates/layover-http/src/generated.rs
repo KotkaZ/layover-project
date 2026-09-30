@@ -122,14 +122,19 @@ pub struct CostReport {
     pub total: CostSummary,
 }
 
-/// Where a cost figure came from, worst-first. `reported` is the only kind worth billing
-/// against; `rate_card` was derived from token counts and published prices; `unreported`
+/// Where a cost figure came from, worst-first. `reported` is dollars the runner printed;
+/// `copilot_credits` is the Copilot AI credits a run reported, priced at the factory's
+/// `[copilot] usd_per_credit` — measured, like `reported`, and both debit Fuel and draw on the
+/// Reserve. `rate_card` was derived from token counts and published prices; `unreported`
 /// means the runner said nothing, so the figure is zero and means nothing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CostSource {
     /// `reported`
     #[serde(rename = "reported")]
     Reported,
+    /// `copilot_credits`
+    #[serde(rename = "copilot_credits")]
+    CopilotCredits,
     /// `rate_card`
     #[serde(rename = "rate_card")]
     RateCard,
@@ -143,9 +148,12 @@ pub enum CostSource {
 pub struct CostSummary {
     /// The weakest source contributing to this total.
     pub confidence: CostSource,
+    /// Runs priced from the Copilot AI credits they reported. Counted as measured.
+    pub credit_runs: i32,
     /// Runs priced from a rate card rather than measured.
     pub estimated_runs: i32,
-    /// Fraction of runs whose cost the runner actually reported, 0.0 to 1.0.
+    /// Fraction of runs whose cost was measured — dollars the runner printed, or Copilot
+    /// credits it reported — 0.0 to 1.0.
     pub measured_share: f64,
     /// How many runs contributed.
     pub runs: i32,

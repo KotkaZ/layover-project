@@ -29,6 +29,8 @@ pub struct Summary {
     pub unreported_runs: u32,
     /// How many runs were priced from a rate card rather than measured.
     pub estimated_runs: u32,
+    /// How many runs were priced from the Copilot AI credits they used.
+    pub credit_runs: u32,
 }
 
 impl Summary {
@@ -40,6 +42,7 @@ impl Summary {
 
         match cost.source {
             CostSource::Reported => {}
+            CostSource::CopilotCredits => self.credit_runs = self.credit_runs.saturating_add(1),
             CostSource::RateCard => self.estimated_runs = self.estimated_runs.saturating_add(1),
             CostSource::Unreported => {
                 self.unreported_runs = self.unreported_runs.saturating_add(1);
@@ -57,12 +60,14 @@ impl Summary {
             CostSource::Unreported
         } else if self.estimated_runs > 0 {
             CostSource::RateCard
+        } else if self.credit_runs > 0 {
+            CostSource::CopilotCredits
         } else {
             CostSource::Reported
         }
     }
 
-    /// Fraction of runs whose cost the runner actually reported, from 0.0 to 1.0.
+    /// Fraction of runs whose cost was measured — dollars or Copilot credits — from 0.0 to 1.0.
     ///
     /// Returns 1.0 for an empty summary: nothing is unaccounted for when nothing has run.
     #[must_use]
@@ -345,6 +350,44 @@ mod tests {
         assert!(total.is_fully_measured());
         assert!((total.measured_share() - 1.0).abs() < f64::EPSILON);
         assert!(Ledger::new().is_empty());
+    }
+
+    #[test]
+    fn copilot_credits_count_as_measured_and_are_named_in_the_confidence() {
+        let mut ledger = Ledger::new();
+        ledger.record(reported("developer", "claude-opus-5", 4.00));
+        ledger.record(RunCost {
+            source: CostSource::CopilotCredits,
+            ..reported("reviewer", "claude-opus-5.5", 15.11)
+        });
+
+        let total = ledger.total();
+        assert_eq!(total.credit_runs, 1);
+        assert_eq!(total.confidence(), CostSource::CopilotCredits);
+        assert!(total.is_fully_measured());
+        assert!((total.measured_share() - 1.0).abs() < 1e-9);
+        assert!((total.usd - 19.11).abs() < 1e-9);
+    }
+
+    #[test]
+    fn an_unreported_run_beside_credits_still_makes_the_total_a_lower_bound() {
+        // A Copilot run killed before its first checkpoint says nothing, and a total built on it
+        // is a floor however many of its neighbours were priced.
+        let mut ledger = Ledger::new();
+        ledger.record(RunCost {
+            source: CostSource::CopilotCredits,
+            ..reported("reviewer", "claude-opus-5.5", 15.11)
+        });
+        ledger.record(RunCost::unreported(
+            RunId::generate(),
+            ItineraryId::generate(),
+            "reviewer".into(),
+            None,
+        ));
+
+        let total = ledger.total();
+        assert_eq!(total.confidence(), CostSource::Unreported);
+        assert!((total.measured_share() - 0.5).abs() < 1e-9);
     }
 
     #[test]

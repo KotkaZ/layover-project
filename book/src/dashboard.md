@@ -117,7 +117,7 @@ finish" are questions about a chain rather than a run.
 | `working` | Something is running, or waiting to |
 | `finished` | It ran and stopped, and nothing is outstanding |
 | `stalled` | It stopped and nothing will ever happen again |
-| `halted` | A Ground Stop caught it |
+| `halted` | A Ground Stop caught it, or the Reserve refused to start its run |
 
 **`stalled` is the one worth looking for**, and the reason this view exists. A joined agent never
 woke because the barrier it was waiting behind could no longer be completed — the tester reported,
@@ -312,7 +312,10 @@ until it matters.
 
 Every total carries its provenance, shown next to the figure rather than tucked away:
 
-- *"all measured"* — every run's cost came from the runner.
+- *"all measured"* — every run's cost was measured: dollars the runner printed.
+- *"n of m runs priced from Copilot credits"* — also measured: Copilot reported the AI credits those
+  runs used, and they are priced at `[copilot] usd_per_credit`. Named so that the arithmetic stays
+  visible.
 - *"n of m runs priced from a rate card"* — part of this is an estimate.
 - *"n of m runs reported nothing"* — part of this is a hole, and the total is a lower bound.
 
@@ -332,8 +335,12 @@ Putting it among figures that narrow would invite reading it as one of them — 
 misread as covering less than it does is worse than one not shown at all. It says on its face that
 it is not narrowed.
 
-A factory with no `[reserve] fuel_usd`, or one set to `0`, has no ceiling, and the meter is hidden
-rather than drawn empty.
+A factory whose `[reserve] fuel_usd` is `0` has no ceiling, and the meter is hidden rather than
+drawn empty. One that writes no `[reserve]` at all has the default, $100 in any rolling 24 hours.
+
+The meter is the same figure the Tower checks before every run. When it is full, new runs are
+refused and their chains show as `halted`, with the reason and the time the window frees room — see
+[Cost](./cost.md#what-happens-when-the-reserve-runs-out).
 
 ## Retention
 

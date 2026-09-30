@@ -14,6 +14,10 @@ use crate::cost::{RateCard, Reserve};
 use crate::pipeline::{Pipeline, PipelineName};
 use crate::route::Route;
 
+mod copilot;
+
+pub use copilot::CopilotConfig;
+
 /// Filesystem and network locations used by the Tower.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -341,6 +345,9 @@ pub struct Config {
     /// Published model prices, used only when a runner reports tokens but no cost.
     #[serde(default)]
     pub rates: RateCard,
+    /// What a Copilot AI credit costs, for pricing Copilot CLI runs.
+    #[serde(default)]
+    pub copilot: CopilotConfig,
     /// Available runners, keyed by name.
     #[serde(default)]
     pub runners: BTreeMap<String, Runner>,

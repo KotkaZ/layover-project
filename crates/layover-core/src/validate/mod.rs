@@ -83,6 +83,7 @@ pub fn validate(config: &Config) -> Vec<Diagnostic> {
     agents::check_fuel_is_usable(config, &mut found);
     agents::check_reserve_window_is_usable(config, &mut found);
     agents::check_reserve_cap_is_deliberate(config, &mut found);
+    agents::check_copilot_price_is_usable(config, &mut found);
     agents::check_model_reaches_its_runner(config, &mut found);
     reach::check_entry_points(config, &mut found);
     routes::check_joins_are_unambiguous(config, &mut found);

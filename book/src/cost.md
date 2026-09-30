@@ -31,6 +31,33 @@ Reserve is too small to fund even one run of a pipeline. It does *not* warn mere
 Reserve is below the theoretical worst case — capping below worst case is the entire reason to
 have a cap, and reaching it pauses the factory rather than breaking it.
 
+### What happens when the Reserve runs out
+
+Before every run starts, the Tower adds up the **measured** spend in history — dollars and Copilot
+credits — over the Reserve's rolling window. At or over the cap, the run is refused: nothing is
+spawned, the chain's run cap is not charged, and the refusal is written into history as a
+`halted` run that says how much was spent and when the window frees room again:
+
+```text
+refused: the Reserve is exhausted — $30.21 of $20.00 spent in the last 24h. New work can start
+again at 2026-09-30 14:02:11 UTC, when enough of it has rolled out of the window, or sooner if
+`[reserve] fuel_usd` is raised and the Tower restarted.
+```
+
+The chain shows as **halted** on the dashboard, and `layover doctor` warns both about refusals and
+about a Reserve that is exhausted now. The Tower reads `layover.toml` once, when it starts, so a
+raised `fuel_usd` takes effect after restarting it. A refused flight is not retried — like any refusal, it
+is taken off the queue — so a scheduled pipeline simply fires again on its next tick, and work a
+person triggered has to be triggered again once there is room.
+
+A factory that writes no `[reserve]` table has the default: **$100 in any rolling 24 hours**. Set
+`fuel_usd = 0` to mean unlimited.
+
+Two limits worth knowing. The check sees finished runs only, so several starting together against
+the last few dollars can all pass and overshoot (risk 15 in
+[`risks.md`](https://github.com/KotkaZ/layover-project/blob/main/docs/risks.md)). And if history
+cannot be read, the check lets work through rather than stopping the factory on a disk error.
+
 ### Why the window rolls instead of resetting at midnight
 
 A daily cap is worse twice over:
@@ -49,44 +76,62 @@ Every run's cost carries a `CostSource`:
 
 | Source | Meaning |
 |---|---|
-| `reported` | The runner said so, and the figure survived a sanity check. The only kind worth billing against. |
+| `reported` | The runner printed dollars, and the figure survived a sanity check. |
+| `copilot_credits` | The runner reported the Copilot AI credits it used, priced at `[copilot] usd_per_credit`. Measured, like `reported`. |
 | `rate_card` | Layover derived it from token counts and published prices. An estimate. |
 | `unreported` | The runner said nothing, or said something that cannot be believed. The figure is zero and means nothing. |
 
-### Copilot CLI reports usage, not cost
+`reported` and `copilot_credits` are **measured**: both debit Fuel, both draw on the Reserve, and
+both count towards `measured_share`. The other two do neither.
 
-Verified against the real CLI, not assumed. With `--output-format json`, Copilot CLI's final
-`result` event carries this:
+### Copilot CLI is priced from its AI credits
 
-```json
-{ "type": "result", "exitCode": 0,
-  "usage": { "premiumRequests": 1, "totalApiDurationMs": 44778, "sessionDurationMs": 56109 } }
-```
-
-and, as of 1.0.88, the stream also carries `session.usage_checkpoint` events with running totals:
+Copilot CLI prints no dollars and no token counts. With `--output-format json` it prints
+`session.usage_checkpoint` events carrying a running total of **AI units**, in billionths:
 
 ```json
 { "type": "session.usage_checkpoint",
-  "data": { "totalNanoAiu": 38444460000, "totalPremiumRequests": 1, … } }
+  "data": { "totalNanoAiu": 1510581560000, "totalPremiumRequests": 15, … } }
 ```
 
-Premium requests and AI units, but no dollars and no token counts — so neither the runner-reported
-path nor a token-priced rate card can use it. Layover does not read either figure today: every
-Copilot run is `unreported`, and **Fuel cannot bind a Copilot factory**. What is actually holding
-such a factory back is `max_runs`, the deterministic cap that needs no cooperation from the
-runner, and the wall-clock `timeout_sec`.
+Layover reads the **last** checkpoint in a run's output and prices it:
 
-Letting Fuel and the Reserve bind on premium requests — a budget counted in them, or a rate that
-prices them — would change what two rails mean, so it is written up as open question 9 in
-[`decisions.md`](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md#still-open)
-rather than decided here.
+```text
+cost_usd = totalNanoAiu / 1,000,000,000 × usd_per_credit
+         = 1,510.58 credits × $0.01 = $15.11
+```
 
-That is a real limit rather than a bug, and the important thing is that it is visible: `layover
-doctor` reports the share of runs that measured nothing, and raises it to a warning once a quarter
-of them have. A factory whose spend nobody can see should say so rather than showing a confident
-`$0.00`.
+The rate defaults to GitHub's published price — "1 AI credit = $0.01 USD", from *Models and pricing
+for GitHub Copilot* — and a factory billed differently sets its own:
 
-Set `max_runs` and the Reserve deliberately when running on Copilot. They are the rails you have.
+```toml
+[copilot]
+usd_per_credit = 0.01
+```
+
+That one AI unit is one AI credit is an assumption: Copilot's own text output labels them "AI
+Credits". It is why these runs carry their own source rather than `reported` — if it is ever
+wrong, they can be found and repriced — and why the dashboard names them: "3 of 5 runs priced from
+Copilot credits".
+
+What is never priced: the final `result` event's `premiumRequests`. It is a flat multiplier per
+prompt — Opus 5.5 reports 15 for a 47-minute run and for a 6-minute one alike — so it says nothing
+about how much a run used.
+
+The usual rules hold. A run killed before its first checkpoint has nothing to price and is
+`unreported`, and a total built on it is a lower bound. A last checkpoint that cannot be read, is
+negative or is not a whole number makes the run `unreported`, rather than priced from an earlier,
+smaller total. Zero credits beside premium requests is silence, not a free run.
+
+> **This changes what an existing Copilot factory does.** Until this release every Copilot run was
+> `unreported`, so `fuel_usd` and the Reserve never refused a Copilot factory anything; `max_runs`
+> and `timeout_sec` were what held. Now both bind. A Copilot factory whose `fuel_usd` was set
+> without looking will find chains cut short, and one without a `[reserve]` table gets the default
+> of $100 in any rolling 24 hours — which at Opus prices is a handful of long runs. Size both from
+> what a run actually costs; the dashboard's cost view shows it per agent and per workflow.
+
+`layover doctor` reports the share of runs that measured nothing — a Copilot run priced from its
+credits is not one of them — and raises it to a warning once a quarter of runs are silent.
 
 ### When a reported figure is disbelieved
 

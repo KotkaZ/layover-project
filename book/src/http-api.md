@@ -38,7 +38,7 @@ Point any OpenAPI tool at the file to get a client, a mock server or rendered do
 | `GET` | `/runs` | `status`, `itinerary_id`, `agent`, `pipeline`, `window`, `limit` | Runs, live and historical. |
 | `GET` | `/runs/{run_id}` | | One run, including how it ended. |
 | `GET` | `/runs/{run_id}/report` | | What that agent wrote about its own run. |
-| `GET` | `/costs` | `window`, `pipeline` | What the factory has spent, and how much of it is measured. |
+| `GET` | `/costs` | `window`, `pipeline` | What the factory has spent, and how much of it is measured. Each total's `confidence` is the weakest `CostSource` in it — `reported`, `copilot_credits`, `rate_card` or `unreported` — and `credit_runs` counts the runs priced from Copilot AI credits, which `measured_share` counts as measured. |
 | `GET` | `/help` | `agent`, `pipeline`, `blocker`, `open`, `window` | Help requests agents have raised. |
 | `POST` | `/help/resolve` | | Mark help requests as dealt with. |
 | `GET` | `/learnings` | `agent`, `state` | Learnings agents have proposed. |

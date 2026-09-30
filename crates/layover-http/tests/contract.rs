@@ -164,6 +164,7 @@ impl Api for Stub {
             usage: usage.clone(),
             unreported_runs: 0,
             estimated_runs: 0,
+            credit_runs: 0,
             confidence: CostSource::Reported,
             measured_share: 1.0,
         };
@@ -173,6 +174,7 @@ impl Api for Stub {
             usage,
             unreported_runs: 0,
             estimated_runs: 1,
+            credit_runs: 0,
             confidence: CostSource::RateCard,
             measured_share: 0.5,
         };

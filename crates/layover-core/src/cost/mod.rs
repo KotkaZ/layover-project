@@ -5,9 +5,11 @@
 //!
 //! # Why provenance is a first-class field
 //!
-//! A cost figure can come from three places, and they are not interchangeable:
+//! A cost figure can come from four places, and they are not interchangeable:
 //!
-//! - the runner reported it, which is the only figure worth trusting;
+//! - the runner reported it in dollars, which is the figure most worth trusting;
+//! - the runner reported how many Copilot AI credits it used, and Layover priced them at the
+//!   published rate of a credit — a measurement of use and one known price;
 //! - Layover derived it from token counts and a rate card, which is an estimate;
 //! - nothing was reported at all, which is a hole.
 //!
@@ -86,8 +88,14 @@ impl TokenUsage {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CostSource {
-    /// The runner reported the figure. The only kind worth billing against.
+    /// The runner reported the figure in dollars.
     Reported,
+    /// The runner reported the Copilot AI credits it used, priced at the rate of one credit.
+    ///
+    /// Measured: the count is Copilot's own, and the price of a credit is published. Named apart
+    /// from [`Self::Reported`] because the dollars are Layover's arithmetic, and a rate that turned
+    /// out wrong has to be findable.
+    CopilotCredits,
     /// Derived from token counts and a [`RateCard`]. An estimate, and labelled as one.
     RateCard,
     /// The runner reported neither cost nor tokens. The figure is zero and means nothing.
@@ -95,11 +103,35 @@ pub enum CostSource {
 }
 
 impl CostSource {
-    /// Returns `true` when the figure came from the runner itself.
+    /// Returns `true` when the figure is a measurement rather than a guess or a hole — the kinds
+    /// that debit Fuel and draw on the Reserve.
     #[must_use]
     pub fn is_measured(&self) -> bool {
-        matches!(self, Self::Reported)
+        matches!(self, Self::Reported | Self::CopilotCredits)
     }
+}
+
+/// What one Copilot AI credit costs, in US dollars, when a factory does not say otherwise.
+///
+/// GitHub's "Models and pricing for GitHub Copilot": "1 AI credit = $0.01 USD". Copilot CLI counts
+/// usage in AI units, which its text output labels "AI Credits", and this takes one to be the
+/// other. A factory overrides it with `[copilot] usd_per_credit`.
+pub const USD_PER_COPILOT_CREDIT: f64 = 0.01;
+
+/// Copilot CLI counts AI units in billionths.
+const NANO_PER_CREDIT: f64 = 1_000_000_000.0;
+
+/// Prices a count of Copilot nano-AI-units at `usd_per_credit` dollars a credit.
+#[must_use]
+pub fn credits_to_usd(nano_aiu: u64, usd_per_credit: f64) -> f64 {
+    // A run uses at most thousands of credits, trillions of nano-units: far below the 2^53 an f64
+    // represents exactly.
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "nano-AIU counts never approach 2^53"
+    )]
+    let nano = nano_aiu as f64;
+    nano / NANO_PER_CREDIT * usd_per_credit
 }
 
 /// What one run cost, and how well that is known.
@@ -325,7 +357,31 @@ mod tests {
     fn sources_order_from_most_to_least_trustworthy() {
         // `max` over a set of sources therefore yields the weakest link, which is what a summary
         // should report rather than the most flattering one.
-        assert!(CostSource::Reported < CostSource::RateCard);
+        assert!(CostSource::Reported < CostSource::CopilotCredits);
+        assert!(CostSource::CopilotCredits < CostSource::RateCard);
         assert!(CostSource::RateCard < CostSource::Unreported);
+    }
+
+    #[test]
+    fn copilot_credits_are_measured_and_named_apart() {
+        // The runner measured the credits; Layover supplied only the published price of one. That
+        // is a measurement, and it is also worth being able to tell apart from dollars a runner
+        // printed itself.
+        assert!(CostSource::CopilotCredits.is_measured());
+        assert!(!CostSource::RateCard.is_measured());
+        assert_eq!(
+            serde_json::to_string(&CostSource::CopilotCredits).expect("serialises"),
+            r#""copilot_credits""#
+        );
+    }
+
+    #[test]
+    fn nano_ai_units_become_dollars_at_the_credit_rate() {
+        // 1,510.58 credits at a cent each: a real 47-minute Opus 5.5 run.
+        let usd = credits_to_usd(1_510_581_560_000, USD_PER_COPILOT_CREDIT);
+        assert!((usd - 15.105_815_6).abs() < 1e-9, "{usd}");
+
+        let doubled = credits_to_usd(1_510_581_560_000, 0.02);
+        assert!((doubled - 30.211_631_2).abs() < 1e-9, "{doubled}");
     }
 }

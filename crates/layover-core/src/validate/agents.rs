@@ -75,6 +75,23 @@ pub(super) fn check_reserve_cap_is_deliberate(config: &Config, found: &mut Vec<D
     }
 }
 
+/// The price of a Copilot AI credit must be a real, positive number.
+///
+/// Zero would record every Copilot run as free *and* measured, so Fuel and the Reserve would be
+/// debited nothing while every total claimed to be exact — the rails switched off by a typo that
+/// still reads as a price. Negative would credit Fuel back.
+pub(super) fn check_copilot_price_is_usable(config: &Config, found: &mut Vec<Diagnostic>) {
+    let price = config.copilot.usd_per_credit;
+
+    if !(price.is_finite() && price > 0.0) {
+        found.push(Diagnostic::error(format!(
+            "`[copilot] usd_per_credit` is {price}, which would record every Copilot run as free \
+             or meaningless while Fuel and the Reserve still read as binding. Set the dollars one \
+             AI credit costs, or leave the table out for the published $0.01"
+        )));
+    }
+}
+
 /// Fuel must be a usable positive number.
 ///
 /// `Itinerary::fuel_exhausted` is `spent >= budget`, so a budget of zero is exhausted before the

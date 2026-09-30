@@ -22,7 +22,6 @@
 
 use std::collections::BTreeMap;
 
-use layover_core::cost::CostSource;
 use layover_core::queue::Queued;
 use layover_core::run::{Outcome, RunRecord};
 use layover_core::stall::Stall;
@@ -100,9 +99,7 @@ fn build(
 
     // A total built partly from silence is a floor, not a figure. Saying so is the difference
     // between a number somebody can plan against and one they should not.
-    let measured = runs
-        .iter()
-        .all(|record| record.source == CostSource::Reported);
+    let measured = runs.iter().all(|record| record.source.is_measured());
 
     let started_at = runs.first().map_or_else(
         || jiff::Timestamp::now().to_string(),
@@ -195,6 +192,7 @@ mod tests {
     use super::*;
     use jiff::{Timestamp, ToSpan as _};
     use layover_core::agent::AgentName;
+    use layover_core::cost::CostSource;
     use layover_core::cost::TokenUsage;
     use layover_core::flight::{Flight, ItineraryId, Origin, RunId};
 

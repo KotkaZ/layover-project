@@ -1,0 +1,14 @@
+{"type":"session.skills_loaded","id":"8f1c2e5a-0000-4000-8000-000000000001","parentId":null,"timestamp":"2026-09-30T08:02:11.104Z","data":{"skills":[]}}
+{"type":"session.mcp_servers_loaded","id":"8f1c2e5a-0000-4000-8000-000000000002","parentId":"8f1c2e5a-0000-4000-8000-000000000001","timestamp":"2026-09-30T08:02:11.910Z","data":{"servers":["layover"]}}
+{"type":"user.message","id":"8f1c2e5a-0000-4000-8000-000000000003","parentId":"8f1c2e5a-0000-4000-8000-000000000002","timestamp":"2026-09-30T08:02:12.001Z","data":{"content":"Review the change and report."}}
+{"type":"assistant.turn_start","id":"8f1c2e5a-0000-4000-8000-000000000004","parentId":"8f1c2e5a-0000-4000-8000-000000000003","timestamp":"2026-09-30T08:02:12.050Z","data":{"turnId":"t1"}}
+{"type":"model.call_start","id":"8f1c2e5a-0000-4000-8000-000000000005","parentId":"8f1c2e5a-0000-4000-8000-000000000004","timestamp":"2026-09-30T08:02:12.051Z","data":{"turnId":"t1"}}
+{"type":"assistant.reasoning_delta","id":"8f1c2e5a-0000-4000-8000-000000000006","parentId":"8f1c2e5a-0000-4000-8000-000000000005","timestamp":"2026-09-30T08:02:13.400Z","data":{"deltaContent":"Reading the diff first."}}
+{"type":"model.call_finished","id":"8f1c2e5a-0000-4000-8000-000000000007","parentId":"8f1c2e5a-0000-4000-8000-000000000005","timestamp":"2026-09-30T08:02:20.817Z","data":{"turnId":"t1","outcome":"success","dispatchDurationMs":8766}}
+{"type":"tool.execution_start","id":"8f1c2e5a-0000-4000-8000-000000000008","parentId":"8f1c2e5a-0000-4000-8000-000000000007","timestamp":"2026-09-30T08:02:20.900Z","data":{"toolName":"view"}}
+{"type":"tool.execution_complete","id":"8f1c2e5a-0000-4000-8000-000000000009","parentId":"8f1c2e5a-0000-4000-8000-000000000008","timestamp":"2026-09-30T08:02:21.012Z","data":{"toolName":"view","success":true}}
+{"type":"assistant.message","id":"8f1c2e5a-0000-4000-8000-000000000010","parentId":"8f1c2e5a-0000-4000-8000-000000000009","timestamp":"2026-09-30T08:48:57.330Z","data":{"content":"The change is sound. It does not mention session.usage_checkpoint anywhere."}}
+{"type":"assistant.turn_end","id":"8f1c2e5a-0000-4000-8000-000000000011","parentId":"8f1c2e5a-0000-4000-8000-000000000010","timestamp":"2026-09-30T08:48:57.331Z","data":{"turnId":"t1"}}
+{"type":"session.usage_checkpoint","id":"8f1c2e5a-0000-4000-8000-000000000012","parentId":"8f1c2e5a-0000-4000-8000-000000000011","timestamp":"2026-09-30T08:48:57.402Z","data":{"totalNanoAiu":1510581560000,"totalPremiumRequests":15,"modelCacheState":[],"promptCacheBreakState":[]}}
+{"type":"assistant.idle","id":"8f1c2e5a-0000-4000-8000-000000000013","parentId":"8f1c2e5a-0000-4000-8000-000000000012","timestamp":"2026-09-30T08:48:57.410Z","data":{}}
+{"type":"result","sessionId":"5d7a0e44-0000-4000-8000-00000000abcd","timestamp":"2026-09-30T08:48:57.500Z","exitCode":0,"usage":{"premiumRequests":15,"totalApiDurationMs":2791003,"sessionDurationMs":2806396,"codeChanges":{"linesAdded":0,"linesRemoved":0,"filesModified":[]}}}

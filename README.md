@@ -234,7 +234,8 @@ A throwaway repository with a planted bug, two agents and the actual `copilot` b
 found `add` returning `a - b`, handed the finding to the Developer over MCP, and the Developer
 fixed it — unattended, end to end. That run found three things every test had passed over, because
 every test used a shell stand-in: no agent CLI could authenticate, the Copilot MCP flag in every
-example did not exist, and Copilot reports no cost at all.
+example did not exist, and Copilot reports no cost at all — no dollars, only AI credits, which
+Layover now prices so that Fuel and the Reserve bind a Copilot factory.
 
 Then the soak: **48.46 hours, one process, no intervention.**
 

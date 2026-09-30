@@ -84,6 +84,11 @@ The Reserve is the only thing that sees that. It rolls rather than resetting at 
 a daily bucket can be spent twice across the boundary and needs a timezone to decide where the
 boundary is. See [Cost](./cost.md).
 
+The Tower checks it before every run, against the measured spend in history — dollars a runner
+printed, and Copilot credits. At the cap, new runs are refused and recorded as `halted` until
+enough spend has rolled out of the window. The default applies to a factory that writes no
+`[reserve]` table at all, so every factory has a ceiling unless it says `fuel_usd = 0`.
+
 ## `[rates]` — prices, for runners that report tokens but not dollars
 
 ```toml
@@ -96,6 +101,22 @@ cache_write_usd = 6.25
 
 Optional and always a fallback. Anything derived from it is labelled an estimate and never folded
 in as a measurement — see [Cost](./cost.md) for why that distinction is load-bearing.
+
+## `[copilot]` — what a Copilot AI credit costs
+
+```toml
+[copilot]
+usd_per_credit = 0.01
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `usd_per_credit` | `0.01` | Dollars one Copilot AI credit costs. Must be a positive number; `validate` refuses zero, negative and non-finite values, because zero would record every Copilot run as free *and* measured. |
+
+Copilot CLI reports the AI credits a run used rather than dollars. Layover prices the last
+`session.usage_checkpoint` a run prints at this rate, so that Fuel and the Reserve bind a Copilot
+factory. The default is GitHub's published price; set it only if you are billed at a different one.
+The whole table is optional. See [Cost](./cost.md#copilot-cli-is-priced-from-its-ai-credits).
 
 ## `[runners.*]` — how to invoke a CLI
 

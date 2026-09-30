@@ -8,6 +8,41 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+### Changed
+
+- **Copilot CLI runs are priced, so Fuel and the Reserve now bind a Copilot factory.** Copilot
+  prints no dollars and no token totals, so every Copilot run was `unreported`: `fuel_usd` and the
+  Reserve never refused a Copilot factory anything, and `max_runs` and `timeout_sec` were all that
+  held. A run is now priced from the last `session.usage_checkpoint` it prints — `totalNanoAiu`
+  AI units, in billionths, at `[copilot] usd_per_credit` dollars a credit, by default GitHub's
+  published $0.01 — and recorded with a new cost source, `copilot_credits`. It is measured: it
+  debits Fuel, draws on the Reserve, counts towards `measured_share`, and is not "reported no
+  cost" to `layover doctor`. The dashboard names it: "n of m runs priced from Copilot credits".
+  The final `result` event's `premiumRequests` is never priced — it is a flat multiplier per
+  prompt. A run killed before its first checkpoint, or whose last checkpoint is negative, not a
+  whole number or unreadable, stays `unreported`, and totals built on it stay a lower bound.
+  **An existing Copilot factory will now have chains cut by `fuel_usd`**; size it from what runs
+  actually cost. Open question 9 in `docs/decisions.md` is decided, and why is in the log.
+
+- **The Reserve is enforced.** It was configured, validated and drawn on the dashboard, and the
+  Tower never checked it. Before every run the Tower now adds up the measured spend in history over
+  the rolling window and, at `[reserve] fuel_usd`, refuses the run: nothing is spawned, the chain's
+  run cap is not charged, and the refusal is recorded as a `halted` run whose detail says how much
+  was spent and when the window frees room. `layover doctor` warns about refusals and about a
+  Reserve that is exhausted now. **This applies to every factory, including one that writes no
+  `[reserve]` table: the documented default of $100 in any rolling 24 hours now binds.** Set
+  `fuel_usd = 0` for no ceiling. The Tower reads `layover.toml` once, so a raised cap takes effect
+  after a restart.
+
+### Added
+
+- **`[copilot] usd_per_credit`**, what one Copilot AI credit costs, defaulting to `0.01`.
+  `layover validate` refuses zero, negative and non-finite values.
+- **`copilot_credits`** in the HTTP API's `CostSource`, and **`credit_runs`** on every
+  `CostSummary`. A client that treats `CostSource` as a closed set will see a value it does not
+  know, and history written by this release carries `"source": "copilot_credits"`, which an earlier
+  release cannot read — a downgrade loses those runs from its totals.
+- `layover_tower::from_transcript` takes the credit rate as a second argument.
 ## [1.3.0] — 2026-09-30
 
 The route map shows each agent's reasoning effort beside its model.

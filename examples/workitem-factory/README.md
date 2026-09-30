@@ -287,7 +287,12 @@ Honest gaps, so nobody discovers them at runtime:
   deliberate headroom.
 - **The Reserve, not Fuel, is what bounds this factory.** `review-bot` fires hourly and every tick
   mints a fresh itinerary with a fresh $20 of Fuel — $480 a day, with every chain inside its rail.
-  `[reserve] fuel_usd = 120.00` is the real ceiling. See risk 5.
+  `[reserve] fuel_usd = 120.00` is the real ceiling, checked before every run. See risk 5.
+- **Both money rails bind the Copilot agents too.** Five agents here run on Copilot, whose runs are
+  priced from the AI credits they report — a long run on a large model can cost $15 on its own.
+  $20 of Fuel then buys one or two such runs per chain, not the `3N + 7` the loop needs, so size
+  `fuel_usd` from what runs actually cost on the dashboard rather than from this example. The run
+  cap is still the backstop for a run that is killed before it reports anything.
 - **Secrets never go in this file.** Credentials reach child CLIs through the environment.
 
 ## 7. Running it

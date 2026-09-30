@@ -36,7 +36,7 @@ use layover_core::cost::CostSource;
 use layover_core::cost::TokenUsage;
 use layover_core::flight::Flight;
 use layover_core::graph::RouteGraph;
-use layover_core::itinerary::Itinerary;
+use layover_core::itinerary::{Denial, Itinerary};
 use layover_core::payload::{Run, compose};
 use layover_core::pipeline::Flags;
 use layover_core::prompt::{PromptDir, resolve};
@@ -260,6 +260,12 @@ impl Factory {
             Err(refusal) => return Dispatched::Refused(refusal),
         };
 
+        // The factory's own ceiling, after everything about the flight itself and before a slot
+        // is counted against the chain: a run the Reserve refuses never started.
+        if let Some(refused) = self.refused_by_reserve(itinerary, &authorised) {
+            return refused;
+        }
+
         // Counted here rather than after the spawn: a run that starts and is never seen to finish
         // has still been started, and a cap that only counts completions is not a cap.
         if let Err(denial) = itinerary.record_run_started() {
@@ -361,6 +367,40 @@ impl Factory {
         self.settle(&run, itinerary, &authorised, started_at, &finished, ended)
     }
 
+    /// Refuses the run when the factory has spent its Reserve, and writes the refusal down.
+    ///
+    /// Written into history as halted, because a scheduled trigger refused here leaves no other
+    /// trace, and "nothing is running" must not look the same as "nothing is allowed to run".
+    fn refused_by_reserve(
+        &self,
+        itinerary: &Itinerary,
+        authorised: &crate::dispatch::Authorised<'_>,
+    ) -> Option<Dispatched> {
+        let now = Timestamp::now();
+        let why = crate::reserve::refusal(&self.config, &self.history_dir(), now)?;
+
+        self.record(&RunRecord {
+            run: layover_core::RunId::generate(),
+            itinerary: itinerary.id().clone(),
+            agent: authorised.name.clone(),
+            pipeline: self.chains.pipeline_of(itinerary.id()),
+            model: authorised.agent.model.clone(),
+            outcome: Outcome::Halted,
+            started_at: now,
+            finished_at: Some(now),
+            // It cost nothing, and that is known for certain. Unreported would turn every total
+            // it lands in into a lower bound for a run that never happened.
+            usd: 0.0,
+            source: CostSource::Reported,
+            usage: TokenUsage::default(),
+            exit_code: None,
+            detail: Some(why),
+            blocked_on: None,
+            pid: None,
+        });
+        Some(Dispatched::Refused(Refusal::Rail(Denial::ReserveExhausted)))
+    }
+
     /// Prices a finished run, charges the chain for it, and writes it down.
     ///
     /// Separate from starting it because everything here happens whether the run went well or
@@ -376,11 +416,14 @@ impl Factory {
         ended: Ended,
     ) -> Dispatched {
         let transcript = std::fs::read_to_string(&finished.transcript).unwrap_or_default();
-        let reported = crate::cost::from_transcript(&transcript);
+        let reported =
+            crate::cost::from_transcript(&transcript, self.config.copilot.usd_per_credit);
 
         // Debited even when the run failed. Money spent is money spent, and a chain that could
-        // retry forever on failures without paying for them is not bounded.
-        if reported.source == CostSource::Reported {
+        // retry forever on failures without paying for them is not bounded. Dollars a runner
+        // printed and Copilot credits priced at a published rate are both measurements; a guess
+        // or a hole is not, and debits nothing.
+        if reported.source.is_measured() {
             itinerary.debit_fuel(reported.usd);
         } else {
             itinerary.note_unreported_cost();

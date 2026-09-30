@@ -32,6 +32,7 @@ pub mod dispatch;
 pub mod factory;
 pub mod mcp_config;
 pub mod outcome;
+pub mod reserve;
 pub mod runtime;
 pub mod spawn;
 pub mod state;

@@ -22,9 +22,11 @@ use std::path::Path;
 
 use jiff::Timestamp;
 use layover_core::config::Config;
-use layover_core::cost::{CostSource, Span, Window};
+use layover_core::cost::{Span, Window};
 use layover_core::run::Outcome;
 use layover_store::{HelpFilter, History, Journal, RunFilter};
+
+mod money;
 
 /// How serious a finding is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -151,6 +153,7 @@ pub fn check(config: &Config, root: &Path, window: Window) -> Result<Report, Str
 
     stalled_chains(&journal, &span, &mut report);
     unreported_costs(&runs, &mut report);
+    money::reserve(config, root, &runs, &mut report);
     interrupted_runs(&runs, &mut report);
     open_help(&journal, &span, &mut report);
     stranded_layovers(&journal, config, &mut report);
@@ -204,10 +207,13 @@ fn stalled_chains(journal: &Journal, span: &Span, report: &mut Report) {
 }
 
 /// Runs whose cost is a floor rather than a figure.
+///
+/// Dollars a runner printed and Copilot credits it reported are both measurements; anything else
+/// leaves a hole.
 fn unreported_costs(runs: &[layover_core::run::RunRecord], report: &mut Report) {
     let silent = runs
         .iter()
-        .filter(|record| record.source != CostSource::Reported)
+        .filter(|record| !record.source.is_measured())
         .count();
 
     if silent == 0 {
@@ -387,6 +393,7 @@ fn idle_schedules(config: &Config, runs: &[layover_core::run::RunRecord], report
 #[cfg(test)]
 mod tests {
     use super::*;
+    use layover_core::cost::CostSource;
 
     #[test]
     fn a_report_with_nothing_in_it_says_so_plainly() {

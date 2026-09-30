@@ -63,24 +63,27 @@ breadth — Hops bounds depth alone — a silent metering failure removes the so
 an exponential fan-out spending unbounded money.
 
 *Mitigation, in place:* the gap is measured rather than merely flagged. Every run records a
-[`CostSource`] of `reported`, `rate_card` or `unreported`; an itinerary counts how many of its runs
-went unmetered and exposes `metered_share()`; and every total in the ledger reports the *weakest*
-source that fed it, so a mostly-measured figure still reads as an estimate. A rate card can price
-a run that reported tokens but no dollars — labelled as an estimate, never folded in as a
-measurement.
+[`CostSource`] of `reported`, `copilot_credits`, `rate_card` or `unreported`; an itinerary counts
+how many of its runs went unmetered and exposes `metered_share()`; and every total in the ledger
+reports the *weakest* source that fed it, so a mostly-measured figure still reads as an estimate. A
+rate card can price a run that reported tokens but no dollars — labelled as an estimate, never
+folded in as a measurement.
 
 *Still unresolved:* none of this makes an unreporting runner report. The deterministic run cap is
 what actually holds, and an operator has to look at `measured_share` to know whether Fuel is
 metering or merely appearing to.
 
-Copilot CLI is the sharpest case and, it turns out, not a runner that reports nothing: verified on
-1.0.88, its JSON stream carries `session.usage_checkpoint` events with `totalPremiumRequests` and
-`totalNanoAiu`, and its final `result` event `usage.premiumRequests`. Usage, not dollars, and not
-tokens — so neither the runner-reported path nor today's token-priced rate card can use it, and
-every Copilot run is `unreported`. Whether Fuel and the Reserve should bind on it is a change to
-two rails and is open question 9 in [`decisions.md`](decisions.md#still-open). Note also that the
-Tower applies no rate card at all today: `rate_card` figures exist in the ledger's vocabulary, and
-nothing in the supervisor produces one.
+Copilot CLI is the sharpest case and, it turns out, not a runner that reports nothing: its JSON
+stream carries `session.usage_checkpoint` events with a running total of AI units. Since it is
+priced from those — `copilot_credits`, at `[copilot] usd_per_credit` — a Copilot run that reaches
+its first checkpoint is metered. One that is killed before it does is still `unreported`, and so is
+one whose last checkpoint cannot be read. Two things this rests on can be wrong and are worth
+knowing: that one AI unit is one AI credit, which comes from the CLI's own text labelling them "AI
+Credits" rather than from a documented contract; and that a credit costs a cent, which is GitHub's
+published price and not necessarily what a given account pays. Both are named — the source is
+distinct and the rate is a setting — so a mispriced run can be found and the rate corrected. Note
+also that the Tower applies no rate card at all today: `rate_card` figures exist in the ledger's
+vocabulary, and nothing in the supervisor produces one.
 
 ### 5. Spend that no per-chain budget can see
 
@@ -90,14 +93,20 @@ Fuel is per itinerary. A scheduled pipeline mints a fresh itinerary — and a fr
 every tick, so an hourly pipeline at `fuel_usd = 20` permits `24 × 20 = $480` a day while every
 chain stays perfectly inside its rail.
 
-*Mitigation:* the **Reserve**, a rolling-window ceiling across every itinerary, checked before an
-itinerary is minted. It rolls rather than resetting daily, because a calendar bucket can be spent
-twice across midnight and needs a timezone to decide when midnight is. `layover validate` warns
-when a factory has a scheduled pipeline and no Reserve, or a Reserve too small to fund one run of
-it.
+*Mitigation:* the **Reserve**, a rolling-window ceiling across every itinerary, checked before
+every run starts from the measured spend in history. It rolls rather than resetting daily, because
+a calendar bucket can be spent twice across midnight and needs a timezone to decide when midnight
+is. `layover validate` warns when a factory has a scheduled pipeline and no Reserve, or a Reserve
+too small to fund one run of it. A refused run is recorded as `halted` with the reason, and
+`layover doctor` reports refusals and an exhausted Reserve.
+
+Until the Copilot credit change the Reserve was configured, validated and drawn on the dashboard
+but never checked by the Tower, so this mitigation was claimed and did not exist.
 
 *Residual:* the Reserve is only as good as the cost figures feeding it, so risk 4 applies here
-too — an unreporting runner spends against a Reserve that never decrements.
+too — an unreporting runner spends against a Reserve that never decrements. It cannot see runs in
+flight (risk 15). And it fails open when history cannot be read, trading a rail that holds through
+a disk error for a factory that does not stop on one.
 
 ### 6. Agents rewriting their own static context
 

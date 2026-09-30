@@ -975,10 +975,12 @@ components:
     CostSource:
       type: string
       description: |
-        Where a cost figure came from, worst-first. `reported` is the only kind worth billing
-        against; `rate_card` was derived from token counts and published prices; `unreported`
+        Where a cost figure came from, worst-first. `reported` is dollars the runner printed;
+        `copilot_credits` is the Copilot AI credits a run reported, priced at the factory's
+        `[copilot] usd_per_credit` — measured, like `reported`, and both debit Fuel and draw on the
+        Reserve. `rate_card` was derived from token counts and published prices; `unreported`
         means the runner said nothing, so the figure is zero and means nothing.
-      enum: [reported, rate_card, unreported]
+      enum: [reported, copilot_credits, rate_card, unreported]
 
     TokenUsage:
       type: object
@@ -1008,7 +1010,7 @@ components:
     CostSummary:
       type: object
       description: Totals over some set of runs, carrying their own confidence.
-      required: [runs, usd, usage, unreported_runs, estimated_runs, confidence, measured_share]
+      required: [runs, usd, usage, unreported_runs, estimated_runs, credit_runs, confidence, measured_share]
       properties:
         runs:
           type: integer
@@ -1029,13 +1031,19 @@ components:
           type: integer
           format: int32
           description: Runs priced from a rate card rather than measured.
+        credit_runs:
+          type: integer
+          format: int32
+          description: Runs priced from the Copilot AI credits they reported. Counted as measured.
         confidence:
           $ref: "#/components/schemas/CostSource"
           description: The weakest source contributing to this total.
         measured_share:
           type: number
           format: double
-          description: Fraction of runs whose cost the runner actually reported, 0.0 to 1.0.
+          description: |
+            Fraction of runs whose cost was measured — dollars the runner printed, or Copilot
+            credits it reported — 0.0 to 1.0.
 
     Blocker:
       type: string

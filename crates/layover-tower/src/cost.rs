@@ -19,9 +19,25 @@
 //! and both money rails then under-count by the same factor. Where token counts are also reported,
 //! they are a second opinion: a cost more than an order of magnitude below what those tokens imply
 //! is treated as unreported rather than as a measurement.
+//!
+//! # Copilot CLI, which reports credits rather than dollars
+//!
+//! Copilot CLI prints no dollars and no token totals. With `--output-format json` it prints
+//! `session.usage_checkpoint` events carrying a running total of AI units in billionths —
+//! `data.totalNanoAiu` — and the last one seen is the run's usage. It is priced at the factory's
+//! `[copilot] usd_per_credit` and recorded as [`CostSource::CopilotCredits`], which debits Fuel and
+//! draws on the Reserve like dollars a runner printed itself.
+//!
+//! The same rules apply as to dollars. A last checkpoint that cannot be read, or reads as negative
+//! or as not an integer, makes the run unreported rather than priced from an earlier, smaller
+//! total. Zero credits beside premium requests is silence, as zero dollars beside tokens is. A run
+//! killed before its first checkpoint has nothing to price and is unreported. The final `result`
+//! event's `premiumRequests` is never priced: it is a flat multiplier per prompt that says the same
+//! for a six-minute run as for a forty-seven-minute one.
 
-use layover_core::cost::CostSource;
+use layover_core::cost::{CostSource, credits_to_usd};
 use serde::Deserialize;
+use serde_json::Value;
 
 /// What a run reported about its own cost.
 #[derive(Debug, Clone, PartialEq)]
@@ -82,13 +98,22 @@ const TOKENS_PER_DOLLAR: f64 = 1_000_000.0;
 ///
 /// The last, not the first: agent CLIs emit running totals, and the final one is the total. Lines
 /// that are not JSON are skipped, because a transcript is mostly the agent talking.
+///
+/// Dollars a runner printed win over anything derived. Failing those, the last Copilot usage
+/// checkpoint is priced at `usd_per_credit` dollars an AI credit.
 #[must_use]
-pub fn from_transcript(text: &str) -> Reported {
+pub fn from_transcript(text: &str, usd_per_credit: f64) -> Reported {
     let mut best: Option<Reported> = None;
+    let mut checkpoint: Option<Checkpoint> = None;
 
     for line in text.lines() {
         let line = line.trim();
         if !line.starts_with('{') {
+            continue;
+        }
+
+        if let Some(seen) = Checkpoint::of(line) {
+            checkpoint = Some(seen);
             continue;
         }
 
@@ -116,7 +141,84 @@ pub fn from_transcript(text: &str) -> Reported {
         best = Some(judge(usd, input, output));
     }
 
-    best.unwrap_or_else(Reported::unreported)
+    match (best, checkpoint) {
+        (Some(dollars), _) if dollars.source == CostSource::Reported => dollars,
+        (_, Some(checkpoint)) => checkpoint.price(usd_per_credit),
+        (best, None) => best.unwrap_or_else(Reported::unreported),
+    }
+}
+
+/// The last thing a Copilot usage checkpoint said.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Checkpoint {
+    /// A total that reads as one.
+    Read {
+        /// AI units used so far, in billionths of a credit.
+        nano_aiu: u64,
+        /// Premium requests made so far. Never priced; only a witness that work was done.
+        premium_requests: u64,
+    },
+    /// A checkpoint whose total cannot be believed.
+    Unreadable,
+}
+
+impl Checkpoint {
+    /// The checkpoint `line` is, or `None` when it is some other event.
+    ///
+    /// A line that names the event but is not JSON is unreadable rather than skipped: skipping it
+    /// would price the run from an earlier, smaller total and call that measured.
+    fn of(line: &str) -> Option<Self> {
+        if !line.contains("session.usage_checkpoint") {
+            return None;
+        }
+        let Ok(value) = serde_json::from_str::<Value>(line) else {
+            return Some(Self::Unreadable);
+        };
+        if value.get("type").and_then(Value::as_str) != Some("session.usage_checkpoint") {
+            // An agent talking about the event, not the event.
+            return None;
+        }
+
+        let data = value.get("data");
+        let count = |key: &str| data.and_then(|data| data.get(key)).and_then(Value::as_u64);
+        Some(match count("totalNanoAiu") {
+            Some(nano_aiu) => Self::Read {
+                nano_aiu,
+                premium_requests: count("totalPremiumRequests").unwrap_or(0),
+            },
+            None => Self::Unreadable,
+        })
+    }
+
+    /// What the run cost, at `usd_per_credit` dollars an AI credit.
+    fn price(self, usd_per_credit: f64) -> Reported {
+        let Self::Read {
+            nano_aiu,
+            premium_requests,
+        } = self
+        else {
+            return Reported::unreported();
+        };
+
+        // Requests made and nothing counted is silence, not a free run.
+        if nano_aiu == 0 && premium_requests > 0 {
+            return Reported::unreported();
+        }
+        if !(usd_per_credit.is_finite() && usd_per_credit > 0.0) {
+            return Reported::unreported();
+        }
+
+        let usd = credits_to_usd(nano_aiu, usd_per_credit);
+        if !usd.is_finite() || usd < 0.0 {
+            return Reported::unreported();
+        }
+        Reported {
+            usd,
+            source: CostSource::CopilotCredits,
+            input_tokens: 0,
+            output_tokens: 0,
+        }
+    }
 }
 
 /// Decides whether a reported figure can be believed.
@@ -176,10 +278,14 @@ fn judge(usd: f64, input: u64, output: u64) -> Reported {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use layover_core::cost::USD_PER_COPILOT_CREDIT;
 
     #[test]
     fn a_plain_total_is_read() {
-        let got = from_transcript(r#"{"total_cost_usd": 1.25, "usage": {"input_tokens": 900000}}"#);
+        let got = from_transcript(
+            r#"{"total_cost_usd": 1.25, "usage": {"input_tokens": 900000}}"#,
+            USD_PER_COPILOT_CREDIT,
+        );
 
         assert!((got.usd - 1.25).abs() < f64::EPSILON);
         assert_eq!(got.source, CostSource::Reported);
@@ -193,19 +299,22 @@ mod tests {
 the agent says something
 {\"total_cost_usd\": 0.90, \"usage\": {\"input_tokens\": 800000}}";
 
-        assert!((from_transcript(text).usd - 0.90).abs() < f64::EPSILON);
+        assert!((from_transcript(text, USD_PER_COPILOT_CREDIT).usd - 0.90).abs() < f64::EPSILON);
     }
 
     #[test]
     fn prose_between_the_json_is_ignored() {
         let text = "Thinking about it.\nI will run the suite.\n{\"cost_usd\": 0.4, \"usage\": {\"input_tokens\": 350000}}\nDone.";
-        assert!((from_transcript(text).usd - 0.4).abs() < f64::EPSILON);
+        assert!((from_transcript(text, USD_PER_COPILOT_CREDIT).usd - 0.4).abs() < f64::EPSILON);
     }
 
     #[test]
     fn a_transcript_with_no_numbers_is_unreported_not_free() {
         // The difference matters: zero-and-measured would let a chain run forever.
-        let got = from_transcript("I looked at the file and it seemed fine.");
+        let got = from_transcript(
+            "I looked at the file and it seemed fine.",
+            USD_PER_COPILOT_CREDIT,
+        );
 
         assert_eq!(got.source, CostSource::Unreported);
         assert!(got.usd.abs() < f64::EPSILON);
@@ -213,7 +322,10 @@ the agent says something
 
     #[test]
     fn zero_dollars_with_real_tokens_is_silence() {
-        let got = from_transcript(r#"{"total_cost_usd": 0.0, "usage": {"input_tokens": 50000}}"#);
+        let got = from_transcript(
+            r#"{"total_cost_usd": 0.0, "usage": {"input_tokens": 50000}}"#,
+            USD_PER_COPILOT_CREDIT,
+        );
 
         assert_eq!(got.source, CostSource::Unreported);
         assert_eq!(
@@ -224,7 +336,10 @@ the agent says something
 
     #[test]
     fn a_negative_cost_cannot_credit_fuel_back() {
-        let got = from_transcript(r#"{"total_cost_usd": -5.0, "usage": {"output_tokens": 1000}}"#);
+        let got = from_transcript(
+            r#"{"total_cost_usd": -5.0, "usage": {"output_tokens": 1000}}"#,
+            USD_PER_COPILOT_CREDIT,
+        );
 
         assert!(got.usd.abs() < f64::EPSILON);
         assert_eq!(got.source, CostSource::Unreported);
@@ -234,8 +349,10 @@ the agent says something
     fn a_cost_wildly_below_what_the_tokens_imply_is_not_believed() {
         // Risk 18: a runner reporting a cent for a four-dollar run defeats Fuel and the Reserve
         // together, because both read the same figure.
-        let got =
-            from_transcript(r#"{"total_cost_usd": 0.01, "usage": {"input_tokens": 4000000}}"#);
+        let got = from_transcript(
+            r#"{"total_cost_usd": 0.01, "usage": {"input_tokens": 4000000}}"#,
+            USD_PER_COPILOT_CREDIT,
+        );
 
         assert_eq!(
             got.source,
@@ -248,7 +365,10 @@ the agent says something
     fn a_cost_merely_cheaper_than_the_yardstick_is_still_believed() {
         // The check is an order of magnitude, not a price list. A cheap model must not be
         // constantly accused of lying.
-        let got = from_transcript(r#"{"total_cost_usd": 0.5, "usage": {"input_tokens": 1000000}}"#);
+        let got = from_transcript(
+            r#"{"total_cost_usd": 0.5, "usage": {"input_tokens": 1000000}}"#,
+            USD_PER_COPILOT_CREDIT,
+        );
 
         assert_eq!(got.source, CostSource::Reported);
         assert!((got.usd - 0.5).abs() < f64::EPSILON);
@@ -256,7 +376,10 @@ the agent says something
 
     #[test]
     fn tokens_without_a_cost_still_record_that_work_happened() {
-        let got = from_transcript(r#"{"usage": {"input_tokens": 1200, "output_tokens": 300}}"#);
+        let got = from_transcript(
+            r#"{"usage": {"input_tokens": 1200, "output_tokens": 300}}"#,
+            USD_PER_COPILOT_CREDIT,
+        );
 
         assert_eq!(got.source, CostSource::Unreported);
         assert_eq!(got.input_tokens, 1200);
@@ -268,7 +391,7 @@ the agent says something
         // The assumption is that these formats will break. What must not happen is that one bad
         // line loses a cost the runner did report.
         let text = "{\"total_cost_usd\": oops}\n{\"total_cost_usd\": 2.0, \"usage\": {\"input_tokens\": 1900000}}";
-        assert!((from_transcript(text).usd - 2.0).abs() < f64::EPSILON);
+        assert!((from_transcript(text, USD_PER_COPILOT_CREDIT).usd - 2.0).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -280,7 +403,7 @@ the agent says something
             r#"{"costUSD": 3.0, "usage": {"input": 2900000}}"#,
         ] {
             assert!(
-                (from_transcript(text).usd - 3.0).abs() < f64::EPSILON,
+                (from_transcript(text, USD_PER_COPILOT_CREDIT).usd - 3.0).abs() < f64::EPSILON,
                 "{text}"
             );
         }
