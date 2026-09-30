@@ -4,7 +4,7 @@
 //! regenerates this file and fails if the result differs, so an edit here is reverted
 //! rather than kept. Change the specification instead.
 //!
-//! Source: Layover Tower API v1.2.0
+//! Source: Layover Tower API v1.3.0
 
 #![allow(clippy::too_many_lines)]
 

@@ -8,6 +8,14 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-09-30
+
+The route map shows each agent's reasoning effort beside its model.
+
+**Compatibility.** Nothing in the configuration format, the HTTP API, the MCP tools or the
+on-disk layout changes. Only the drawing does: an agent's first line under its name now reads
+`model · effort …` when its command line sets an effort, and a box may have a third small line.
+
 ### Added
 
 - **The route map shows each agent's reasoning effort.** It sits beside the model, as
@@ -948,7 +956,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/KotkaZ/layover-project/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/KotkaZ/layover-project/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/KotkaZ/layover-project/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/KotkaZ/layover-project/compare/v0.23.3...v1.0.0
