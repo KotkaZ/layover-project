@@ -27,16 +27,24 @@ use crate::history::StoreError;
 /// open cannot be left truncated by a process that dies mid-run — which, given that recording
 /// interruptions is the whole point, is not a hypothetical.
 ///
+/// One write of the whole line, under the file's lock. Runs in parallel append to the same
+/// segments, and a line written in pieces — `writeln!` writes the text and the newline separately
+/// — can have another thread's line land between them.
+///
 /// # Errors
 ///
 /// Returns [`StoreError::Io`] if the line cannot be written.
 pub fn append_line(path: &Path, line: &str) -> Result<(), StoreError> {
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-        .map_err(StoreError::at(path))?;
-    writeln!(file, "{line}").map_err(StoreError::at(path))
+    let whole = format!("{line}\n");
+    crate::lock::exclusive(path, || {
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .map_err(StoreError::at(path))?;
+        file.write_all(whole.as_bytes())
+            .map_err(StoreError::at(path))
+    })
 }
 
 /// Reads one segment, skipping lines that will not parse.

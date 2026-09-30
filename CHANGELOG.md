@@ -43,6 +43,17 @@ status](README.md#project-status).
   know, and history written by this release carries `"source": "copilot_credits"`, which an earlier
   release cannot read — a downgrade loses those runs from its totals.
 - `layover_tower::from_transcript` takes the credit rate as a second argument.
+- For library users: `layover_store::lock`, one lock per file path shared by every handle in the
+  process, and `Journal::update_learnings`, an atomic read-modify-write of the learnings.
+  `Wiring`'s `read_learnings` and `write_learnings` are replaced by one `update_learnings`.
+
+### Fixed
+
+- **Runs writing at once no longer lose each other's work.** An agent's `memory.md`, the learnings,
+  the logbook, help requests, reports and the queue are each changed under a lock, and each
+  appended line is written whole. Twelve runs of one agent writing five notes each kept 6 of the 60
+  notes before, and learnings writes failed outright on a shared staging file.
+
 ## [1.3.0] — 2026-09-30
 
 The route map shows each agent's reasoning effort beside its model.

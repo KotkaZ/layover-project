@@ -78,7 +78,9 @@ pub struct Journal {
     /// something this guards.
     ///
     /// Shared across clones rather than copied: a clone addresses the same file, so a clone with
-    /// its own lock would look like it was protected and protect nothing.
+    /// its own lock would look like it was protected and protect nothing. For the same reason it is
+    /// taken from [`crate::lock`] by directory, so two journals opened separately on one
+    /// directory — the Tower's and the dashboard's — share it too.
     writes: Arc<Mutex<()>>,
 }
 
@@ -91,10 +93,8 @@ impl Journal {
     pub fn open(root: impl Into<PathBuf>) -> Result<Self, StoreError> {
         let root = root.into();
         fs::create_dir_all(&root).map_err(StoreError::at(&root))?;
-        Ok(Self {
-            root,
-            writes: Arc::new(Mutex::new(())),
-        })
+        let writes = crate::lock::for_path(&root);
+        Ok(Self { root, writes })
     }
 
     /// Where the journal lives.
@@ -205,8 +205,34 @@ impl Journal {
     ///
     /// Returns [`StoreError::Io`] if it cannot be written or moved into place.
     pub fn save_learnings(&self, learnings: &Learnings) -> Result<(), StoreError> {
+        let _writing = self.writes.lock().map_err(|_| poisoned())?;
         let entries: Vec<&Learning> = learnings.all().collect();
         crate::segment::write_document(&self.learnings_path(), &entries)
+    }
+
+    /// Reads the learnings, lets `change` alter them, and writes them back if it says to — as one
+    /// step no other writer can interleave with.
+    ///
+    /// Runs propose and confirm learnings while the Tower ages them after every run, and with runs
+    /// in parallel those happen at once. Reading, changing and saving separately loses whichever
+    /// change was read first.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Io`] if the file cannot be read or written.
+    pub fn update_learnings(
+        &self,
+        change: impl FnOnce(&mut Learnings) -> bool,
+    ) -> Result<bool, StoreError> {
+        let _writing = self.writes.lock().map_err(|_| poisoned())?;
+
+        let mut learnings = self.learnings()?;
+        let save = change(&mut learnings);
+        if save {
+            let entries: Vec<&Learning> = learnings.all().collect();
+            crate::segment::write_document(&self.learnings_path(), &entries)?;
+        }
+        Ok(save)
     }
 
     /// Where the learnings live.

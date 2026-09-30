@@ -30,6 +30,7 @@ pub mod hangar;
 mod history;
 mod journal;
 pub mod layout;
+pub mod lock;
 mod segment;
 
 pub use history::{History, RunFilter, StoreError};

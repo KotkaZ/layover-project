@@ -65,8 +65,7 @@ impl ServedMcp {
         let booking = Arc::clone(journal);
         let asking = Arc::clone(journal);
         let filing = Arc::clone(journal);
-        let reading = Arc::clone(journal);
-        let writing = Arc::clone(journal);
+        let learning = Arc::clone(journal);
 
         let runtime = FactoryRuntime::new(Wiring {
             config: Arc::new(config.clone()),
@@ -93,15 +92,11 @@ impl ServedMcp {
                     .file(&report)
                     .map_err(|error| format!("the report could not be filed: {error}"))
             }),
-            read_learnings: Arc::new(move || {
-                reading
-                    .learnings()
-                    .map_err(|error| format!("the learnings could not be read: {error}"))
-            }),
-            write_learnings: Arc::new(move |learnings| {
-                writing
-                    .save_learnings(learnings)
-                    .map_err(|error| format!("the learnings could not be written: {error}"))
+            update_learnings: Arc::new(move |change| {
+                learning
+                    .update_learnings(|learnings| change(learnings))
+                    .map(|_| ())
+                    .map_err(|error| format!("the learnings could not be updated: {error}"))
             }),
         });
 

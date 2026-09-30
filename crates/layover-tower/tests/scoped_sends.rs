@@ -56,8 +56,11 @@ impl Fixture {
             }),
             ask: Arc::new(|_| Ok(())),
             file: Arc::new(|_| Ok(())),
-            read_learnings: Arc::new(|| Ok(Learnings::new())),
-            write_learnings: Arc::new(|_| Ok(())),
+            update_learnings: Arc::new(|change| {
+                let mut none = Learnings::new();
+                change(&mut none);
+                Ok(())
+            }),
         });
 
         Self {

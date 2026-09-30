@@ -499,6 +499,13 @@ and money spent is gone, whereas a machine that is busy now will not be busy in 
 would turn "review twelve pull requests" into "review four and silently drop eight", which is the
 worst available reading of a concurrency limit.
 
+**Why shared files are locked per path, in one registry.** Runs of one agent are about to overlap,
+and they share its Hangar's `memory.md`, the factory's learnings and logbook, and the journal's
+help, reports and queue. Each read-modify-write takes a lock keyed by the file's path from one
+process-wide registry, so two handles on the same journal share it, and each appended line is one
+write of the whole line. Across processes nothing is shared, which is why two Towers over one
+factory remain unsupported.
+
 **Why spawning needs a generation counter.** A spawned itinerary gets fresh Hops, fresh Fuel and a
 fresh run cap — that is the entire point, because per-item work wants per-item budget. It is also
 exactly what makes spawning unbounded: Hops counts depth *within* a chain and cannot see across

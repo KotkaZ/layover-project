@@ -155,15 +155,14 @@ impl Chains {
     }
 }
 
-/// Everything a tool call needs, wired to a real factory.
+/// How a runtime changes the factory's accumulated learnings: read, change, and write back if the
+/// change says to, as one step no other writer can interleave with.
 ///
-/// Owns rather than borrows, because this has to live in an HTTP handler that outlives any
-/// particular call and is shared across threads.
-/// How a runtime reads the factory's accumulated learnings.
-pub type ReadLearnings = Arc<dyn Fn() -> Result<Learnings, String> + Send + Sync>;
-
-/// How it writes them back.
-pub type WriteLearnings = Arc<dyn Fn(&Learnings) -> Result<(), String> + Send + Sync>;
+/// One hook rather than a reader and a writer. With runs in parallel, two runs proposing at once —
+/// or a run proposing while the Tower ages the learnings after another run — would each read the
+/// same file and the second write would erase the first change.
+pub type UpdateLearnings =
+    Arc<dyn Fn(&mut dyn FnMut(&mut Learnings) -> bool) -> Result<(), String> + Send + Sync>;
 
 /// Where a sent flight goes.
 pub type QueueFlight = Arc<dyn Fn(Queued) -> Result<(), String> + Send + Sync>;
@@ -189,8 +188,7 @@ pub struct FactoryRuntime {
     book: BookLayover,
     ask: AskForHelp,
     file: FileReport,
-    read_learnings: ReadLearnings,
-    write_learnings: WriteLearnings,
+    update_learnings: UpdateLearnings,
     hangars: PathBuf,
     logbook: PathBuf,
 }
@@ -218,10 +216,8 @@ pub struct Wiring {
     pub ask: AskForHelp,
     /// Where a run's report goes: the journal, which the dashboard and a resumed layover read.
     pub file: FileReport,
-    /// How to read what the factory has learned.
-    pub read_learnings: ReadLearnings,
-    /// How to write it back.
-    pub write_learnings: WriteLearnings,
+    /// How to change what the factory has learned, atomically.
+    pub update_learnings: UpdateLearnings,
 }
 
 impl FactoryRuntime {
@@ -235,8 +231,7 @@ impl FactoryRuntime {
             book: wiring.book,
             ask: wiring.ask,
             file: wiring.file,
-            read_learnings: wiring.read_learnings,
-            write_learnings: wiring.write_learnings,
+            update_learnings: wiring.update_learnings,
             hangars: wiring.hangars,
             logbook: wiring.logbook,
         }
@@ -391,15 +386,21 @@ impl Runtime for FactoryRuntime {
         })?;
 
         let path = dir.join("memory.md");
-        let mut existing = std::fs::read_to_string(&path).unwrap_or_default();
-        if !existing.is_empty() && !existing.ends_with('\n') {
-            existing.push('\n');
-        }
-        existing.push_str(text.trim());
-        existing.push('\n');
 
-        std::fs::write(&path, existing).map_err(|error| ToolError::Unavailable {
-            detail: error.to_string(),
+        // Read, appended to and written back under the file's lock. Two runs of one agent now run
+        // at once, and without it both would read the same notes and the second write would erase
+        // the first run's addition.
+        layover_store::lock::exclusive(&path, || {
+            let mut existing = std::fs::read_to_string(&path).unwrap_or_default();
+            if !existing.is_empty() && !existing.ends_with('\n') {
+                existing.push('\n');
+            }
+            existing.push_str(text.trim());
+            existing.push('\n');
+
+            std::fs::write(&path, existing).map_err(|error| ToolError::Unavailable {
+                detail: error.to_string(),
+            })
         })
     }
 
@@ -470,21 +471,25 @@ impl Runtime for FactoryRuntime {
             jiff::Timestamp::now(),
         );
 
-        let mut learnings =
-            (self.read_learnings)().map_err(|detail| ToolError::Unavailable { detail })?;
-
-        let uptake = learnings.propose(&proposal);
-
-        // Malformed and Refused change nothing, so writing would be a needless rewrite of the
-        // whole file — and `Refused` writing anything at all would let repetition look like it
-        // had an effect.
-        if !matches!(
-            uptake,
-            Uptake::Malformed | Uptake::Refused | Uptake::Echo | Uptake::Unacceptable(_)
-        ) {
-            (self.write_learnings)(&learnings)
-                .map_err(|detail| ToolError::Unavailable { detail })?;
-        }
+        let mut outcome = None;
+        (self.update_learnings)(&mut |learnings| {
+            let uptake = learnings.propose(&proposal);
+            // Malformed and Refused change nothing, so writing would be a needless rewrite of the
+            // whole file — and `Refused` writing anything at all would let repetition look like it
+            // had an effect.
+            let save = !matches!(
+                uptake,
+                Uptake::Malformed | Uptake::Refused | Uptake::Echo | Uptake::Unacceptable(_)
+            );
+            outcome = Some(uptake);
+            save
+        })
+        .map_err(|detail| ToolError::Unavailable { detail })?;
+        let Some(uptake) = outcome else {
+            return Err(ToolError::Unavailable {
+                detail: "the learnings were not consulted".to_owned(),
+            });
+        };
 
         // Said differently for each outcome, because they are not interchangeable and an agent
         // that hears "noted" every time learns nothing about what its proposals are worth.
@@ -548,14 +553,16 @@ impl Runtime for FactoryRuntime {
             session.agent
         );
 
-        std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&self.logbook)
-            .and_then(|mut file| file.write_all(entry.as_bytes()))
-            .map_err(|error| ToolError::Unavailable {
-                detail: error.to_string(),
-            })
+        layover_store::lock::exclusive(&self.logbook, || {
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&self.logbook)
+                .and_then(|mut file| file.write_all(entry.as_bytes()))
+                .map_err(|error| ToolError::Unavailable {
+                    detail: error.to_string(),
+                })
+        })
     }
 }
 
@@ -686,7 +693,6 @@ mode = "spawn"
                 Arc::new(Mutex::new(Vec::new()));
             let cabinet = Arc::clone(&filed);
             let learnings: Arc<Mutex<Learnings>> = Arc::new(Mutex::new(Learnings::new()));
-            let reading = Arc::clone(&learnings);
             let writing = Arc::clone(&learnings);
 
             Self {
@@ -720,11 +726,12 @@ mode = "spawn"
                             .push(report);
                         Ok(())
                     }),
-                    read_learnings: Arc::new(move || {
-                        Ok(reading.lock().map_err(|_| "poisoned".to_owned())?.clone())
-                    }),
-                    write_learnings: Arc::new(move |updated| {
-                        *writing.lock().map_err(|_| "poisoned".to_owned())? = updated.clone();
+                    update_learnings: Arc::new(move |change| {
+                        let mut held = writing.lock().map_err(|_| "poisoned".to_owned())?;
+                        let mut changed = held.clone();
+                        if change(&mut changed) {
+                            *held = changed;
+                        }
                         Ok(())
                     }),
                 }),
