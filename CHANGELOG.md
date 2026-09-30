@@ -8,6 +8,22 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-09-30
+
+The Tower runs agents in parallel, prices Copilot runs from their AI credits, enforces the Reserve,
+and settles the runs a restart left behind.
+
+**Compatibility.** The configuration format, the HTTP API and the on-disk layout only gain:
+`[copilot] usd_per_credit` and `[agents.<name>] max_concurrent` in `layover.toml`;
+`copilot_credits`, `credit_runs`, `alive_runs` and `max_concurrent_runs` in the API; `queued_at` on
+run records, and the work and owning Tower on a live run's record. Everything that loaded before
+still loads. Three things behave differently in an existing factory: **runs overlap**, up to
+`max_concurrent_runs` at once — `1` restores one at a time; **Copilot runs are priced**, so
+`fuel_usd` now cuts Copilot chains; and **the Reserve is enforced**, including its default of $100
+in any 24 hours for a factory that sets none. History written with `copilot_credits` is not counted
+by an earlier release. For library users, `Wiring`'s learnings hooks and `from_transcript`'s
+signature changed.
+
 ### Changed
 
 - **Runs overlap: the Tower runs up to `max_concurrent_runs` agents at once.** The setting was
@@ -1044,7 +1060,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/KotkaZ/layover-project/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/KotkaZ/layover-project/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/KotkaZ/layover-project/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/KotkaZ/layover-project/compare/v1.0.0...v1.1.0
