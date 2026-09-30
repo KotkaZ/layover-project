@@ -10,6 +10,23 @@ status](README.md#project-status).
 
 ### Changed
 
+- **Runs overlap: the Tower runs up to `max_concurrent_runs` agents at once.** The setting was
+  parsed and read nowhere, and the Tower ran one agent at a time: a sweep that spawned ten
+  hour-long reviews took ten hours, manual triggers waited behind it, and a schedule due at 14:00
+  fired at 14:23, when the run in front of it ended. The Tower now keeps up to `max_concurrent_runs`
+  runs alive, factory-wide, and starts the oldest queued flight that can start the moment a slot
+  frees; nothing is refused or dropped. The clock keeps firing while runs are going, and a
+  pipeline's tick is still skipped while its last wave is queued *or running*. A fan-out's Hops,
+  Fuel and run cap stay exact, `timeout_sec` and a Ground Stop apply to each run, and `layover run`
+  runs in parallel too. **An existing factory now runs agents side by side:** two agents that write
+  one `work_dir` can write it at the same moment, and runs admitted together can overshoot Fuel or
+  the Reserve by up to `max_concurrent_runs` runs' worth. `max_concurrent_runs = 1` restores one at
+  a time; `max_concurrent = 1` keeps a single agent from overlapping itself.
+
+- **History files a run by the day it finished.** A run was written into the segment of the day it
+  started, while history is read by finish, so an hour-long run crossing midnight was missing from
+  its own window.
+
 - **Copilot CLI runs are priced, so Fuel and the Reserve now bind a Copilot factory.** Copilot
   prints no dollars and no token totals, so every Copilot run was `unreported`: `fuel_usd` and the
   Reserve never refused a Copilot factory anything, and `max_runs` and `timeout_sec` were all that
@@ -43,16 +60,41 @@ status](README.md#project-status).
   know, and history written by this release carries `"source": "copilot_credits"`, which an earlier
   release cannot read — a downgrade loses those runs from its totals.
 - `layover_tower::from_transcript` takes the credit rate as a second argument.
-- For library users: `layover_store::lock`, one lock per file path shared by every handle in the
-  process, and `Journal::update_learnings`, an atomic read-modify-write of the learnings.
-  `Wiring`'s `read_learnings` and `write_learnings` are replaced by one `update_learnings`.
+- **`[agents.<name>] max_concurrent`**: at most this many runs of the agent alive at once, within
+  `max_concurrent_runs` — `1` for an agent that must never overlap itself, such as a single Teams
+  sender. A flight waiting for it does not hold up work for other agents. `layover validate`
+  refuses `0`, and warns that a factory-wide `max_concurrent_runs = 0` is read as 1.
+- **`GET /flights` says who runs the queue and how busy it is.** `dispatched_by` names the Tower
+  under `layover serve` (it was always `null`), and the new `alive_runs` and `max_concurrent_runs`
+  give the slots in use. The dashboard shows `2 of 4 run(s) alive · 3 flight(s) queued`, refreshed
+  every few seconds, and no longer tells a live Tower's operator that nothing will dispatch their
+  work. Under `--watch-only` `dispatched_by` stays `null`, and the page says why.
+- **`layover doctor` warns about work that waited with a slot free** — queued longer than
+  `timeout_sec` while fewer than `max_concurrent_runs` runs, and fewer than its agent's own cap,
+  were alive. That is what the one-at-a-time Tower produced without a word. It checks history and
+  the queue as it stands now.
+- Run records carry **`queued_at`**, so a run's wait for a slot can be read back.
+- For library users: `Factory::dispatch`, `Factory::reconcile` and `layover_tower::recovery`,
+  `Factory::alive_runs` and `busy_pipelines`, `Dashboard::dispatched_by`, `layover_store::lock` and
+  `Journal::update_learnings`. `Wiring`'s `read_learnings` and `write_learnings` are replaced by one
+  atomic `update_learnings`.
 
 ### Fixed
 
+- **A run alive when the Tower went away is settled on restart.** It was neither restarted nor
+  written to history, and its `state/runs/*.json` stayed behind for good. The next Tower —
+  `layover serve`, or `layover run` — now stops it if it is still going (cut off from Layover, it
+  could only spend), records it as `interrupted` with what it cost, removes its record, and
+  restarts the work where the agent's `recovery` policy and `max_recovery_attempts` allow and no
+  Ground Stop is engaged. The restart is told what it is continuing, is charged what the run it
+  replaces spent, and — for a join — goes straight to its agent rather than waiting at a barrier
+  that no longer exists. Runs another living Tower is watching are left alone.
 - **Runs writing at once no longer lose each other's work.** An agent's `memory.md`, the learnings,
   the logbook, help requests, reports and the queue are each changed under a lock, and each
   appended line is written whole. Twelve runs of one agent writing five notes each kept 6 of the 60
   notes before, and learnings writes failed outright on a shared staging file.
+- **A rendezvous is not given up while its upstream is still queued**, which a Tower stopping — or
+  one with every slot busy — could otherwise do.
 
 ## [1.3.0] — 2026-09-30
 

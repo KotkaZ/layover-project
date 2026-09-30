@@ -179,6 +179,8 @@ prompt_file = "publisher.md"
 # before it recorded that it had, restarting it automatically would open a second pull request.
 # A human decides instead.
 recovery    = "manual"
+# And never two at once: two publishers in one working tree would commit each other's changes.
+max_concurrent = 1
 
 [agents.publisher.mcp.ado]
 url      = "https://dev.azure.com/mcp/"

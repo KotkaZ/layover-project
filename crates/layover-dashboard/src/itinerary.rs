@@ -226,6 +226,7 @@ mod tests {
             detail: None,
             blocked_on: None,
             pid: None,
+            queued_at: None,
         }
     }
 

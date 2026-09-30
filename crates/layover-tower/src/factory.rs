@@ -22,7 +22,7 @@
 //! or not this process survives to write it down, which is why the live mark goes first and comes
 //! off last.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -34,8 +34,9 @@ use layover_core::barrier::Delivery;
 use layover_core::config::Config;
 use layover_core::cost::CostSource;
 use layover_core::cost::TokenUsage;
-use layover_core::flight::Flight;
+use layover_core::flight::{Flight, ItineraryId};
 use layover_core::graph::RouteGraph;
+use layover_core::handover::Handover;
 use layover_core::itinerary::{Denial, Itinerary};
 use layover_core::payload::{Run, compose};
 use layover_core::pipeline::Flags;
@@ -120,15 +121,21 @@ pub struct Drained {
 
 /// A running factory.
 pub struct Factory {
-    config: Config,
-    routes: RouteMap,
+    pub(crate) config: Config,
+    pub(crate) routes: RouteMap,
     root: PathBuf,
-    live: Ledger,
-    journal: Journal,
+    pub(crate) live: Ledger,
+    pub(crate) journal: Journal,
     tokens: Arc<Tokens>,
-    chains: Chains,
-    barriers: Barriers,
+    pub(crate) chains: Chains,
+    pub(crate) barriers: Barriers,
     endpoint: Option<String>,
+    /// Every run started and not yet seen finish. What the dispatcher counts slots against, and
+    /// what "nothing is running" asks.
+    pub(crate) inflight: std::sync::Mutex<crate::dispatcher::Registry>,
+    /// This Tower's claim on the runs it starts, taken when it starts its first. See
+    /// [`crate::owner`].
+    owner: std::sync::OnceLock<Option<crate::owner::Owner>>,
 }
 
 impl Factory {
@@ -160,6 +167,8 @@ impl Factory {
             chains: Chains::new(),
             barriers: Barriers::new(),
             endpoint: None,
+            inflight: std::sync::Mutex::default(),
+            owner: std::sync::OnceLock::new(),
         })
     }
 
@@ -214,6 +223,17 @@ impl Factory {
         self.root.join(".layover").join("ground-stop")
     }
 
+    /// The name this Tower's live records carry, claimed on first use.
+    ///
+    /// Claimed lazily so that a factory opened only to be looked at — `layover prompt`, a test that
+    /// never runs anything — leaves nothing behind in the state directory.
+    pub(crate) fn owner_id(&self) -> Option<&str> {
+        self.owner
+            .get_or_init(|| crate::owner::Owner::claim(self.live.root()).ok())
+            .as_ref()
+            .map(crate::owner::Owner::id)
+    }
+
     /// Runs one flight to completion, recording what happened.
     ///
     /// `sender` is `None` for work that entered the mesh from outside it: a person, a schedule, a
@@ -232,7 +252,7 @@ impl Factory {
         self.run(itinerary, sender, flight, Some(&flight.from))
     }
 
-    /// Runs one flight, telling the run who sent it when that is one sender.
+    /// Runs one flight start to finish on this thread, against an itinerary the caller holds.
     ///
     /// `origin` is `None` for a released join: its body already labels each flight it carries,
     /// and naming one sender above them would be wrong about the rest.
@@ -243,35 +263,76 @@ impl Factory {
         flight: &Flight,
         origin: Option<&layover_core::flight::Origin>,
     ) -> Dispatched {
+        let authorised = match self.admit(itinerary, sender, flight) {
+            Ok(authorised) => authorised,
+            Err(refused) => return refused,
+        };
+        let launched = match self.launch(itinerary.id(), authorised, flight, origin, None, None) {
+            Ok(launched) => launched,
+            Err(failed) => return failed,
+        };
+        self.finish(launched, |reported| {
+            crate::dispatcher::charge(itinerary, reported);
+        })
+    }
+
+    /// Decides whether a flight may start, and charges its chain for starting it.
+    ///
+    /// Everything here reads or changes the chain's rails, so a caller holds the chain while this
+    /// runs — and only while this runs. Runs of one chain alive at once are admitted one after
+    /// another, each against what the last left; the process itself is started and waited for
+    /// without holding anything.
+    pub(crate) fn admit<'a>(
+        &'a self,
+        itinerary: &mut Itinerary,
+        sender: Option<&AgentName>,
+        flight: &Flight,
+    ) -> Result<crate::dispatch::Authorised<'a>, Dispatched> {
         // The chain's own graph: its pipeline's routes, narrowed by any work it resumes. Read from
         // the Tower's record of the chain, which queued work carries across a restart.
         let scope = self.chains.scope_of(itinerary.id());
         let graph = self.routes.for_scope(&scope);
 
-        let authorised = match authorise(
+        let authorised = authorise(
             &self.config,
             &graph,
             itinerary,
             sender,
             flight,
             self.ground_stop_engaged(),
-        ) {
-            Ok(authorised) => authorised,
-            Err(refusal) => return Dispatched::Refused(refusal),
-        };
+        )
+        .map_err(Dispatched::Refused)?;
 
         // The factory's own ceiling, after everything about the flight itself and before a slot
         // is counted against the chain: a run the Reserve refuses never started.
         if let Some(refused) = self.refused_by_reserve(itinerary, &authorised) {
-            return refused;
+            return Err(refused);
         }
 
         // Counted here rather than after the spawn: a run that starts and is never seen to finish
         // has still been started, and a cap that only counts completions is not a cap.
-        if let Err(denial) = itinerary.record_run_started() {
-            return Dispatched::Refused(Refusal::Rail(denial));
-        }
+        itinerary
+            .record_run_started()
+            .map_err(|denial| Dispatched::Refused(Refusal::Rail(denial)))?;
 
+        Ok(authorised)
+    }
+
+    /// Starts an admitted run: composes what it is told, mints its token, spawns it, and writes
+    /// down that it is alive.
+    ///
+    /// `queued` is the flight as it was queued, kept in the run's live record so a Tower that
+    /// comes back after this run was interrupted can start it again.
+    pub(crate) fn launch<'a>(
+        &'a self,
+        chain: &ItineraryId,
+        authorised: crate::dispatch::Authorised<'a>,
+        flight: &Flight,
+        origin: Option<&layover_core::flight::Origin>,
+        queued: Option<&Queued>,
+        queued_at: Option<Timestamp>,
+    ) -> Result<crate::dispatcher::Launched<'a>, Dispatched> {
+        let scope = self.chains.scope_of(chain);
         let run = layover_core::RunId::generate();
         let hangar = self
             .root
@@ -282,16 +343,16 @@ impl Factory {
 
         // Resolved once per run and used twice: to compose this run's prompt, and in the token's
         // session, so that whatever this run sends on carries exactly the flags it was given.
-        let flags = self.flags_for(itinerary.id());
+        let flags = self.flags_for(chain);
 
         // Minted before the plan is assembled, because the plan is where the token becomes an
-        // argument and an environment variable. It is revoked on every path out of this function:
-        // a token that outlives its run is a finished process that can still send work.
+        // argument and an environment variable. It is revoked on every path out of the run: a
+        // token that outlives its run is a finished process that can still send work.
         let token = self.endpoint.as_ref().map(|_| {
             self.tokens.mint_for(Session {
                 run: run.clone(),
                 agent: authorised.name.clone(),
-                itinerary: itinerary.id().clone(),
+                itinerary: chain.clone(),
                 hops_remaining: authorised.hops_remaining,
                 pipeline: scope.pipeline.clone(),
                 flags: flags.to_map(),
@@ -300,55 +361,103 @@ impl Factory {
             })
         });
 
+        // A restart is told what it is restarting, above the work, so it looks before repeating a
+        // side effect the interrupted run may already have had.
+        let handover = queued
+            .and_then(|queued| queued.recovering.clone())
+            .map(|recovery| Handover::recovered(recovery, vec![flight.clone()]).brief());
+        let told = Told {
+            origin,
+            handover: handover.as_deref(),
+        };
+
         let plan = match self.plan_for(
             &authorised,
             &hangar,
             flight,
-            origin,
+            &told,
             &flags,
             token.as_deref(),
         ) {
             Ok(plan) => plan,
             Err(why) => {
                 self.revoke(token.as_deref());
-                return Dispatched::Failed(why);
+                return Err(Dispatched::Failed(why));
             }
         };
 
         let started_at = Timestamp::now();
-
-        // The run is written down before the process exists. If this process dies in the next
-        // instant, that record is the only evidence the run happened.
         let started = match spawn::start(&plan) {
             Ok(started) => started,
             Err(error) => {
                 self.record(&self.never_started(
                     &run,
-                    itinerary,
+                    chain,
                     &authorised,
                     started_at,
                     &error.to_string(),
                 ));
                 self.revoke(token.as_deref());
-                return Dispatched::Failed(error.to_string());
+                return Err(Dispatched::Failed(error.to_string()));
             }
         };
 
+        // The only evidence the run exists if this process dies before it sees the run finish,
+        // and with the flight it was given, what lets the next Tower start it again.
         let mark = Live {
             run: run.clone(),
-            itinerary: itinerary.id().clone(),
+            itinerary: chain.clone(),
             agent: authorised.name.clone(),
             pid: started.pid(),
             started_at,
-            hangar: hangar.clone(),
+            hangar,
+            queued: queued.cloned(),
+            owner: self.owner_id().map(str::to_owned),
         };
         let _ = self.live.starting(&mark);
+        self.hold(
+            run.clone(),
+            crate::dispatcher::InFlight {
+                agent: authorised.name.clone(),
+                pipeline: scope.pipeline,
+            },
+        );
+
+        Ok(crate::dispatcher::Launched {
+            ticket: crate::dispatcher::Ticket {
+                run,
+                chain: chain.clone(),
+                authorised,
+                started_at,
+                queued_at,
+            },
+            started,
+            token,
+        })
+    }
+
+    /// Waits for a launched run — killing it at `timeout_sec` or on a Ground Stop — then prices
+    /// it, charges its chain through `charge`, and writes it down.
+    ///
+    /// Safe to call on its own thread: the timeout, the Ground Stop and the kill are this run's
+    /// alone, and the chain is held only inside `charge`.
+    pub(crate) fn finish(
+        &self,
+        launched: crate::dispatcher::Launched<'_>,
+        charge: impl FnOnce(&crate::cost::Reported),
+    ) -> Dispatched {
+        let crate::dispatcher::Launched {
+            ticket,
+            started,
+            token,
+        } = launched;
 
         let timeout = Some(Duration::from_secs(self.config.defaults.timeout_sec));
         let (finished, ended) = match wait_for(started, timeout, || self.ground_stop_engaged()) {
             Ok(result) => result,
             Err(error) => {
-                let _ = self.live.finished(&run);
+                let _ = self.live.finished(&ticket.run);
+                self.forget(&ticket.run);
                 self.revoke(token.as_deref());
                 return Dispatched::Failed(error.to_string());
             }
@@ -362,9 +471,9 @@ impl Factory {
         // A run has happened, so the agent's provisional advice is one run closer to lapsing.
         // Charged whatever the outcome: a learning that only decays on success would be kept alive
         // by the failures it was meant to prevent.
-        self.age_learnings(&authorised.name);
+        self.age_learnings(&ticket.authorised.name);
 
-        self.settle(&run, itinerary, &authorised, started_at, &finished, ended)
+        self.settle(&ticket, &finished, ended, charge)
     }
 
     /// Refuses the run when the factory has spent its Reserve, and writes the refusal down.
@@ -386,6 +495,7 @@ impl Factory {
             pipeline: self.chains.pipeline_of(itinerary.id()),
             model: authorised.agent.model.clone(),
             outcome: Outcome::Halted,
+            queued_at: None,
             started_at: now,
             finished_at: Some(now),
             // It cost nothing, and that is known for certain. Unreported would turn every total
@@ -404,41 +514,32 @@ impl Factory {
     /// Prices a finished run, charges the chain for it, and writes it down.
     ///
     /// Separate from starting it because everything here happens whether the run went well or
-    /// badly, and because the order of the last three steps is load-bearing: charge, record, then
-    /// forget the live mark.
+    /// badly, and because the order of the last steps is load-bearing: charge, record, then forget
+    /// the live mark.
     fn settle(
         &self,
-        run: &layover_core::RunId,
-        itinerary: &mut Itinerary,
-        authorised: &crate::dispatch::Authorised<'_>,
-        started_at: Timestamp,
+        ticket: &crate::dispatcher::Ticket<'_>,
         finished: &spawn::Finished,
         ended: Ended,
+        charge: impl FnOnce(&crate::cost::Reported),
     ) -> Dispatched {
         let transcript = std::fs::read_to_string(&finished.transcript).unwrap_or_default();
         let reported =
             crate::cost::from_transcript(&transcript, self.config.copilot.usd_per_credit);
 
-        // Debited even when the run failed. Money spent is money spent, and a chain that could
-        // retry forever on failures without paying for them is not bounded. Dollars a runner
-        // printed and Copilot credits priced at a published rate are both measurements; a guess
-        // or a hole is not, and debits nothing.
-        if reported.source.is_measured() {
-            itinerary.debit_fuel(reported.usd);
-        } else {
-            itinerary.note_unreported_cost();
-        }
+        charge(&reported);
 
         let outcome = outcome_of(ended, finished.succeeded());
 
         self.record(&RunRecord {
-            run: run.clone(),
-            itinerary: itinerary.id().clone(),
-            agent: authorised.name.clone(),
-            pipeline: self.chains.pipeline_of(itinerary.id()),
-            model: authorised.agent.model.clone(),
+            run: ticket.run.clone(),
+            itinerary: ticket.chain.clone(),
+            agent: ticket.authorised.name.clone(),
+            pipeline: self.chains.pipeline_of(&ticket.chain),
+            model: ticket.authorised.agent.model.clone(),
             outcome,
-            started_at,
+            queued_at: ticket.queued_at,
+            started_at: ticket.started_at,
             finished_at: Some(finished.finished_at),
             usd: reported.usd,
             source: reported.source,
@@ -449,13 +550,14 @@ impl Factory {
             },
             exit_code: finished.exit_code,
             detail: detail_for(ended, finished.exit_code, &transcript),
-            blocked_on: self.blocked_on(run, started_at),
+            blocked_on: self.blocked_on(&ticket.run, ticket.started_at),
             pid: None,
         });
 
         // Last, because until the outcome is written the run is still unaccounted for. Forgetting
         // it first would lose a run that this process failed to finish recording.
-        let _ = self.live.finished(run);
+        let _ = self.live.finished(&ticket.run);
+        self.forget(&ticket.run);
 
         Dispatched::Ran {
             outcome,
@@ -501,18 +603,19 @@ impl Factory {
     fn never_started(
         &self,
         run: &layover_core::RunId,
-        itinerary: &Itinerary,
+        chain: &ItineraryId,
         authorised: &crate::dispatch::Authorised<'_>,
         started_at: Timestamp,
         why: &str,
     ) -> RunRecord {
         RunRecord {
             run: run.clone(),
-            itinerary: itinerary.id().clone(),
+            itinerary: chain.clone(),
             agent: authorised.name.clone(),
-            pipeline: self.chains.pipeline_of(itinerary.id()),
+            pipeline: self.chains.pipeline_of(chain),
             model: authorised.agent.model.clone(),
             outcome: Outcome::Failed,
+            queued_at: None,
             started_at,
             finished_at: Some(Timestamp::now()),
             usd: 0.0,
@@ -559,11 +662,7 @@ impl Factory {
     /// This is what makes a learning lapse. Without it, "applies now and expires unless later runs
     /// arrive at it independently" is only the first half — everything proposed once would apply
     /// forever, which is the approval queue's failure arrived at from the other direction.
-    fn age_learnings(&self, agent: &AgentName) {
-        let Ok(mut learnings) = self.journal.learnings() else {
-            return;
-        };
-
+    pub(crate) fn age_learnings(&self, agent: &AgentName) {
         // `charge_run` returns the learnings that *lapsed*, not the ones it touched — so an empty
         // result means "nothing expired this time", not "nothing changed". Saving only when
         // something lapsed would throw away every decrement in between, and a learning would never
@@ -571,9 +670,13 @@ impl Factory {
         //
         // The lapsed list is not reported here because saving already reports it: a lapsed
         // learning shows as `lapsed` in the dashboard, which is where somebody would look.
-        drop(learnings.charge_run(agent));
-
-        let _ = self.journal.save_learnings(&learnings);
+        //
+        // One locked step, because runs of other agents propose learnings while this one ages
+        // them, and a separate read and write would erase whatever they proposed in between.
+        let _ = self.journal.update_learnings(|learnings| {
+            drop(learnings.charge_run(agent));
+            true
+        });
     }
 
     /// The agent's standing instructions, as the run will actually receive them.
@@ -654,7 +757,7 @@ impl Factory {
         authorised: &crate::dispatch::Authorised<'_>,
         hangar: &Path,
         flight: &Flight,
-        origin: Option<&layover_core::flight::Origin>,
+        told: &Told<'_>,
         flags: &Flags,
         token: Option<&str>,
     ) -> Result<Plan, String> {
@@ -665,8 +768,8 @@ impl Factory {
             instructions: &instructions,
             memory: self.memory_of(&authorised.name).as_deref(),
             brief: &self.brief_for(&authorised.name),
-            handover: None,
-            origin,
+            handover: told.handover,
+            origin: told.origin,
             body: &flight.body,
         });
 
@@ -766,141 +869,15 @@ impl Factory {
     ///
     /// Deliberately best-effort: a factory that stops working because it could not write a log
     /// line has turned an observability problem into an outage.
-    fn record(&self, record: &RunRecord) {
-        let dir = self.history_dir();
-        if std::fs::create_dir_all(&dir).is_err() {
-            return;
+    ///
+    /// Through [`layover_store::History::append`], which files a run by the day it *finished* —
+    /// the day the history reader looks in — and takes the segment's lock. Filing by the day it
+    /// started put an hour-long run that crossed midnight in a segment its own window never opened,
+    /// and parallel runs appending by hand could interleave.
+    pub(crate) fn record(&self, record: &RunRecord) {
+        if let Ok(history) = layover_store::History::open(self.history_dir()) {
+            let _ = history.append(record);
         }
-
-        let day = record
-            .started_at
-            .to_string()
-            .chars()
-            .take(10)
-            .collect::<String>();
-        let path = dir.join(format!("runs-{day}.jsonl"));
-
-        if let Ok(mut line) = serde_json::to_string(record) {
-            line.push('\n');
-            let _ = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(path)
-                .map(|mut file| std::io::Write::write_all(&mut file, line.as_bytes()));
-        }
-    }
-
-    /// Runs every flight waiting in `pending`, and every flight those runs send, until nothing is
-    /// left.
-    ///
-    /// Each is taken off the queue **before** it runs. A flight that crashes the factory mid-run
-    /// must not come back on restart and run again: an agent that opened a pull request and was
-    /// interrupted before its outcome was recorded would open a second one.
-    ///
-    /// # Why this loops rather than iterating once
-    ///
-    /// A run can send flights while it is running. Draining the list it started with would leave
-    /// those sitting until something else picked them up, which turns every chain into one hop per
-    /// invocation. `refill` is asked for whatever is queued now, after each pass.
-    ///
-    /// The loop is bounded by the rails rather than by a count: each flight spends a Hop from a
-    /// shared itinerary and each run spends Fuel and a slot against the run cap, so a chain that
-    /// will not settle is cut by the same mechanism that bounds every other chain.
-    ///
-    /// It also stops as soon as a whole pass starts nothing. Only a *run* can send a flight, so a
-    /// pass in which every flight was refused cannot have produced new work, and asking for more
-    /// would spin against a queue the rails have already closed.
-    pub fn drain(
-        &self,
-        pending: Vec<Queued>,
-        mut unqueue: impl FnMut(&Flight),
-        mut report: impl FnMut(&Flight, &Dispatched),
-    ) -> Drained {
-        self.drain_with(pending, &mut unqueue, &mut report, |_| Vec::new())
-    }
-
-    /// Drains, asking `refill` for newly queued work after each pass.
-    pub fn drain_with(
-        &self,
-        pending: Vec<Queued>,
-        unqueue: &mut impl FnMut(&Flight),
-        report: &mut impl FnMut(&Flight, &Dispatched),
-        mut refill: impl FnMut(&[Flight]) -> Vec<Queued>,
-    ) -> Drained {
-        let mut ran = 0;
-        let mut batch = pending;
-        let mut done: Vec<Flight> = Vec::new();
-
-        while !batch.is_empty() {
-            let before = ran;
-
-            for queued in std::mem::take(&mut batch) {
-                if self.ground_stop_engaged() {
-                    return Drained {
-                        ran,
-                        abandoned: Vec::new(),
-                    };
-                }
-
-                unqueue(&queued.flight);
-
-                // Recorded before anything runs, because this is where a chain's pipeline and flags
-                // enter the process: from the trigger for a fresh chain, from the queued flight for
-                // one resumed after a restart. Every run after this one reads them from here.
-                self.chains.opened_by(
-                    &queued.flight.itinerary,
-                    queued.pipeline.as_ref(),
-                    &queued.flags,
-                    &queued.within,
-                );
-
-                let Some((flight, joined)) = self.past_the_barrier(&queued.flight, report) else {
-                    done.push(queued.flight);
-                    continue;
-                };
-
-                // The chain is looked up, not created. Every flight in one causal chain is
-                // accounted against the same Hops, Fuel and run cap; minting a fresh itinerary
-                // per flight would reset all three and a loop between two agents would never end.
-                let sender = flight.from.agent().cloned();
-                let origin = (!joined).then_some(&flight.from);
-                let result = self
-                    .chains
-                    .with(&flight.itinerary, &self.config.defaults, |chain| {
-                        self.run(chain, sender.as_ref(), &flight, origin)
-                    })
-                    .unwrap_or_else(|| {
-                        Dispatched::Failed("the itinerary ledger was poisoned".to_owned())
-                    });
-
-                report(&flight, &result);
-
-                if matches!(result, Dispatched::Ran { .. }) {
-                    ran += 1;
-                }
-
-                done.push(queued.flight);
-            }
-
-            // Only a run can send a flight. A pass that started nothing cannot have produced new
-            // work, so asking for more would spin against a queue the rails have already closed.
-            if ran == before {
-                break;
-            }
-
-            batch = refill(&done);
-        }
-
-        // Nothing is running and nothing is queued, so any barrier still holding work is waiting
-        // for something that will never arrive. Giving up loudly beats a silent permanent stall,
-        // which is the worst outcome in this system: a failure at least says something happened.
-        let abandoned = self.barriers.abandon_unreachable(
-            &self.routes,
-            |id| self.chains.scope_of(id),
-            &BTreeSet::new(),
-        );
-
-        Drained { ran, abandoned }
     }
 
     /// Resolves a flight against any rendezvous guarding its destination.
@@ -912,10 +889,10 @@ impl Factory {
     /// Returns `None` when nothing should run: the flight was parked, or it arrived after an `any`
     /// join had already fired. Otherwise the flight to run, and whether it folds several flights
     /// together — in which case its body names each sender and the payload names none.
-    fn past_the_barrier(
+    pub(crate) fn past_the_barrier(
         &self,
         flight: &Flight,
-        report: &mut impl FnMut(&Flight, &Dispatched),
+        report: &mut dyn FnMut(&Flight, &Dispatched),
     ) -> Option<(Flight, bool)> {
         // A join applies only in its scope, so the barrier is looked up in the chain's own graph:
         // a flight in a pipeline the join is not scoped to goes straight through.
@@ -956,6 +933,14 @@ impl Factory {
             .map(declared_values)
             .unwrap_or_default()
     }
+}
+
+/// What a run is told about where its work came from, beside the work itself.
+struct Told<'a> {
+    /// Who sent it. `None` for a released join, whose body already labels each flight it carries.
+    origin: Option<&'a layover_core::flight::Origin>,
+    /// Why this run follows another, when it restarts one that was interrupted.
+    handover: Option<&'a str>,
 }
 
 /// Folds everything a join was waiting for into the one flight that wakes its agent.

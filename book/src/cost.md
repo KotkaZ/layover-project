@@ -54,8 +54,11 @@ A factory that writes no `[reserve]` table has the default: **$100 in any rollin
 `fuel_usd = 0` to mean unlimited.
 
 Two limits worth knowing. The check sees finished runs only, so several starting together against
-the last few dollars can all pass and overshoot (risk 15 in
-[`risks.md`](https://github.com/KotkaZ/layover-project/blob/main/docs/risks.md)). And if history
+the last few dollars can all pass and overshoot — with runs in parallel, up to
+`max_concurrent_runs` of them (risk 15 in
+[`risks.md`](https://github.com/KotkaZ/layover-project/blob/main/docs/risks.md)). Fuel has the same
+shape within a chain: a fan-out's runs are admitted together against what is left, and each is
+charged when it finishes. And if history
 cannot be read, the check lets work through rather than stopping the factory on a disk error.
 
 ### Why the window rolls instead of resetting at midnight

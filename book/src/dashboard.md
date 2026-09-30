@@ -44,10 +44,12 @@ that pipeline declares — each starting from its declared default, so the windo
 happen if you changed nothing. A flag the pipeline does not declare is refused rather than ignored:
 silently dropping it would let a typo change nothing while appearing to work.
 
-**The work is queued, not started.** Dispatching needs the supervisor, which is not part of this
-release, so the flight is persisted and waits. The window says so, and `dispatched_by` is reported
-as `null` rather than a plausible name, so a queue never looks like it is moving when nothing is
-moving it. A Ground Stop refuses the trigger outright — a kill switch that halts running work while
+**The work is queued, and the Tower starts it.** Under `layover serve` it starts as soon as a slot
+is free, and the window names the Tower that will pick it up. Above the workflows a line reads
+`2 of 4 run(s) alive · 3 flight(s) queued`, kept current every few seconds — the difference between
+a busy factory and a stuck one. A dashboard started with `--watch-only` runs nothing and says so:
+`dispatched_by` is `null` rather than a plausible name, so a queue never looks like it is moving
+when nothing here is moving it. A Ground Stop refuses the trigger outright — a kill switch that halts running work while
 letting more be booked is not a kill switch.
 
 ## Reading what an agent did

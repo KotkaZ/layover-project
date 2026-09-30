@@ -48,9 +48,9 @@ fail an unattended run — a stalled chain, a schedule that never fired, a Groun
 
 ## Status
 
-`layover serve` runs a factory unattended: it fires scheduled pipelines, spawns agent CLIs, hosts
-the MCP endpoint they call back into, enforces the safety rails, and serves a dashboard over all
-of it.
+`layover serve` runs a factory unattended: it fires scheduled pipelines, runs agent CLIs — up to
+`max_concurrent_runs` at once — hosts the MCP endpoint they call back into, enforces the safety
+rails, settles the runs a previous Tower left behind, and serves a dashboard over all of it.
 
 See [the decision log](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md).
 

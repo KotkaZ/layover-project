@@ -54,13 +54,45 @@ pub struct DashboardState {
 /// route map changes with it. A factory definition is a few kilobytes of TOML, so the cost of
 /// re-reading it is not worth the surprise of a stale diagram.
 #[derive(Debug, Clone)]
-pub struct Dashboard(Arc<DashboardState>);
+pub struct Dashboard(Arc<DashboardState>, Option<Arc<str>>);
 
 impl Dashboard {
     /// Creates a dashboard over a configuration file and a history directory.
+    ///
+    /// It says nothing is running the queue until [`Dashboard::dispatched_by`] says what is.
     #[must_use]
     pub fn new(state: DashboardState) -> Self {
-        Self(Arc::new(state))
+        Self(Arc::new(state), None)
+    }
+
+    /// Names what runs this factory's queue — the Tower in the same process — so the dashboard can
+    /// say who will pick queued work up instead of that nothing will.
+    #[must_use]
+    pub fn dispatched_by(mut self, dispatcher: impl Into<String>) -> Self {
+        self.1 = Some(Arc::from(dispatcher.into()));
+        self
+    }
+
+    /// How many runs are alive, factory-wide: the live records Towers keep in `state/runs`, one per
+    /// run started and not yet seen finish.
+    ///
+    /// Read from those records rather than asked of a Tower, so it is right whichever process
+    /// started the runs — this one, another `serve`, or `layover run`.
+    fn alive_runs(&self) -> usize {
+        let runs = self
+            .0
+            .config_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join(".layover")
+            .join("state")
+            .join("runs");
+        std::fs::read_dir(runs).map_or(0, |entries| {
+            entries
+                .flatten()
+                .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "json"))
+                .count()
+        })
     }
 
     /// The state this dashboard reads.
@@ -402,11 +434,21 @@ impl Api for Dashboard {
                 .with_detail(error.to_string())
         })?;
 
+        // The limit is the factory's as it stands on disk, like everything else here; a Tower reads
+        // it once at start, so the two differ only between an edit and a restart.
+        let max_concurrent_runs = self.config().map_or_else(
+            |_| layover_core::config::Defaults::default().max_concurrent_runs,
+            // The Tower reads zero as one at a time, so that is what is reported.
+            |config| config.defaults.max_concurrent_runs.max(1),
+        );
+
         Ok(PendingList {
             pending: pending.iter().map(view::pending).collect(),
-            // Null is the honest answer. Showing a queue that looks like it is moving when
-            // nothing will move it is the failure this whole surface is meant to avoid.
-            dispatched_by: None,
+            // Null unless a Tower in this process runs the queue. Showing a queue that looks like
+            // it is moving when nothing will move it is the failure this surface exists to avoid.
+            dispatched_by: self.1.as_deref().map(str::to_owned),
+            alive_runs: i32::try_from(self.alive_runs()).unwrap_or(i32::MAX),
+            max_concurrent_runs: i32::try_from(max_concurrent_runs).unwrap_or(i32::MAX),
         })
     }
 

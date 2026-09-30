@@ -54,7 +54,7 @@ layout must be interchangeable, or the layout number means nothing.
 | `max_runs` | `64` | Deterministic run cap; holds when a runner reports no cost. |
 | `timeout_sec` | `900` | Wall-clock limit for one run. |
 | `max_recovery_attempts` | `2` | How many times interrupted work may be [restarted](./recovery.md). |
-| `max_concurrent_runs` | `4` | How many agent CLIs may be alive **at once**, factory-wide. Excess work queues. |
+| `max_concurrent_runs` | `4` | How many agent runs may be alive **at once**, factory-wide. Queued work waits for a slot and starts, oldest first, the moment one frees. `1` runs one at a time. |
 | `max_spawn_generations` | `1` | How many `mode = "spawn"` hops separate a chain from the trigger that began it. |
 
 `max_hops` and `fuel_usd` are not interchangeable. A hop is spent per flight and branches *inherit*
@@ -225,6 +225,7 @@ prompt_file = "tester.md"
 | `fuel_usd` | — | Fuel override for itineraries that *start* at this agent. |
 | `work_dir` | — | Work somewhere other than the shared `work_dir`. Relative to this file; an absolute path is used as written. |
 | `recovery` | `automatic` | `manual` if repeating this agent's work would do damage. See [Recovery](./recovery.md). |
+| `max_concurrent` | — | At most this many runs of this agent alive at once, within `max_concurrent_runs`. `1` for an agent that must never overlap itself. |
 
 ### MCP servers
 
@@ -313,7 +314,8 @@ Until then, treat `access` as a statement of intent that prompts should repeat (
 product code"), not as a guarantee.
 
 Fanning out to two `read-write` agents is a warning: they share one working directory and will
-overwrite each other. The same is true of any two agents today, whatever their `access`.
+overwrite each other. The same is true of any two agents that run at the same time, whatever their
+`access` — and since 1.4.0, runs do.
 
 ### Bounding width, not just depth
 
@@ -326,6 +328,23 @@ width is not known until it looks.
 refusing**. Every other rail protects a budget, and money spent is gone. This one protects a
 machine, and a machine that is busy now will not be busy in a minute — refusing would turn "review
 twelve pull requests" into "review four and silently drop eight".
+
+**Runs overlap.** Up to `max_concurrent_runs` agents run at the same time — the branches of a
+fan-out, the reviews a sweep spawns, a schedule's tick beside an hour-long manual job — and the next
+queued flight starts the moment a slot frees. Before 1.4.0 the Tower ran one agent at a time
+whatever this said, so a factory written then is now more parallel than it has ever been: two
+agents that write the same `work_dir` can now write it *at once*. `max_concurrent_runs = 1` restores
+one at a time for the whole factory; `max_concurrent` keeps a single agent from overlapping itself:
+
+```toml
+[agents.mailman]
+max_concurrent = 1   # one Teams sender; every other agent still runs beside it
+```
+
+Work starts oldest first among the flights that can start. A flight for an agent at its own cap
+waits where it is, and the flights behind it for other agents go ahead: waiting for that agent is
+what the cap asks for, and holding the whole factory behind it is not. `layover validate` refuses
+either limit at `0`, which would start nothing.
 
 `max_spawn_generations` bounds the other direction. A spawned itinerary gets *fresh* Hops, so Hops
 cannot see across chains: without a generation limit an agent that spawns an agent that spawns an

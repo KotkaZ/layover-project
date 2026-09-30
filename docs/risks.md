@@ -19,10 +19,15 @@ documented as such.
 
 ### 2. Shared workspace contention
 
-**Severity: high. Not mitigated.**
+**Severity: high. Partially mitigated.**
 
 Concurrent agents share one working directory and *will* clobber each other's files. There is no
 locking and no merge strategy.
+
+*Made real by parallel runs.* Until 1.4.0 the Tower happened to run one agent at a time, which hid
+this for agents in different chains. Runs now overlap up to `max_concurrent_runs`. `max_concurrent
+= 1` keeps one writer from overlapping itself, and `max_concurrent_runs = 1` restores one at a time
+for the whole factory; neither stops two *different* writers sharing the tree.
 
 *Declared but not built:* agents declare `access = "read-only" | "read-write"` and pipelines
 `workspace = "shared" | "per-itinerary"`, and the design gives a read-only agent — and each
@@ -231,10 +236,13 @@ in flight. With a `$40` Reserve and four Slots, four runs each costing `$20` all
 recorded spend is still zero, and the factory ends `$40` over. Fuel has the same shape: a run
 admitted with one cent remaining may spend a hundred dollars before its completion report arrives.
 
+Parallel runs make this real rather than theoretical: a fan-out's runs are admitted together
+against the Fuel left before any of them has reported, and `tests/parallel.rs` pins that overshoot
+down so it cannot grow unnoticed.
+
 **Why it is not fixed.** A reservation needs a *worst-case estimate* before a run starts, and the
-only honest source for that is a rate card and a token ceiling the Tower controls — neither of
-which can be wired up before the supervisor exists. Guessing a ceiling now would either throttle
-real work or provide false assurance.
+only honest source for that is a rate card and a token ceiling the Tower controls. Guessing a
+ceiling would either throttle real work or provide false assurance.
 
 **Mitigation until then.** Slots bound how many runs can be simultaneously overshooting, so the
 overshoot is bounded by `max_concurrent_runs × worst single run` rather than being open-ended.
@@ -383,3 +391,18 @@ and queued work, never from a tool call. The route check refuses the edge whatev
 - **The Tower trusts its own files.** A chain's pipeline is read from the queue under `.layover/`.
   Anything able to rewrite that file can relabel queued work; an agent is not meant to be able to,
   but nothing stops an agent whose `work_dir` contains the factory's state directory.
+
+### 23. Two processes running one factory's queue
+
+**What could happen.** Locks on the queue, the learnings and each Hangar's memory are held within
+one process. `layover run` beside a `serve`, or two `serve`s over one directory, each take a flight
+off the queue by reading it and writing it back, and can both believe they took the same one — so
+it runs twice.
+
+**Why it is not fixed.** A lock across processes on every journal file is a different mechanism from
+the one runs in parallel needed, and running one factory from two processes is not a supported
+shape: `layover serve --watch-only` is the way to point a second window at a factory.
+
+**Mitigation until then.** Each Tower's claim on its live runs is a lock the operating system holds
+across processes, so a second Tower never stops or restarts the first one's runs. It does not stop
+them racing for queued work. Run one Tower per factory.

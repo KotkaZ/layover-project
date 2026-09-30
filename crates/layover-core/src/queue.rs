@@ -19,6 +19,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 
 use crate::flight::Flight;
+use crate::handover::Recovery;
 use crate::pipeline::PipelineName;
 
 /// A flight waiting to be dispatched, with the instructions needed to dispatch it.
@@ -47,6 +48,20 @@ pub struct Queued {
     /// A `null` entry is an ancestor chain no pipeline opened. Empty for every other chain.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub within: BTreeSet<Option<PipelineName>>,
+    /// The interrupted run this flight restarts, when it restarts one.
+    ///
+    /// Told to the run above its work, so that it checks before repeating a side effect. Carried on
+    /// the queued flight so a crash loop is bounded by `max_recovery_attempts` across restarts,
+    /// which are exactly when a count held in memory would be lost.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovering: Option<Recovery>,
+    /// Whether the flight is a rendezvous that already released, carrying every arrival.
+    ///
+    /// Only a restarted run of a released join is queued like this. The barrier it passed was
+    /// discarded with the Tower that held it, and delivered to a fresh one it would wait for
+    /// upstreams whose runs finished long ago.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub released: bool,
 }
 
 impl Queued {
@@ -62,7 +77,32 @@ impl Queued {
             pipeline,
             flags,
             within: BTreeSet::new(),
+            recovering: None,
+            released: false,
         }
+    }
+
+    /// Which attempt at its work this is: 1 as it was asked for, 2 for the first restart after a
+    /// run of it was interrupted, and so on.
+    #[must_use]
+    pub fn attempt(&self) -> u32 {
+        self.recovering
+            .as_ref()
+            .map_or(1, |recovery| recovery.attempt)
+    }
+
+    /// Marks the flight as restarting an interrupted run.
+    #[must_use]
+    pub fn restarting(mut self, recovery: Recovery) -> Self {
+        self.recovering = Some(recovery);
+        self
+    }
+
+    /// Marks the flight as a join that already released, to be delivered straight to its agent.
+    #[must_use]
+    pub fn already_released(mut self) -> Self {
+        self.released = true;
+        self
     }
 
     /// Records the pipelines the chain must also stay within.
@@ -120,5 +160,35 @@ mod tests {
 
         assert!(!json.contains("pipeline"), "{json}");
         assert!(!json.contains("flags"), "{json}");
+    }
+
+    #[test]
+    fn a_restart_survives_storage_and_counts_its_attempt() {
+        // The attempt count bounds a crash loop, and a crash loop is a sequence of restarts — the
+        // moment anything held only in memory is gone.
+        let queued = Queued::new(flight(), None, BTreeMap::new())
+            .restarting(crate::handover::Recovery {
+                previous: crate::flight::RunId::generate(),
+                interruption: crate::handover::Interruption::TowerRestart,
+                attempt: 2,
+            })
+            .already_released();
+
+        let json = serde_json::to_string(&queued).expect("serialises");
+        let read: Queued = serde_json::from_str(&json).expect("deserialises");
+
+        assert_eq!(read, queued);
+        assert_eq!(read.attempt(), 2);
+        assert!(read.released);
+    }
+
+    #[test]
+    fn work_as_asked_for_is_the_first_attempt_and_says_nothing_about_restarts() {
+        let queued = Queued::new(flight(), None, BTreeMap::new());
+        let json = serde_json::to_string(&queued).expect("serialises");
+
+        assert_eq!(queued.attempt(), 1);
+        assert!(!json.contains("recovering"), "{json}");
+        assert!(!json.contains("released"), "{json}");
     }
 }

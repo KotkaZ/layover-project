@@ -98,11 +98,36 @@ for the steps where checking is not good enough.
 
 The reference factory sets `recovery = "manual"` on its publisher, and nothing else.
 
+## After a restart
+
+A Tower that goes away — a restart, a crash, a closed terminal — leaves a record of every run it
+was watching. The next Tower to open the factory, `layover serve` or `layover run`, settles each one
+before it starts anything:
+
+1. **It makes sure the process is gone.** A run still alive is cut off — its MCP endpoint and token
+   died with the Tower that minted them, so nothing it sends, reports or books can arrive — and is
+   stopped along with everything it started. A process identifier since reused by another program
+   is recognised by its start time and left alone.
+2. **It writes the run to history** as `interrupted`, priced from what its transcript reported, with
+   a detail saying what was found.
+3. **It restarts the work** where the agent's `recovery` policy and `max_recovery_attempts` allow and
+   no Ground Stop is engaged: the same flight, in the same chain, told the handover above. The
+   interrupted run's spend is charged to the chain first, so being interrupted cannot buy a chain a
+   fresh budget.
+
+```text
+`eagle` (run_01M3…) was interrupted by a restart: it was still running, cut off from Layover, and
+was stopped; restarted as attempt 2
+```
+
+A run another living Tower is watching is left alone. Each Tower holds a lock on a file of its own,
+which the operating system releases however the Tower ends, and every run's record names it.
+`layover run --dry-run` settles nothing.
+
+A chain's Fuel and run count live in the Tower's memory, so a chain continuing after a restart
+starts from its configured budget again — less what the interrupted run spent.
+
 ## Status
 
-The domain model, its rails and the handover text are built and tested, and so is the part that
-notices: a run is recorded before it is spawned, with its process identifier and the moment it
-began, which is what lets an interrupted run be told apart from a finished one after a restart.
-
-What is missing is the loop that acts on that — deciding to start the replacement, and routing what
-it produces. See [Status](./index.md#status).
+Recovery after a restart is built on everything above. Steering has its handover, and nothing yet
+that lets a person send one.

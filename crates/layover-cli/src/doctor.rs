@@ -27,6 +27,7 @@ use layover_core::run::Outcome;
 use layover_store::{HelpFilter, History, Journal, RunFilter};
 
 mod money;
+mod waits;
 
 /// How serious a finding is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -154,6 +155,13 @@ pub fn check(config: &Config, root: &Path, window: Window) -> Result<Report, Str
     stalled_chains(&journal, &span, &mut report);
     unreported_costs(&runs, &mut report);
     money::reserve(config, root, &runs, &mut report);
+    waits::waits(
+        config,
+        root,
+        &runs,
+        &journal.pending().unwrap_or_default(),
+        &mut report,
+    );
     interrupted_runs(&runs, &mut report);
     open_help(&journal, &span, &mut report);
     stranded_layovers(&journal, config, &mut report);
@@ -583,6 +591,7 @@ entry = "analyst"
             detail: None,
             blocked_on: None,
             pid: None,
+            queued_at: None,
         };
 
         let mut rare = Report::default();

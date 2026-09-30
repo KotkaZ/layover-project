@@ -238,12 +238,7 @@ pub fn serve(
     hangar::prune(&state_dir(path, history).join("hangars"), horizon)
         .map_err(|error| error.to_string())?;
 
-    let dashboard = Dashboard::new(DashboardState {
-        config_path: path.to_path_buf(),
-        history: store,
-        journal: Arc::clone(&journal),
-        ground_stop: history_dir.with_file_name("ground-stop"),
-    });
+    let dashboard = dashboard_for(path, store, &journal, &history_dir, watch_only);
 
     // Held for the lifetime of the command. Dropping either stops it: the endpoint frees its port,
     // and the Tower finishes whatever run it is watching before the thread joins.
@@ -595,6 +590,33 @@ pub fn doctor(path: &Path, window: &str) -> Result<(String, bool), Failure> {
     Ok((report.render(), report.healthy()))
 }
 
+/// The dashboard `serve` puts on a factory.
+///
+/// It names the Tower only when this process runs the queue. A watching dashboard that claimed a
+/// dispatcher would show a queue that looks like it is moving when nothing here will move it.
+fn dashboard_for(
+    path: &Path,
+    history: History,
+    journal: &Arc<Journal>,
+    history_dir: &Path,
+    watch_only: bool,
+) -> Dashboard {
+    let dashboard = Dashboard::new(DashboardState {
+        config_path: path.to_path_buf(),
+        history,
+        journal: Arc::clone(journal),
+        ground_stop: history_dir.with_file_name("ground-stop"),
+    });
+    if watch_only {
+        dashboard
+    } else {
+        dashboard.dispatched_by(format!(
+            "the Tower in `layover serve` (process {})",
+            std::process::id()
+        ))
+    }
+}
+
 /// The state directory a command is about to use.
 ///
 /// `--history` points at `.layover/history`, and the versioned thing is its parent: one marker
@@ -641,12 +663,30 @@ pub fn run(path: &Path, dry_run: bool) -> Result<String, Failure> {
     let journal = Arc::new(
         Journal::open(root.join(".layover").join("journal")).map_err(|error| error.to_string())?,
     );
-    let pending = journal.pending().map_err(|error| error.to_string())?;
 
     let mut out = String::new();
 
+    // Before reading the queue: a run the last Tower was watching when it went away is stopped if
+    // it is still going, written to history, and — where its agent allows — queued again. Not on a
+    // dry run, which promises to start nothing and so must not stop anything either. A run a
+    // living `serve` is watching is left alone.
+    //
+    // The same factory settles and then runs, so a restart is charged what the run it replaces
+    // spent. The MCP endpoint is attached afterwards, once there is something to run.
+    let factory = Factory::new(config.clone(), root).map_err(|error| error.to_string())?;
+    if !dry_run {
+        for settled in factory
+            .reconcile(&mut |restart| journal.queue(restart).map_err(|error| error.to_string()))
+        {
+            let _ = writeln!(out, "{settled}");
+        }
+    }
+
+    let pending = journal.pending().map_err(|error| error.to_string())?;
+
     if pending.is_empty() {
-        return Ok("Nothing is queued.\n".to_owned());
+        out.push_str("Nothing is queued.\n");
+        return Ok(out);
     }
 
     if dry_run {
@@ -669,9 +709,7 @@ pub fn run(path: &Path, dry_run: bool) -> Result<String, Failure> {
     // that reads as the agent misbehaving.
     let served = ServedMcp::start(&config, root, &journal)?;
 
-    let factory = Factory::new(config, root)
-        .map_err(|error| error.to_string())?
-        .serving_mcp(served.endpoint.clone());
+    let factory = factory.serving_mcp(served.endpoint.clone());
 
     if factory.ground_stop_engaged() {
         return Err("a Ground Stop is engaged; release it before running anything".into());
@@ -679,16 +717,24 @@ pub fn run(path: &Path, dry_run: bool) -> Result<String, Failure> {
 
     served.resolve_against(factory.tokens());
 
-    let mut lines = Vec::new();
-    let drained = factory.drain_with(
+    let lines = std::cell::RefCell::new(Vec::new());
+    let drained = factory.dispatch(
         pending,
-        &mut |flight| {
+        &mut |flight| match journal.unqueue(&flight.id) {
             // Off the queue before it runs. A flight that crashes the factory mid-run must not
-            // come back on restart and do its work a second time.
-            let _ = journal.unqueue(&flight.id);
+            // come back on restart and do its work a second time — so one that cannot be taken
+            // off is not run, and stays queued for the next attempt.
+            Ok(was_queued) => was_queued,
+            Err(error) => {
+                lines.borrow_mut().push(format!(
+                    "  {} not run: it could not be taken off the queue: {error}",
+                    flight.to
+                ));
+                false
+            }
         },
         &mut |flight, result| {
-            lines.push(match result {
+            lines.borrow_mut().push(match result {
                 Dispatched::Ran {
                     outcome,
                     usd,
@@ -707,13 +753,14 @@ pub fn run(path: &Path, dry_run: bool) -> Result<String, Failure> {
                 other => format!("  {} {other}", flight.to),
             });
         },
-        // Whatever the runs just finished put in the queue. Agents send flights while they run,
-        // so the work waiting now is not the work that was waiting when this started.
+        // Whatever has been queued since. Agents send flights while they run, so the work waiting
+        // now is not the work that was waiting when this started.
         |_| journal.pending().unwrap_or_default(),
+        &|| false,
     );
 
     let _ = writeln!(out, "Ran {} flight(s):", drained.ran);
-    for line in lines {
+    for line in lines.into_inner() {
         let _ = writeln!(out, "{line}");
     }
 

@@ -58,6 +58,9 @@ work_dir = "work"
 [defaults]
 runner = "copilot"
 timeout_sec = 30
+# One at a time, so each run's cost is known before the next is admitted. Runs admitted together
+# are all charged, but only after they finish — the overshoot `tests/parallel.rs` pins down.
+max_concurrent_runs = 1
 {extra}
 
 [runners.copilot]

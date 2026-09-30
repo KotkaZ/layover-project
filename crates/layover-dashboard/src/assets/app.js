@@ -541,8 +541,8 @@ async function openTrigger() {
 
   const { dispatched_by: by } = await get("/flights").catch(() => ({ dispatched_by: null }));
   $("#trigger-note").textContent = by
-    ? `Queued work is picked up by ${by}.`
-    : "This queues the work. Nothing dispatches it yet — the supervisor is not part of this release, so it will sit in the queue until there is something to run it.";
+    ? `Queued work is started by ${by} as soon as a slot is free.`
+    : "This queues the work. Nothing in this process starts it — the dashboard is watching only — so it waits until a Tower (`layover serve`) or `layover run` picks it up.";
 
   $("#trigger").showModal();
 }
@@ -574,15 +574,25 @@ async function submitTrigger(event) {
   }
 }
 
+// Runs alive against the factory's limit, and what is waiting for a slot. Shown whenever either is
+// non-zero, because "four of four alive, six queued" is the difference between a busy factory and
+// a stuck one.
 async function loadQueued() {
   const note = $("#queued");
   try {
-    const { pending, dispatched_by: by } = await get("/flights");
-    note.hidden = pending.length === 0;
-    if (pending.length === 0) return;
-    note.textContent = by
-      ? `${pending.length} flight(s) queued, waiting on ${by}.`
-      : `${pending.length} flight(s) queued. Nothing will dispatch them until a supervisor exists.`;
+    const { pending, dispatched_by: by, alive_runs: alive, max_concurrent_runs: limit } =
+      await get("/flights");
+    note.hidden = pending.length === 0 && alive === 0;
+    if (note.hidden) return;
+
+    const running = `${alive} of ${limit} run(s) alive`;
+    if (pending.length === 0) {
+      note.textContent = `${running}.`;
+    } else if (by) {
+      note.textContent = `${running} · ${pending.length} flight(s) queued, started by ${by} as slots free.`;
+    } else {
+      note.textContent = `${running} · ${pending.length} flight(s) queued. Nothing in this process starts them — it is watching only — so they wait for a Tower (\`layover serve\`) or \`layover run\`.`;
+    }
   } catch {
     note.hidden = true;
   }
@@ -860,6 +870,8 @@ function start() {
   loadChains();
   loadHelpBadge();
   loadQueued();
+  // Runs start and finish on their own, so the count is kept current rather than drawn once.
+  setInterval(loadQueued, 5000);
   // The pipeline list has to exist before the first draw, or the selector is empty on load.
   loadPipelines().then(() => {
     loadAgentNames();

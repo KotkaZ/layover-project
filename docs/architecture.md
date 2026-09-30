@@ -44,7 +44,7 @@ carries budget across a causal chain, and *Ground Stop* says exactly what a kill
 | Spawn vs. send | Unified — sending a flight is what starts an agent |
 | Message semantics | Fire-and-forget; `request_response` deferred, superseded by rendezvous joins |
 | Re-entry | Reentrant — re-entry spawns a second independent run |
-| Concurrency | Unbounded |
+| Concurrency | Up to `max_concurrent_runs` runs at once, factory-wide, and `max_concurrent` per agent; the rest queue |
 | Control channel | **MCP** — Layover is an MCP server, agents are MCP clients |
 | Config | A single `layover.toml` |
 | Entry points | Named **pipelines**: an entry agent, a trigger (manual or scheduled) and boolean flags |
@@ -144,6 +144,7 @@ max_hops    = 8
 fuel_usd    = 5.00
 max_runs    = 64
 timeout_sec = 900
+max_concurrent_runs = 4   # runs alive at once, factory-wide; the rest wait in the queue
 
 # ── How to invoke each supported CLI ───────────────────────────────
 # The prompt goes to stdin, so none of these name it: `-p` and its kin take the prompt *text*,
@@ -182,6 +183,7 @@ Record durable conclusions with layover_memory_write.
 [agents.coder]
 runner = "copilot"
 prompt = "You implement the task described in the incoming flight."
+max_concurrent = 1       # two coders in one working tree would overwrite each other
 
 [agents.reviewer]
 runner   = "codex"

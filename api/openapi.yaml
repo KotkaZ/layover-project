@@ -1379,8 +1379,8 @@ components:
 
     PendingList:
       type: object
-      description: Work waiting to start.
-      required: [pending, dispatched_by]
+      description: Work waiting to start, and how many runs are alive to take the slots it waits for.
+      required: [pending, dispatched_by, alive_runs, max_concurrent_runs]
       properties:
         pending:
           type: array
@@ -1390,9 +1390,23 @@ components:
         dispatched_by:
           type: [string, "null"]
           description: |
-            What will pick this work up, or null when nothing will. Null is the honest answer
-            until the supervisor exists, and the dashboard says so rather than showing a queue
-            that looks like it is moving.
+            What is running this queue, or null when nothing in the process serving this API is.
+            `layover serve` names itself; one started with `--watch-only` says null, because the
+            queue it shows moves only if a Tower elsewhere, or `layover run`, picks it up. The
+            dashboard says so rather than showing a queue that looks like it is moving.
+        alive_runs:
+          type: integer
+          format: int32
+          description: |
+            Agent runs alive now, factory-wide: every run a Tower has started and not yet seen
+            finish. A run left behind by a Tower that went away counts until the next Tower
+            settles it.
+        max_concurrent_runs:
+          type: integer
+          format: int32
+          description: |
+            How many runs may be alive at once, from `[defaults] max_concurrent_runs`. Queued work
+            waits for a slot rather than being refused.
 
     Report:
       type: object

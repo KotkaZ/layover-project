@@ -267,6 +267,8 @@ impl Api for Stub {
         Ok(PendingList {
             pending: Vec::new(),
             dispatched_by: None,
+            alive_runs: 0,
+            max_concurrent_runs: 4,
         })
     }
 
@@ -300,6 +302,8 @@ impl Api for Stub {
                 queued_at: "2026-09-17T10:00:00Z".to_owned(),
             }],
             dispatched_by: None,
+            alive_runs: 0,
+            max_concurrent_runs: 4,
         })
     }
 

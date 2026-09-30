@@ -27,6 +27,7 @@ use std::path::{Path, PathBuf};
 use jiff::Timestamp;
 use layover_core::agent::AgentName;
 use layover_core::flight::{ItineraryId, RunId};
+use layover_core::queue::Queued;
 use serde::{Deserialize, Serialize};
 
 /// A run the supervisor started and has not yet seen finish.
@@ -44,6 +45,20 @@ pub struct Live {
     pub started_at: Timestamp,
     /// Where the run's files are.
     pub hangar: PathBuf,
+    /// The work the run was given, as it was queued — kept so that a Tower restarting after this
+    /// run was interrupted can start it again rather than only noting that it existed.
+    ///
+    /// Absent in a record written by a release that did not keep it; such a run can be recorded
+    /// as interrupted, and not restarted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queued: Option<Queued>,
+    /// The Tower watching the run, so that another Tower — or `layover run` beside it — leaves a
+    /// run alone while the one that started it is still alive. See [`crate::recovery`].
+    ///
+    /// Absent in a record written by a release that did not keep it, which is treated as a run
+    /// whose Tower has gone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
 }
 
 /// Where live-run records are kept.
@@ -187,6 +202,8 @@ mod tests {
             pid: 4242,
             started_at: Timestamp::now(),
             hangar: PathBuf::from("hangar"),
+            queued: None,
+            owner: None,
         }
     }
 

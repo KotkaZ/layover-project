@@ -57,9 +57,10 @@ Early. A factory loads, validates and composes its prompts, and `layover serve` 
 on it — route map, run history, cost and the Reserve, help requests, learnings and each agent's
 report.
 
-**`layover serve` runs the factory.** It fires scheduled pipelines, drains the queue, spawns agent
-CLIs, watches them, times them out if they wedge, reads what they cost and writes each run to
-history — and serves the MCP endpoint they call back into.
+**`layover serve` runs the factory.** It fires scheduled pipelines, runs agent CLIs — up to
+`max_concurrent_runs` at once — watches them, times them out if they wedge, reads what they cost
+and writes each run to history, and serves the MCP endpoint they call back into. After a restart
+it settles whatever the last Tower left running before it starts anything new.
 
 **Agents reach one another.** Each run gets a token minted for it alone. An agent that calls
 `layover_send` queues a real flight; the same drain picks it up and runs the next agent. Every hop

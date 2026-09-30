@@ -109,15 +109,18 @@ things in one process:
 
 | | |
 |---|---|
-| Fires schedules | A pipeline with a `trigger` starts on its own, and skips a tick whose previous wave has not finished |
-| Runs the queue | Whatever is waiting — from a schedule, from `POST /flights`, or sent by another agent |
+| Fires schedules | A pipeline with a `trigger` starts on its own, on time even while other runs are going, and skips a tick whose previous wave is still queued or running |
+| Runs the queue | Whatever is waiting — from a schedule, from `POST /flights`, or sent by another agent — up to `max_concurrent_runs` at once, the next starting as a slot frees |
 | Hosts MCP | Every run gets the endpoint and a token, so `layover_send` reaches a real queue |
 | Serves the dashboard | The [route map per workflow](./dashboard.md), run history, cost and the Reserve, help requests, learnings, and each agent's report |
 
 They share one process because they share one factory definition, one queue and one set of live
 tokens. Splitting them would mean keeping three copies of that agreeing.
 
-It also prunes history past its 90-day horizon on startup.
+It also prunes history past its 90-day horizon on startup, and settles what the last Tower left
+behind: a run that was alive when that Tower went away is stopped if it is still going — it can no
+longer reach Layover — written to history as `interrupted`, and restarted where its agent's
+[`recovery`](./recovery.md) policy allows. A run another living Tower is watching is left alone.
 
 `--watch-only` leaves out the first three and serves the dashboard alone. That is what you want
 when pointing a second window at a factory another process is already running: **two Towers over
@@ -145,15 +148,19 @@ layover run                  # run everything queued
 layover run --dry-run        # say what would run, start nothing
 ```
 
-Drains the queue **once** and stops. Each flight is authorised against the route map and the safety
-rails, spawned, watched, and written to history; agents can call back over MCP, so a chain sent by
-one run is picked up by the same command.
+Drains the queue **once** and stops, running up to `max_concurrent_runs` agents at once. Each flight
+is authorised against the route map and the safety rails, spawned, watched, and written to history;
+agents can call back over MCP, so a chain sent by one run is picked up by the same command.
+
+Before it reads the queue it settles runs a Tower that went away left behind, as `serve` does —
+except with `--dry-run`, which starts nothing and so stops nothing either.
 
 A flight is taken **off** the queue before it runs, so a factory that dies mid-run does not repeat
 the work on restart — an agent that opened a pull request and was interrupted before its outcome
 was recorded would otherwise open a second one.
 
-A Ground Stop refuses the command outright, and one appearing mid-drain stops it between flights.
+A Ground Stop refuses the command outright, and one engaged mid-drain starts nothing more and ends
+what is running.
 
 **It is not the lights-out command** — that is [`serve`](#serve). `run` is for when you want to
 watch one batch of work go through, and for scripting Layover from something else that already has
@@ -182,6 +189,7 @@ The failures it looks for are the quiet ones — the ones that look like nothing
 | Expired layovers | Work set down that nothing ever picked up |
 | A Ground Stop left engaged | The factory is up, the dashboard is green, and nothing is running |
 | The Reserve refusing work | A factory that may not spend any more looks exactly like one with nothing to do |
+| Work that waited with a slot free | Queued longer than `timeout_sec` while fewer than `max_concurrent_runs` runs were alive, it looks like a busy factory. It is one where nothing was starting the work |
 
 Findings come in three weights. A **fault** means work was lost or money cannot be accounted for; a
 **warning** means something is wrong and a person should look; a **note** is worth knowing and does

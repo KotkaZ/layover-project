@@ -92,6 +92,31 @@ pub(super) fn check_copilot_price_is_usable(config: &Config, found: &mut Vec<Dia
     }
 }
 
+/// A concurrency limit of zero would start nothing, and must say so.
+///
+/// Excess work waits for a slot rather than being refused, so a limit of zero is not a refusal
+/// anybody would notice: work is accepted, queued, and never started.
+pub(super) fn check_concurrency_is_usable(config: &Config, found: &mut Vec<Diagnostic>) {
+    // A warning, not an error: 1.3.0 loaded this value, and refusing a factory that used to load
+    // is a breaking change. The Tower has always treated it as one at a time.
+    if config.defaults.max_concurrent_runs == 0 {
+        found.push(Diagnostic::warning(
+            "`[defaults] max_concurrent_runs` is 0, which the Tower treats as 1: one run at a time. \
+             Say 1 if that is what you mean, or how many agent CLIs may be alive at once"
+                .to_owned(),
+        ));
+    }
+
+    for (name, agent) in &config.agents {
+        if agent.max_concurrent == Some(0) {
+            found.push(Diagnostic::error(format!(
+                "agent `{name}` sets `max_concurrent = 0`, so no run of it could ever start and its \
+                 work would wait in the queue forever. Leave it unset, or set 1 or more"
+            )));
+        }
+    }
+}
+
 /// Fuel must be a usable positive number.
 ///
 /// `Itinerary::fuel_exhausted` is `spent >= budget`, so a budget of zero is exhausted before the

@@ -499,12 +499,80 @@ and money spent is gone, whereas a machine that is busy now will not be busy in 
 would turn "review twelve pull requests" into "review four and silently drop eight", which is the
 worst available reading of a concurrency limit.
 
-**Why shared files are locked per path, in one registry.** Runs of one agent are about to overlap,
-and they share its Hangar's `memory.md`, the factory's learnings and logbook, and the journal's
-help, reports and queue. Each read-modify-write takes a lock keyed by the file's path from one
-process-wide registry, so two handles on the same journal share it, and each appended line is one
-write of the whole line. Across processes nothing is shared, which is why two Towers over one
-factory remain unsupported.
+**Why one coordinator decides and many threads wait.** Until 1.4.0 the Tower ran one agent at a
+time while `max_concurrent_runs` was parsed and read nowhere: an Eagle Eye sweep of ten hour-long
+reviews took ten hours, and a 14:00 schedule fired at 14:23 because the clock waited for the run in
+front of it. The fix keeps everything that decides *whether* work may start on one thread —
+unqueueing, barriers, admission against Hops, Fuel and the run cap — and moves only the waiting,
+which is where all the time goes, onto a thread per run. So the guarantees the sequential loop gave
+hold without a lock around them: a flight leaves the queue before it runs and is never taken twice,
+a barrier sees its arrivals one at a time, and a chain's rails are charged in the order its flights
+were admitted. A chain's ledger is held only while it is charged — admission before the spawn, the
+Fuel debit after the exit — so runs of one fan-out alive at once each see what the last left.
+
+**Why the clock ticks on the dispatcher's thread.** A schedule skips a tick while its last wave is
+queued *or* running, and a flight moves from one to the other as it starts. A clock on a thread of
+its own could look at both between those moments, see neither, and start a second copy of work
+already under way. Ticked from the dispatcher between one step and the next, nothing moves while it
+looks. The dispatcher looks for new work every quarter second while runs are alive, so schedules
+still fire on time.
+
+**Why the next flight is the oldest one that can start.** First in, first out, among flights whose
+agent is below its own `max_concurrent`. A flight for an agent at its cap waits where it is, and
+flights behind it for other agents go ahead: waiting for the one agent is what the cap asks for,
+and holding the whole factory behind a single Teams sender is not.
+
+**Why the slot count comes from the runs alive rather than from `Slots`.** `Slots` keeps a waiting
+line of run identifiers, but a queued flight has no run yet, and the line work actually waits in is
+the journal's queue — durable, and read back after a restart. A second line in memory would be a
+second source of truth that dies with the process. So the dispatcher counts the runs it holds alive
+against the limit and takes the next eligible flight off the journal's queue.
+
+**Why a restarting Tower stops a run it finds still alive.** Such a run is cut off: its MCP endpoint
+and token died with the Tower that minted them, so nothing it sends, reports or books can arrive,
+and left alone it keeps spending on work nobody will receive. The alternatives were weighed: letting
+it run to completion in a held slot, or doing that only for agents whose `recovery` is `manual`.
+Both leave the chain dead-ended — its output has nowhere to go — and pay for work that is thrown
+away. Stopping it is also what makes it *confirmed* gone, which recovery requires; the restart is
+then decided by the agent's `recovery` policy and `max_recovery_attempts` as for any interruption,
+and is told to check before repeating a side effect. Decided with the maintainer on 30 September
+2026.
+
+**Why each Tower holds a lock rather than recording its process identifier.** A Tower settling runs
+must leave alone those another living Tower is watching — `layover run` beside a `serve`. Comparing
+process identifiers invites the reuse problem recovery already had to solve for runs. A lock on a
+file of its own is released by the operating system however the Tower ends, so "is anybody holding
+it" is exactly "is that Tower alive", and a record written by a release that kept no owner is
+treated as a Tower that has gone.
+
+**Why a restart is charged what the run it replaces spent.** A chain's ledger lives in the Tower's
+memory and starts afresh after a restart. Charging the interrupted run's measured spend — and
+counting it as a run — before the restart is admitted keeps recovery a rail rather than a way for a
+chain to buy itself a new budget by being interrupted.
+
+**Why a released join is restarted past its barrier.** The barrier state went with the Tower that
+held it, and decisions above discard it on restart. Delivered to a fresh barrier, the restarted join
+would wait for upstreams whose runs finished before the restart and be given up as unreachable. So
+the live record keeps the one flight carrying every arrival, marked as already released, and a
+restart delivers it straight to its agent.
+
+**Why history files a run by the day it finished.** The run was written by hand into the segment of
+the day it *started*, while the history reader looks for a run by its finish. An hour-long run that
+crossed midnight landed in a segment its own window never opened, and parallel runs appending by
+hand could interleave. Every run now goes through `History::append`, which files by finish and takes
+the segment's lock.
+
+**Why shared files are locked per path, in one registry.** Runs of one agent now overlap, and they
+share its Hangar's `memory.md`, the factory's learnings and logbook, and the journal's help, reports
+and queue. Each read-modify-write takes a lock keyed by the file's path from one process-wide
+registry, so two handles on the same journal share it, and each appended line is one write of the
+whole line. Across processes nothing is shared, which is why two Towers over one factory remain
+unsupported: see risk 23.
+
+**Why `doctor` measures free slots rather than waiting time.** Work waiting in a busy factory is the
+design. What the one-at-a-time Tower produced was waiting *with slots free*, so that is what is
+measured: from history, how long each run spent queued while fewer than `max_concurrent_runs` runs —
+and fewer than its agent's own cap — were alive. Over `timeout_sec` of that is a warning.
 
 **Why spawning needs a generation counter.** A spawned itinerary gets fresh Hops, fresh Fuel and a
 fresh run cap — that is the entire point, because per-item work wants per-item budget. It is also
@@ -637,9 +705,10 @@ which is the honest answer rather than the tidy one.
 grounds that a control which silently does nothing is worse than no control — it gets trusted once
 and then relied upon at the moment it matters. A trigger button that could not dispatch anything
 would be exactly that. What makes it honest is that the thing it produces is real: a durable,
-persisted flight, which the Tower will drain when it exists. The window says the work is queued and
-that nothing will pick it up yet, and `PendingList.dispatched_by` is `null` rather than a plausible
-name, so the queue never looks like it is moving when it is not. A Ground Stop refuses the trigger,
+persisted flight, which the Tower drains. The window names the Tower that will pick it up; on a
+dashboard that runs nothing (`--watch-only`) it says nothing here will, and
+`PendingList.dispatched_by` is `null` rather than a plausible name, so the queue never looks like
+it is moving when it is not. A Ground Stop refuses the trigger,
 because a kill switch that halts running work while letting more be booked is not a kill switch.
 
 **Why a queued trigger is a Flight and not a new noun.** The obvious modelling is a "request" or a

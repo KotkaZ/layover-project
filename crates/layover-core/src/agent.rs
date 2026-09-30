@@ -117,6 +117,14 @@ pub struct Agent {
     /// Whether the agent is pinned resident rather than transient.
     #[serde(default)]
     pub resident: bool,
+    /// How many runs of this agent may be alive at once, on top of the factory-wide
+    /// `max_concurrent_runs`.
+    ///
+    /// For an agent that must not overlap itself — a single Teams sender, a publisher that pushes
+    /// one branch at a time. Unset, only the factory-wide limit applies. Excess work waits in the
+    /// queue, like every other concurrency limit; nothing is refused.
+    #[serde(default)]
+    pub max_concurrent: Option<usize>,
     /// Per-agent Fuel override, applied when an itinerary starts at this agent.
     #[serde(default)]
     pub fuel_usd: Option<f64>,

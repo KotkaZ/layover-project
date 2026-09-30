@@ -152,6 +152,10 @@ By default the tick is **skipped**. Starting a second copy means paying twice fo
 on a shared workspace, two agents editing the same files. Skipping means being one interval late.
 For unattended spending those are not comparable.
 
+The last wave is still going while any flight of it is queued *or* any run of it is alive —
+including a chain it spawned — so an hour-long run holds its schedule for the hour. Other
+pipelines' schedules are not held: the clock fires on time while runs are going.
+
 ```toml
 [pipelines.review-bot]
 entry   = "reviewer"

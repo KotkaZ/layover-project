@@ -67,10 +67,12 @@ curl -X POST localhost:8080/flights \
 }
 ```
 
-`202 Accepted`, not `200`: the work has been accepted, not finished — and today, not started
-either. The flight is written to the queue with the pipeline and every resolved flag, so it
-survives a restart with the run it describes. `GET /flights` reports `dispatched_by: null`,
-because nothing will pick it up.
+`202 Accepted`, not `200`: the work has been accepted, not finished. The flight is written to the
+queue with the pipeline and every resolved flag, so it survives a restart with the run it
+describes, and a Tower starts it as soon as a slot is free. `GET /flights` says which Tower —
+`dispatched_by` — with `alive_runs` and `max_concurrent_runs`, so a client can tell a busy factory
+from a stuck one. `dispatched_by` is `null` when nothing in the serving process runs the queue, as
+under `--watch-only`.
 
 Give either a `pipeline` or a `to`. A pipeline is the normal way in — it names the entry agent and
 declares which flags may be set. A bare `to` sends to an agent marked `entry = true` and accepts

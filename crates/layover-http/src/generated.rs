@@ -485,14 +485,22 @@ pub struct PendingFlight {
     pub to: String,
 }
 
-/// Work waiting to start.
+/// Work waiting to start, and how many runs are alive to take the slots it waits for.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PendingList {
-    /// What will pick this work up, or null when nothing will. Null is the honest answer
-    /// until the supervisor exists, and the dashboard says so rather than showing a queue
-    /// that looks like it is moving.
+    /// Agent runs alive now, factory-wide: every run a Tower has started and not yet seen
+    /// finish. A run left behind by a Tower that went away counts until the next Tower
+    /// settles it.
+    pub alive_runs: i32,
+    /// What is running this queue, or null when nothing in the process serving this API is.
+    /// `layover serve` names itself; one started with `--watch-only` says null, because the
+    /// queue it shows moves only if a Tower elsewhere, or `layover run`, picks it up. The
+    /// dashboard says so rather than showing a queue that looks like it is moving.
     #[serde(default)]
     pub dispatched_by: Option<String>,
+    /// How many runs may be alive at once, from `[defaults] max_concurrent_runs`. Queued work
+    /// waits for a slot rather than being refused.
+    pub max_concurrent_runs: i32,
     /// Queued flights, oldest first.
     pub pending: Vec<PendingFlight>,
 }

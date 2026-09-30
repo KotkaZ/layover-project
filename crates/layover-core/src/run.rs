@@ -111,6 +111,13 @@ pub struct RunRecord {
     pub model: Option<String>,
     /// How it ended.
     pub outcome: Outcome,
+    /// When the work it ran was queued, so the wait between the two can be read back.
+    ///
+    /// For a released join, when the join released rather than when its first flight arrived:
+    /// waiting at a barrier is the design, and only the wait for a free slot says anything about
+    /// dispatch. Absent in records written before it was kept.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queued_at: Option<Timestamp>,
     /// When it started.
     pub started_at: Timestamp,
     /// When it ended, or `None` while it is still going.
@@ -173,6 +180,7 @@ impl RunRecord {
             pipeline: None,
             model: None,
             outcome: Outcome::Running,
+            queued_at: None,
             started_at,
             finished_at: None,
             usd: 0.0,
