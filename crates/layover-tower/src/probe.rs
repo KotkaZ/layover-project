@@ -79,13 +79,24 @@ fn alive_for(pid: u32) -> Option<Seen> {
             .stdin(Stdio::null())
             .output()
             .ok()?;
-        let said = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-        if said.is_empty() {
-            // `ps` exits non-zero and prints nothing for a pid that is not running.
-            return Some(Seen::Gone);
-        }
-        elapsed(&said).map(Seen::RunningFor)
+        read_ps(
+            &String::from_utf8_lossy(&output.stdout),
+            &String::from_utf8_lossy(&output.stderr),
+        )
     }
+}
+
+/// What `ps -o etime= -p PID` said.
+///
+/// Nothing at all is its answer for a pid that is not running. Nothing on stdout with a complaint on
+/// stderr is a `ps` that did not understand the question — the one in `BusyBox` has no `-p` — and
+/// reading that as "gone" would let recovery start a second run beside one still going.
+fn read_ps(stdout: &str, stderr: &str) -> Option<Seen> {
+    let said = stdout.trim();
+    if said.is_empty() {
+        return stderr.trim().is_empty().then_some(Seen::Gone);
+    }
+    elapsed(said).map(Seen::RunningFor)
 }
 
 /// Reads `ps`'s elapsed time, `[[dd-]hh:]mm:ss`, as seconds.
@@ -156,6 +167,24 @@ mod tests {
         let a_day_ago = Timestamp::now() - SignedDuration::from_hours(24);
 
         assert_eq!(probe(std::process::id(), a_day_ago), Some(Verdict::Reused));
+    }
+
+    #[test]
+    fn a_ps_that_did_not_understand_the_question_is_not_an_answer() {
+        assert!(matches!(read_ps("", ""), Some(Seen::Gone)));
+        assert!(matches!(
+            read_ps("   01:05\n", ""),
+            Some(Seen::RunningFor(65))
+        ));
+        assert!(
+            read_ps(
+                "",
+                "ps: unrecognized option: p\nBusyBox v1.37.0 multi-call binary."
+            )
+            .is_none(),
+            "a usage message is not evidence that the process is gone"
+        );
+        assert!(read_ps("nonsense", "").is_none());
     }
 
     #[test]

@@ -95,12 +95,18 @@ impl Started {
         self.child.try_wait().map_err(SpawnError::Io)
     }
 
-    /// Reaps a child that has been killed, so it does not linger as a zombie.
+    /// Ends the child itself, whatever killing its tree managed, and reaps it so it does not
+    /// linger as a zombie.
+    ///
+    /// Signalled directly as well as through the platform's tree kill, because that goes through
+    /// an external command whose word cannot be taken for it — see [`crate::wait::kill_tree`].
+    /// A child that has already gone is not an error.
     ///
     /// # Errors
     ///
     /// Returns [`SpawnError::Io`] when the child cannot be waited on.
     pub fn wait_after_kill(&mut self) -> Result<std::process::ExitStatus, SpawnError> {
+        let _ = self.child.kill();
         self.child.wait().map_err(SpawnError::Io)
     }
 

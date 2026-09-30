@@ -406,3 +406,20 @@ shape: `layover serve --watch-only` is the way to point a second window at a fac
 **Mitigation until then.** Each Tower's claim on its live runs is a lock the operating system holds
 across processes, so a second Tower never stops or restarts the first one's runs. It does not stop
 them racing for queued work. Run one Tower per factory.
+
+### 24. On Linux and macOS, ending a run ends the agent CLI, not what it started
+
+**What could happen.** A run that times out or meets a Ground Stop is killed. On Windows the whole
+tree goes, because `taskkill /T` follows the parent chain. On Unix the Tower kills the process it
+spawned and, if that process leads a process group, the group; an agent CLI that does not start one
+leaves its language servers, MCP servers and test runs behind, reparented and still running.
+
+**Why it is not fixed.** Starting every run as the leader of its own process group would let the
+Tower end the whole tree, as `kill_tree` was always meant to. It would also take the runs out of the
+terminal's foreground group, so Ctrl+C on a `serve` or `run` in a terminal would no longer reach
+them — they would run on, cut off, until the next Tower settled them. That is a change to what
+stopping the Tower means, and it deserves a decision of its own rather than a line in a fix.
+
+**Mitigation until then.** Most children end when their parent does, because the pipe they read from
+closes. A Tower restart settles the agent CLI itself. `timeout_sec` still ends the run's process,
+which is what `doctor`, the slots and the Fuel meter all count.

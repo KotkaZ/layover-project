@@ -111,6 +111,12 @@ signature changed.
   notes before, and learnings writes failed outright on a shared staging file.
 - **A rendezvous is not given up while its upstream is still queued**, which a Tower stopping — or
   one with every slot busy — could otherwise do.
+- **On Linux, a run that times out or meets a Ground Stop is actually ended.** The Tower asked
+  `kill -KILL -<pid>` to end it, which procps 4.0.4 — the `kill` in Ubuntu 24.04 — misreads: it
+  signals the process group named by the pid's first digit, and exits 0 when that fails. Nothing
+  was killed, so `timeout_sec` and a Ground Stop waited runs out, and a pid beginning with 1 would
+  have been `kill(-1)`: every process the user owns. The group is now addressed after `--`, and the
+  Tower also ends the run's process itself, without any external command. Windows was not affected.
 
 ## [1.3.0] — 2026-09-30
 

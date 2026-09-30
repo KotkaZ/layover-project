@@ -103,25 +103,27 @@ pub fn kill_tree(pid: u32) -> Result<(), SpawnError> {
 
     #[cfg(not(windows))]
     {
-        // Negating the identifier addresses the process group, which is what catches the children.
-        let status = Command::new("kill")
-            .args(["-KILL", &format!("-{pid}")])
+        // The group, for a CLI that leads one of its own, which is what catches its children. The
+        // identifier is negated and comes after `--`, with the signal named first. Without the
+        // `--`, procps 4.0.4 — Ubuntu 24.04's `kill` — reads `-1234` as a cluster of options,
+        // signals the group named by its first digit alone, and exits 0 when that fails: nothing
+        // was killed, and a pid beginning with 1 became `kill(-1)`, every process the user owns.
+        // BusyBox objects to the `--` and kills the group anyway, so the exit status says nothing
+        // either way. A run the Tower spawned leads no group of its own; see risk 24.
+        let _ = Command::new("kill")
+            .args(["-KILL", "--", &format!("-{pid}")])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status()
             .map_err(SpawnError::Io)?;
 
-        if status.success() {
-            return Ok(());
-        }
-
-        // The group may not exist because the child never made one. Fall back to the process.
-        Command::new("kill")
+        // The process itself. A caller holding the child also signals it directly, which does not
+        // depend on any of the above; see `Started::wait_after_kill`.
+        let _ = Command::new("kill")
             .args(["-KILL", &pid.to_string()])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
-            .status()
-            .map_err(SpawnError::Io)?;
+            .status();
 
         Ok(())
     }
@@ -205,11 +207,19 @@ mod tests {
     fn a_run_that_outlives_its_timeout_is_killed_and_says_so() {
         let temp = Temp::new("timeout");
         let started = start(&plan(&temp, sleeping(30))).expect("starts");
+        let began = Instant::now();
 
         let (_, ended) =
             wait_for(started, Some(Duration::from_millis(300)), || false).expect("waits");
 
         assert_eq!(ended, Ended::TimedOut, "a wedged run has to be endable");
+        // Said as a time, because the outcome alone passed for years on Linux while every kill
+        // quietly failed and the wait ran the full thirty seconds.
+        assert!(
+            began.elapsed() < Duration::from_secs(10),
+            "ended by the kill, not by the run finishing: {:?}",
+            began.elapsed()
+        );
     }
 
     #[test]

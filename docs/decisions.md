@@ -569,6 +569,15 @@ registry, so two handles on the same journal share it, and each appended line is
 whole line. Across processes nothing is shared, which is why two Towers over one factory remain
 unsupported: see risk 23.
 
+**Why a run is also ended without asking `kill`.** On Unix the Tower ended a run by running
+`kill -KILL -<pid>`, and on Ubuntu 24.04 that never worked: procps 4.0.4 reads a negative number as
+options, signals the group named by its first digit, and reports success when that fails. The tests
+said "timed out" throughout, because they checked the outcome and not how long it took — thirty
+seconds for a 300-millisecond timeout. The group is now addressed after `--`, which every `kill`
+checked reads as a pid, and the Tower then signals the process itself through the standard
+library, which depends on no external command at all. Its own children are another matter: see risk
+24.
+
 **Why `doctor` measures free slots rather than waiting time.** Work waiting in a busy factory is the
 design. What the one-at-a-time Tower produced was waiting *with slots free*, so that is what is
 measured: from history, how long each run spent queued while fewer than `max_concurrent_runs` runs —
