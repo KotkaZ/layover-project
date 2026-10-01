@@ -50,7 +50,7 @@ impl LayoverId {
     /// Mints a new identifier.
     #[must_use]
     pub fn generate() -> Self {
-        Self(format!("lay_{}", Ulid::new()))
+        Self(format!("lay_{}", Ulid::generate()))
     }
 
     /// Returns the identifier as a string slice.

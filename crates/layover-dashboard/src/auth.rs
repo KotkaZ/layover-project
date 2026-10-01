@@ -55,7 +55,7 @@ impl Guard {
     pub fn minted() -> Self {
         // Two ULIDs rather than one: a ULID's leading bits are a timestamp, so half of a single
         // one is guessable by anybody who knows roughly when the process started.
-        let token = format!("{}{}", ulid::Ulid::new(), ulid::Ulid::new());
+        let token = format!("{}{}", ulid::Ulid::generate(), ulid::Ulid::generate());
         Self::Token(Arc::new(token))
     }
 

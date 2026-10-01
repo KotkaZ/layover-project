@@ -77,7 +77,7 @@ impl LearningId {
     /// Mints a new identifier.
     #[must_use]
     pub fn generate() -> Self {
-        Self(format!("lrn_{}", Ulid::new()))
+        Self(format!("lrn_{}", Ulid::generate()))
     }
 
     /// Returns the identifier as a string slice.
