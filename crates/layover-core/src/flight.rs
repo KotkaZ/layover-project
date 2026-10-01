@@ -21,7 +21,7 @@ impl RunId {
     /// Mints a new identifier.
     #[must_use]
     pub fn generate() -> Self {
-        Self(format!("run_{}", Ulid::new()))
+        Self(format!("run_{}", Ulid::generate()))
     }
 
     /// Returns the identifier as a string slice.
@@ -70,7 +70,7 @@ impl FlightId {
     /// Mints a new identifier.
     #[must_use]
     pub fn generate() -> Self {
-        Self(format!("flt_{}", Ulid::new()))
+        Self(format!("flt_{}", Ulid::generate()))
     }
 
     /// Returns the identifier as a string slice.
@@ -107,7 +107,7 @@ impl ItineraryId {
     /// Mints a new identifier.
     #[must_use]
     pub fn generate() -> Self {
-        Self(format!("itn_{}", Ulid::new()))
+        Self(format!("itn_{}", Ulid::generate()))
     }
 
     /// Returns the identifier as a string slice.
