@@ -37,10 +37,12 @@ spawns agent CLIs with an MCP endpoint and a per-run token, holds work at rendez
 writes every run to history. An agent that calls `layover_send` queues a real flight and the same
 process runs the next agent, charging every hop to the one itinerary that began the chain.
 
-What does not exist is API authentication and live run streaming. And the claim this project is
-named for — forty-eight hours unattended without intervention — has not been proven.
+The dashboard watches it: the route map, run history, cost, and each running agent's output as its
+CLI prints it, read-only. What does not exist is isolation between agents — `access` and
+`workspace` are declared and every agent still shares `work_dir` — and the claim this project is
+named for, forty-eight hours unattended without intervention, has not been proven.
 
-What each of those will do is settled rather than open: see
+What was decided for the first runnable release is in
 [`docs/first-release.md`](docs/first-release.md). What is still genuinely undecided is the short
 list in `docs/decisions.md`; do not guess at those.
 

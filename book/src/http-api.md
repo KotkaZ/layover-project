@@ -4,8 +4,7 @@ Layover exposes an HTTP API. The dashboard is purely a client of it, so this lis
 dashboard can ever do.
 
 > **Status:** implemented and served by `layover serve`, which also runs the factory behind it —
-> `POST /flights` queues work the Tower then starts. Streaming a live run is the one endpoint
-> still answering `501`. See [Status](./index.md#status).
+> `POST /flights` queues work the Tower then starts. See [Status](./index.md#status).
 
 ## The specification is the contract
 
@@ -18,8 +17,8 @@ That means the server cannot drift away from the document's *shape*: an endpoint
 code but not in the specification is impossible, and one that is specified but has no handler is
 a compile error rather than a 404 found in production.
 
-It does not mean every handler does something. Generation enforces routes and types, not
-behaviour — which is why one endpoint below compiles, routes, and answers `501`.
+It does not mean every handler does what its description says. Generation enforces routes and
+types, not behaviour; the tests behind each handler do that.
 
 Point any OpenAPI tool at the file to get a client, a mock server or rendered documentation.
 
@@ -35,7 +34,7 @@ Point any OpenAPI tool at the file to get a client, a mock server or rendered do
 | `GET` | `/flights` | | What is queued and waiting. |
 | `DELETE` | `/flights/{flight_id}` | | Cancel queued work. Only what has not started. |
 | `GET` | `/itineraries` | `window`, `state` | Chains of work, and whether each finished or stalled. |
-| `GET` | `/runs` | `status`, `itinerary_id`, `agent`, `pipeline`, `window`, `limit` | Runs, live and historical. |
+| `GET` | `/runs` | `status`, `itinerary_id`, `agent`, `pipeline`, `window`, `limit` | Runs, live and historical. Runs alive now come first, as `running`, read from the Tower's live records — history holds a run only once it is over. |
 | `GET` | `/runs/{run_id}` | | One run, including how it ended. |
 | `GET` | `/runs/{run_id}/report` | | What that agent wrote about its own run. |
 | `GET` | `/costs` | `window`, `pipeline` | What the factory has spent, and how much of it is measured. Each total's `confidence` is the weakest `CostSource` in it — `reported`, `copilot_credits`, `rate_card` or `unreported` — and `credit_runs` counts the runs priced from Copilot AI credits, which `measured_share` counts as measured. |
@@ -45,7 +44,39 @@ Point any OpenAPI tool at the file to get a client, a mock server or rendered do
 | `PATCH` | `/learnings/{learning_id}` | | Keep a learning for good, or stop using it. |
 | `POST` | `/ground-stop` | | Halt everything. Engaging twice is a success, not a conflict. |
 | `DELETE` | `/ground-stop` | | Resume. |
-| `GET` | `/runs/{run_id}/stream` | | Live output as server-sent events — **`501`**. |
+| `GET` | `/runs/{run_id}/stream` | `after` | A run's CLI output as server-sent events, rendered as a terminal shows it — live while it runs, a replay once it is over. See below. |
+
+## Watching a run
+
+`GET /runs/{run_id}/stream` follows the run's transcript in its Hangar and sends what is new as
+[server-sent events](https://html.spec.whatwg.org/multipage/server-sent-events.html), twice a second
+while the run is alive. For a run that is over it sends the whole transcript and closes. It is
+read-only: nothing reaches the agent.
+
+```text
+id: 48213
+event: entry
+data: {"at":"2026-10-01T08:02:20.900Z","closes":null,"kind":"tool","text":"view src/lib.rs (1–40)"}
+
+id: 48213
+event: partial
+data: {"id":"m:5c1e","kind":"say","text":"The change is sound, but"}
+
+id: 51877
+event: end
+data: {"detail":null,"status":"succeeded"}
+```
+
+| Event | Data |
+|---|---|
+| `entry` | Something the run finished doing. `kind` is `prompt`, `think`, `say`, `tool`, `done`, `failed`, `info` or `raw`; `at` is when the CLI said it happened, or `null`; `closes` names the `partial` it replaces. |
+| `partial` | The end of text still arriving. An empty `text` takes it away. |
+| `end` | Sent once, last: how the run ended, from history. `"missing": true` when no transcript was kept. |
+
+Every `id` is how far into the transcript the server had read. A client that loses the connection
+asks again with `?after=` that `id` and gets only what it has not seen. The output is rendered rather
+than raw — deltas folded into the text they build, tool output cut to its first lines, credentials
+masked — so a forty-minute run that wrote tens of megabytes arrives as what a person would read.
 
 ## Queueing work
 

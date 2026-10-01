@@ -8,6 +8,36 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+### Added
+
+- **Sessions: watch agents work, live, the way their CLI would show it.** A new dashboard tab lists
+  every run that is going and the ones that ended in the last day. Each opens as a read-only
+  terminal: the first lines of the prompt, the model's reasoning, every tool call with a few lines
+  of what came back, and what the agent said, with text that is still being written shown as it
+  arrives. A finished run replays from the start, so you can see how an agent reached its
+  conclusion. **Tile running sessions** shows up to four side by side and adds new ones as they
+  start; **Show thinking** and **Follow** do what they say. Runs and reports gain **Watch** /
+  **Transcript**. Copilot CLI's JSON events and Claude Code's `stream-json` are rendered;
+  anything else is shown as printed. Credentials are masked, and tool output and the prompt are cut
+  to their first lines — the whole of both stays in the run's Hangar.
+- **`GET /runs/{run_id}/stream`** serves it, as server-sent `entry`, `partial` and `end` events,
+  with `?after=` to resume. It answered `501` until now.
+
+### Fixed
+
+- **The dashboard shows what is running.** It read running runs from history, which records a run
+  only when it ends, so nothing ever showed as running: not in **Runs**, not on the route map. Both
+  now read the Tower's live records, whichever process started the runs.
+- **Empty badges are hidden.** The Chains and Help tabs showed a red "0" when there was nothing to
+  count.
+
+### Changed
+
+- For library users: `Ledger` and `Live` are defined in `layover_store::live`, and still exported
+  from `layover_tower`. `Ledger::at` reads live records without creating anything, and
+  `Ledger::find` looks one up. `layover_store::hangar::run_dir` and `TRANSCRIPT` name a run's
+  Hangar and transcript. `Api::stream_run` takes a `StreamRunQuery`.
+
 ## [1.4.0] — 2026-09-30
 
 The Tower runs agents in parallel, prices Copilot runs from their AI credits, enforces the Reserve,

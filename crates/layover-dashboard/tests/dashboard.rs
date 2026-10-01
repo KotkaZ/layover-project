@@ -275,6 +275,7 @@ async fn the_page_and_its_assets_are_served_from_the_binary() {
         ("/", "<title>Layover</title>"),
         ("/style.css", ".routemap"),
         ("/app.js", "async function loadCost"),
+        ("/sessions.js", "class Terminal"),
     ] {
         let (status, body) = call(factory.router(), path).await;
         assert_eq!(status, StatusCode::OK, "{path}");
@@ -532,27 +533,6 @@ async fn a_run_still_going_is_listed_but_not_billed() {
 
     let (_, costs) = call(factory.router(), "/costs?window=all_time").await;
     assert_eq!(json(&costs)["total"]["runs"], 0);
-}
-
-#[tokio::test]
-async fn control_operations_refuse_rather_than_pretend() {
-    // A control that silently does nothing is worse than one that is not there, because it gets
-    // trusted once and then relied upon. Streaming a run is the one still unbuilt.
-    let factory = Factory::new("control");
-
-    let response = factory
-        .router()
-        .oneshot(
-            Request::builder()
-                .method("GET")
-                .uri("/runs/run_x/stream")
-                .body(Body::empty())
-                .expect("request builds"),
-        )
-        .await
-        .expect("router responds");
-
-    assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
 }
 
 #[tokio::test]

@@ -23,7 +23,7 @@ use layover_http::{
     LearningList, LearningState, ListHelpQuery, ListItinerariesQuery, ListLearningsQuery,
     ListRunsQuery, OPERATIONS, PendingFlight, PendingList, Pipeline, PipelineList, Problem, Report,
     ReserveState, ResolveHelpRequest, RouteMap, Run, RunList, RunStatus, SendFlightRequest, Status,
-    StreamRunPath, TokenUsage, Trigger, TriggerKind, WindowSpan, Workspace, router,
+    StreamRunPath, StreamRunQuery, TokenUsage, Trigger, TriggerKind, WindowSpan, Workspace, router,
 };
 use tower::ServiceExt as _;
 
@@ -146,7 +146,11 @@ impl Api for Stub {
         }
     }
 
-    async fn stream_run(&self, _path: StreamRunPath) -> Result<EventStream, Problem> {
+    async fn stream_run(
+        &self,
+        _path: StreamRunPath,
+        _query: StreamRunQuery,
+    ) -> Result<EventStream, Problem> {
         Ok(EventStream::new(Body::from("data: hello\n\n")))
     }
 

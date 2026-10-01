@@ -29,12 +29,27 @@
 //! factory held evidence for runs it could no longer look up — transcripts attached to nothing.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use jiff::Timestamp;
 use layover_core::RunId;
+use layover_core::agent::AgentName;
 
 use crate::history::StoreError;
+
+/// The file in a run's directory that holds everything its CLI printed, stdout and stderr in the
+/// order they were written.
+pub const TRANSCRIPT: &str = "transcript.log";
+
+/// The directory one run of `agent` keeps its prompt and transcript in, under `root`, the
+/// `hangars` directory.
+///
+/// Named in one place because two processes find it: the Tower that writes it and the dashboard
+/// that shows it, which may be a different process watching the same factory.
+#[must_use]
+pub fn run_dir(root: &Path, agent: &AgentName, run: &RunId) -> PathBuf {
+    root.join(agent.to_string()).join(run.as_str())
+}
 
 /// Deletes Hangars for runs that began before `horizon`, returning how many went.
 ///

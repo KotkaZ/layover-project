@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Layover</title>
 <link rel="stylesheet" href="/style.css">
+<link rel="icon" href="data:,">
 </head>
 <body>
 <header>
@@ -12,6 +13,7 @@
   <nav>
     <button class="tab" data-view="map" aria-current="true">Route map</button>
     <button class="tab" data-view="chains">Chains<span id="stalled-badge" class="badge" hidden></span></button>
+    <button class="tab" data-view="sessions">Sessions<span id="live-badge" class="badge live" hidden></span></button>
     <button class="tab" data-view="runs">Runs</button>
     <button class="tab" data-view="cost">Cost</button>
     <button class="tab" data-view="journal">Help &amp; learnings<span id="help-badge" class="badge" hidden></span></button>
@@ -73,6 +75,26 @@
     </table>
   </section>
 
+  <section id="sessions" class="view" hidden>
+    <div class="bar">
+      <p class="hint">
+        What each agent's CLI is printing, as it prints it, and the replay of runs that are over.
+        Read-only: nothing here reaches the agent.
+      </p>
+      <label><input id="sessions-follow" type="checkbox" checked> Follow</label>
+      <label><input id="sessions-thinking" type="checkbox" checked> Show thinking</label>
+      <button id="sessions-tile" type="button" aria-pressed="false"
+        title="Show every running session side by side, up to four, and add new ones as they start">Tile running sessions</button>
+    </div>
+    <div class="sessions">
+      <aside id="session-list"></aside>
+      <div>
+        <p id="sessions-empty" class="empty">Pick a session to watch it, or tile everything that is running.</p>
+        <div id="terminals"></div>
+      </div>
+    </div>
+  </section>
+
   <section id="runs" class="view" hidden>
     <div class="bar">
       <label>Window <select id="runs-window"></select></label>
@@ -94,7 +116,7 @@
       <thead>
         <tr>
           <th>Finished</th><th>Agent</th><th>Pipeline</th><th>Outcome</th>
-          <th class="num">Took</th><th class="num">Cost</th><th>Chain</th>
+          <th class="num">Took</th><th class="num">Cost</th><th>Chain</th><th></th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -210,11 +232,15 @@
     <p class="hint" id="report-meta"></p>
     <pre id="report-body"></pre>
     <div id="report-artifacts"></div>
-    <menu><button value="close">Close</button></menu>
+    <menu>
+      <button id="report-transcript" type="button">Transcript</button>
+      <button value="close">Close</button>
+    </menu>
   </form>
 </dialog>
 
 <script src="/routemap.js"></script>
+<script src="/sessions.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

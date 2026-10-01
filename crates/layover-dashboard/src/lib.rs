@@ -21,17 +21,19 @@
 //!
 //! # What it deliberately does not do
 //!
-//! One control writes: a manual trigger queues a flight. What makes that honest is that the thing
-//! it produces is real and durable — the Tower will drain the queue when it exists — and the window
-//! says the work is queued rather than started. Everything else is read-only, and the operations
-//! that need a running supervisor answer [`layover_http::Problem`] with `501` rather than
-//! pretending. A page that silently does nothing when you press the button is worse than one with
-//! no button.
+//! It controls very little. A trigger queues a flight, which the Tower starts; a Ground Stop halts
+//! everything; help and learnings can be settled. Watching a run — its live output, or the replay
+//! of one that is over — is read-only: there is no way to type into an agent from here, and a
+//! running agent cannot tell it is being watched. A page that silently does nothing when you press
+//! the button is worse than one with no button, so there are few buttons.
 
 mod api;
 mod assets;
 pub mod auth;
 mod itinerary;
+mod live;
+mod stream;
+pub mod transcript;
 mod view;
 
 pub use api::{Dashboard, DashboardState};

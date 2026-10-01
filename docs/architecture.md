@@ -321,7 +321,7 @@ exists in the specification but is not implemented is a compile error.
 | `POST` | `/flights` | Start work — name a pipeline, or an `entry = true` agent |
 | `GET` | `/runs` | Runs, live and historical |
 | `GET` | `/runs/:id` | One run, including how it ended |
-| `GET` | `/runs/:id/stream` | SSE live output |
+| `GET` | `/runs/:id/stream` | SSE: a run's CLI output, rendered — live, or a replay once it is over |
 | `GET` | `/costs` | Spend per agent and per model, with its provenance, plus the Reserve |
 | `POST` | `/ground-stop` | Halt everything |
 | `DELETE` | `/ground-stop` | Resume |

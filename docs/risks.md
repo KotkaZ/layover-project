@@ -124,14 +124,18 @@ file shaping their behaviour. That is a drift loop with no human in it.
 in config. Note this applies to *users'* repositories; it does not apply here, because no factory
 targets this repo.
 
-### 7. Transcripts persisted but not exposed
+### 7. Transcripts are readable through the dashboard
 
 **Severity: low.**
 
-The design can stream a live run but has no endpoint to read a finished one, despite storing full
-transcripts and run metadata. Post-incident review would mean reading files by hand.
+`GET /runs/:id/stream` renders any run's transcript — a running one live, a finished one in full —
+so whatever an agent's tools printed reaches anyone who can reach the dashboard: file contents,
+command output, an API's response. Credential-shaped strings are masked as they are in a failure
+detail, which catches tokens and keys with a recognisable shape and not a password printed bare.
 
-*Mitigation:* add `GET /runs/:id` and `GET /runs/:id/transcript` when the UI needs them.
+*Mitigation:* the dashboard requires its token by default, the same one every other route needs;
+`--no-auth` is for a machine only you can reach. Tool output is cut to its first lines, and the
+whole transcript stays in the run's Hangar, which only the factory's own user can read.
 
 ### 8. Self-modification
 

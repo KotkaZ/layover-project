@@ -24,7 +24,7 @@ use layover_http::{
     HelpList, HelpResolved, ItineraryList, ItineraryState, JudgeLearningPath, JudgeLearningRequest,
     Judgement, Learning, LearningList, ListHelpQuery, ListItinerariesQuery, ListLearningsQuery,
     ListRunsQuery, PendingList, PipelineList, Problem, Report, ReserveState, ResolveHelpRequest,
-    RouteMap, Run, RunList, RunStatus, SendFlightRequest, Status, StreamRunPath,
+    RouteMap, Run, RunList, RunStatus, SendFlightRequest, Status, StreamRunPath, StreamRunQuery,
 };
 use layover_store::{HelpFilter, History, Journal, RunFilter};
 
@@ -178,9 +178,8 @@ impl Dashboard {
 
     /// What the factory is doing right now, for colouring the route map.
     ///
-    /// Derived from history rather than from a live supervisor, because there is not one yet. A
-    /// record left in `running` is either genuinely live or was interrupted, and until the Tower
-    /// exists those are indistinguishable from here — which is itself worth seeing.
+    /// An agent is running while a live record names it, and failed when its latest run in the
+    /// last day failed.
     fn live(&self) -> Live {
         let span = self.0.history.resolve(Window::Last24Hours);
         let mut live = Live::default();
@@ -205,6 +204,12 @@ impl Dashboard {
                     live.activity.remove(&record.agent);
                 }
             }
+        }
+
+        // Last, because what is running now outranks how it last ended.
+        for record in self.live_records() {
+            live.activity
+                .insert(record.agent, layover_core::diagram::Activity::Running);
         }
 
         live
@@ -265,12 +270,46 @@ impl Api for Dashboard {
             records.retain(|record| record.itinerary.as_str() == itinerary);
         }
 
-        Ok(RunList {
-            runs: records.iter().map(view::run).collect(),
-        })
+        // What is running now first, whatever the window: it is happening in all of them.
+        let mut runs: Vec<Run> = Vec::new();
+        if matches!(query.status, None | Some(RunStatus::Running)) {
+            let config = self.config().ok();
+            runs.extend(
+                self.live_records()
+                    .iter()
+                    .map(|live| Self::live_run(live, config.as_ref()))
+                    .filter(|run| query.agent.as_ref().is_none_or(|agent| run.agent == *agent))
+                    .filter(|run| {
+                        query
+                            .pipeline
+                            .as_ref()
+                            .is_none_or(|pipeline| run.pipeline.as_ref() == Some(pipeline))
+                    })
+                    .filter(|run| {
+                        query
+                            .itinerary_id
+                            .as_ref()
+                            .is_none_or(|itinerary| run.itinerary_id == *itinerary)
+                    }),
+            );
+        }
+        runs.extend(records.iter().map(view::run));
+        if let Some(limit) = filter.limit {
+            runs.truncate(limit);
+        }
+
+        Ok(RunList { runs })
     }
 
     async fn get_run(&self, path: GetRunPath) -> Result<Run, Problem> {
+        if let Some(live) = self
+            .live_records()
+            .iter()
+            .find(|live| live.run.as_str() == path.run_id)
+        {
+            return Ok(Self::live_run(live, self.config().ok().as_ref()));
+        }
+
         let span = self.0.history.resolve(Window::AllTime);
         let found = self
             .runs(&span, &RunFilter::default())?
@@ -474,8 +513,17 @@ impl Api for Dashboard {
         })
     }
 
-    async fn stream_run(&self, _: StreamRunPath) -> Result<EventStream, Problem> {
-        Err(not_supervised("streaming a run"))
+    async fn stream_run(
+        &self,
+        path: StreamRunPath,
+        query: StreamRunQuery,
+    ) -> Result<EventStream, Problem> {
+        let source = self.source(&path.run_id)?;
+        let after = query
+            .after
+            .and_then(|after| u64::try_from(after).ok())
+            .unwrap_or(0);
+        Ok(EventStream::new(crate::stream::body(source, after)))
     }
 
     async fn cancel_flight(&self, path: CancelFlightPath) -> Result<PendingList, Problem> {
@@ -750,17 +798,6 @@ fn resolve_flags(
             ))),
         },
         |flags| Ok(flags.iter().map(|(k, v)| (k.to_owned(), v)).collect()),
-    )
-}
-
-/// Refuses an operation that needs a supervisor, and says so.
-///
-/// `501` rather than a plausible-looking success. A control that silently does nothing is worse
-/// than a control that is not there, because it is trusted once and then relied on.
-fn not_supervised(what: &str) -> Problem {
-    Problem::new(StatusCode::NOT_IMPLEMENTED, format!("{what} needs a Tower")).with_detail(
-        "The dashboard reads history and configuration. Starting, stopping and steering work \
-             requires the supervisor, which is not part of this release.",
     )
 }
 

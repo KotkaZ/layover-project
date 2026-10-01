@@ -12,7 +12,10 @@ layover-core = { path = "../layover-core", version = "1.4.0" }
 layover-http = { path = "../layover-http", version = "1.4.0" }
 layover-store = { path = "../layover-store", version = "1.4.0" }
 axum = { workspace = true }
+futures-util = { version = "0.3", default-features = false }
 jiff = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["time"] }
 ulid = { workspace = true }
 
 [dev-dependencies]

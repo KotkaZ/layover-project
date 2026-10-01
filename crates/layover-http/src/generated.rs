@@ -976,6 +976,14 @@ pub struct StreamRunPath {
     pub run_id: String,
 }
 
+/// query parameters for `streamRun`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StreamRunQuery {
+    /// Resume from here: the `id` of the last event received. Omit to start at the beginning.
+    #[serde(default)]
+    pub after: Option<i64>,
+}
+
 /// Everything the Tower must implement to serve this API.
 ///
 /// One method per `operationId`. Adding an operation to `api/openapi.yaml` adds a method
@@ -1152,6 +1160,9 @@ pub trait Api: Send + Sync + 'static {
     ) -> impl core::future::Future<Output = Result<PipelineList, Problem>> + Send;
     /// Runs, live and historical.
     ///
+    /// Runs alive now come first, as `running`, from the live records the Tower keeps while a run
+    /// is going — whichever process started it. History holds a run only once it has ended.
+    ///
     /// `GET /runs`
     fn list_runs(
         &self,
@@ -1175,12 +1186,34 @@ pub trait Api: Send + Sync + 'static {
         &self,
         path: GetReportPath,
     ) -> impl core::future::Future<Output = Result<Report, Problem>> + Send;
-    /// Live output from a run, as server-sent events.
+    /// What a run's CLI printed, rendered as a terminal would show it, live.
+    ///
+    /// Read-only. Follows the run's transcript in its Hangar from the start — or from `after` —
+    /// and keeps following it while the run is alive. For a run that is over it sends the whole
+    /// transcript and closes, so the same request replays how a finished run reached its
+    /// conclusion.
+    ///
+    /// The transcript is rendered rather than sent raw: a Copilot or Claude Code run writes one
+    /// JSON event per line, most of them token-by-token deltas of text that arrives again whole.
+    /// What is sent is what the CLI would show a person — the prompt's first lines, reasoning,
+    /// each tool call and a few lines of what it returned, what the agent said — redacted like a
+    /// failure detail and cut to size. Output in no known dialect is sent as written.
+    ///
+    /// Three events, each with an `id` saying how far the transcript was read:
+    ///
+    /// - `entry` — `{"kind", "text", "at", "closes"}`. `kind` is one of `prompt`, `think`,
+    ///   `say`, `tool`, `done`, `failed`, `info`, `raw`. `at` is when the CLI said it happened,
+    ///   or null. `closes` names the partial this entry finishes, or is null.
+    /// - `partial` — `{"id", "kind", "text"}`: the end of text still arriving. Empty `text` takes
+    ///   it away.
+    /// - `end` — `{"status", "detail"}` from history, once the run is over; `"missing": true`
+    ///   when no transcript was kept. Sent once, last.
     ///
     /// `GET /runs/{run_id}/stream`
     fn stream_run(
         &self,
         path: StreamRunPath,
+        query: StreamRunQuery,
     ) -> impl core::future::Future<Output = Result<EventStream, Problem>> + Send;
 }
 
@@ -1413,8 +1446,9 @@ async fn handle_get_report<A: Api>(
 async fn handle_stream_run<A: Api>(
     axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
     axum::extract::Path(path): axum::extract::Path<StreamRunPath>,
+    axum::extract::Query(query): axum::extract::Query<StreamRunQuery>,
 ) -> axum::response::Response {
-    match api.stream_run(path).await {
+    match api.stream_run(path, query).await {
         Ok(stream) => stream.into_response(),
         Err(problem) => problem.into_response(),
     }

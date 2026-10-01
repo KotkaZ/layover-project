@@ -86,6 +86,7 @@ function showView(name) {
   if (name === "runs") loadRuns();
   if (name === "cost") loadCost();
   if (name === "journal") loadJournal();
+  watchSessions(name === "sessions");
 }
 
 async function loadHealth() {
@@ -262,15 +263,29 @@ async function loadRuns() {
         el("td", "", run.pipeline ?? "—"),
         el("td", `outcome ${run.status}`, run.status.replace("_", " ")),
         el("td", "num", duration(run.duration_sec)),
-        el("td", "num", run.cost_usd === null ? "not reported" : money(run.cost_usd)),
+        // A run still going has not been billed yet, which is not the same as reporting nothing.
+        el(
+          "td",
+          "num",
+          run.status === "running" ? "—" : run.cost_usd === null ? "not reported" : money(run.cost_usd),
+        ),
       );
       const chain = el("td");
       chain.append(el("code", "", run.itinerary_id));
-      row.append(chain);
+      // How it got there, as its CLI printed it: live for a run still going, a replay otherwise.
+      const watching = el("td");
+      const transcript = el("button", "link", run.status === "running" ? "Watch" : "Transcript");
+      transcript.type = "button";
+      transcript.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openSession(run);
+      });
+      watching.append(transcript);
+      row.append(chain, watching);
       if (run.detail) row.title = run.detail;
       // Every row opens whatever the agent wrote about itself.
       row.classList.add("readable");
-      row.addEventListener("click", () => openReport(run.run_id));
+      row.addEventListener("click", () => openReport(run.run_id, run));
       body.append(row);
     }
 
@@ -585,6 +600,7 @@ async function loadQueued() {
     note.hidden = pending.length === 0 && alive === 0;
     if (note.hidden) return;
 
+    setLiveBadge(alive);
     const running = `${alive} of ${limit} run(s) alive`;
     if (pending.length === 0) {
       note.textContent = `${running}.`;
@@ -598,7 +614,13 @@ async function loadQueued() {
   }
 }
 
-async function openReport(runId) {
+async function openReport(runId, run) {
+  const transcript = $("#report-transcript");
+  transcript.hidden = !run;
+  transcript.onclick = () => {
+    $("#report").close();
+    openSession(run);
+  };
   try {
     const report = await get(`/runs/${encodeURIComponent(runId)}/report`);
     $("#report-headline").textContent = report.headline;
@@ -853,6 +875,7 @@ function start() {
     $(id).addEventListener("change", loadChains),
   );
   $("#runs-agent").addEventListener("input", loadRuns);
+  startSessions();
 
   // One selector, so every view has to be told. Redrawing only the visible one would leave the
   // others showing another workflow's numbers under this workflow's name the moment you switch.
@@ -864,6 +887,7 @@ function start() {
     loadCost();
     loadJournal();
     loadHelpBadge();
+    if (!$("#sessions").hidden) loadSessions();
   });
 
   loadHealth();

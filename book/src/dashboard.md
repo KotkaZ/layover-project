@@ -52,6 +52,31 @@ a busy factory and a stuck one. A dashboard started with `--watch-only` runs not
 when nothing here is moving it. A Ground Stop refuses the trigger outright — a kill switch that halts running work while
 letting more be booked is not a kill switch.
 
+## Watching agents work
+
+**Sessions** shows every run that is going now, and the ones that ended in the last day, each as
+its CLI would show it in a terminal: the first lines of what it was asked, its reasoning, every
+tool it called with a few lines of what came back, and what it said. Text the model is still
+writing appears as it arrives, and is replaced by the finished message. A session that ends says
+how — `succeeded`, `failed`, `timed out` — and a finished one replays from the start, which is how
+you see the route an agent took to its conclusion rather than only the conclusion.
+
+**Tile running sessions** puts every running session side by side, up to four, and adds new ones as
+they start. **Show thinking** hides the reasoning when you only want the actions; **Follow** keeps
+each terminal at its latest line. The green number on the tab is how many runs are alive. In
+**Runs**, a running row has **Watch** and a finished one **Transcript**; so does a report.
+
+It is **read-only**. There is nowhere to type, and an agent cannot tell it is being watched: the
+dashboard reads the transcript the Tower already writes to each run's Hangar, so it works the same
+from a `--watch-only` dashboard beside a running `serve`.
+
+What is shown is rendered, not raw. A forty-minute Copilot review writes tens of megabytes, most of
+it the same text twice — once token by token, then whole — and the page shows each thing once.
+Tool output is cut to its first lines and the prompt to its first two; the whole of both are in the
+run's Hangar (`.layover/hangars/<agent>/<run>/`). Credentials are masked the way they are in a
+run's failure detail. Copilot CLI's JSON events and Claude Code's `stream-json` are understood;
+anything else — Codex, a script — is shown as it was printed.
+
 ## Reading what an agent did
 
 Every row on **Runs** opens the report that agent wrote about its own run: a headline, the body,
@@ -86,9 +111,6 @@ Queued work can be cancelled individually. Only work that has *not started*: a r
 is stopped with a Ground Stop, which is a different decision with a different blast radius — one
 flight versus the whole factory — and saying "cancelled" about something still opening pull
 requests is the most dangerous thing this surface could say.
-
-Streaming a live run still answers `501`. A control that silently does nothing is worse than a
-control that is not there, because it gets trusted once and then relied upon.
 
 The read-only half needs no Tower at all. History outlives the process that wrote it, so the
 dashboard answers for a factory that is not currently running — which is exactly when you most

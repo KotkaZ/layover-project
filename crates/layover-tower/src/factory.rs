@@ -334,12 +334,11 @@ impl Factory {
     ) -> Result<crate::dispatcher::Launched<'a>, Dispatched> {
         let scope = self.chains.scope_of(chain);
         let run = layover_core::RunId::generate();
-        let hangar = self
-            .root
-            .join(".layover")
-            .join("hangars")
-            .join(authorised.name.to_string())
-            .join(run.as_str());
+        let hangar = layover_store::hangar::run_dir(
+            &self.root.join(".layover").join("hangars"),
+            &authorised.name,
+            &run,
+        );
 
         // Resolved once per run and used twice: to compose this run's prompt, and in the token's
         // session, so that whatever this run sends on carries exactly the flags it was given.

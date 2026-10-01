@@ -204,6 +204,9 @@ paths:
     get:
       operationId: listRuns
       summary: Runs, live and historical.
+      description: |
+        Runs alive now come first, as `running`, from the live records the Tower keeps while a run
+        is going — whichever process started it. History holds a run only once it has ended.
       tags: [work]
       parameters:
         - name: status
@@ -346,7 +349,28 @@ paths:
   /runs/{run_id}/stream:
     get:
       operationId: streamRun
-      summary: Live output from a run, as server-sent events.
+      summary: What a run's CLI printed, rendered as a terminal would show it, live.
+      description: |
+        Read-only. Follows the run's transcript in its Hangar from the start — or from `after` —
+        and keeps following it while the run is alive. For a run that is over it sends the whole
+        transcript and closes, so the same request replays how a finished run reached its
+        conclusion.
+
+        The transcript is rendered rather than sent raw: a Copilot or Claude Code run writes one
+        JSON event per line, most of them token-by-token deltas of text that arrives again whole.
+        What is sent is what the CLI would show a person — the prompt's first lines, reasoning,
+        each tool call and a few lines of what it returned, what the agent said — redacted like a
+        failure detail and cut to size. Output in no known dialect is sent as written.
+
+        Three events, each with an `id` saying how far the transcript was read:
+
+        - `entry` — `{"kind", "text", "at", "closes"}`. `kind` is one of `prompt`, `think`,
+          `say`, `tool`, `done`, `failed`, `info`, `raw`. `at` is when the CLI said it happened,
+          or null. `closes` names the partial this entry finishes, or is null.
+        - `partial` — `{"id", "kind", "text"}`: the end of text still arriving. Empty `text` takes
+          it away.
+        - `end` — `{"status", "detail"}` from history, once the run is over; `"missing": true`
+          when no transcript was kept. Sent once, last.
       tags: [work]
       parameters:
         - name: run_id
@@ -355,14 +379,22 @@ paths:
           description: Identifier of the run to stream.
           schema:
             type: string
+        - name: after
+          in: query
+          required: false
+          description: |
+            Resume from here: the `id` of the last event received. Omit to start at the beginning.
+          schema:
+            type: integer
+            format: int64
       responses:
         "200":
-          description: A stream of output lines, ending when the run exits.
+          description: Rendered output, ending when the run is over.
           content:
             text/event-stream:
               schema:
                 type: string
-                description: One output line per event.
+                description: Server-sent `entry`, `partial` and `end` events.
         "404":
           description: No such run.
           content:

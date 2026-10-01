@@ -420,10 +420,32 @@ the validator already computes also means the diagram's columns and the hop arit
 disagree.
 
 **Why the dashboard refuses control operations instead of hiding them.** Sending a flight,
-streaming a run and engaging a Ground Stop all need a supervisor that does not exist yet, and
-they answer `501` rather than returning something plausible. A control that silently does nothing
+streaming a run and engaging a Ground Stop all needed a supervisor that did not exist yet, and
+they answered `501` rather than returning something plausible. A control that silently does nothing
 is worse than a control that is not there: it is trusted once, and then relied upon at the moment
-it matters.
+it matters. Each was built when the Tower could do it; streaming was the last.
+
+**Why a run is watched by reading its transcript, not by asking the Tower.** The Tower already
+streams every run's output to a file in its Hangar, so following that file is enough — and it is
+the only way that works from a `--watch-only` dashboard, or one beside a `serve` in another
+terminal, which share nothing with the Tower but its directory. It also makes a finished run and a
+live one the same request: replaying how an agent reached its conclusion is reading the file from
+the start and not waiting at the end. The same goes for knowing what is running: history holds a
+run only once it is over, so the dashboard reads the Tower's live records, which is why they moved
+from `layover-tower` to `layover-store`.
+
+**Why the transcript is rendered on the server.** A forty-minute Copilot review wrote 44 MB, of
+which 29 MB were token-by-token deltas of text that then arrives again whole, and single events ran
+to 280 KB. Sent raw, the browser would parse all of it to show a fraction, and the rendering — which
+event means what, in which CLI's dialect — would be untested JavaScript. In Rust it is a pure
+function over lines with tests against the real event shapes, it is redacted once in the same place
+as every other excerpt Layover shows, and the page receives a few hundred kilobytes. Deltas are not
+thrown away: while a block is still arriving it is sent as a *partial*, which the finished event
+replaces, so a live session still shows the model typing.
+
+**Why watching is read-only.** Typing into a running agent is steering, and steering is settled as
+a new run carrying a handover, never input to a live process. A terminal that looked interactive and
+was not would invite exactly the wrong expectation, so it says *read-only* on every pane.
 
 **Why the prompt is written to stdin and never onto the command line.** The runner template
 originally inlined it as `command = ["claude", "-p", "{prompt}", ...]`. Windows caps a command

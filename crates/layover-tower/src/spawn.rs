@@ -203,7 +203,7 @@ impl From<io::Error> for SpawnError {
 pub const PAYLOAD_FILE: &str = "prompt.md";
 
 /// The file a run's output is streamed to.
-pub const TRANSCRIPT_FILE: &str = "transcript.log";
+pub const TRANSCRIPT_FILE: &str = layover_store::hangar::TRANSCRIPT;
 
 /// Variables a process needs to exist at all, as opposed to variables an agent was given.
 ///

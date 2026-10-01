@@ -204,7 +204,8 @@ test and doc build, with warnings denied. CI runs the same command, unchanged.
 
 | Built | Not built |
 |---|---|
-| `validate`, `explain`, `prompt`, `graph` | Live run streaming over HTTP, which answers `501` |
+| `validate`, `explain`, `prompt`, `graph` | Worktrees: `access` and `workspace` are declared, and every agent still shares `work_dir` |
+| **Sessions: every agent's CLI output, live or replayed, read-only in the dashboard** | |
 | **`serve`: the Tower — fires schedules, runs the queue in parallel, hosts MCP, serves the dashboard** | |
 | **Restart recovery: a run the last Tower left is stopped, recorded and restarted** | |
 | **Schedules: `every` and `cron`, skipping a tick whose previous wave is still going** | |
