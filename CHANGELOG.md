@@ -8,6 +8,22 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-10-01
+
+Watch agents work from the dashboard, live, the way their CLI would show it; answer an agent's help
+request and have the work continue with its chain's flags; and see which chains are waiting for you.
+
+**Compatibility.** The configuration format is unchanged. The HTTP API only gains: `POST
+/help/reply`, the `awaiting_human` chain state, `flags`, `reply`, `waiting_for`, `continues` and
+`continued_by` where they apply, and `GET /runs/{run_id}/stream`, which answered `501` and now
+streams. A client that treats `ItineraryState` as a closed set will see a value it does not know.
+On disk, help requests, run records and queued flights gain optional fields, so anything an
+earlier release wrote still reads. Two things behave differently in an existing factory: running
+runs now appear in **Runs**, **Chains** and on the route map, where they never did; and a run lost
+under 1.3.0 is settled with when it was last seen alive. For library users, `Api` gains
+`reply_help`, `stream_run` takes a `StreamRunQuery`, and `Ledger`/`Live` moved to
+`layover_store::live` (still exported by `layover_tower`).
+
 ### Added
 
 - **Reply to an agent, and the work continues.** A help request has **Reply** beside **Resolved**.
@@ -1137,7 +1153,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/KotkaZ/layover-project/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/KotkaZ/layover-project/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/KotkaZ/layover-project/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/KotkaZ/layover-project/compare/v1.1.0...v1.2.0
