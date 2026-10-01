@@ -8,6 +8,30 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+## [1.5.1] — 2026-10-01
+
+Dependency and CI maintenance. Nothing a factory sees changes.
+
+**Compatibility.** The configuration format, the HTTP API, the MCP tools and the on-disk layout are
+unchanged, and identifiers keep their shape. For library users, `ConfigError::Parse` carries a
+`toml` 1.x `toml::de::Error` where it carried a 0.9 one, so code that names that type needs
+`toml` 1.
+
+### Changed
+
+- **`ulid` 1.2 → 3.0.** Identifiers are minted with `Ulid::generate`, the new name for
+  `Ulid::new`. They are still 26 Crockford base32 characters after their prefix, and
+  `RunId::minted_at` still reads the time out of ids an earlier release minted. The dashboard's API
+  token still comes from `rand`'s OS-seeded ChaCha generator, now `rand` 0.10.
+- **`toml` 0.9 → 1.1.** The TOML 1.1 grammar was already accepted, so what a `layover.toml` may
+  contain does not change. `validate --strict`, `explain` and `graph` print the same output as
+  1.5.0 for every example, and parse errors read the same.
+- **`thiserror` 2.0.20 → 2.0.21.**
+- **Workflows.** `actions/checkout` v7, `configure-pages` v6, `deploy-pages` v5,
+  `upload-pages-artifact` v5 and `attest-build-provenance` v4. Dependabot no longer updates
+  `.github/workflows/release.yml`: `dist` generates it and refuses to release when it differs, so
+  its actions move when `cargo-dist-version` does.
+
 ## [1.5.0] — 2026-10-01
 
 Watch agents work from the dashboard, live, the way their CLI would show it; answer an agent's help
@@ -1153,7 +1177,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/KotkaZ/layover-project/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/KotkaZ/layover-project/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/KotkaZ/layover-project/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/KotkaZ/layover-project/compare/v1.2.0...v1.3.0
