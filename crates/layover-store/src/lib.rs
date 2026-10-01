@@ -26,6 +26,7 @@
 //! into two files. UTC has no such day. Reading a local window therefore opens one extra file at
 //! each end and filters by instant, which is cheap and cannot be wrong.
 
+mod answer;
 pub mod hangar;
 mod history;
 mod journal;
@@ -34,6 +35,7 @@ pub mod live;
 pub mod lock;
 mod segment;
 
+pub use answer::Answered;
 pub use history::{History, RunFilter, StoreError};
 pub use journal::{HelpFilter, Journal};
 pub use layout::{Incompatible, Opened};

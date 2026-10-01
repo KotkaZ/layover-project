@@ -12,7 +12,7 @@
   <h1>Layover</h1>
   <nav>
     <button class="tab" data-view="map" aria-current="true">Route map</button>
-    <button class="tab" data-view="chains">Chains<span id="stalled-badge" class="badge" hidden></span></button>
+    <button class="tab" data-view="chains">Chains<span id="stalled-badge" class="badge" hidden></span><span id="awaiting-badge" class="badge waiting" title="Chains waiting for you to answer" hidden></span></button>
     <button class="tab" data-view="sessions">Sessions<span id="live-badge" class="badge live" hidden></span></button>
     <button class="tab" data-view="runs">Runs</button>
     <button class="tab" data-view="cost">Cost</button>
@@ -57,6 +57,7 @@
           <option value="working">working</option>
           <option value="finished">finished</option>
           <option value="stalled">stalled</option>
+          <option value="awaiting_human">waiting for you</option>
           <option value="halted">halted</option>
         </select>
       </label>
@@ -65,11 +66,13 @@
     <p class="note">
       A chain is everything one trigger caused, and the budget it shares. <b>Stalled</b> is the one
       worth looking for: every run in it succeeded and nothing will ever happen again, so a list of
-      runs cannot show it.
+      runs cannot show it. <b>Waiting for you</b> looks finished too: its last run stopped to ask
+      you something, and nothing will run until you <b>Reply</b>. <b>Continue…</b> triggers a
+      chain's workflow again with that chain's flags rather than the defaults.
     </p>
     <table id="chains-table">
       <thead>
-        <tr><th>Started</th><th>Workflow</th><th>Agents</th><th>Runs</th><th>Cost</th><th>State</th></tr>
+        <tr><th>Started</th><th>Workflow</th><th>Agents</th><th>Runs</th><th>Cost</th><th>State</th><th></th></tr>
       </thead>
       <tbody></tbody>
     </table>
@@ -163,7 +166,10 @@
     <h2>Open help requests</h2>
     <p class="hint">
       An agent that quietly cannot do what it was asked is worse than one that crashes. This is
-      where it says so. In practice most requests are permission failures.
+      where it says so. In practice most requests are permission failures. <b>Reply</b> answers the
+      agent and continues the work — a new run of it, in the same workflow with the same flags.
+      <b>Resolved</b> only marks the request dealt with: after one that stopped its run, nothing
+      restarts.
     </p>
     <table id="help-table">
       <thead>
@@ -203,6 +209,7 @@
   <form method="dialog">
     <h2>Trigger a workflow</h2>
     <p class="hint" id="trigger-note"></p>
+    <p class="hint" id="trigger-origin" hidden></p>
 
     <label class="field">Workflow
       <select id="trigger-pipeline"></select>
@@ -226,6 +233,34 @@
   </form>
 </dialog>
 
+<dialog id="reply">
+  <form method="dialog">
+    <h2 id="reply-headline">Reply</h2>
+    <p class="hint" id="reply-meta"></p>
+    <label class="field">Your answer
+      <textarea id="reply-body" rows="11"></textarea>
+    </label>
+    <p class="hint">
+      What it asked is quoted above for reference; answer between the lines or below. The agent
+      receives exactly this, after a line naming the request it answers.
+    </p>
+    <p class="hint" id="reply-carries"></p>
+    <fieldset id="reply-flags" hidden>
+      <legend>Flags the chain had</legend>
+      <p class="caveat" id="reply-flags-warning"></p>
+    </fieldset>
+    <label class="field">Your name
+      <input id="reply-by" type="text" autocomplete="name"
+        placeholder="recorded with the reply; the dashboard's account if left empty">
+    </label>
+    <p id="reply-error" class="caveat" hidden></p>
+    <menu>
+      <button value="cancel">Cancel</button>
+      <button id="reply-send" value="send" class="primary">Reply and continue</button>
+    </menu>
+  </form>
+</dialog>
+
 <dialog id="report">
   <form method="dialog">
     <h2 id="report-headline"></h2>
@@ -233,6 +268,7 @@
     <pre id="report-body"></pre>
     <div id="report-artifacts"></div>
     <menu>
+      <button id="report-continue" type="button">Continue…</button>
       <button id="report-transcript" type="button">Transcript</button>
       <button value="close">Close</button>
     </menu>
@@ -241,6 +277,7 @@
 
 <script src="/routemap.js"></script>
 <script src="/sessions.js"></script>
+<script src="/reply.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

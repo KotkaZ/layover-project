@@ -33,13 +33,14 @@ Point any OpenAPI tool at the file to get a client, a mock server or rendered do
 | `POST` | `/flights` | | **Queue** work. The Tower starts it within seconds. |
 | `GET` | `/flights` | | What is queued and waiting. |
 | `DELETE` | `/flights/{flight_id}` | | Cancel queued work. Only what has not started. |
-| `GET` | `/itineraries` | `window`, `state` | Chains of work, and whether each finished or stalled. |
+| `GET` | `/itineraries` | `window`, `state` | Chains of work, and whether each finished, stalled or is waiting for a person (`awaiting_human`). Each carries its `flags`, `waiting_for` when it waits, and the chains it `continues` or is `continued_by`. |
 | `GET` | `/runs` | `status`, `itinerary_id`, `agent`, `pipeline`, `window`, `limit` | Runs, live and historical. Runs alive now come first, as `running`, read from the Tower's live records — history holds a run only once it is over. |
 | `GET` | `/runs/{run_id}` | | One run, including how it ended. |
 | `GET` | `/runs/{run_id}/report` | | What that agent wrote about its own run. |
 | `GET` | `/costs` | `window`, `pipeline` | What the factory has spent, and how much of it is measured. Each total's `confidence` is the weakest `CostSource` in it — `reported`, `copilot_credits`, `rate_card` or `unreported` — and `credit_runs` counts the runs priced from Copilot AI credits, which `measured_share` counts as measured. |
 | `GET` | `/help` | `agent`, `pipeline`, `blocker`, `open`, `window` | Help requests agents have raised. |
 | `POST` | `/help/resolve` | | Mark help requests as dealt with. |
+| `POST` | `/help/reply` | | Answer a run's help requests and continue the work. See below. |
 | `GET` | `/learnings` | `agent`, `state` | Learnings agents have proposed. |
 | `PATCH` | `/learnings/{learning_id}` | | Keep a learning for good, or stop using it. |
 | `POST` | `/ground-stop` | | Halt everything. Engaging twice is a success, not a conflict. |
@@ -130,7 +131,31 @@ ignore the colour.
 There is deliberately no `stalled`. Stalling is something an **itinerary** does when it parks at a
 barrier that can no longer be satisfied; a run either finishes or does not. That state is real and
 matters — a factory that quietly parks work forever is worse than one that crashes — but it
-belongs to the chain, and there is no itinerary endpoint yet to carry it.
+belongs to the chain, and `GET /itineraries` carries it.
+
+## Answering a help request
+
+```json
+POST /help/reply
+{ "run_id": "run_01M3…", "body": "1. Exponential.\n2. The platform team.", "by": "Karl" }
+```
+
+`202 Accepted` answers every open request that run filed and queues a flight to the agent that
+asked, from a person: a new chain with a fresh budget, in the workflow, with the flags and within
+the routes of the chain that asked — never the workflow's defaults. The agent's work begins
+`In reply to your help request <run_id> (<summary>)`, then `body` verbatim. The requests are marked
+dealt with, recording `by` (or the account the dashboard runs as), the body and the new chain, and
+the new chain records the one it continues. The response says which chain, with which flags.
+
+| Status | When |
+|---|---|
+| `400` | `body` is empty; or `flags` was given for a request that records its chain's, or names one the workflow does not declare |
+| `404` | The run filed no help request that is still kept |
+| `409` | Every request it filed is already dealt with; or a Ground Stop is engaged; or the request predates Layover recording its chain's flags and `flags` was not given |
+
+A request filed before Layover recorded its chain's flags shows no `flags` in `GET /help`; for one
+of those whose workflow declares flags, pass `flags` to say what the chain had. Answering needs the
+same token as a trigger.
 
 ## Errors
 

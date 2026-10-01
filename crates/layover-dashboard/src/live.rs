@@ -43,20 +43,29 @@ impl Dashboard {
         live
     }
 
-    /// A live run as the API shows a run: `running`, how long so far, and nothing billed yet.
-    pub(crate) fn live_run(live: &Live, config: Option<&Config>) -> Run {
+    /// A live run as history would hold it if it had ended: still `running`, not finished, with
+    /// the workflow, flags and link to an earlier chain that its queued work carried.
+    pub(crate) fn live_record(live: &Live, config: Option<&Config>) -> RunRecord {
         let mut record = RunRecord::started(
             live.run.clone(),
             live.itinerary.clone(),
             live.agent.clone(),
             live.started_at,
         );
-        record.pipeline = live
-            .queued
-            .as_ref()
-            .and_then(|queued| queued.pipeline.clone());
+        if let Some(queued) = &live.queued {
+            record.pipeline.clone_from(&queued.pipeline);
+            if queued.pipeline.is_some() {
+                record.flags.clone_from(&queued.flags);
+            }
+            record.continues.clone_from(&queued.continues);
+        }
         record.model = config.and_then(|config| ModelChoice::of(config, &live.agent).model);
+        record
+    }
 
+    /// A live run as the API shows a run: `running`, how long so far, and nothing billed yet.
+    pub(crate) fn live_run(live: &Live, config: Option<&Config>) -> Run {
+        let record = Self::live_record(live, config);
         let mut run = crate::view::run(&record);
         run.duration_sec = Some(Timestamp::now().as_second() - live.started_at.as_second());
         run

@@ -18,12 +18,13 @@ use http_body_util::BodyExt as _;
 use layover_http::{
     Access, Agent, AgentList, Api, Blocker, CancelFlightPath, CostBucket, CostReport, CostSource,
     CostSummary, CostWindow, EventStream, FlightAccepted, GetCostsQuery, GetGraphQuery,
-    GetReportPath, GetRunPath, GroundStop, Health, HelpList, HelpRequest, HelpResolved, Impact,
-    Itinerary, ItineraryList, ItineraryState, JudgeLearningPath, JudgeLearningRequest, Learning,
-    LearningList, LearningState, ListHelpQuery, ListItinerariesQuery, ListLearningsQuery,
-    ListRunsQuery, OPERATIONS, PendingFlight, PendingList, Pipeline, PipelineList, Problem, Report,
-    ReserveState, ResolveHelpRequest, RouteMap, Run, RunList, RunStatus, SendFlightRequest, Status,
-    StreamRunPath, StreamRunQuery, TokenUsage, Trigger, TriggerKind, WindowSpan, Workspace, router,
+    GetReportPath, GetRunPath, GroundStop, Health, HelpList, HelpReplied, HelpReplyRequest,
+    HelpRequest, HelpResolved, Impact, Itinerary, ItineraryList, ItineraryState, JudgeLearningPath,
+    JudgeLearningRequest, Learning, LearningList, LearningState, ListHelpQuery,
+    ListItinerariesQuery, ListLearningsQuery, ListRunsQuery, OPERATIONS, PendingFlight,
+    PendingList, Pipeline, PipelineList, Problem, Report, ReserveState, ResolveHelpRequest,
+    RouteMap, Run, RunList, RunStatus, SendFlightRequest, Status, StreamRunPath, StreamRunQuery,
+    TokenUsage, Trigger, TriggerKind, WindowSpan, Workspace, router,
 };
 use tower::ServiceExt as _;
 
@@ -65,6 +66,7 @@ fn sample_run() -> Run {
         detail: Some("the Tower went away mid-run".to_owned()),
         blocked_on: None,
         hops_remaining: Some(21),
+        flags: None,
     }
 }
 
@@ -233,6 +235,8 @@ impl Api for Stub {
                 fatal: true,
                 at: "2026-09-16T12:00:00Z".to_owned(),
                 resolved_at: None,
+                flags: None,
+                reply: None,
             }],
             open: 1,
         })
@@ -252,6 +256,17 @@ impl Api for Stub {
                 last_at: "2026-09-16T12:00:00Z".to_owned(),
             }],
             active: 1,
+        })
+    }
+
+    async fn reply_help(&self, body: HelpReplyRequest) -> Result<HelpReplied, Problem> {
+        Ok(HelpReplied {
+            flight_id: "flt_1".to_owned(),
+            itinerary_id: "itn_2".to_owned(),
+            to: "analyst".to_owned(),
+            pipeline: Some("development".to_owned()),
+            flags: body.flags,
+            answered: 1,
         })
     }
 
@@ -289,8 +304,13 @@ impl Api for Stub {
                 started_at: "2026-09-17T10:00:00Z".to_owned(),
                 finished_at: Some("2026-09-17T10:09:00Z".to_owned()),
                 detail: Some("`publisher` never woke".to_owned()),
+                waiting_for: None,
+                flags: None,
+                continues: None,
+                continued_by: None,
             }],
             stalled: 1,
+            awaiting_human: 0,
         })
     }
 
@@ -384,7 +404,7 @@ fn json(body: &str) -> serde_json::Value {
 
 #[test]
 fn every_specified_operation_is_routed() {
-    assert_eq!(OPERATIONS.len(), 19);
+    assert_eq!(OPERATIONS.len(), 20);
 
     for (method, path, operation) in OPERATIONS {
         assert!(path.starts_with('/'), "`{operation}` has an odd path");

@@ -142,6 +142,7 @@ pub fn run(record: &RunRecord) -> Run {
         detail: record.detail.clone(),
         blocked_on: record.blocked_on.clone(),
         hops_remaining: None,
+        flags: (!record.flags.is_empty()).then(|| record.flags.clone()),
     }
 }
 
@@ -225,6 +226,15 @@ pub fn help(request: &layover_core::help::HelpRequest, pipeline: Option<String>)
         fatal: request.fatal,
         at: request.at.to_string(),
         resolved_at: request.resolved_at.map(|at| at.to_string()),
+        // Present whenever the request records its chain, even with no flags set: an empty map
+        // says "none", where an absent one says "not known".
+        flags: request.records_its_chain().then(|| request.flags.clone()),
+        reply: request.reply.as_ref().map(|reply| layover_http::HelpReply {
+            by: reply.by.clone(),
+            body: reply.body.clone(),
+            at: reply.at.to_string(),
+            itinerary_id: reply.itinerary.as_str().to_owned(),
+        }),
     }
 }
 

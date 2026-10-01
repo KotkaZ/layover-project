@@ -29,7 +29,9 @@
 //! and it is worth being able to filter for it.
 
 pub mod redact;
+pub mod reply;
 
+use std::collections::BTreeMap;
 use std::fmt;
 
 use jiff::Timestamp;
@@ -37,6 +39,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::agent::AgentName;
 use crate::flight::{ItineraryId, RunId};
+use crate::scope::ChainScope;
 
 /// What kind of thing an agent is stuck on.
 ///
@@ -134,8 +137,34 @@ pub struct HelpRequest {
     /// When a human marked it dealt with.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resolved_at: Option<Timestamp>,
+    /// The workflow, and the routes, of the chain that raised it.
+    ///
+    /// Recorded so that answering it can continue the work as that chain would have: in its
+    /// pipeline, held to what it could reach. Absent in a request filed before it was kept, which
+    /// is also how such a request is told apart — see [`HelpRequest::records_its_chain`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope: Option<ChainScope>,
+    /// The flags the chain that raised it ran with, resolved, for the same reason.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub flags: BTreeMap<String, bool>,
+    /// How a person answered it, when they did by replying rather than only marking it dealt with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reply: Option<Reply>,
 }
 
+/// A person's answer to a help request, and the work it started.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct Reply {
+    /// Who answered, as they gave it. Layover has no accounts; this is what was typed or, failing
+    /// that, the operating-system account the dashboard runs as.
+    pub by: String,
+    /// What they said, as they said it.
+    pub body: String,
+    /// When.
+    pub at: Timestamp,
+    /// The chain the answer started.
+    pub itinerary: ItineraryId,
+}
 impl HelpRequest {
     /// Records a request.
     #[must_use]
@@ -158,7 +187,33 @@ impl HelpRequest {
             fatal: false,
             at,
             resolved_at: None,
+            scope: None,
+            flags: BTreeMap::new(),
+            reply: None,
         }
+    }
+
+    /// Records the chain that raised it: its workflow, its routes and its flags.
+    #[must_use]
+    pub fn raised_in(mut self, scope: ChainScope, flags: BTreeMap<String, bool>) -> Self {
+        self.scope = Some(scope);
+        self.flags = flags;
+        self
+    }
+
+    /// Whether it says what chain raised it, so an answer can continue that chain's work exactly.
+    /// A request filed before Layover kept that does not.
+    #[must_use]
+    pub fn records_its_chain(&self) -> bool {
+        self.scope.is_some()
+    }
+
+    /// Marks it answered, which also marks it dealt with.
+    #[must_use]
+    pub fn replied(mut self, reply: Reply) -> Self {
+        self.resolved_at = Some(reply.at);
+        self.reply = Some(reply);
+        self
     }
 
     /// Marks the request as having stopped the work.

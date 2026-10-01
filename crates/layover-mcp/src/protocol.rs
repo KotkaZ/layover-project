@@ -170,7 +170,7 @@ fn schema_for(tool: Tool) -> Value {
                     "enum": Blocker::ALL.iter().map(|blocker| blocker.slug()).collect::<Vec<_>>(),
                     "description": blocker_description(),
                 },
-                "fatal": { "type": "boolean", "description": "True if this stopped the work; false if it merely limited it." },
+                "fatal": { "type": "boolean", "description": "True if this stopped the work; false if it merely limited it. A person's answer starts a new run of you with it." },
             },
         }),
         Tool::MemoryWrite | Tool::Learn | Tool::LogbookAppend => json!({

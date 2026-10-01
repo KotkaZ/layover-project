@@ -103,9 +103,9 @@ paths:
         agent and declares which flags may be set. A bare `to` sends to an agent marked
         `entry = true` and accepts no flags.
 
-        **The flight is queued, not run.** Dispatching it needs the supervisor, which is not part
-        of this release, so `202` means the work is booked and durable — it will start when there
-        is something to start it. `GET /flights` shows what is waiting.
+        **The flight is queued, not run.** `202` means the work is booked and durable; a Tower starts
+        it as soon as a slot is free. `GET /flights` shows what is waiting, and which Tower will
+        start it.
       tags: [work]
       requestBody:
         required: true
@@ -521,6 +521,64 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HelpResolved"
+
+  /help/reply:
+    post:
+      operationId: replyHelp
+      summary: Answer a help request, and continue the work it stopped.
+      description: |
+        Answers every open request the run raised. Queues a flight to the agent that asked, from a
+        person, starting a **new chain** with a fresh budget — the chain that asked is over — in
+        the same workflow, with the same flags and the same routes as the chain that asked. Never
+        the workflow's defaults: continuing a chain that was allowed to publish as one that may not
+        is the silent downgrade this exists to avoid.
+
+        The agent is told `In reply to your help request <run_id> (<summary>)`, then the body,
+        verbatim. The requests are marked dealt with, recording who replied, what they said and the
+        new chain, which records the chain it continues.
+
+        A request filed before Layover recorded its chain's flags does not know them. For one of
+        those whose workflow declares flags, `flags` must say what they were, and the reply is
+        refused with `409` until it does. For any other request `flags` is refused: the recorded
+        flags are carried, and continuing a chain with different ones is what `POST /flights`
+        is for.
+
+        Needs the same token as a trigger, and a Ground Stop refuses it like one.
+      tags: [control]
+      requestBody:
+        required: true
+        description: Which run's request to answer, and the answer.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HelpReplyRequest"
+      responses:
+        "202":
+          description: The continuation is queued, and the requests are answered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HelpReplied"
+        "400":
+          description: The body is empty, or a flag is undeclared or not needed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: The run raised no help request that is still kept.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: |
+            Every request the run raised has already been dealt with, the request's chain did not
+            record its flags and `flags` was not given, or a Ground Stop is engaged.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 
   /learnings:
     get:
@@ -992,6 +1050,14 @@ components:
           type: [integer, "null"]
           format: int32
           description: Hops left when this run was started, mirrored for display only.
+        flags:
+          type: object
+          description: |
+            The flags the run was composed with, for a chain a workflow opened. Absent otherwise,
+            and for runs recorded before they were kept.
+          additionalProperties:
+            type: boolean
+            description: Whether the flag was on.
 
     RunList:
       type: object
@@ -1127,6 +1193,87 @@ components:
           type: [string, "null"]
           format: date-time
           description: When a human marked it dealt with. Null while it is still open.
+        flags:
+          type: object
+          description: |
+            The flags of the chain that raised it, which a reply carries. Absent when the request
+            was filed before Layover recorded them — a reply must then say what they were.
+          additionalProperties:
+            type: boolean
+            description: Whether the flag was on.
+        reply:
+          $ref: "#/components/schemas/HelpReply"
+          description: How a person answered it, when they replied rather than only resolving it.
+
+    HelpReply:
+      type: object
+      description: A person's answer to a help request, and the chain it started.
+      required: [by, body, at, itinerary_id]
+      properties:
+        by:
+          type: string
+          description: Who replied, as they gave it, or the account the dashboard runs as.
+        body:
+          type: string
+          description: What they said, verbatim.
+        at:
+          type: string
+          format: date-time
+          description: When.
+        itinerary_id:
+          type: string
+          description: The chain the reply started.
+
+    HelpReplyRequest:
+      type: object
+      description: An answer to a run's help requests.
+      required: [run_id, body]
+      properties:
+        run_id:
+          type: string
+          description: The run whose open requests this answers.
+        body:
+          type: string
+          description: The answer, sent to the agent verbatim below a fixed first line.
+        by:
+          type: [string, "null"]
+          description: Who is replying. Defaults to the account the dashboard runs as.
+        flags:
+          type: object
+          description: |
+            The flags the chain that asked had, for a request filed before Layover recorded them.
+            Refused for any other.
+          additionalProperties:
+            type: boolean
+            description: Whether the flag was on.
+
+    HelpReplied:
+      type: object
+      description: The work a reply started.
+      required: [flight_id, itinerary_id, to, answered]
+      properties:
+        flight_id:
+          type: string
+          description: The flight that was queued.
+        itinerary_id:
+          type: string
+          description: The new chain.
+        to:
+          type: string
+          description: The agent that asked, which the flight is for.
+        pipeline:
+          type: [string, "null"]
+          description: The workflow the work continues in.
+        flags:
+          type: object
+          description: The flags it carries.
+          additionalProperties:
+            type: boolean
+            description: Whether the flag is on.
+        answered:
+          type: integer
+          format: int32
+          description: How many open requests the reply answered.
 
     HelpList:
       type: object
@@ -1347,7 +1494,26 @@ components:
         `stalled` is the one that matters and the one a list of runs cannot show: every run
         succeeded, nothing is live, nothing is queued, and nothing will ever happen again. It is
         the failure mode this whole surface exists to make visible.
-      enum: [working, finished, stalled, halted]
+
+        `awaiting_human` looks finished and is not: the chain's last run stopped to ask a person
+        something — a fatal help request, still open — and nothing will run until somebody
+        answers. Resolving the request without replying makes it `finished`.
+      enum: [working, finished, stalled, halted, awaiting_human]
+
+    HelpAsk:
+      type: object
+      description: What a chain is waiting for a person to answer.
+      required: [run_id, agent, summary]
+      properties:
+        run_id:
+          type: string
+          description: The run that asked, which is what a reply names.
+        agent:
+          type: string
+          description: The agent that asked.
+        summary:
+          type: string
+          description: What it asked, in one line.
 
     Itinerary:
       type: object
@@ -1391,12 +1557,33 @@ components:
           description: When the last run of the chain ended. Null while it is still working.
         detail:
           type: [string, "null"]
-          description: Why a chain is stalled or halted, when that can be said.
+          description: |
+            Why a chain is stalled, halted or waiting, when that can be said, or the chain that
+            continued it.
+        waiting_for:
+          $ref: "#/components/schemas/HelpAsk"
+          description: What it is waiting for a person to answer, when it is `awaiting_human`.
+        flags:
+          type: object
+          description: |
+            The flags its runs were composed with, which continuing it starts from. Absent for a
+            chain no workflow opened, and for one whose runs predate their being recorded.
+          additionalProperties:
+            type: boolean
+            description: Whether the flag was on.
+        continues:
+          type: [string, "null"]
+          description: The chain this one continues, when a reply to a help request started it.
+        continued_by:
+          type: array
+          description: Chains that continue this one, started by replies to its help requests.
+          items:
+            type: string
 
     ItineraryList:
       type: object
       description: Chains of work.
-      required: [itineraries, stalled]
+      required: [itineraries, stalled, awaiting_human]
       properties:
         itineraries:
           type: array
@@ -1408,6 +1595,9 @@ components:
           description: |
             How many of them are stalled. Counted separately so the number can be shown without
             reading the list, because it is the one that should prompt somebody to look.
+        awaiting_human:
+          type: integer
+          description: How many of them are waiting for a person to answer a help request.
 
     PendingList:
       type: object

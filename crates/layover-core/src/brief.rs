@@ -145,6 +145,15 @@ fn write_help(out: &mut String) {
         "- Say whether it stopped you or merely limited you. Finishing the work while being \
          unable to check one thing is worth reporting and is not an outage.\n",
     );
+    // Said so that an agent which stops to ask writes down where it got to first, and knows the
+    // answer when it arrives: it is a new run, with nothing of this one but its notes.
+    let _ = writeln!(
+        out,
+        "- A person can answer. Their answer starts a new run of you, beginning \"{} <run> \
+         (<your summary>)\", with nothing of this run but what you wrote with \
+         `layover_memory_write` — so write down where you got to before you ask.",
+        crate::help::reply::HEADER
+    );
     out.push_str(
         "\nCategories — pass the one that fits as `blocker`, or leave it out for `other`:\n",
     );
@@ -190,6 +199,19 @@ mod tests {
 
         assert!(!brief.contains("ASKING FOR HELP"));
         assert!(!brief.contains("layover_help"));
+    }
+
+    #[test]
+    fn an_agent_is_told_how_a_persons_answer_reaches_it() {
+        // A reply is a new run with nothing of the one that asked. Told in advance, an agent writes
+        // down where it got to before it asks, and recognises the answer when it arrives.
+        let brief = brief(&reviewer(), &Learnings::new(), true);
+
+        assert!(
+            brief.contains(&format!("\"{} <run>", crate::help::reply::HEADER)),
+            "{brief}"
+        );
+        assert!(brief.contains("layover_memory_write"), "{brief}");
     }
 
     #[test]

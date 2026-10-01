@@ -252,6 +252,17 @@ pub struct Health {
     pub version: String,
 }
 
+/// What a chain is waiting for a person to answer.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HelpAsk {
+    /// The agent that asked.
+    pub agent: String,
+    /// The run that asked, which is what a reply names.
+    pub run_id: String,
+    /// What it asked, in one line.
+    pub summary: String,
+}
+
 /// Matching help requests, most recent first.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HelpList {
@@ -259,6 +270,54 @@ pub struct HelpList {
     pub open: i32,
     /// The requests.
     pub requests: Vec<HelpRequest>,
+}
+
+/// The work a reply started.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HelpReplied {
+    /// How many open requests the reply answered.
+    pub answered: i32,
+    /// The flags it carries.
+    #[serde(default)]
+    pub flags: Option<std::collections::BTreeMap<String, bool>>,
+    /// The flight that was queued.
+    pub flight_id: String,
+    /// The new chain.
+    pub itinerary_id: String,
+    /// The workflow the work continues in.
+    #[serde(default)]
+    pub pipeline: Option<String>,
+    /// The agent that asked, which the flight is for.
+    pub to: String,
+}
+
+/// A person's answer to a help request, and the chain it started.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HelpReply {
+    /// When.
+    pub at: String,
+    /// What they said, verbatim.
+    pub body: String,
+    /// Who replied, as they gave it, or the account the dashboard runs as.
+    pub by: String,
+    /// The chain the reply started.
+    pub itinerary_id: String,
+}
+
+/// An answer to a run's help requests.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HelpReplyRequest {
+    /// The answer, sent to the agent verbatim below a fixed first line.
+    pub body: String,
+    /// Who is replying. Defaults to the account the dashboard runs as.
+    #[serde(default)]
+    pub by: Option<String>,
+    /// The flags the chain that asked had, for a request filed before Layover recorded them.
+    /// Refused for any other.
+    #[serde(default)]
+    pub flags: Option<std::collections::BTreeMap<String, bool>>,
+    /// The run whose open requests this answers.
+    pub run_id: String,
 }
 
 /// One agent asking a human for something.
@@ -276,6 +335,10 @@ pub struct HelpRequest {
     /// still have been unable to check something; that is worth reporting and is not an
     /// outage.
     pub fatal: bool,
+    /// The flags of the chain that raised it, which a reply carries. Absent when the request
+    /// was filed before Layover recorded them — a reply must then say what they were.
+    #[serde(default)]
+    pub flags: Option<std::collections::BTreeMap<String, bool>>,
     /// The chain it belonged to.
     pub itinerary_id: String,
     /// The workflow whose run raised it, derived from the itinerary rather than stored on the
@@ -283,6 +346,9 @@ pub struct HelpRequest {
     /// cause at the far edge of the window.
     #[serde(default)]
     pub pipeline: Option<String>,
+    /// How a person answered it, when they replied rather than only resolving it.
+    #[serde(default)]
+    pub reply: Option<HelpReply>,
     /// When a human marked it dealt with. Null while it is still open.
     #[serde(default)]
     pub resolved_at: Option<String>,
@@ -321,12 +387,23 @@ pub struct Itinerary {
     /// Agents that ran in this chain, in the order they first ran.
     #[serde(default)]
     pub agents: Option<Vec<String>>,
-    /// Why a chain is stalled or halted, when that can be said.
+    /// Chains that continue this one, started by replies to its help requests.
+    #[serde(default)]
+    pub continued_by: Option<Vec<String>>,
+    /// The chain this one continues, when a reply to a help request started it.
+    #[serde(default)]
+    pub continues: Option<String>,
+    /// Why a chain is stalled, halted or waiting, when that can be said, or the chain that
+    /// continued it.
     #[serde(default)]
     pub detail: Option<String>,
     /// When the last run of the chain ended. Null while it is still working.
     #[serde(default)]
     pub finished_at: Option<String>,
+    /// The flags its runs were composed with, which continuing it starts from. Absent for a
+    /// chain no workflow opened, and for one whose runs predate their being recorded.
+    #[serde(default)]
+    pub flags: Option<std::collections::BTreeMap<String, bool>>,
     /// Identifier of the chain.
     pub itinerary_id: String,
     /// False when any run in the chain reported no cost. A total built partly from silence is
@@ -345,11 +422,16 @@ pub struct Itinerary {
     pub state: ItineraryState,
     /// What the chain has spent, as far as its runners reported.
     pub usd: f64,
+    /// What it is waiting for a person to answer, when it is `awaiting_human`.
+    #[serde(default)]
+    pub waiting_for: Option<HelpAsk>,
 }
 
 /// Chains of work.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ItineraryList {
+    /// How many of them are waiting for a person to answer a help request.
+    pub awaiting_human: i32,
     /// Chains, most recently started first.
     pub itineraries: Vec<Itinerary>,
     /// How many of them are stalled. Counted separately so the number can be shown without
@@ -362,6 +444,10 @@ pub struct ItineraryList {
 /// `stalled` is the one that matters and the one a list of runs cannot show: every run
 /// succeeded, nothing is live, nothing is queued, and nothing will ever happen again. It is
 /// the failure mode this whole surface exists to make visible.
+///
+/// `awaiting_human` looks finished and is not: the chain's last run stopped to ask a person
+/// something — a fatal help request, still open — and nothing will run until somebody
+/// answers. Resolving the request without replying makes it `finished`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ItineraryState {
     /// `working`
@@ -376,6 +462,9 @@ pub enum ItineraryState {
     /// `halted`
     #[serde(rename = "halted")]
     Halted,
+    /// `awaiting_human`
+    #[serde(rename = "awaiting_human")]
+    AwaitingHuman,
 }
 
 /// The condition under which a rendezvous barrier releases.
@@ -681,6 +770,10 @@ pub struct Run {
     /// When the process exited; null while it is still running.
     #[serde(default)]
     pub finished_at: Option<String>,
+    /// The flags the run was composed with, for a chain a workflow opened. Absent otherwise,
+    /// and for runs recorded before they were kept.
+    #[serde(default)]
+    pub flags: Option<std::collections::BTreeMap<String, bool>>,
     /// Hops left when this run was started, mirrored for display only.
     #[serde(default)]
     pub hops_remaining: Option<i32>,
@@ -1026,9 +1119,9 @@ pub trait Api: Send + Sync + 'static {
     /// agent and declares which flags may be set. A bare `to` sends to an agent marked
     /// `entry = true` and accepts no flags.
     ///
-    /// **The flight is queued, not run.** Dispatching it needs the supervisor, which is not part
-    /// of this release, so `202` means the work is booked and durable — it will start when there
-    /// is something to start it. `GET /flights` shows what is waiting.
+    /// **The flight is queued, not run.** `202` means the work is booked and durable; a Tower starts
+    /// it as soon as a slot is free. `GET /flights` shows what is waiting, and which Tower will
+    /// start it.
     ///
     /// `POST /flights`
     fn send_flight(
@@ -1095,6 +1188,31 @@ pub trait Api: Send + Sync + 'static {
         &self,
         query: ListHelpQuery,
     ) -> impl core::future::Future<Output = Result<HelpList, Problem>> + Send;
+    /// Answer a help request, and continue the work it stopped.
+    ///
+    /// Answers every open request the run raised. Queues a flight to the agent that asked, from a
+    /// person, starting a **new chain** with a fresh budget — the chain that asked is over — in
+    /// the same workflow, with the same flags and the same routes as the chain that asked. Never
+    /// the workflow's defaults: continuing a chain that was allowed to publish as one that may not
+    /// is the silent downgrade this exists to avoid.
+    ///
+    /// The agent is told `In reply to your help request <run_id> (<summary>)`, then the body,
+    /// verbatim. The requests are marked dealt with, recording who replied, what they said and the
+    /// new chain, which records the chain it continues.
+    ///
+    /// A request filed before Layover recorded its chain's flags does not know them. For one of
+    /// those whose workflow declares flags, `flags` must say what they were, and the reply is
+    /// refused with `409` until it does. For any other request `flags` is refused: the recorded
+    /// flags are carried, and continuing a chain with different ones is what `POST /flights`
+    /// is for.
+    ///
+    /// Needs the same token as a trigger, and a Ground Stop refuses it like one.
+    ///
+    /// `POST /help/reply`
+    fn reply_help(
+        &self,
+        body: HelpReplyRequest,
+    ) -> impl core::future::Future<Output = Result<HelpReplied, Problem>> + Send;
     /// Mark help requests as dealt with.
     ///
     /// Resolving says *the blocker is gone*, not *I have read this*. An agent that raises the same
@@ -1241,6 +1359,7 @@ pub fn router<A: Api>(api: std::sync::Arc<A>) -> axum::Router {
         )
         .route("/health", axum::routing::get(handle_get_health::<A>))
         .route("/help", axum::routing::get(handle_list_help::<A>))
+        .route("/help/reply", axum::routing::post(handle_reply_help::<A>))
         .route(
             "/help/resolve",
             axum::routing::post(handle_resolve_help::<A>),
@@ -1363,6 +1482,16 @@ async fn handle_list_help<A: Api>(
     }
 }
 
+async fn handle_reply_help<A: Api>(
+    axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
+    axum::Json(body): axum::Json<HelpReplyRequest>,
+) -> axum::response::Response {
+    match api.reply_help(body).await {
+        Ok(value) => (axum::http::StatusCode::ACCEPTED, axum::Json(value)).into_response(),
+        Err(problem) => problem.into_response(),
+    }
+}
+
 async fn handle_resolve_help<A: Api>(
     axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
     axum::Json(body): axum::Json<ResolveHelpRequest>,
@@ -1457,7 +1586,7 @@ async fn handle_stream_run<A: Api>(
 /// Every operation the specification declares, as (method, path, operationId).
 ///
 /// Exposed so tests can assert the router and the specification agree.
-pub const OPERATIONS: [(&str, &str, &str); 19] = [
+pub const OPERATIONS: [(&str, &str, &str); 20] = [
     ("GET", "/agents", "listAgents"),
     ("GET", "/costs", "getCosts"),
     ("GET", "/flights", "listPending"),
@@ -1468,6 +1597,7 @@ pub const OPERATIONS: [(&str, &str, &str); 19] = [
     ("DELETE", "/ground-stop", "releaseGroundStop"),
     ("GET", "/health", "getHealth"),
     ("GET", "/help", "listHelp"),
+    ("POST", "/help/reply", "replyHelp"),
     ("POST", "/help/resolve", "resolveHelp"),
     ("GET", "/itineraries", "listItineraries"),
     ("GET", "/learnings", "listLearnings"),

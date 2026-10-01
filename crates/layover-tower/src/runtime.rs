@@ -50,6 +50,8 @@ pub struct Chains {
     /// Recorded from queued work like the pipeline, so a restart cannot widen a resumed chain's
     /// reach by forgetting where its work came from.
     within: Mutex<HashMap<String, BTreeSet<Option<PipelineName>>>>,
+    /// The chain each one continues, for a chain a person's reply to a help request started.
+    continues: Mutex<HashMap<String, ItineraryId>>,
 }
 
 impl Chains {
@@ -125,6 +127,23 @@ impl Chains {
                 .entry(id.as_str().to_owned())
                 .or_insert_with(|| flags.clone());
         }
+    }
+
+    /// Remembers that chain `id` continues `earlier`. The first to say decides, like the pipeline.
+    pub fn continuing(&self, id: &ItineraryId, earlier: Option<&ItineraryId>) {
+        if let Some(earlier) = earlier
+            && let Ok(mut known) = self.continues.lock()
+        {
+            known
+                .entry(id.as_str().to_owned())
+                .or_insert_with(|| earlier.clone());
+        }
+    }
+
+    /// The chain that `id` continues, if it continues one.
+    #[must_use]
+    pub fn continues_of(&self, id: &ItineraryId) -> Option<ItineraryId> {
+        self.continues.lock().ok()?.get(id.as_str()).cloned()
     }
 
     /// Which pipeline a chain was triggered through, if it is known.
@@ -355,6 +374,17 @@ impl Runtime for FactoryRuntime {
             summary,
             detail,
             jiff::Timestamp::now(),
+        )
+        // The chain that asked, as its own session knows it: so that a person's answer can
+        // continue the work in the same workflow, with the same flags and the same reach, rather
+        // than from the workflow's defaults.
+        .raised_in(
+            ChainScope::new(session.pipeline.clone(), session.within.clone()),
+            if session.pipeline.is_some() {
+                session.flags.clone()
+            } else {
+                BTreeMap::new()
+            },
         );
         request.fatal = fatal;
 

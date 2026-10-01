@@ -81,7 +81,7 @@ pub struct Journal {
     /// its own lock would look like it was protected and protect nothing. For the same reason it is
     /// taken from [`crate::lock`] by directory, so two journals opened separately on one
     /// directory — the Tower's and the dashboard's — share it too.
-    writes: Arc<Mutex<()>>,
+    pub(crate) writes: Arc<Mutex<()>>,
 }
 
 impl Journal {
@@ -147,20 +147,24 @@ impl Journal {
         let mut resolved = 0;
 
         for path in crate::segment::segments_covering(&self.root, "help", span)? {
-            let mut requests: Vec<HelpRequest> = crate::segment::read_segment(&path)?;
-            let mut touched = false;
+            // Held across the read and the rewrite: a request an agent files in between would
+            // otherwise be read past and written over.
+            resolved += crate::lock::exclusive(&path, || -> Result<usize, StoreError> {
+                let mut requests: Vec<HelpRequest> = crate::segment::read_segment(&path)?;
+                let mut marked = 0;
 
-            for request in &mut requests {
-                if request.is_open() && span.contains(request.at) && filter.matches(request) {
-                    request.resolved_at = Some(at);
-                    resolved += 1;
-                    touched = true;
+                for request in &mut requests {
+                    if request.is_open() && span.contains(request.at) && filter.matches(request) {
+                        request.resolved_at = Some(at);
+                        marked += 1;
+                    }
                 }
-            }
 
-            if touched {
-                crate::segment::rewrite_segment(&path, &requests)?;
-            }
+                if marked > 0 {
+                    crate::segment::rewrite_segment(&path, &requests)?;
+                }
+                Ok(marked)
+            })?;
         }
 
         Ok(resolved)
@@ -450,7 +454,7 @@ impl Journal {
     }
 
     /// Where queued flights live.
-    fn pending_path(&self) -> PathBuf {
+    pub(crate) fn pending_path(&self) -> PathBuf {
         self.root.join("pending.jsonl")
     }
 
@@ -489,7 +493,7 @@ impl Journal {
 ///
 /// A poisoned lock means a thread died mid-write, so the queue on disk may be half a change. This
 /// reports rather than recovers: guessing which half survived is how work quietly disappears.
-fn poisoned() -> StoreError {
+pub(crate) fn poisoned() -> StoreError {
     StoreError::Io {
         path: PathBuf::from("pending.jsonl"),
         source: std::io::Error::other("the queue lock was poisoned by a panicking writer"),

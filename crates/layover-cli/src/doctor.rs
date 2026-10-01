@@ -592,6 +592,8 @@ entry = "analyst"
             blocked_on: None,
             pid: None,
             queued_at: None,
+            flags: std::collections::BTreeMap::new(),
+            continues: None,
         };
 
         let mut rare = Report::default();

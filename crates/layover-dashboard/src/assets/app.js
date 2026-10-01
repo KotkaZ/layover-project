@@ -303,6 +303,9 @@ async function loadRuns() {
 // A chain is what a person actually asked for; a run is one step of it. Shown separately because
 // the interesting failure — a chain that stopped with every run reporting success — is invisible
 // in a list of runs, which is where somebody would otherwise go looking for it.
+// How a chain's state reads on the page. `awaiting_human` is the one that looked finished.
+const STATES = { awaiting_human: "waiting for you" };
+
 async function loadChains() {
   const body = $("#chains-table tbody");
   const count = $("#chains-count");
@@ -310,7 +313,7 @@ async function loadChains() {
   if ($("#chains-state").value) params.set("state", $("#chains-state").value);
 
   try {
-    const { itineraries, stalled } = await get(`/itineraries?${params}`);
+    const { itineraries, stalled, awaiting_human: awaiting } = await get(`/itineraries?${params}`);
     body.replaceChildren();
 
     for (const chain of itineraries) {
@@ -323,8 +326,27 @@ async function loadChains() {
         el("td", "", (chain.agents ?? []).join(" → ") || "—"),
         el("td", "num", String(chain.runs)),
         el("td", "num", cost),
-        el("td", `outcome ${chain.state}`, chain.state),
+        el("td", `outcome ${chain.state}`, STATES[chain.state] ?? chain.state),
       );
+
+      // What a person can do from here. A chain waiting for an answer gets the answer; any chain
+      // of a workflow can be continued with its own flags rather than the workflow's defaults.
+      const actions = el("td", "actions");
+      if (chain.waiting_for) {
+        const answer = el("button", "link", "Reply…");
+        answer.title = `${chain.waiting_for.agent} asked: ${chain.waiting_for.summary}`;
+        answer.addEventListener("click", () => openReplyFor(chain.waiting_for.run_id));
+        actions.append(answer);
+      }
+      if (chain.pipeline) {
+        const onward = el("button", "link", "Continue…");
+        onward.title = "Trigger this workflow again, with this chain's flags.";
+        onward.addEventListener("click", () =>
+          continueChain(chain.pipeline, chain.flags ?? null, chain.itinerary_id),
+        );
+        actions.append(onward);
+      }
+      row.append(actions);
 
       // The reason lives in a tooltip rather than a column: it is a sentence, and a column wide
       // enough for it would squeeze out everything that is scannable.
@@ -335,11 +357,14 @@ async function loadChains() {
     $("#chains-table").hidden = itineraries.length === 0;
     count.textContent = itineraries.length === 0
       ? "Nothing ran in this window."
-      : `${itineraries.length} chain(s)${stalled ? `, ${stalled} stalled` : ""}`;
+      : `${itineraries.length} chain(s)${stalled ? `, ${stalled} stalled` : ""}${awaiting ? `, ${awaiting} waiting for you` : ""}`;
 
     const badge = $("#stalled-badge");
     badge.textContent = String(stalled);
     badge.hidden = stalled === 0;
+    const waiting = $("#awaiting-badge");
+    waiting.textContent = String(awaiting);
+    waiting.hidden = awaiting === 0;
   } catch (error) {
     body.replaceChildren();
     $("#chains-table").hidden = true;
@@ -540,7 +565,9 @@ function showFlags(name) {
   }
 }
 
-async function openTrigger() {
+// `preset` continues a chain: its workflow selected and its flags set, saying where they came from.
+// Without one the dialog starts from the workflow's defaults, which is what a fresh trigger means.
+async function openTrigger(preset) {
   const select = $("#trigger-pipeline");
   select.replaceChildren(
     ...[...pipelinesByName.values()].map((pipeline) => {
@@ -552,7 +579,24 @@ async function openTrigger() {
 
   $("#trigger-error").hidden = true;
   $("#trigger-body").value = "";
+  const origin = $("#trigger-origin");
+  origin.hidden = true;
+  if (preset?.pipeline && pipelinesByName.has(preset.pipeline)) select.value = preset.pipeline;
   showFlags(select.value);
+
+  if (preset?.from) {
+    origin.hidden = false;
+    if (preset.flags) {
+      for (const box of $("#trigger-flags").querySelectorAll("input[type=checkbox]")) {
+        if (box.dataset.flag in preset.flags) box.checked = preset.flags[box.dataset.flag];
+      }
+      origin.className = "hint";
+      origin.textContent = `Continuing chain ${preset.from}: the workflow and flags are set as that chain had them. Change them if you need to.`;
+    } else {
+      origin.className = "caveat";
+      origin.textContent = `Chain ${preset.from} did not record its flags — it ran before they were kept. These are ${select.value}'s defaults: set them as it had them.`;
+    }
+  }
 
   const { dispatched_by: by } = await get("/flights").catch(() => ({ dispatched_by: null }));
   $("#trigger-note").textContent = by
@@ -620,6 +664,12 @@ async function openReport(runId, run) {
   transcript.onclick = () => {
     $("#report").close();
     openSession(run);
+  };
+  const onward = $("#report-continue");
+  onward.hidden = !run?.pipeline;
+  onward.onclick = () => {
+    $("#report").close();
+    continueChain(run.pipeline, run.flags ?? null, run.itinerary_id);
   };
   try {
     const report = await get(`/runs/${encodeURIComponent(runId)}/report`);
@@ -696,13 +746,21 @@ async function loadJournal() {  const helpBody = document.querySelector("#help-t
       what.title = request.detail;
       row.append(what, el("td", "", request.fatal ? "stopped the run" : "limited it"));
 
-      // Resolving says the blocker is gone, not that somebody read this. An agent that hits the
-      // same wall next run raises it again, which is the point of the list.
-      const action = el("td");
+      // Reply continues the work with the answer. Resolving says the blocker is gone, not that
+      // somebody read this — and after a request that stopped its run there is no next run to
+      // notice, so the tooltip says so rather than promising one.
+      const action = el("td", "actions");
+      const answer = el("button", "link", "Reply");
+      answer.title = request.fatal
+        ? "Answer it and continue the work: a new run of this agent, with your reply, in the same workflow with the same flags."
+        : "Answer it: a new run of this agent with your reply, in the same workflow with the same flags.";
+      answer.addEventListener("click", () => openReply(request));
       const done = el("button", "link", "Resolved");
-      done.title = "Mark as dealt with. If it is not, the next run will raise it again.";
+      done.title = request.fatal
+        ? "Mark as dealt with. This does not restart anything: the run that asked has ended, and nothing will run until you start it. To continue the work, use Reply."
+        : "Mark as dealt with. If it is not, the next run will raise it again.";
       done.addEventListener("click", () => resolveHelp(request.run_id, done));
-      action.append(done);
+      action.append(answer, done);
       row.append(action);
 
       helpBody.append(row);
@@ -866,8 +924,12 @@ function start() {
     tab.addEventListener("click", () => showView(tab.dataset.view));
   });
   $("#refresh").addEventListener("click", loadMap);
-  $("#trigger-open").addEventListener("click", openTrigger);
-  $("#trigger-pipeline").addEventListener("change", (e) => showFlags(e.target.value));
+  $("#trigger-open").addEventListener("click", () => openTrigger());
+  $("#trigger-pipeline").addEventListener("change", (e) => {
+    // Another workflow is not the chain being continued, so its flags say nothing about it.
+    $("#trigger-origin").hidden = true;
+    showFlags(e.target.value);
+  });
   $("#trigger-send").addEventListener("click", submitTrigger);
   $("#ground-stop").addEventListener("click", toggleGroundStop);
   ["#runs-window", "#runs-status"].forEach((id) => $(id).addEventListener("change", loadRuns));
@@ -876,6 +938,7 @@ function start() {
   );
   $("#runs-agent").addEventListener("input", loadRuns);
   startSessions();
+  startReplies();
 
   // One selector, so every view has to be told. Redrawing only the visible one would leave the
   // others showing another workflow's numbers under this workflow's name the moment you switch.

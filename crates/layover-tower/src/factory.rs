@@ -506,6 +506,8 @@ impl Factory {
             detail: Some(why),
             blocked_on: None,
             pid: None,
+            flags: self.recorded_flags(itinerary.id()),
+            continues: self.chains.continues_of(itinerary.id()),
         });
         Some(Dispatched::Refused(Refusal::Rail(Denial::ReserveExhausted)))
     }
@@ -551,6 +553,8 @@ impl Factory {
             detail: detail_for(ended, finished.exit_code, &transcript),
             blocked_on: self.blocked_on(&ticket.run, ticket.started_at),
             pid: None,
+            flags: self.recorded_flags(&ticket.chain),
+            continues: self.chains.continues_of(&ticket.chain),
         });
 
         // Last, because until the outcome is written the run is still unaccounted for. Forgetting
@@ -624,6 +628,8 @@ impl Factory {
             detail: Some(why.to_owned()),
             blocked_on: None,
             pid: None,
+            flags: self.recorded_flags(chain),
+            continues: self.chains.continues_of(chain),
         }
     }
 
@@ -743,6 +749,17 @@ impl Factory {
             Some(pipeline) => pipeline.flags_carrying(&recorded),
             None if !recorded.is_empty() => Flags::new(recorded),
             None => self.config.flags_without_pipeline(),
+        }
+    }
+
+    /// The flags to write into a run's record: those its chain was composed with, for a chain a
+    /// workflow opened. A chain no workflow opened has none of its own, and writing every declared
+    /// flag at its default would claim choices nobody made.
+    fn recorded_flags(&self, chain: &ItineraryId) -> BTreeMap<String, bool> {
+        if self.chains.pipeline_of(chain).is_some() {
+            self.flags_for(chain).to_map()
+        } else {
+            BTreeMap::new()
         }
     }
 

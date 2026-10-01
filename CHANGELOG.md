@@ -10,6 +10,28 @@ status](README.md#project-status).
 
 ### Added
 
+- **Reply to an agent, and the work continues.** A help request has **Reply** beside **Resolved**.
+  It opens with what the agent asked, quoted, to answer between its questions, and sending it
+  starts a new run of the agent that asked: a new chain with a fresh budget, from a person, in the
+  same workflow with the same flags and routes as the chain that asked — never the workflow's
+  defaults. Its work begins `In reply to your help request <run> (<summary>)`, then the answer
+  verbatim. The request is marked dealt with, recording who replied, what they said and the chain
+  it started, and the two chains name each other. **`POST /help/reply`** does it over the API, with
+  the same token as a trigger; it answers `409` for a request already dealt with and `404` for one
+  that does not exist.
+- **Chains waiting for you.** A chain whose last run stopped on a fatal help request that is still
+  open is `awaiting_human` — "waiting for you" on the page, with the request's summary, a
+  **Reply…** and an amber count on the Chains tab — instead of `finished`. Resolving the request
+  without replying makes it `finished`. `GET /itineraries` takes it as a `state`, counts it as
+  `awaiting_human`, and gives each chain `flags`, `waiting_for`, `continues` and `continued_by`.
+- **Continue…** on a chain, and in a run's report, opens the trigger window with that chain's
+  workflow and flags rather than the defaults, and says where they came from.
+- Help requests record the workflow, routes and flags of the chain that raised them, and run records
+  the flags they were composed with and the chain theirs continues. `GET /help` and `GET /runs`
+  show the flags and the reply.
+- The brief every run gets says how a person's answer reaches an agent: as a new run, which is why
+  it should write down where it got to before it asks.
+
 - **Sessions: watch agents work, live, the way their CLI would show it.** A new dashboard tab lists
   every run that is going and the ones that ended in the last day. Each opens as a read-only
   terminal: the first lines of the prompt, the model's reasoning, every tool call with a few lines
@@ -25,6 +47,12 @@ status](README.md#project-status).
 
 ### Fixed
 
+- **"Resolved" no longer implies the work will continue.** For a request that stopped its run, the
+  tooltip said "If it is not, the next run will raise it again" — but that run ended its chain, and
+  there is no next run. It now says resolving restarts nothing, and points to Reply.
+- **A help request filed while one is being resolved is no longer lost.** Resolving rewrote the
+  day's file without holding the lock appends take.
+- **A chain whose first run is still going is on the Chains page,** as `working`.
 - **The dashboard shows what is running.** It read running runs from history, which records a run
   only when it ends, so nothing ever showed as running: not in **Runs**, not on the route map. Both
   now read the Tower's live records, whichever process started the runs.
@@ -33,6 +61,13 @@ status](README.md#project-status).
 
 ### Changed
 
+- `ItineraryState` gains `awaiting_human`. A client that treats it as a closed set will see a value
+  it does not know; one that showed every chain that was not `working` as done now shows a chain
+  waiting for an answer as done, which is the mistake the state exists to stop.
+- For library users: `HelpRequest` gains `scope`, `flags` and `reply`; `RunRecord` gains `flags`
+  and `continues`; `Queued` gains `continues`. All are optional on disk, so records written by an
+  earlier release still read. `layover_core::help::reply` composes a reply's flight and
+  `Journal::answer` queues it and answers the requests as one step.
 - For library users: `Ledger` and `Live` are defined in `layover_store::live`, and still exported
   from `layover_tower`. `Ledger::at` reads live records without creating anything, and
   `Ledger::find` looks one up. `layover_store::hangar::run_dir` and `TRANSCRIPT` name a run's

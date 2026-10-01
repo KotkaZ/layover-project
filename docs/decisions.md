@@ -600,6 +600,36 @@ checked reads as a pid, and the Tower then signals the process itself through th
 library, which depends on no external command at all. Its own children are another matter: see risk
 24.
 
+**Why answering a help request starts a new chain.** A fatal request ends its run, and with it the
+chain, by design: an agent that cannot go on should stop rather than guess. So the answer cannot
+resume anything — nothing is running, and resuming a process is settled against everywhere else.
+It is a new run of the agent that asked, priced like a resumed layover: a fresh budget, because the
+chain that asked is over and its Hops and Fuel were sized for the work it did. What carries over is
+how the work was asked for — workflow, flags and routes — taken from the request, which records
+them from the asking run's own session, never from what the agent says. The two chains are linked
+both ways, through the answer recorded on the request and the link recorded on the new chain's
+runs, so neither looks like it came from nowhere.
+
+**Why a reply never takes the workflow's defaults.** The defaults are the safe choice for work
+nobody has thought about. An answer is the opposite: someone triggered this chain with chosen
+flags, and continuing it with the defaults silently downgrades it — a chain allowed to publish
+becomes one that may not, and the only sign is a pull request that never appears. So a request
+filed before requests recorded their chain's flags, which cannot know them, makes the person
+replying say what they were, and is refused until they do. Decided with the maintainer on
+1 October 2026, as was the next one.
+
+**Why a reply records a name it is given.** Layover has one token per Tower and no accounts, so it
+cannot know who answered. A name the person types, remembered by their browser, is the honest
+record; failing that, the operating-system account the dashboard runs as, which on a factory one
+person runs is that person.
+
+**Why `awaiting_human` is a state of its own.** It is the second state, after `stalled`, that a list
+of runs cannot show: every run ended cleanly and nothing is queued, and still the work is not done.
+It applies only while the request the chain's *last* run filed is open and fatal — a request an
+earlier run filed, which the chain went on past, does not hold it — and resolving the request
+without an answer makes the chain `finished`, because that is a person deciding nothing more is
+needed.
+
 **Why `doctor` measures free slots rather than waiting time.** Work waiting in a busy factory is the
 design. What the one-at-a-time Tower produced was waiting *with slots free*, so that is what is
 measured: from history, how long each run spent queued while fewer than `max_concurrent_runs` runs —

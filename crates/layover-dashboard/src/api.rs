@@ -21,10 +21,11 @@ use layover_core::run::Outcome;
 use layover_http::{
     AgentList, Api, CancelFlightPath, CostBucket, CostReport, CostWindow, EventStream,
     FlightAccepted, GetCostsQuery, GetGraphQuery, GetReportPath, GetRunPath, GroundStop, Health,
-    HelpList, HelpResolved, ItineraryList, ItineraryState, JudgeLearningPath, JudgeLearningRequest,
-    Judgement, Learning, LearningList, ListHelpQuery, ListItinerariesQuery, ListLearningsQuery,
-    ListRunsQuery, PendingList, PipelineList, Problem, Report, ReserveState, ResolveHelpRequest,
-    RouteMap, Run, RunList, RunStatus, SendFlightRequest, Status, StreamRunPath, StreamRunQuery,
+    HelpList, HelpReplied, HelpReplyRequest, HelpResolved, ItineraryList, ItineraryState,
+    JudgeLearningPath, JudgeLearningRequest, Judgement, Learning, LearningList, ListHelpQuery,
+    ListItinerariesQuery, ListLearningsQuery, ListRunsQuery, PendingList, PipelineList, Problem,
+    Report, ReserveState, ResolveHelpRequest, RouteMap, Run, RunList, RunStatus, SendFlightRequest,
+    Status, StreamRunPath, StreamRunQuery,
 };
 use layover_store::{HelpFilter, History, Journal, RunFilter};
 
@@ -107,7 +108,7 @@ impl Dashboard {
     /// kill switch is a file: it survives a crash and can be set by hand when nothing else is
     /// responding. Reporting a remembered `false` would make the dashboard tell an operator who
     /// had just pulled the handle that nothing was stopped.
-    fn ground_stop_engaged(&self) -> bool {
+    pub(crate) fn ground_stop_engaged(&self) -> bool {
         self.0.ground_stop.exists()
     }
 
@@ -129,7 +130,7 @@ impl Dashboard {
     }
 
     /// Loads the factory definition as it is on disk right now.
-    fn config(&self) -> Result<Config, Problem> {
+    pub(crate) fn config(&self) -> Result<Config, Problem> {
         Config::load(&self.0.config_path).map_err(|error| {
             Problem::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -165,7 +166,7 @@ impl Dashboard {
     }
 
     /// Reads runs, turning a store failure into a problem rather than a panic.
-    fn runs(
+    pub(crate) fn runs(
         &self,
         span: &Span,
         filter: &RunFilter,
@@ -371,21 +372,23 @@ impl Api for Dashboard {
             .with_detail(error.to_string())
         })?;
 
-        // A help request records the itinerary it came from, not the workflow. An itinerary
-        // belongs to exactly one pipeline, so the runs already in the window supply the mapping
-        // and nothing has to be stored twice.
+        // A help request records the workflow of the chain that raised it. One filed before it
+        // did is placed by its itinerary: a chain belongs to exactly one pipeline, so the runs
+        // already in the window supply the mapping.
         let pipelines = self.pipelines_by_itinerary(&span)?;
+        let pipeline_of = |request: &layover_core::help::HelpRequest| {
+            request
+                .scope
+                .as_ref()
+                .and_then(|scope| scope.pipeline.as_ref().map(ToString::to_string))
+                .or_else(|| pipelines.get(request.itinerary.as_str()).cloned())
+        };
         let wanted = query.pipeline.as_deref();
 
         let matching: Vec<_> = requests
             .into_iter()
             .filter(|request| {
-                wanted.is_none_or(|name| {
-                    pipelines
-                        .get(request.itinerary.as_str())
-                        .map(String::as_str)
-                        == Some(name)
-                })
+                wanted.is_none_or(|name| pipeline_of(request).as_deref() == Some(name))
             })
             .collect();
 
@@ -394,9 +397,7 @@ impl Api for Dashboard {
                 .unwrap_or(i32::MAX),
             requests: matching
                 .iter()
-                .map(|request| {
-                    view::help(request, pipelines.get(request.itinerary.as_str()).cloned())
-                })
+                .map(|request| view::help(request, pipeline_of(request)))
                 .collect(),
         })
     }
@@ -562,30 +563,55 @@ impl Api for Dashboard {
     ) -> Result<ItineraryList, Problem> {
         let span = self.span(query.window);
 
-        let records = self.runs(&span, &RunFilter::default())?;
+        // With what is running now, which history does not hold until it ends: without it a chain
+        // whose first run is still going is not on the page at all.
+        let mut records = self.runs(&span, &RunFilter::default())?;
+        let config = self.config().ok();
+        records.extend(
+            self.live_records()
+                .iter()
+                .map(|live| Self::live_record(live, config.as_ref())),
+        );
         let stalls = self.0.journal.stalls(&span).map_err(|error| {
             Problem::new(StatusCode::INTERNAL_SERVER_ERROR, "stalls are unreadable")
                 .with_detail(error.to_string())
         })?;
         let pending = self.0.journal.pending().unwrap_or_default();
+        // Every request, answered or not: an open one says a chain is waiting, an answered one
+        // says which chain continued it.
+        let help = self
+            .0
+            .journal
+            .help(&span, &HelpFilter::default())
+            .unwrap_or_default();
 
-        let mut chains =
-            crate::itinerary::itineraries(&records, &stalls, &pending, self.ground_stop_engaged());
+        let mut chains = crate::itinerary::itineraries(
+            &records,
+            crate::itinerary::Context {
+                stalls: &stalls,
+                pending: &pending,
+                help: &help,
+                ground_stop: self.ground_stop_engaged(),
+            },
+        );
 
         if let Some(wanted) = query.state {
             chains.retain(|chain| chain.state == wanted);
         }
 
+        let count = |state| {
+            i32::try_from(chains.iter().filter(|chain| chain.state == state).count())
+                .unwrap_or(i32::MAX)
+        };
         Ok(ItineraryList {
-            stalled: i32::try_from(
-                chains
-                    .iter()
-                    .filter(|chain| chain.state == ItineraryState::Stalled)
-                    .count(),
-            )
-            .unwrap_or(i32::MAX),
+            stalled: count(ItineraryState::Stalled),
+            awaiting_human: count(ItineraryState::AwaitingHuman),
             itineraries: chains,
         })
+    }
+
+    async fn reply_help(&self, body: HelpReplyRequest) -> Result<HelpReplied, Problem> {
+        self.reply(&body)
     }
 
     async fn resolve_help(&self, body: ResolveHelpRequest) -> Result<HelpResolved, Problem> {

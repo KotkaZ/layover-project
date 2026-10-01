@@ -45,6 +45,18 @@ Four rules, each of which exists because of a specific failure:
 - **Ask once per blocker.** A factory whose credentials expired needs one request and a count, not
   forty identical ones.
 - **Say whether it stopped you.** See above.
+- **A person's answer is a new run.** A reply starts a new run of the agent that asked, beginning
+  `In reply to your help request <run> (<summary>)`, and nothing of the run that asked survives but
+  what it wrote with `layover_memory_write` — so it writes down where it got to before it asks.
+
+### Answering a request
+
+**Reply**, in the dashboard or `POST /help/reply`, answers every open request a run filed and
+continues the work: a new chain to the agent that asked, from a person, in the workflow, with the
+flags and within the routes of the chain that asked. That is why a request records them — its
+chain's workflow, routes and flags, from the run's own session — and why one filed before it did
+asks the person replying to say what the flags were. **Resolved** only marks a request dealt with.
+See [the dashboard](./dashboard.md#answering-an-agent).
 
 A run that asked for help carries `blocked_on` — one line, independent of whether it succeeded, so
 a blocked run does not look identical to a clean one on a list. It is the summary of the request

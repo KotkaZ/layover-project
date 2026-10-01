@@ -119,11 +119,32 @@ want to know what it did. `layover serve --watch-only` serves that half alone.
 ## Answering an agent
 
 An agent that cannot get past something raises a **help request** rather than guessing. Those are
-in the Help &amp; learnings tab, with a `Resolved` button beside each.
+in the Help &amp; learnings tab, each with **Reply** and **Resolved**.
 
-Resolving says *the blocker is gone*, not *I have read this*. Nothing checks: if it is not actually
+**Reply answers it and continues the work.** The window opens with what the agent asked, quoted, so
+you can answer between its questions. Sending starts a new run of the agent that asked — a new
+chain, with a fresh budget, in the same workflow with the same flags and routes as the chain that
+asked. Never the workflow's defaults: a chain that was allowed to open a pull request still is, and
+the window says which flags it carries. The agent is told a person sent it, and its work begins with
+a line naming the request it answers, then your words exactly as you wrote them:
+
+```text
+In reply to your help request run_01M3… (spec needs 3 decisions from Karl)
+
+> 1. Exponential or linear back-off?
+Exponential.
+```
+
+The request is marked dealt with, recording who replied — the name you give, which the browser
+remembers, or the account the dashboard runs as — what you said, and the chain it started. On the
+Chains tab each of the two chains names the other. A request filed before Layover recorded its
+chain's flags cannot know them, so the window asks you to set them: they start from the workflow's
+defaults and it says so, and the reply is refused until it has them.
+
+**Resolved says the blocker is gone**, not *I have read this*. Nothing checks: if it is not actually
 fixed, the next run raises it again, which is what keeps the list evidence of something rather than
-a queue somebody clears to feel tidy.
+a queue somebody clears to feel tidy. But a request that *stopped* its run ended its chain, so there
+is no next run: resolving one restarts nothing, its button says so, and Reply is the way on.
 
 Learnings sit below them, with `Keep` and `Drop`. **Neither is an approval step.** A learning
 applies from the moment an agent proposes it; these say "this is real, stop it lapsing" and "this
@@ -141,7 +162,18 @@ finish" are questions about a chain rather than a run.
 | `working` | Something is running, or waiting to |
 | `finished` | It ran and stopped, and nothing is outstanding |
 | `stalled` | It stopped and nothing will ever happen again |
+| `waiting for you` | Its last run stopped to ask you something, and nothing will run until you answer (`awaiting_human`) |
 | `halted` | A Ground Stop caught it, or the Reserve refused to start its run |
+
+**`waiting for you` looks finished too.** Every run in it ended cleanly and nothing is queued —
+because its last run filed a fatal help request and stopped. It has a **Reply…** beside it and an
+amber count on the tab. Resolving the request without replying makes it `finished`; replying makes
+it `finished`, continued by the chain the reply started.
+
+**Continue…**, on any chain of a workflow and in a run's report, opens the trigger window with that
+workflow chosen and its flags set as that chain had them, saying where they came from. Change them
+if you need to. A chain from before runs recorded their flags opens with the workflow's defaults,
+and a warning that they are only that.
 
 **`stalled` is the one worth looking for**, and the reason this view exists. A joined agent never
 woke because the barrier it was waiting behind could no longer be completed — the tester reported,

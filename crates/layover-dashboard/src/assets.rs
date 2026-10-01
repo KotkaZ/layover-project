@@ -24,6 +24,8 @@ const SCRIPT: &str = include_str!("assets/app.js");
 const ROUTEMAP: &str = include_str!("assets/routemap.js");
 /// Watching sessions: the session list and the read-only terminals.
 const SESSIONS: &str = include_str!("assets/sessions.js");
+/// Answering help requests, and continuing a chain with its own flags.
+const REPLY: &str = include_str!("assets/reply.js");
 
 /// Builds the complete server: the JSON API, plus the dashboard on top of it.
 ///
@@ -51,6 +53,10 @@ pub fn router(dashboard: Dashboard, guard: Guard) -> Router {
         .route(
             "/sessions.js",
             get(|| async { asset("text/javascript", SESSIONS) }),
+        )
+        .route(
+            "/reply.js",
+            get(|| async { asset("text/javascript", REPLY) }),
         )
         .merge(api)
         .layer(axum::middleware::from_fn_with_state(

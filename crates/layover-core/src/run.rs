@@ -4,6 +4,8 @@
 //! in which chain, started by which pipeline, and how it ended. The dashboard needs both, and
 //! they are separate types because cost is a rail that must work even when history is turned off.
 
+use std::collections::BTreeMap;
+
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 
@@ -162,6 +164,16 @@ pub struct RunRecord {
     /// recover. That is the safe direction: stalled work is visible, duplicated work is not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pid: Option<u32>,
+    /// The flags the run was composed with, for a chain a workflow opened.
+    ///
+    /// Kept so a finished chain can be continued as it was asked for, rather than from the
+    /// workflow's defaults. Absent for a chain no workflow opened, and in records written before
+    /// it was kept.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub flags: BTreeMap<String, bool>,
+    /// The chain this run's chain continues, when a person's reply to a help request started it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continues: Option<ItineraryId>,
 }
 
 impl RunRecord {
@@ -190,6 +202,8 @@ impl RunRecord {
             detail: None,
             blocked_on: None,
             pid: None,
+            flags: BTreeMap::new(),
+            continues: None,
         }
     }
 

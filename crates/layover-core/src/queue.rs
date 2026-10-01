@@ -18,7 +18,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
-use crate::flight::Flight;
+use crate::flight::{Flight, ItineraryId};
 use crate::handover::Recovery;
 use crate::pipeline::PipelineName;
 
@@ -62,6 +62,12 @@ pub struct Queued {
     /// upstreams whose runs finished long ago.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub released: bool,
+    /// The chain this one continues, when a person answered a help request it raised.
+    ///
+    /// The new chain has its own budget, so it is a different itinerary; this is what links the
+    /// two, so each can say where the other went.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continues: Option<ItineraryId>,
 }
 
 impl Queued {
@@ -79,7 +85,15 @@ impl Queued {
             within: BTreeSet::new(),
             recovering: None,
             released: false,
+            continues: None,
         }
+    }
+
+    /// Marks the flight as continuing the chain `earlier`.
+    #[must_use]
+    pub fn continuing(mut self, earlier: ItineraryId) -> Self {
+        self.continues = Some(earlier);
+        self
     }
 
     /// Which attempt at its work this is: 1 as it was asked for, 2 for the first restart after a

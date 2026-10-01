@@ -276,6 +276,7 @@ async fn the_page_and_its_assets_are_served_from_the_binary() {
         ("/style.css", ".routemap"),
         ("/app.js", "async function loadCost"),
         ("/sessions.js", "class Terminal"),
+        ("/reply.js", "async function submitReply"),
     ] {
         let (status, body) = call(factory.router(), path).await;
         assert_eq!(status, StatusCode::OK, "{path}");

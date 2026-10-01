@@ -32,6 +32,7 @@ mod assets;
 pub mod auth;
 mod itinerary;
 mod live;
+mod reply;
 mod stream;
 pub mod transcript;
 mod view;

@@ -191,6 +191,16 @@ impl Factory {
             )),
             blocked_on: None,
             pid: None,
+            flags: live
+                .queued
+                .as_ref()
+                .filter(|queued| queued.pipeline.is_some())
+                .map(|queued| queued.flags.clone())
+                .unwrap_or_default(),
+            continues: live
+                .queued
+                .as_ref()
+                .and_then(|queued| queued.continues.clone()),
         });
         self.age_learnings(&live.agent);
         let _ = self.live.finished(&live.run);

@@ -237,6 +237,20 @@ async fn a_running_session_is_listed_as_running_with_its_workflow_and_model() {
 }
 
 #[tokio::test]
+async fn a_chain_whose_only_run_is_alive_is_listed_as_working() {
+    // A chain was built from history alone, so one whose first run had not ended yet — a trigger a
+    // minute old, or the chain a reply just started — was not on the Chains page at all.
+    let factory = Factory::new("chain-live");
+    let live = factory.running();
+
+    let (_, chains) = json(factory.app(), "/itineraries?window=last_24h").await;
+    let chain = &chains["itineraries"][0];
+    assert_eq!(chain["itinerary_id"], live.itinerary.as_str(), "{chains}");
+    assert_eq!(chain["state"], "working");
+    assert_eq!(chain["pipeline"], "devforge");
+}
+
+#[tokio::test]
 async fn a_finished_run_replays_from_its_transcript_and_says_how_it_ended() {
     let factory = Factory::new("replay");
     let live = factory.running();

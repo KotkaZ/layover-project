@@ -213,7 +213,8 @@ test and doc build, with warnings denied. CI runs the same command, unchanged.
 | **Layovers: an agent sets work down and a resuming pipeline brings it back** | |
 | **Memory and learnings: injected into every run, and all ten agent tools connected** | |
 | **The MCP endpoint agents call back into: `layover_send` queues a real flight** | |
-| **Ground Stop, cancelling queued work, resolving help, settling learnings** | |
+| **Ground Stop, cancelling queued work, settling learnings** | |
+| **Help: answer an agent from the dashboard and the work continues, with its chain's flags** | |
 | **Chains: what one trigger caused, and whether it finished or stalled** | |
 | **A versioned state directory: a newer layout is refused, an older one migrated** | |
 | **A token on the API by default, signed build provenance, and an SBOM per release** | |

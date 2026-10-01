@@ -444,3 +444,12 @@ tr.readable:hover { background: color-mix(in srgb, var(--accent) 7%, transparent
 .line.end.succeeded { color: #3fb950; }
 .hide-think .line.think { display: none; }
 #sessions-tile[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* Replying and continuing. */
+.badge.waiting { background: var(--warn); }
+.outcome.awaiting_human { color: var(--warn); }
+td.actions { white-space: nowrap; }
+td.actions .link + .link { margin-left: 12px; }
+#reply-body { font: 12.5px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace; }
+#reply-flags .flag { display: inline-flex; gap: 6px; margin-right: 14px; }
+#reply-by { display: block; width: 100%; margin-top: 4px; font: inherit; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
