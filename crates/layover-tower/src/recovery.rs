@@ -31,8 +31,10 @@ use std::time::{Duration, Instant};
 use jiff::Timestamp;
 use layover_core::agent::AgentName;
 use layover_core::cost::TokenUsage;
-use layover_core::flight::{Flight, RunId};
+use layover_core::cost::Window;
+use layover_core::flight::{Flight, ItineraryId, RunId};
 use layover_core::handover::{ChildState, Interruption, Recovery, authorize_recovery};
+use layover_core::pipeline::PipelineName;
 use layover_core::queue::Queued;
 use layover_core::run::{Outcome, RunRecord};
 
@@ -159,24 +161,47 @@ impl Factory {
                 crate::dispatcher::charge(chain, &reported);
             });
 
-        let decided = match &restart {
-            Ok(queued) => format!("restarting it as attempt {}", queued.attempt()),
-            Err(why) => format!("not restarted: {why}"),
+        let detail = match (&live.queued, &restart) {
+            // Said plainly: a person reading the Runs list should know this is not a run of the
+            // workflow that failed, but one that was lost, and what to do about it.
+            (None, _) => format!(
+                "lost when the Tower stopped (process {}; {found}). Layover 1.3.0 and earlier did not \
+                 record its work, so it could not be restarted. Re-trigger it if it is still needed.",
+                live.pid
+            ),
+            (Some(_), Ok(queued)) => format!(
+                "the Tower went away while it was running (process {}); {found}; restarting it as \
+                 attempt {}",
+                live.pid,
+                queued.attempt()
+            ),
+            (Some(_), Err(why)) => format!(
+                "the Tower went away while it was running (process {}); {found}; not restarted: {why}",
+                live.pid
+            ),
         };
         let agent = self.config.agents.get(&live.agent);
+        let pipeline = live
+            .queued
+            .as_ref()
+            .and_then(|queued| queued.pipeline.clone())
+            .or_else(|| self.pipeline_on_record(&live.itinerary));
         self.record(&RunRecord {
             run: live.run.clone(),
             itinerary: live.itinerary.clone(),
             agent: live.agent.clone(),
-            pipeline: live
-                .queued
-                .as_ref()
-                .and_then(|queued| queued.pipeline.clone()),
+            pipeline,
             model: agent.and_then(|agent| agent.model.clone()),
             outcome: Outcome::Interrupted,
             queued_at: None,
             started_at: live.started_at,
-            finished_at: Some(Timestamp::now()),
+            // When it was last seen alive, not when this Tower got round to noticing: a run that
+            // died twenty-nine minutes in must not read as having taken the six hours the Tower
+            // was down. Only a run stopped just now ended now.
+            finished_at: Some(match found {
+                Found::Stopped => Timestamp::now(),
+                Found::Exited | Found::Reused | Found::Unknown => last_seen_alive(live),
+            }),
             usd: reported.usd,
             source: reported.source,
             usage: TokenUsage {
@@ -185,10 +210,7 @@ impl Factory {
                 ..TokenUsage::default()
             },
             exit_code: None,
-            detail: Some(format!(
-                "the Tower went away while it was running (process {}); {found}; {decided}",
-                live.pid
-            )),
+            detail: Some(detail),
             blocked_on: None,
             pid: None,
             flags: live
@@ -270,6 +292,72 @@ impl Factory {
             attempt: attempt.saturating_add(1),
         }))
     }
+}
+
+impl Factory {
+    /// The workflow a chain belonged to, as anything still on disk records it: another of its runs
+    /// in history, work of it still queued, work it set down, or a help request it raised.
+    ///
+    /// For a run whose own record did not say, which every run started by 1.3.0 and earlier is.
+    /// `None` only when nothing records it — better than a guess, which would file the run under a
+    /// workflow it never belonged to.
+    fn pipeline_on_record(&self, chain: &ItineraryId) -> Option<PipelineName> {
+        let everything = Window::AllTime.resolve(
+            &(Timestamp::now() + jiff::SignedDuration::from_mins(1))
+                .to_zoned(jiff::tz::TimeZone::UTC),
+        );
+        let history = layover_store::History::open(self.history_dir()).ok();
+        let from_history = || {
+            history?
+                .runs(&everything, &layover_store::RunFilter::default())
+                .ok()?
+                .into_iter()
+                .filter(|record| record.itinerary == *chain)
+                .find_map(|record| record.pipeline)
+        };
+        let from_queue = || {
+            self.journal
+                .pending()
+                .ok()?
+                .into_iter()
+                .filter(|queued| queued.flight.itinerary == *chain)
+                .find_map(|queued| queued.pipeline)
+        };
+        let from_layovers = || {
+            self.journal
+                .layovers()
+                .ok()?
+                .into_iter()
+                .filter(|layover| layover.booked_by == *chain)
+                .find_map(|layover| layover.scope.and_then(|scope| scope.pipeline))
+        };
+        let from_help = || {
+            self.journal
+                .help(&everything, &layover_store::HelpFilter::default())
+                .ok()?
+                .into_iter()
+                .filter(|request| request.itinerary == *chain)
+                .find_map(|request| request.scope.and_then(|scope| scope.pipeline))
+        };
+
+        self.chains
+            .pipeline_of(chain)
+            .or_else(from_history)
+            .or_else(from_queue)
+            .or_else(from_layovers)
+            .or_else(from_help)
+    }
+}
+
+/// The last moment `live` is known to have been alive: the last write to its transcript, which
+/// the CLI appends to as long as it runs, or its start when there is not one.
+fn last_seen_alive(live: &Live) -> Timestamp {
+    std::fs::metadata(live.hangar.join(crate::spawn::TRANSCRIPT_FILE))
+        .and_then(|meta| meta.modified())
+        .ok()
+        .and_then(|modified| Timestamp::try_from(modified).ok())
+        .filter(|written| *written >= live.started_at)
+        .unwrap_or(live.started_at)
 }
 
 /// Establishes that the run's process is gone, stopping it if it is not.

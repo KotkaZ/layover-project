@@ -120,7 +120,12 @@ before it starts anything:
 was stopped; restarted as attempt 2
 ```
 
-A run another living Tower is watching is left alone. Each Tower holds a lock on a file of its own,
+A run another living Tower is watching is left alone.
+
+A run left behind by Layover 1.3.0 or earlier did not record its work, so it cannot be restarted.
+It is written to history as `interrupted` with the detail *lost when the Tower stopped … Re-trigger
+it if it is still needed*, ending when its transcript was last written rather than when it was
+found, and in the workflow its chain's other records name, when any do. Each Tower holds a lock on a file of its own,
 which the operating system releases however the Tower ends, and every run's record names it.
 `layover run --dry-run` settles nothing.
 

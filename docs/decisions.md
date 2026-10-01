@@ -630,6 +630,14 @@ earlier run filed, which the chain went on past, does not hold it — and resolv
 without an answer makes the chain `finished`, because that is a person deciding nothing more is
 needed.
 
+**Why a run 1.3.0 lost ends when its transcript was last written.** Its record says only that it
+was started. The time the next Tower noticed it is the one thing certainly *not* when it ended — a
+run that died twenty-nine minutes in read as taking almost six hours. The transcript is appended to
+for as long as the CLI runs, so its last write is the last evidence of life. Its workflow comes from
+whatever else records the chain — another run in history, queued work, a layover, a help request —
+and stays empty when nothing does, because a guess would file it under a workflow it never belonged
+to.
+
 **Why `doctor` measures free slots rather than waiting time.** Work waiting in a busy factory is the
 design. What the one-at-a-time Tower produced was waiting *with slots free*, so that is what is
 measured: from history, how long each run spent queued while fewer than `max_concurrent_runs` runs —

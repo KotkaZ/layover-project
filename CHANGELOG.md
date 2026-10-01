@@ -50,6 +50,12 @@ status](README.md#project-status).
 - **"Resolved" no longer implies the work will continue.** For a request that stopped its run, the
   tooltip said "If it is not, the next run will raise it again" — but that run ended its chain, and
   there is no next run. It now says resolving restarts nothing, and points to Reply.
+- **A run 1.3.0 left behind is settled honestly.** It was recorded as interrupted when the next Tower
+  found it — "took 5h47m" for a run that died 29 minutes in — with no workflow and a detail about a
+  release not keeping its work. It now ends when its transcript was last written, takes its
+  workflow from its chain's other records when any have it, and says plainly that it was lost when
+  the Tower stopped and should be re-triggered if still needed. Any run found already gone after a
+  restart ends when it was last seen alive.
 - **A help request filed while one is being resolved is no longer lost.** Resolving rewrote the
   day's file without holding the lock appends take.
 - **A chain whose first run is still going is on the Chains page,** as `working`.
