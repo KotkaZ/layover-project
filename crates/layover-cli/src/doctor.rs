@@ -26,6 +26,7 @@ use layover_core::cost::{Span, Window};
 use layover_core::run::Outcome;
 use layover_store::{HelpFilter, History, Journal, RunFilter};
 
+mod costs;
 mod money;
 mod waits;
 
@@ -153,7 +154,7 @@ pub fn check(config: &Config, root: &Path, window: Window) -> Result<Report, Str
     };
 
     stalled_chains(&journal, &span, &mut report);
-    unreported_costs(&runs, &mut report);
+    costs::unreported(config, &runs, &mut report);
     money::reserve(config, root, &runs, &mut report);
     waits::waits(
         config,
@@ -210,41 +211,6 @@ fn stalled_chains(journal: &Journal, span: &Span, report: &mut Report) {
         advice: "Work somebody asked for that will not happen. Each stall names the agent that \
                  never woke and what it was waiting for; a join whose upstream cannot be reached \
                  is usually a route map that disagrees with the prompts."
-            .to_owned(),
-    });
-}
-
-/// Runs whose cost is a floor rather than a figure.
-///
-/// Dollars a runner printed and Copilot credits it reported are both measurements; anything else
-/// leaves a hole.
-fn unreported_costs(runs: &[layover_core::run::RunRecord], report: &mut Report) {
-    let silent = runs
-        .iter()
-        .filter(|record| !record.source.is_measured())
-        .count();
-
-    if silent == 0 {
-        return;
-    }
-
-    // A proportion rather than a count: one silent run in a thousand is a runner quirk, and half
-    // of them is a factory whose spending nobody can actually see.
-    let share = silent * 100 / runs.len().max(1);
-
-    report.findings.push(Finding {
-        severity: if share >= 25 {
-            Severity::Warning
-        } else {
-            Severity::Note
-        },
-        summary: format!(
-            "{silent} of {} run(s) reported no cost ({share}%)",
-            runs.len()
-        ),
-        advice: "Every total that includes these is a floor, not a figure. Fuel is the rail that \
-                 depends on runners reporting honestly; the run cap is the one that does not, and \
-                 it is what is actually holding."
             .to_owned(),
     });
 }
@@ -401,7 +367,6 @@ fn idle_schedules(config: &Config, runs: &[layover_core::run::RunRecord], report
 #[cfg(test)]
 mod tests {
     use super::*;
-    use layover_core::cost::CostSource;
 
     #[test]
     fn a_report_with_nothing_in_it_says_so_plainly() {
@@ -569,51 +534,5 @@ entry = "analyst"
             .sort_by_key(|finding| std::cmp::Reverse(finding.severity));
 
         assert_eq!(report.findings[0].severity, Severity::Fault);
-    }
-
-    #[test]
-    fn silent_costs_are_a_note_when_rare_and_a_warning_when_common() {
-        // One silent run in a thousand is a runner quirk; half of them is a factory whose
-        // spending nobody can see.
-        let run = |source: CostSource| layover_core::run::RunRecord {
-            run: layover_core::RunId::generate(),
-            itinerary: layover_core::flight::ItineraryId::generate(),
-            agent: layover_core::agent::AgentName::new("worker"),
-            pipeline: None,
-            model: None,
-            outcome: Outcome::Succeeded,
-            started_at: Timestamp::now(),
-            finished_at: Some(Timestamp::now()),
-            usd: 0.0,
-            source,
-            usage: layover_core::cost::TokenUsage::default(),
-            exit_code: None,
-            detail: None,
-            blocked_on: None,
-            pid: None,
-            queued_at: None,
-            flags: std::collections::BTreeMap::new(),
-            continues: None,
-            sent_by: None,
-        };
-
-        let mut rare = Report::default();
-        let mut runs: Vec<_> = (0..20).map(|_| run(CostSource::Reported)).collect();
-        runs.push(run(CostSource::Unreported));
-        unreported_costs(&runs, &mut rare);
-        assert_eq!(rare.findings[0].severity, Severity::Note);
-
-        let mut common = Report::default();
-        let half: Vec<_> = (0..10)
-            .map(|index| {
-                run(if index % 2 == 0 {
-                    CostSource::Reported
-                } else {
-                    CostSource::Unreported
-                })
-            })
-            .collect();
-        unreported_costs(&half, &mut common);
-        assert_eq!(common.findings[0].severity, Severity::Warning);
     }
 }

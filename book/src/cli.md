@@ -183,7 +183,7 @@ The failures it looks for are the quiet ones — the ones that look like nothing
 | Finding | Why it is invisible otherwise |
 |---|---|
 | A **stalled chain** | Every run in it reports success. A stall and a finished chain look identical on a list |
-| Runs reporting no cost | The total still renders. It is a floor, not a figure, and nothing says so |
+| Runs reporting no cost | The total reads *not reported* or carries a `+`, which says *that* it is unknown and not *why*. The finding names each runner the silent runs ran on and what to change: the output flag its CLI needs, a rate card row for a Codex model, or — when the command is already right — that the runs ended before printing a cost or predate Layover reading one |
 | A schedule that never fired | A schedule that is not firing looks exactly like one with nothing to do |
 | Open help requests | The channel that reaches a person is the one nobody is there to read |
 | Expired layovers | Work set down that nothing ever picked up |

@@ -138,7 +138,16 @@ smaller total. Zero credits beside premium requests is silence, not a free run.
 > what a run actually costs; the dashboard's cost view shows it per agent and per workflow.
 
 `layover doctor` reports the share of runs that measured nothing — a Copilot run priced from its
-credits is not one of them — and raises it to a warning once a quarter of runs are silent.
+credits is not one of them — and raises it to a warning once a quarter of runs are silent. It says
+which runner each silent run ran on and what to change about it:
+
+```text
+warning: 2 of 3 run(s) reported no cost (66%)
+    `silent` (2 run(s)): runner `stand` runs Copilot CLI without `--output-format json`, which is the only output that carries its cost. Add `--output-format json` to its `command`.
+```
+
+History is never repriced: runs recorded before a runner was fixed — or, for Copilot, before
+Layover 1.4.0 first priced its credits — keep reading as reporting nothing until they age out.
 
 ### When a reported figure is disbelieved
 

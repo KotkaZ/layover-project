@@ -44,7 +44,8 @@ factory definition: an unattended factory that discovers a typo three agents dee
 spent money to find out.
 
 `layover doctor` exits non-zero when a factory's recorded history contains something that would
-fail an unattended run — a stalled chain, a schedule that never fired, a Ground Stop left engaged.
+fail an unattended run — a stalled chain, a schedule that never fired, a Ground Stop left engaged,
+or a quarter of its runs reporting no cost, with the runner to fix and what to add.
 
 ## Status
 

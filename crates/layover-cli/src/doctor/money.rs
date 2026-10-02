@@ -96,7 +96,7 @@ mod tests {
             .map(|_| run(CostSource::CopilotCredits, 15.11, Outcome::Succeeded, None))
             .collect();
         let mut report = Report::default();
-        super::super::unreported_costs(&runs, &mut report);
+        super::super::costs::unreported(&bare(), &runs, &mut report);
 
         assert!(report.findings.is_empty(), "{:?}", report.findings);
     }
@@ -108,10 +108,15 @@ mod tests {
             run(CostSource::Unreported, 0.0, Outcome::TimedOut, None),
         ];
         let mut report = Report::default();
-        super::super::unreported_costs(&runs, &mut report);
+        super::super::costs::unreported(&bare(), &runs, &mut report);
 
         assert_eq!(report.findings.len(), 1);
         assert!(report.findings[0].summary.starts_with("1 of 2"));
+    }
+
+    /// A factory that declares nothing: these runs' agents are not in it, which the finding allows.
+    fn bare() -> Config {
+        toml::from_str("[layover]\nwork_dir = \"work\"\n").expect("parses")
     }
 
     /// A factory root whose history holds `runs`, cleaned up on drop.
