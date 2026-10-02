@@ -8,6 +8,21 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-10-02
+
+Spend nobody reported no longer reads as zero, and Layover says why a runner's costs are missing
+and what to add to its command.
+
+**Compatibility.** The configuration format, the HTTP API, the MCP tools and the on-disk layout
+are unchanged. Three things behave differently in an existing factory:
+- `layover validate` has a new warning, so a factory checked with `--strict` whose Copilot or
+  Claude Code runner lacks its JSON output now fails the check, as it should: its spend has been
+  unknowable.
+- A factory with a `[rates]` table now gets estimates for runs that print tokens and no dollars,
+  shown as `rate_card` and never debited from Fuel or the Reserve.
+- A run's recorded `model` is the one its command line selects, falling back to the declared one,
+  so **By model** gains runner-fixed models.
+
 ### Added
 
 - **`layover validate` warns about a runner whose output cannot say what its runs cost**: one an
@@ -1255,7 +1270,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/KotkaZ/layover-project/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/KotkaZ/layover-project/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/KotkaZ/layover-project/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/KotkaZ/layover-project/compare/v1.4.0...v1.5.0
