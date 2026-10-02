@@ -132,6 +132,24 @@ fn a_copilot_run_is_recorded_at_the_price_of_its_credits() {
     assert!((usd - 15.105_815_6).abs() < 1e-9, "{usd}");
 }
 
+/// How many flights ran, and how many were refused for `denial`.
+///
+/// Counted rather than read by position, because reports do not arrive in the order runs happen:
+/// a run frees its slot and charges its chain on its own thread, before the coordinator reports
+/// it, so the next flight can be admitted — and refused — first. With one slot and a queue taken
+/// in order, a refusal still only ever follows the debits that caused it.
+fn outcomes(results: &[Seen], denial: Denial) -> (usize, usize) {
+    let ran = results
+        .iter()
+        .filter(|seen| matches!(seen, Seen::Ran { .. }))
+        .count();
+    let refused = results
+        .iter()
+        .filter(|seen| matches!(seen, Seen::Refused(Refusal::Rail(found)) if *found == denial))
+        .count();
+    (ran, refused)
+}
+
 #[test]
 fn credits_debit_the_chains_fuel_until_it_is_refused() {
     // $10 of Fuel, and the first run costs $15.11. The second run in the same chain is refused;
@@ -143,12 +161,9 @@ fn credits_debit_the_chains_fuel_until_it_is_refused() {
         vec![flight(&chain), flight(&chain)],
     );
 
-    assert!(matches!(results[0], Seen::Ran { .. }), "{results:?}");
-    assert!(
-        matches!(
-            results[1],
-            Seen::Refused(Refusal::Rail(Denial::FuelExhausted))
-        ),
+    assert_eq!(
+        outcomes(&results, Denial::FuelExhausted),
+        (1, 1),
         "{results:?}"
     );
 }
@@ -171,13 +186,9 @@ fn the_reserve_refuses_new_work_once_credits_have_spent_it() {
         ],
     );
 
-    assert!(matches!(results[0], Seen::Ran { .. }), "{results:?}");
-    assert!(matches!(results[1], Seen::Ran { .. }), "{results:?}");
-    assert!(
-        matches!(
-            results[2],
-            Seen::Refused(Refusal::Rail(Denial::ReserveExhausted))
-        ),
+    assert_eq!(
+        outcomes(&results, Denial::ReserveExhausted),
+        (2, 1),
         "{results:?}"
     );
 
