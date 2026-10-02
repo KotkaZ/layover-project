@@ -32,7 +32,7 @@ command = ["claude", "-p", "--model", "{model}", "--output-format", "stream-json
 mcp     = { flag = "--mcp-config", format = "claude_json" }
 
 [runners.copilot]
-command = ["copilot", "--model", "{model}", "--allow-all-tools"]
+command = ["copilot", "--model", "{model}", "--allow-all-tools", "--output-format", "json"]
 mcp     = { flag = "--additional-mcp-config", format = "claude_json", prefix = "@" }
 
 [runners.codex]

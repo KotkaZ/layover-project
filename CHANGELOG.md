@@ -24,6 +24,9 @@ status](README.md#project-status).
   `$0.00` on the route map's **spend, 7d**, with no sign that it was not a figure, and the cost
   cards and breakdowns showed the same sum with only a small note beside it. A total built partly
   from silence now carries a `+`, and one built wholly from it reads **not reported**.
+- **`examples/planner.toml` ran Copilot without `--output-format json`**, the only output that
+  carries the AI credits a run used, so a factory started from it recorded every Copilot run as
+  reporting nothing. Every other example already had it.
 
 ## [1.6.0] — 2026-10-02
 
