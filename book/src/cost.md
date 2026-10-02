@@ -166,7 +166,8 @@ upper bound, not a measurement.
 
 ## Rate cards
 
-Optional, and only ever a fallback for a runner that reports tokens but not dollars.
+Optional, and only ever a fallback for a runner that reports tokens but not dollars — Codex with
+`--json`, which prints a token count when its turn ends and never a price.
 
 ```toml
 [rates.claude-opus-4]
@@ -177,11 +178,26 @@ cache_write_usd = 6.25
 ```
 
 Four rates rather than one because providers price cached tokens far below fresh input — often ten
-to one — and a single blended rate is wrong by whatever the cache hit rate happened to be.
+to one — and a single blended rate is wrong by whatever the cache hit rate happened to be. Codex
+counts its cached tokens inside its input, so they are taken out and priced at `cache_read_usd`.
+
+A run is priced from the card only when all three hold:
+
+- **It printed token counts and no dollar figure at all.** A figure it printed and that was not
+  believed stays `unreported` — an estimate would be a different number with no better claim.
+- **Its model is known from its command line**: `--model`, or the agent's `model` carried by its
+  runner's `{model}`. The table is keyed by that exact name.
+- **The card has a row for that model.** An unknown model stays `unreported`, never a flattering
+  zero.
+
+What it produces is `rate_card`, an estimate: it is shown and totalled, with the dashboard saying
+"n of m runs priced from a rate card", but it **never debits Fuel and never draws on the Reserve**.
+Those rails move only on measured figures, so writing a rate card cannot make a budget bind on
+prices you typed in.
 
 **Layover ships no rate card.** Prices change, differ per provider and per context tier, and a
 stale table baked into a release is exactly how a cost estimate drifts by a factor of two without
-anyone noticing. An unknown model produces `unreported`, never a flattering zero.
+anyone noticing.
 
 ## Reading the bill
 

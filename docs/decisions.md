@@ -343,6 +343,16 @@ integer makes the run `unreported` rather than priced from an earlier total; zer
 premium requests is silence; and a run killed before its first checkpoint is `unreported`, and
 every total built on it a lower bound.
 
+**Why a rate card prices only silence, and moves no rail.** The card was parsed and validated and
+then never applied, so a Codex factory that had written one still showed no spend. Applying it
+raised two questions. Which runs: only those that printed tokens and no dollar figure at all — a
+printed figure that was disbelieved stays `unreported`, for the reason first-release.md gives for
+not clamping one to a card. And what an estimate may move: nothing. Fuel and the Reserve bind on
+measured figures only, so typing a price into a configuration file cannot make a budget trip, or
+fail to — the run cap and the timeout remain what bounds a runner that does not price itself. The
+model is the one the command line selects, as the route map reads it, because pricing a model the
+runner never passed would be pricing a run that did not happen.
+
 This changes what an existing Copilot factory does: its `fuel_usd` now refuses work, and so does
 its Reserve.
 

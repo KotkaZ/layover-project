@@ -558,8 +558,8 @@ impl Factory {
         charge: impl FnOnce(&crate::cost::Reported),
     ) -> Dispatched {
         let transcript = std::fs::read_to_string(&finished.transcript).unwrap_or_default();
-        let reported =
-            crate::cost::from_transcript(&transcript, self.config.copilot.usd_per_credit);
+        let (reported, model) =
+            crate::cost::of_run(&self.config, &ticket.authorised.name, &transcript);
 
         charge(&reported);
 
@@ -570,7 +570,7 @@ impl Factory {
             itinerary: ticket.chain.clone(),
             agent: ticket.authorised.name.clone(),
             pipeline: self.chains.pipeline_of(&ticket.chain),
-            model: ticket.authorised.agent.model.clone(),
+            model,
             outcome,
             queued_at: ticket.queued_at,
             started_at: ticket.started_at,
@@ -580,6 +580,7 @@ impl Factory {
             usage: TokenUsage {
                 input: reported.input_tokens,
                 output: reported.output_tokens,
+                cache_read: reported.cache_read_tokens,
                 ..TokenUsage::default()
             },
             exit_code: finished.exit_code,

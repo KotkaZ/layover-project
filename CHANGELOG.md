@@ -8,6 +8,19 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A rate card priced nothing.** `[rates.<model>]` is documented as the fallback for a runner that
+  prints tokens but no dollars — Codex — and was parsed and validated, and then never applied: every
+  such run was `unreported`, and a factory that had written a rate card still showed no spend. A run
+  that printed token counts and no dollar figure is now estimated from the card for the model its
+  command line selects, with Codex's cached input priced at the cache rate. An estimate is
+  `rate_card`: shown and totalled, never debited from Fuel and never drawn from the Reserve, as
+  the cost page always said. A figure a runner printed and that was not believed stays
+  `unreported`. A run's recorded `model` is now the one its command line selects, falling back to
+  the one the agent declares, so a factory that fixes the model in its runner sees it in **By
+  model**.
+
 ## [1.6.0] — 2026-10-02
 
 See one run of a workflow on its own, even while the same workflow runs several times at once.

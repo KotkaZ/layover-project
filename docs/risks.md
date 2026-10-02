@@ -86,9 +86,10 @@ one whose last checkpoint cannot be read. Two things this rests on can be wrong 
 knowing: that one AI unit is one AI credit, which comes from the CLI's own text labelling them "AI
 Credits" rather than from a documented contract; and that a credit costs a cent, which is GitHub's
 published price and not necessarily what a given account pays. Both are named — the source is
-distinct and the rate is a setting — so a mispriced run can be found and the rate corrected. Note
-also that the Tower applies no rate card at all today: `rate_card` figures exist in the ledger's
-vocabulary, and nothing in the supervisor produces one.
+distinct and the rate is a setting — so a mispriced run can be found and the rate corrected. A
+runner that prints tokens and no dollars — Codex — is estimated from the factory's rate card where
+it has one for the run's model: `rate_card`, shown but never debited, so the rails stay where the
+run cap and the timeout put them.
 
 ### 5. Spend that no per-chain budget can see
 

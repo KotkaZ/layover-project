@@ -99,8 +99,11 @@ cache_read_usd  = 0.50
 cache_write_usd = 6.25
 ```
 
-Optional and always a fallback. Anything derived from it is labelled an estimate and never folded
-in as a measurement — see [Cost](./cost.md) for why that distinction is load-bearing.
+Optional and always a fallback. Keyed by the model a run's command line selects, and applied only
+to a run that printed token counts and no dollar figure at all. Anything derived from it is
+labelled an estimate and never folded in as a measurement: it debits no Fuel and draws on no
+Reserve — see [Cost](./cost.md#rate-cards) for when it applies and why that distinction is
+load-bearing.
 
 ## `[copilot]` — what a Copilot AI credit costs
 

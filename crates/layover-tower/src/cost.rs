@@ -35,7 +35,10 @@
 //! event's `premiumRequests` is never priced: it is a flat multiplier per prompt that says the same
 //! for a six-minute run as for a forty-seven-minute one.
 
-use layover_core::cost::{CostSource, credits_to_usd};
+use layover_core::agent::AgentName;
+use layover_core::config::Config;
+use layover_core::cost::{CostSource, RateCard, TokenUsage, credits_to_usd};
+use layover_core::model::ModelChoice;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -46,10 +49,12 @@ pub struct Reported {
     pub usd: f64,
     /// Where it came from, and therefore how much it can be trusted.
     pub source: CostSource,
-    /// Tokens in, when the runner said.
+    /// Fresh tokens in, when the runner said.
     pub input_tokens: u64,
     /// Tokens out, when the runner said.
     pub output_tokens: u64,
+    /// Input tokens served from the prompt cache, when the runner said.
+    pub cache_read_tokens: u64,
 }
 
 impl Reported {
@@ -64,8 +69,32 @@ impl Reported {
             source: CostSource::Unreported,
             input_tokens: 0,
             output_tokens: 0,
+            cache_read_tokens: 0,
         }
     }
+
+    /// Silence about dollars, beside the tokens a runner did report.
+    const fn tokens_only(input: u64, output: u64, cache_read: u64) -> Self {
+        Self {
+            usd: 0.0,
+            source: CostSource::Unreported,
+            input_tokens: input,
+            output_tokens: output,
+            cache_read_tokens: cache_read,
+        }
+    }
+}
+
+/// What prices a run beside what it printed: the factory's price of a Copilot credit, and its rate
+/// card for the model the run's command line selects.
+#[derive(Debug, Clone, Copy)]
+pub struct Prices<'a> {
+    /// Dollars per Copilot AI credit, from `[copilot] usd_per_credit`.
+    pub usd_per_credit: f64,
+    /// The factory's `[rates]`.
+    pub rates: &'a RateCard,
+    /// The model the run ran on, as its command line says.
+    pub model: Option<&'a str>,
 }
 
 /// The shapes the supported CLIs emit.
@@ -85,6 +114,9 @@ struct Usage {
     input: Option<u64>,
     #[serde(alias = "output_tokens", alias = "completion_tokens")]
     output: Option<u64>,
+    /// Codex's count of input tokens served from the cache, which are *part of* its input count —
+    /// unlike Claude's `cache_read_input_tokens`, which are not and are deliberately not read.
+    cached_input_tokens: Option<u64>,
 }
 
 /// Roughly what a dollar buys, used only to sanity-check a reported figure.
@@ -100,11 +132,33 @@ const TOKENS_PER_DOLLAR: f64 = 1_000_000.0;
 /// that are not JSON are skipped, because a transcript is mostly the agent talking.
 ///
 /// Dollars a runner printed win over anything derived. Failing those, the last Copilot usage
-/// checkpoint is priced at `usd_per_credit` dollars an AI credit.
+/// checkpoint is priced at `usd_per_credit` dollars an AI credit. No rate card is consulted; see
+/// [`priced`] for that.
 #[must_use]
 pub fn from_transcript(text: &str, usd_per_credit: f64) -> Reported {
+    priced(
+        text,
+        &Prices {
+            usd_per_credit,
+            rates: &RateCard::new(),
+            model: None,
+        },
+    )
+}
+
+/// Reads what a run cost, as [`from_transcript`] does, and estimates from the factory's rate card
+/// what a run cost that printed token counts and no dollars at all.
+///
+/// Only silence is estimated. A figure the runner printed and that was not believed stays
+/// unreported: replacing it with an estimate would invent a different number with no better claim
+/// to the truth. And an estimate is [`CostSource::RateCard`], which is not a measurement — it is
+/// shown, but it never debits Fuel and never draws on the Reserve.
+#[must_use]
+pub fn priced(text: &str, prices: &Prices<'_>) -> Reported {
     let mut best: Option<Reported> = None;
     let mut checkpoint: Option<Checkpoint> = None;
+    // Whether the runner printed a dollar figure at all, believed or not.
+    let mut printed = false;
 
     for line in text.lines() {
         let line = line.trim();
@@ -121,30 +175,84 @@ pub fn from_transcript(text: &str, usd_per_credit: f64) -> Reported {
             continue;
         };
 
-        let input = parsed.usage.as_ref().and_then(|u| u.input).unwrap_or(0);
-        let output = parsed.usage.as_ref().and_then(|u| u.output).unwrap_or(0);
+        let usage = parsed.usage.as_ref();
+        let cached = usage.and_then(|u| u.cached_input_tokens).unwrap_or(0);
+        let input = usage
+            .and_then(|u| u.input)
+            .unwrap_or(0)
+            .saturating_sub(cached);
+        let output = usage.and_then(|u| u.output).unwrap_or(0);
 
         let Some(usd) = parsed.cost else {
             // Tokens without a cost is still worth keeping: it is what makes a later cost
-            // checkable, and on its own it says a run did work it could not price.
-            if input + output > 0 {
-                best = Some(Reported {
-                    usd: 0.0,
-                    source: CostSource::Unreported,
-                    input_tokens: input,
-                    output_tokens: output,
-                });
+            // checkable, what a rate card can price, and on its own it says a run did work.
+            if input + output + cached > 0 {
+                best = Some(Reported::tokens_only(input, output, cached));
             }
             continue;
         };
 
-        best = Some(judge(usd, input, output));
+        printed = true;
+        best = Some(Reported {
+            cache_read_tokens: cached,
+            ..judge(usd, input, output)
+        });
     }
 
     match (best, checkpoint) {
         (Some(dollars), _) if dollars.source == CostSource::Reported => dollars,
-        (_, Some(checkpoint)) => checkpoint.price(usd_per_credit),
+        (_, Some(checkpoint)) => checkpoint.price(prices.usd_per_credit),
+        (Some(tokens), None) if !printed => estimate(tokens, prices),
         (best, None) => best.unwrap_or_else(Reported::unreported),
+    }
+}
+
+/// What a run of `agent` cost, read from its transcript and priced as `config` says, and the model
+/// to record it under.
+///
+/// The rate card is consulted for the model the agent's command line selects — `--model`, or the
+/// declared model its runner's `{model}` carries — because that is what the run ran on. A model the
+/// agent declares and its runner never passes is not priced; it is still what the record names,
+/// as it always was, so history reads the same as before.
+#[must_use]
+pub fn of_run(config: &Config, agent: &AgentName, transcript: &str) -> (Reported, Option<String>) {
+    let ran_on = ModelChoice::of(config, agent).model;
+    let reported = priced(
+        transcript,
+        &Prices {
+            usd_per_credit: config.copilot.usd_per_credit,
+            rates: &config.rates,
+            model: ran_on.as_deref(),
+        },
+    );
+    let named = ran_on.or_else(|| {
+        config
+            .agents
+            .get(agent)
+            .and_then(|definition| definition.model.clone())
+    });
+    (reported, named)
+}
+
+/// What the rate card says tokens a run reported cost, or the run unchanged — unreported — when
+/// there is no model to price or no rates published for it.
+fn estimate(tokens: Reported, prices: &Prices<'_>) -> Reported {
+    let usage = TokenUsage {
+        input: tokens.input_tokens,
+        output: tokens.output_tokens,
+        cache_read: tokens.cache_read_tokens,
+        cache_write: 0,
+    };
+    match prices
+        .model
+        .and_then(|model| prices.rates.estimate(model, usage))
+    {
+        Some(usd) => Reported {
+            usd,
+            source: CostSource::RateCard,
+            ..tokens
+        },
+        None => tokens,
     }
 }
 
@@ -217,6 +325,7 @@ impl Checkpoint {
             source: CostSource::CopilotCredits,
             input_tokens: 0,
             output_tokens: 0,
+            cache_read_tokens: 0,
         }
     }
 }
@@ -233,6 +342,7 @@ fn judge(usd: f64, input: u64, output: u64) -> Reported {
             source: CostSource::Unreported,
             input_tokens: input,
             output_tokens: output,
+            cache_read_tokens: 0,
         };
     }
 
@@ -244,6 +354,7 @@ fn judge(usd: f64, input: u64, output: u64) -> Reported {
             source: CostSource::Unreported,
             input_tokens: input,
             output_tokens: output,
+            cache_read_tokens: 0,
         };
     }
 
@@ -263,6 +374,7 @@ fn judge(usd: f64, input: u64, output: u64) -> Reported {
                 source: CostSource::Unreported,
                 input_tokens: input,
                 output_tokens: output,
+                cache_read_tokens: 0,
             };
         }
     }
@@ -272,6 +384,7 @@ fn judge(usd: f64, input: u64, output: u64) -> Reported {
         source: CostSource::Reported,
         input_tokens: input,
         output_tokens: output,
+        cache_read_tokens: 0,
     }
 }
 

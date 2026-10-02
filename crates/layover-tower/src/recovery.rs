@@ -149,8 +149,7 @@ impl Factory {
 
         let transcript = std::fs::read_to_string(live.hangar.join(crate::spawn::TRANSCRIPT_FILE))
             .unwrap_or_default();
-        let reported =
-            crate::cost::from_transcript(&transcript, self.config.copilot.usd_per_credit);
+        let (reported, model) = crate::cost::of_run(&self.config, &live.agent, &transcript);
 
         // Charged to the chain as any run is, so a restart is admitted against what the run it
         // replaces spent and counts as one more run of the chain, not as its first.
@@ -180,7 +179,6 @@ impl Factory {
                 live.pid
             ),
         };
-        let agent = self.config.agents.get(&live.agent);
         let pipeline = live
             .queued
             .as_ref()
@@ -191,7 +189,7 @@ impl Factory {
             itinerary: live.itinerary.clone(),
             agent: live.agent.clone(),
             pipeline,
-            model: agent.and_then(|agent| agent.model.clone()),
+            model,
             outcome: Outcome::Interrupted,
             queued_at: None,
             started_at: live.started_at,
@@ -207,6 +205,7 @@ impl Factory {
             usage: TokenUsage {
                 input: reported.input_tokens,
                 output: reported.output_tokens,
+                cache_read: reported.cache_read_tokens,
                 ..TokenUsage::default()
             },
             exit_code: None,
