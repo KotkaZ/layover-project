@@ -10,7 +10,7 @@ pub fn config(body: &str) -> Config {
         &format!(
             r#"
             [runners.claude]
-            command = ["claude", "-p"]
+            command = ["claude", "-p", "--output-format", "stream-json"]
 
             {body}
             "#

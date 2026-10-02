@@ -92,7 +92,7 @@ impl ModelChoice {
 /// A following argument that is itself a flag is not a value: `--model {model}` with no model set
 /// leaves a bare `--model` in front of whatever comes next, and reading `--output-format` as a
 /// model name would be worse than saying nothing. An unresolved placeholder is not a value either.
-fn value_of(args: &[String], flag: &str) -> Option<String> {
+pub(crate) fn value_of(args: &[String], flag: &str) -> Option<String> {
     let joined = format!("{flag}=");
     let mut found = None;
     let mut rest = args.iter().peekable();

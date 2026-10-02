@@ -9,6 +9,7 @@
 //! view.
 
 mod agents;
+mod costs;
 mod pipelines;
 mod prompts;
 mod reach;
@@ -84,6 +85,7 @@ pub fn validate(config: &Config) -> Vec<Diagnostic> {
     agents::check_reserve_window_is_usable(config, &mut found);
     agents::check_reserve_cap_is_deliberate(config, &mut found);
     agents::check_copilot_price_is_usable(config, &mut found);
+    costs::check_runners_report_cost(config, &mut found);
     agents::check_concurrency_is_usable(config, &mut found);
     agents::check_model_reaches_its_runner(config, &mut found);
     reach::check_entry_points(config, &mut found);
@@ -114,9 +116,11 @@ pub(crate) mod testing {
     use super::{Severity, validate};
     use crate::config::Config;
 
+    // Printing its cost, as a real factory's runner should: without it every factory built on this
+    // fixture would be warned that its spend is unknowable.
     pub(crate) const RUNNER: &str = r#"
         [runners.claude]
-        command = ["claude", "-p", "{prompt}"]
+        command = ["claude", "-p", "--output-format", "stream-json", "{prompt}"]
     "#;
 
     pub(crate) fn parse(body: &str) -> Config {

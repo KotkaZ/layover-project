@@ -22,6 +22,7 @@
 
 pub mod ledger;
 pub mod rates;
+pub mod reporting;
 pub mod reserve;
 pub mod window;
 

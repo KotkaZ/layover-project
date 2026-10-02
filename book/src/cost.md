@@ -87,6 +87,10 @@ Every run's cost carries a `CostSource`:
 `reported` and `copilot_credits` are **measured**: both debit Fuel, both draw on the Reserve, and
 both count towards `measured_share`. The other two do neither.
 
+Most `unreported` runs are not a CLI failing to say: they are a runner started without the output
+its CLI prints a cost in. `layover validate` warns about that — see
+[the output that says what a run cost](./configuration.md#the-output-that-says-what-a-run-cost).
+
 ### Copilot CLI is priced from its AI credits
 
 Copilot CLI prints no dollars and no token counts. With `--output-format json` it prints

@@ -18,7 +18,7 @@ fuel_usd = 1.00
 max_runs = 16
 
 [runners.claude]
-command = ["claude", "-p", "{prompt}"]
+command = ["claude", "-p", "--output-format", "stream-json", "{prompt}"]
 
 [agents.planner]
 description = "Breaks the goal down and dispatches it"

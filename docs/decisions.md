@@ -353,6 +353,18 @@ fail to — the run cap and the timeout remain what bounds a runner that does no
 model is the one the command line selects, as the route map reads it, because pricing a model the
 runner never passed would be pricing a run that did not happen.
 
+**Why `validate` warns about a runner's output mode, and about Codex only beside a rate card.** A
+runner started without the output its CLI prints a cost in is the commonest way a factory's spend
+becomes unknowable, and nothing fails when it happens — so it is said before the first run rather
+than discovered from a dashboard reading zero. Only what a change to the command would fix is
+warned about. Codex prints no price however it is run; a warning nobody could ever clear is one
+people learn to skip, and would make `validate --strict` fail every Codex factory for good. So
+Codex is flagged only where a rate card is waiting for the token counts `--json` would give it, and
+`layover doctor`, which sees the runs that actually reported nothing, says the rest. The CLI is
+recognised by name anywhere in the command, because factories wrap them (`cmd /c copilot`,
+`npx @github/copilot`); a command naming none is not judged, because a stand-in or another CLI may
+print whatever it likes and Layover will read it.
+
 This changes what an existing Copilot factory does: its `fuel_usd` now refuses work, and so does
 its Reserve.
 

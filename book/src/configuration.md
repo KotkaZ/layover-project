@@ -139,6 +139,23 @@ path. Copilot CLI needs `prefix = "@"` because `--additional-mcp-config` accepts
 *or* a path and distinguishes them by that character; most CLIs take a plain path and want no
 prefix. See [Agent tools](./tools.md).
 
+### The output that says what a run cost
+
+Layover reads what a run cost from what its CLI prints, and each CLI prints it in one output mode
+only. Leave it out and nothing fails: the work is done, every run is recorded as reporting nothing,
+its spend reads **not reported**, and Fuel and the Reserve never bind it.
+
+| CLI | Add | What it then prints |
+|---|---|---|
+| Copilot CLI | `--output-format json` | The AI credits a run used, which Layover prices |
+| Claude Code | `--output-format stream-json` (or `json`) | Dollars |
+| Codex | `--json` | Token counts and no price; a [rate card](./cost.md#rate-cards) can estimate them |
+
+`layover validate` warns about a runner an agent uses that runs Copilot CLI or Claude Code without
+it, and about a Codex runner without `--json` when a rate card has a row for one of its agents'
+models — the cases a change to the command would fix. The CLI is recognised by name anywhere in
+the command, so `cmd /c copilot` counts; a command that names none of them is not judged.
+
 ### Credentials for the CLI itself
 
 An agent CLI needs a credential before it can do anything, and it is not the same credential its

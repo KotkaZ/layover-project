@@ -8,6 +8,16 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+### Added
+
+- **`layover validate` warns about a runner whose output cannot say what its runs cost**: one an
+  agent uses that runs Copilot CLI without `--output-format json` or Claude Code without
+  `--output-format stream-json` (or `json`), and a Codex runner without `--json` where a rate card
+  has a row for one of its agents' models. Each names the agents affected and what to add. The CLI
+  is recognised by name anywhere in the command; a command naming none of them is not judged. A
+  factory checked with `validate --strict` that has such a runner now fails the check, which is the
+  point: its spend has been unknowable.
+
 ### Fixed
 
 - **A rate card priced nothing.** `[rates.<model>]` is documented as the fallback for a runner that
