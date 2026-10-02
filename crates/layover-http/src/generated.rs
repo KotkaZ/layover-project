@@ -414,9 +414,17 @@ pub struct Itinerary {
     /// The pipeline it was triggered through, when one was named.
     #[serde(default)]
     pub pipeline: Option<String>,
+    /// Agents this chain has work queued for, waiting for a free slot — or, under a Ground
+    /// Stop, for it to be released.
+    #[serde(default)]
+    pub queued: Option<Vec<String>>,
+    /// Agents with a run alive in this chain now, which is where the chain is.
+    #[serde(default)]
+    pub running: Option<Vec<String>>,
     /// How many runs the chain has started.
     pub runs: i32,
-    /// When the first run of the chain began.
+    /// When the first run of the chain began, or for a chain with nothing run yet, when its
+    /// first flight was queued.
     pub started_at: String,
     /// What became of the chain.
     pub state: ItineraryState,
@@ -425,6 +433,21 @@ pub struct Itinerary {
     /// What it is waiting for a person to answer, when it is `awaiting_human`.
     #[serde(default)]
     pub waiting_for: Option<HelpAsk>,
+}
+
+/// One chain, whole.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ItineraryDetail {
+    /// The chain, as `GET /itineraries` lists it.
+    pub itinerary: Itinerary,
+    /// Its workflow's route map, drawn for this chain: each agent coloured by how it fared
+    /// here, a count on any that ran more than once, and the routes its work took marked
+    /// `travelled`. The whole factory, for a chain no workflow opened.
+    pub map: RouteMap,
+    /// Its flights waiting to start, oldest first.
+    pub pending: Vec<PendingFlight>,
+    /// Every run in it, alive or over, oldest first.
+    pub runs: Vec<Run>,
 }
 
 /// Chains of work.
@@ -787,6 +810,12 @@ pub struct Run {
     pub pipeline: Option<String>,
     /// Identifier of this run.
     pub run_id: String,
+    /// The agents whose flights started this run — for a released join, every arrival. Empty
+    /// when the work came from outside the mesh: a person, a schedule or a resumed layover.
+    /// Absent when it was not recorded: by an earlier release, for a join restarted after the
+    /// Tower that released it went away, or for a run the Reserve refused.
+    #[serde(default)]
+    pub sent_by: Option<Vec<String>>,
     /// When the process was spawned.
     pub started_at: String,
     /// How it ended, or that it has not.
@@ -1006,6 +1035,13 @@ pub struct ListItinerariesQuery {
     pub state: Option<ItineraryState>,
 }
 
+/// path parameters for `getItinerary`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GetItineraryPath {
+    /// Identifier of the chain.
+    pub itinerary_id: String,
+}
+
 /// query parameters for `listLearnings`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListLearningsQuery {
@@ -1146,9 +1182,11 @@ pub trait Api: Send + Sync + 'static {
     /// `layover.toml` and reload; the diagram changes with it, because nothing here is baked at
     /// build time.
     ///
-    /// Agents currently running, waiting at a barrier, or freshly failed are coloured. An edge
-    /// into a joined agent from a sender the barrier does not name is drawn as bypassing it,
-    /// which is what actually happens.
+    /// Agents currently running, waiting at a barrier, or freshly failed are coloured. An agent
+    /// with more than one run alive at once — the same workflow triggered twice, say — carries a
+    /// count such as `×2`. An edge into a joined agent from a sender the barrier does not name is
+    /// drawn as bypassing it, which is what actually happens. To see one chain on its own, use
+    /// `GET /itineraries/{itinerary_id}`.
     ///
     /// `GET /graph`
     fn get_graph(
@@ -1234,11 +1272,33 @@ pub trait Api: Send + Sync + 'static {
     /// — every run in it succeeded and nothing will ever happen again — and a list of runs cannot
     /// show that, because there is no failed run to point at.
     ///
+    /// A chain is listed from the moment its first flight is queued: `working`, with no runs yet,
+    /// and `queued` naming the agent it waits for. Triggering one workflow several times while
+    /// every slot is taken would otherwise show some of those chains and silently not the rest.
+    ///
     /// `GET /itineraries`
     fn list_itineraries(
         &self,
         query: ListItinerariesQuery,
     ) -> impl core::future::Future<Output = Result<ItineraryList, Problem>> + Send;
+    /// One chain, whole — its runs, what it is waiting for, and its route map.
+    ///
+    /// Everything one trigger caused, read together: the chain as `GET /itineraries` lists it,
+    /// every run in it oldest first with who sent each one, the flights it has queued, and its
+    /// workflow's route map coloured by this chain alone.
+    ///
+    /// Several chains of one workflow run at once, and the workflow's map colours an agent while
+    /// *any* of them runs it. This one does not: an agent is `done`, `running`, `failed` or
+    /// `queued` for what happened *in this chain*, carries `×2` when it ran twice here, and the
+    /// routes the chain's work actually took are marked `travelled`.
+    ///
+    /// Read from the moment the chain began, whatever its age, as far back as retention keeps.
+    ///
+    /// `GET /itineraries/{itinerary_id}`
+    fn get_itinerary(
+        &self,
+        path: GetItineraryPath,
+    ) -> impl core::future::Future<Output = Result<ItineraryDetail, Problem>> + Send;
     /// What agents have worked out, and how well established it is.
     ///
     /// A learning applies as soon as it is proposed and expires unless later runs arrive at it
@@ -1367,6 +1427,10 @@ pub fn router<A: Api>(api: std::sync::Arc<A>) -> axum::Router {
         .route(
             "/itineraries",
             axum::routing::get(handle_list_itineraries::<A>),
+        )
+        .route(
+            "/itineraries/{itinerary_id}",
+            axum::routing::get(handle_get_itinerary::<A>),
         )
         .route("/learnings", axum::routing::get(handle_list_learnings::<A>))
         .route(
@@ -1512,6 +1576,16 @@ async fn handle_list_itineraries<A: Api>(
     }
 }
 
+async fn handle_get_itinerary<A: Api>(
+    axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
+    axum::extract::Path(path): axum::extract::Path<GetItineraryPath>,
+) -> axum::response::Response {
+    match api.get_itinerary(path).await {
+        Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
+        Err(problem) => problem.into_response(),
+    }
+}
+
 async fn handle_list_learnings<A: Api>(
     axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
     axum::extract::Query(query): axum::extract::Query<ListLearningsQuery>,
@@ -1586,7 +1660,7 @@ async fn handle_stream_run<A: Api>(
 /// Every operation the specification declares, as (method, path, operationId).
 ///
 /// Exposed so tests can assert the router and the specification agree.
-pub const OPERATIONS: [(&str, &str, &str); 20] = [
+pub const OPERATIONS: [(&str, &str, &str); 21] = [
     ("GET", "/agents", "listAgents"),
     ("GET", "/costs", "getCosts"),
     ("GET", "/flights", "listPending"),
@@ -1600,6 +1674,7 @@ pub const OPERATIONS: [(&str, &str, &str); 20] = [
     ("POST", "/help/reply", "replyHelp"),
     ("POST", "/help/resolve", "resolveHelp"),
     ("GET", "/itineraries", "listItineraries"),
+    ("GET", "/itineraries/{itinerary_id}", "getItinerary"),
     ("GET", "/learnings", "listLearnings"),
     ("PATCH", "/learnings/{learning_id}", "judgeLearning"),
     ("GET", "/pipelines", "listPipelines"),

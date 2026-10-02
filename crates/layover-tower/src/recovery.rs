@@ -223,6 +223,7 @@ impl Factory {
                 .queued
                 .as_ref()
                 .and_then(|queued| queued.continues.clone()),
+            sent_by: live.sent_by.clone(),
         });
         self.age_learnings(&live.agent);
         let _ = self.live.finished(&live.run);

@@ -822,6 +822,24 @@ reason; only a route that genuinely runs backwards still goes round the bottom. 
 hovering an agent to light its routes — was added too, but not as the fix: it helps someone who
 already knows which agent to ask about, and a map has to be readable before anyone touches it.
 
+**Why one chain is drawn on its workflow's map, and why a run records who sent it.** Once runs
+overlapped, a workflow triggered three times was still one drawing, coloured while *any* of its
+chains ran an agent — so "the coder is running" stayed true and stopped saying anything. A view per
+chain was the fix, and it reuses the workflow's own layout rather than drawing the chain as a
+timeline or a fresh graph: the same boxes in the same places is what lets a person compare where
+this run went with where the workflow can go. Lighting the routes a chain took needed something
+history did not hold. A run record said which agent ran, not whose flight woke it, and inferring a
+route from "the coder ran after the analyst" draws edges that were never taken the moment two
+agents can both send to a third. So the Tower now records `sent_by` — every arrival, for a released
+join, because naming the first would draw one of the two routes that led there. Three answers are
+kept apart on purpose: agents, nobody in the mesh (`[]`, the way in), and *not known* (`null`), for
+records written before this and for a restarted join whose arrivals left with the Tower that held
+them. Not known lights nothing; a route drawn from a guess looks exactly like one that was taken.
+The chain's whole picture is one endpoint rather than four because the page refreshes it every few
+seconds, and four answers read at four moments can disagree about whether a run has ended. Parked
+barrier flights are not drawn: they live only in the Tower's memory, and a dashboard that guessed
+at them would misreport the one wait somebody is most likely to be watching.
+
 ---
 
 ## Still open

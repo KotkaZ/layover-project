@@ -45,7 +45,9 @@ happen if you changed nothing. A flag the pipeline does not declare is refused r
 silently dropping it would let a typo change nothing while appearing to work.
 
 **The work is queued, and the Tower starts it.** Under `layover serve` it starts as soon as a slot
-is free, and the window names the Tower that will pick it up. Above the workflows a line reads
+is free, and the window names the Tower that will pick it up. Once it is queued the page opens
+[the chain it started](#one-chain-whole), so you watch that run of the workflow rather than the
+workflow. Above the workflows a line reads
 `2 of 4 run(s) alive · 3 flight(s) queued`, kept current every few seconds — the difference between
 a busy factory and a stuck one. A dashboard started with `--watch-only` runs nothing and says so:
 `dispatched_by` is `null` rather than a plausible name, so a queue never looks like it is moving
@@ -190,6 +192,46 @@ moment it gives up on a rendezvous, and this is where that shows up:
 A cost with a `+` after it is a floor rather than a figure: some run in the chain reported nothing,
 so the real total is at least that much.
 
+A chain is listed from the moment its first flight is queued. Trigger a workflow while every slot
+is taken and it reads `working · queued`, with no runs yet, rather than not appearing until a slot
+frees; one that is going says where it is — `working · at coder`. Click a chain to see it whole.
+
+## One chain, whole
+
+Trigger a development workflow three times and its route map is still one drawing. It colours the
+coder while *any* of the three runs it, so it says that the coder is running and not which of the
+three is where. Opening a chain — from **Chains**, from a run's chain in **Runs**, from the buttons
+under its workflow's map, or straight after triggering it — shows that chain on its own:
+
+- **Its workflow's map, drawn for it alone.** The same drawing, so the two can be compared at a
+  glance, coloured by what happened *in this chain*, with the routes its work actually took drawn
+  in green and the rest faded.
+- **Every run, in the order it happened**, with who sent it, how it ended, how long it took and
+  what it cost, and **Watch** or **Transcript** and **Report** beside each.
+- **What it is waiting for**: flights it has queued, at the end of the list.
+
+| Drawn as | Means, in this chain |
+|---|---|
+| Pale green box | It ran here, and its last run here went well |
+| Green box | It is running now |
+| Red box | Its last run here failed, timed out, was interrupted or was halted |
+| Dashed amber outline | Work for it is queued, waiting for a free slot |
+| Faded box | Nothing in this chain reached it |
+| Green line | A route this chain's work took |
+| `×2` in a corner | It ran twice here — the coder on its second pass after a review, say |
+
+The view keeps itself current every few seconds while the chain works, and stops asking once it
+has stopped. Its address ends `#chain=itn_…`, so it survives a reload and can be sent to somebody.
+
+**Sent by** says where each run's work came from: an agent, the `way in` (a trigger, a schedule or a
+resumed layover), or `—` when that was not recorded. Runs from before this release, a join restarted
+after the Tower that released it went away, and a run the Reserve refused do not know, and they
+light no route rather than a guessed one — a route drawn from who happened to run before would look
+exactly like one that was taken.
+
+What it cannot show is a flight parked at a barrier: that lives only in the Tower's memory. The
+upstreams that have reported show as done, and the joined agent wakes when the last arrives.
+
 ## The route map
 
 ```mermaid
@@ -214,9 +256,16 @@ Read it as: pipelines on the left, work flowing right, one column per hop.
 | Line under the whole map | A route back towards the way in: out to the right of its column, along a lane of its own, and up into the agent it returns to |
 | Arrow labelled with pipeline names | A route only those workflows' chains may use — on the whole-factory map only |
 | Green, amber, red fill | Running, waiting at a barrier, last run failed |
+| `×2` in a box's corner | Two runs of it alive at once — the workflow triggered twice, say |
 
 Amber needs the supervisor: nothing records a parked barrier yet, so today the map shows running
 and recently-failed agents only.
+
+A workflow's map is coloured by that workflow's runs. An agent it shares with another workflow is
+not shown running here because the other workflow is running it; a run whose chain no workflow
+opened — a review spawned by a sweep, say — could be anybody's, so it counts on every map its agent
+is drawn on. Under the map, one button per chain the workflow has going says where each is —
+`46TNEG at coder`, `GDTHVD queued for analyst` — and opens [that chain](#one-chain-whole).
 
 That dashed arrow is the one worth dwelling on. A barrier constrains only the upstreams it names;
 any other permitted sender wakes the agent directly and leaves the parked flights untouched. In
@@ -441,8 +490,12 @@ The files are plain text, one JSON object per line, and are meant to be read:
 $ tail -1 .layover/history/runs-2026-09-16.jsonl
 {"run":"run_01K...","itinerary":"itn_01K...","agent":"developer","pipeline":"development",
  "outcome":"succeeded","started_at":"2026-09-16T10:00:00Z","finished_at":"2026-09-16T10:04:30Z",
- "usd":1.25,"source":"reported","usage":{"input":18402,"output":3100,...},"exit_code":0}
+ "usd":1.25,"source":"reported","usage":{"input":18402,"output":3100,...},"exit_code":0,
+ "sent_by":["analyst"]}
 ```
+
+`sent_by` names the agents whose flights started the run — every arrival, for a released join — and
+is `[]` for work from outside the mesh. It is absent from records written before it was kept.
 
 ## Why it looks like this
 

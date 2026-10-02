@@ -729,6 +729,7 @@ entry = true
                 .join("old"),
             queued: None,
             owner: Some("tower-killed-mid-run".to_owned()),
+            sent_by: None,
         };
         let left = layover_tower::Live {
             queued: Some(Queued::new(

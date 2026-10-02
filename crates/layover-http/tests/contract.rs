@@ -18,13 +18,13 @@ use http_body_util::BodyExt as _;
 use layover_http::{
     Access, Agent, AgentList, Api, Blocker, CancelFlightPath, CostBucket, CostReport, CostSource,
     CostSummary, CostWindow, EventStream, FlightAccepted, GetCostsQuery, GetGraphQuery,
-    GetReportPath, GetRunPath, GroundStop, Health, HelpList, HelpReplied, HelpReplyRequest,
-    HelpRequest, HelpResolved, Impact, Itinerary, ItineraryList, ItineraryState, JudgeLearningPath,
-    JudgeLearningRequest, Learning, LearningList, LearningState, ListHelpQuery,
-    ListItinerariesQuery, ListLearningsQuery, ListRunsQuery, OPERATIONS, PendingFlight,
-    PendingList, Pipeline, PipelineList, Problem, Report, ReserveState, ResolveHelpRequest,
-    RouteMap, Run, RunList, RunStatus, SendFlightRequest, Status, StreamRunPath, StreamRunQuery,
-    TokenUsage, Trigger, TriggerKind, WindowSpan, Workspace, router,
+    GetItineraryPath, GetReportPath, GetRunPath, GroundStop, Health, HelpList, HelpReplied,
+    HelpReplyRequest, HelpRequest, HelpResolved, Impact, Itinerary, ItineraryDetail, ItineraryList,
+    ItineraryState, JudgeLearningPath, JudgeLearningRequest, Learning, LearningList, LearningState,
+    ListHelpQuery, ListItinerariesQuery, ListLearningsQuery, ListRunsQuery, OPERATIONS,
+    PendingFlight, PendingList, Pipeline, PipelineList, Problem, Report, ReserveState,
+    ResolveHelpRequest, RouteMap, Run, RunList, RunStatus, SendFlightRequest, Status,
+    StreamRunPath, StreamRunQuery, TokenUsage, Trigger, TriggerKind, WindowSpan, Workspace, router,
 };
 use tower::ServiceExt as _;
 
@@ -67,6 +67,7 @@ fn sample_run() -> Run {
         blocked_on: None,
         hops_remaining: Some(21),
         flags: None,
+        sent_by: Some(Vec::new()),
     }
 }
 
@@ -308,9 +309,33 @@ impl Api for Stub {
                 flags: None,
                 continues: None,
                 continued_by: None,
+                running: None,
+                queued: None,
             }],
             stalled: 1,
             awaiting_human: 0,
+        })
+    }
+
+    async fn get_itinerary(&self, path: GetItineraryPath) -> Result<ItineraryDetail, Problem> {
+        if path.itinerary_id != "itn_1" {
+            return Err(Problem::new(StatusCode::NOT_FOUND, "no such chain"));
+        }
+        let mut list = self
+            .list_itineraries(ListItinerariesQuery {
+                window: None,
+                state: None,
+            })
+            .await?;
+        Ok(ItineraryDetail {
+            itinerary: list.itineraries.remove(0),
+            runs: Vec::new(),
+            pending: Vec::new(),
+            map: RouteMap {
+                mermaid: "<svg class=\"routemap\"></svg>".to_owned(),
+                generated_at: "2026-09-17T10:00:00Z".to_owned(),
+                config_path: None,
+            },
         })
     }
 
@@ -404,7 +429,7 @@ fn json(body: &str) -> serde_json::Value {
 
 #[test]
 fn every_specified_operation_is_routed() {
-    assert_eq!(OPERATIONS.len(), 20);
+    assert_eq!(OPERATIONS.len(), 21);
 
     for (method, path, operation) in OPERATIONS {
         assert!(path.starts_with('/'), "`{operation}` has an odd path");
@@ -418,6 +443,19 @@ fn every_specified_operation_is_routed() {
     assert!(paths.contains(&"/ground-stop"));
     assert!(paths.contains(&"/runs/{run_id}/stream"));
     assert!(paths.contains(&"/costs"));
+}
+
+#[tokio::test]
+async fn one_chain_is_routed_by_its_identifier_and_a_stranger_is_not_found() {
+    let (status, _, body) = call("GET", "/itineraries/itn_1", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let value = json(&body);
+    assert_eq!(value["itinerary"]["itinerary_id"], "itn_1");
+    assert!(value["runs"].is_array() && value["pending"].is_array());
+    assert!(value["map"]["mermaid"].as_str().is_some());
+
+    let (status, _, _) = call("GET", "/itineraries/itn_2", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

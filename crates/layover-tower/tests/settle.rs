@@ -79,6 +79,7 @@ fn left_by_1_3(temp: &Temp, chain: &ItineraryId, last_written: Option<SignedDura
         hangar,
         queued: None,
         owner: None,
+        sent_by: None,
     };
     Ledger::open(temp.0.join(".layover").join("state").join("runs"))
         .expect("ledger")

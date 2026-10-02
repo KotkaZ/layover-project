@@ -59,6 +59,7 @@ impl Dashboard {
             }
             record.continues.clone_from(&queued.continues);
         }
+        record.sent_by.clone_from(&live.sent_by);
         record.model = config.and_then(|config| ModelChoice::of(config, &live.agent).model);
         record
     }

@@ -174,6 +174,15 @@ pub struct RunRecord {
     /// The chain this run's chain continues, when a person's reply to a help request started it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub continues: Option<ItineraryId>,
+    /// The agents whose flights started this run — for a released join, every arrival.
+    ///
+    /// Empty when the work came from outside the mesh: a person, a schedule or a resumed layover.
+    /// `None` when it was not recorded, by a release that did not keep it or for a join restarted
+    /// after the Tower that released it went away. The two must stay distinct, because a chain is
+    /// drawn from this: "a trigger started it" lights the way in, and "not known" lights nothing
+    /// rather than inventing a route.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sent_by: Option<Vec<AgentName>>,
 }
 
 impl RunRecord {
@@ -204,6 +213,7 @@ impl RunRecord {
             pid: None,
             flags: BTreeMap::new(),
             continues: None,
+            sent_by: None,
         }
     }
 

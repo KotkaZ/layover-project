@@ -26,6 +26,8 @@ const ROUTEMAP: &str = include_str!("assets/routemap.js");
 const SESSIONS: &str = include_str!("assets/sessions.js");
 /// Answering help requests, and continuing a chain with its own flags.
 const REPLY: &str = include_str!("assets/reply.js");
+/// One chain, whole: its map drawn for it alone, and its runs in order.
+const CHAIN: &str = include_str!("assets/chain.js");
 
 /// Builds the complete server: the JSON API, plus the dashboard on top of it.
 ///
@@ -57,6 +59,10 @@ pub fn router(dashboard: Dashboard, guard: Guard) -> Router {
         .route(
             "/reply.js",
             get(|| async { asset("text/javascript", REPLY) }),
+        )
+        .route(
+            "/chain.js",
+            get(|| async { asset("text/javascript", CHAIN) }),
         )
         .merge(api)
         .layer(axum::middleware::from_fn_with_state(

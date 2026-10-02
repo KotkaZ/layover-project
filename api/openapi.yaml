@@ -176,6 +176,10 @@ paths:
         it shares. The distinction matters most when something goes wrong: a chain can be *stalled*
         — every run in it succeeded and nothing will ever happen again — and a list of runs cannot
         show that, because there is no failed run to point at.
+
+        A chain is listed from the moment its first flight is queued: `working`, with no runs yet,
+        and `queued` naming the agent it waits for. Triggering one workflow several times while
+        every slot is taken would otherwise show some of those chains and silently not the rest.
       tags: [work]
       parameters:
         - name: window
@@ -199,6 +203,43 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ItineraryList"
+
+  /itineraries/{itinerary_id}:
+    get:
+      operationId: getItinerary
+      summary: One chain, whole — its runs, what it is waiting for, and its route map.
+      description: |
+        Everything one trigger caused, read together: the chain as `GET /itineraries` lists it,
+        every run in it oldest first with who sent each one, the flights it has queued, and its
+        workflow's route map coloured by this chain alone.
+
+        Several chains of one workflow run at once, and the workflow's map colours an agent while
+        *any* of them runs it. This one does not: an agent is `done`, `running`, `failed` or
+        `queued` for what happened *in this chain*, carries `×2` when it ran twice here, and the
+        routes the chain's work actually took are marked `travelled`.
+
+        Read from the moment the chain began, whatever its age, as far back as retention keeps.
+      tags: [work]
+      parameters:
+        - name: itinerary_id
+          in: path
+          required: true
+          description: Identifier of the chain.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The chain.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItineraryDetail"
+        "404":
+          description: No run, live run or queued flight belongs to that chain.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 
   /runs:
     get:
@@ -265,9 +306,11 @@ paths:
         `layover.toml` and reload; the diagram changes with it, because nothing here is baked at
         build time.
 
-        Agents currently running, waiting at a barrier, or freshly failed are coloured. An edge
-        into a joined agent from a sender the barrier does not name is drawn as bypassing it,
-        which is what actually happens.
+        Agents currently running, waiting at a barrier, or freshly failed are coloured. An agent
+        with more than one run alive at once — the same workflow triggered twice, say — carries a
+        count such as `×2`. An edge into a joined agent from a sender the barrier does not name is
+        drawn as bypassing it, which is what actually happens. To see one chain on its own, use
+        `GET /itineraries/{itinerary_id}`.
       tags: [structure]
       parameters:
         - name: pipeline
@@ -1058,6 +1101,15 @@ components:
           additionalProperties:
             type: boolean
             description: Whether the flag was on.
+        sent_by:
+          type: array
+          description: |
+            The agents whose flights started this run — for a released join, every arrival. Empty
+            when the work came from outside the mesh: a person, a schedule or a resumed layover.
+            Absent when it was not recorded: by an earlier release, for a join restarted after the
+            Tower that released it went away, or for a run the Reserve refused.
+          items:
+            type: string
 
     RunList:
       type: object
@@ -1550,7 +1602,9 @@ components:
         started_at:
           type: string
           format: date-time
-          description: When the first run of the chain began.
+          description: |
+            When the first run of the chain began, or for a chain with nothing run yet, when its
+            first flight was queued.
         finished_at:
           type: [string, "null"]
           format: date-time
@@ -1579,6 +1633,43 @@ components:
           description: Chains that continue this one, started by replies to its help requests.
           items:
             type: string
+        running:
+          type: array
+          description: Agents with a run alive in this chain now, which is where the chain is.
+          items:
+            type: string
+        queued:
+          type: array
+          description: |
+            Agents this chain has work queued for, waiting for a free slot — or, under a Ground
+            Stop, for it to be released.
+          items:
+            type: string
+
+    ItineraryDetail:
+      type: object
+      description: One chain, whole.
+      required: [itinerary, runs, pending, map]
+      properties:
+        itinerary:
+          $ref: "#/components/schemas/Itinerary"
+          description: The chain, as `GET /itineraries` lists it.
+        runs:
+          type: array
+          description: Every run in it, alive or over, oldest first.
+          items:
+            $ref: "#/components/schemas/Run"
+        pending:
+          type: array
+          description: Its flights waiting to start, oldest first.
+          items:
+            $ref: "#/components/schemas/PendingFlight"
+        map:
+          $ref: "#/components/schemas/RouteMap"
+          description: |
+            Its workflow's route map, drawn for this chain: each agent coloured by how it fared
+            here, a count on any that ran more than once, and the routes its work took marked
+            `travelled`. The whole factory, for a chain no workflow opened.
 
     ItineraryList:
       type: object

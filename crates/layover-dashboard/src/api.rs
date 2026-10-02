@@ -13,19 +13,19 @@ use axum::http::StatusCode;
 use jiff::Timestamp;
 use layover_core::config::Config;
 use layover_core::cost::{Ledger, Span, Window};
-use layover_core::diagram::{Layout, Live, Scope, render_svg};
+use layover_core::diagram::{Layout, Scope, render_svg};
 use layover_core::flight::{Flight, ItineraryId, Origin};
 use layover_core::pipeline::{FlagError, Pipeline as CorePipeline, PipelineName};
 use layover_core::queue::Queued;
 use layover_core::run::Outcome;
 use layover_http::{
     AgentList, Api, CancelFlightPath, CostBucket, CostReport, CostWindow, EventStream,
-    FlightAccepted, GetCostsQuery, GetGraphQuery, GetReportPath, GetRunPath, GroundStop, Health,
-    HelpList, HelpReplied, HelpReplyRequest, HelpResolved, ItineraryList, ItineraryState,
-    JudgeLearningPath, JudgeLearningRequest, Judgement, Learning, LearningList, ListHelpQuery,
-    ListItinerariesQuery, ListLearningsQuery, ListRunsQuery, PendingList, PipelineList, Problem,
-    Report, ReserveState, ResolveHelpRequest, RouteMap, Run, RunList, RunStatus, SendFlightRequest,
-    Status, StreamRunPath, StreamRunQuery,
+    FlightAccepted, GetCostsQuery, GetGraphQuery, GetItineraryPath, GetReportPath, GetRunPath,
+    GroundStop, Health, HelpList, HelpReplied, HelpReplyRequest, HelpResolved, ItineraryDetail,
+    ItineraryList, ItineraryState, JudgeLearningPath, JudgeLearningRequest, Judgement, Learning,
+    LearningList, ListHelpQuery, ListItinerariesQuery, ListLearningsQuery, ListRunsQuery,
+    PendingList, PipelineList, Problem, Report, ReserveState, ResolveHelpRequest, RouteMap, Run,
+    RunList, RunStatus, SendFlightRequest, Status, StreamRunPath, StreamRunQuery,
 };
 use layover_store::{HelpFilter, History, Journal, RunFilter};
 
@@ -176,45 +176,6 @@ impl Dashboard {
                 .with_detail(error.to_string())
         })
     }
-
-    /// What the factory is doing right now, for colouring the route map.
-    ///
-    /// An agent is running while a live record names it, and failed when its latest run in the
-    /// last day failed.
-    fn live(&self) -> Live {
-        let span = self.0.history.resolve(Window::Last24Hours);
-        let mut live = Live::default();
-
-        let Ok(records) = self.0.history.runs(&span, &RunFilter::default()) else {
-            return live;
-        };
-
-        // Oldest first so that a later run of the same agent overwrites an earlier one: the most
-        // recent state is the one worth showing.
-        for record in records.into_iter().rev() {
-            match record.outcome {
-                Outcome::Running => {
-                    live.activity
-                        .insert(record.agent, layover_core::diagram::Activity::Running);
-                }
-                outcome if outcome.is_failure() => {
-                    live.activity
-                        .insert(record.agent, layover_core::diagram::Activity::Failed);
-                }
-                _ => {
-                    live.activity.remove(&record.agent);
-                }
-            }
-        }
-
-        // Last, because what is running now outranks how it last ended.
-        for record in self.live_records() {
-            live.activity
-                .insert(record.agent, layover_core::diagram::Activity::Running);
-        }
-
-        live
-    }
 }
 
 impl Api for Dashboard {
@@ -248,7 +209,7 @@ impl Api for Dashboard {
             }
         };
 
-        let layout = Layout::scoped(&config, &self.live(), &scope);
+        let layout = Layout::scoped(&config, &self.live(scope.pipeline()), &scope);
 
         Ok(RouteMap {
             mermaid: render_svg(&layout),
@@ -612,6 +573,10 @@ impl Api for Dashboard {
 
     async fn reply_help(&self, body: HelpReplyRequest) -> Result<HelpReplied, Problem> {
         self.reply(&body)
+    }
+
+    async fn get_itinerary(&self, path: GetItineraryPath) -> Result<ItineraryDetail, Problem> {
+        self.chain(&path)
     }
 
     async fn resolve_help(&self, body: ResolveHelpRequest) -> Result<HelpResolved, Problem> {

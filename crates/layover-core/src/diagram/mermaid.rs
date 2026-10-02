@@ -253,7 +253,13 @@ impl Drawing<'_> {
             let _ = writeln!(out, "  class {} pipeline;", shown.join(","));
         }
 
-        for activity in [Activity::Running, Activity::Waiting, Activity::Failed] {
+        for activity in [
+            Activity::Running,
+            Activity::Waiting,
+            Activity::Failed,
+            Activity::Done,
+            Activity::Queued,
+        ] {
             let members: Vec<String> = live
                 .activity
                 .iter()
@@ -268,6 +274,10 @@ impl Drawing<'_> {
                 Activity::Running => "fill:#dcfce7,stroke:#16a34a,stroke-width:2px",
                 Activity::Waiting => "fill:#fef9c3,stroke:#ca8a04,stroke-width:2px",
                 Activity::Failed => "fill:#fee2e2,stroke:#dc2626,stroke-width:2px",
+                Activity::Done => "fill:#f0fdf4,stroke:#86efac,stroke-width:1px",
+                Activity::Queued => {
+                    "fill:#ffffff,stroke:#ca8a04,stroke-width:2px,stroke-dasharray:5 3"
+                }
             };
             let _ = writeln!(out, "  classDef {} {style};", activity.class());
             let _ = writeln!(out, "  class {} {};", members.join(","), activity.class());

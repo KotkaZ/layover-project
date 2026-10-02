@@ -29,11 +29,12 @@ Point any OpenAPI tool at the file to get a client, a mock server or rendered do
 | `GET` | `/health` | | Liveness, version, and whether a Ground Stop is engaged. |
 | `GET` | `/agents` | | Every agent and the route map between them. Each agent's `model`, `reasoning_effort` and `context` are read from the command line Layover will run for it, `null` where it sets none. A route's `pipelines` lists the workflows whose chains may use it, and is `null` for a global route. |
 | `GET` | `/pipelines` | | Declared pipelines, their triggers and their flags. |
-| `GET` | `/graph` | `pipeline` | The route map as a rendered diagram, optionally for one workflow — drawn over the routes that workflow's chains may use. |
-| `POST` | `/flights` | | **Queue** work. The Tower starts it within seconds. |
+| `GET` | `/graph` | `pipeline` | The route map as a rendered diagram, optionally for one workflow — drawn over the routes that workflow's chains may use. An agent with several runs alive at once — the workflow triggered twice — carries a count such as `×2`. |
+| `POST` | `/flights` | | **Queue** work. The Tower starts it within seconds. Answers with the new chain's `itinerary_id`. |
 | `GET` | `/flights` | | What is queued and waiting. |
 | `DELETE` | `/flights/{flight_id}` | | Cancel queued work. Only what has not started. |
-| `GET` | `/itineraries` | `window`, `state` | Chains of work, and whether each finished, stalled or is waiting for a person (`awaiting_human`). Each carries its `flags`, `waiting_for` when it waits, and the chains it `continues` or is `continued_by`. |
+| `GET` | `/itineraries` | `window`, `state` | Chains of work, and whether each finished, stalled or is waiting for a person (`awaiting_human`). Each carries its `flags`, `waiting_for` when it waits, the chains it `continues` or is `continued_by`, and where a working chain is: the agents `running` in it and those it has work `queued` for. A chain is listed from the moment its first flight is queued, with no runs yet. |
+| `GET` | `/itineraries/{itinerary_id}` | | One chain, whole. See below. |
 | `GET` | `/runs` | `status`, `itinerary_id`, `agent`, `pipeline`, `window`, `limit` | Runs, live and historical. Runs alive now come first, as `running`, read from the Tower's live records — history holds a run only once it is over. |
 | `GET` | `/runs/{run_id}` | | One run, including how it ended. |
 | `GET` | `/runs/{run_id}/report` | | What that agent wrote about its own run. |
@@ -46,6 +47,26 @@ Point any OpenAPI tool at the file to get a client, a mock server or rendered do
 | `POST` | `/ground-stop` | | Halt everything. Engaging twice is a success, not a conflict. |
 | `DELETE` | `/ground-stop` | | Resume. |
 | `GET` | `/runs/{run_id}/stream` | `after` | A run's CLI output as server-sent events, rendered as a terminal shows it — live while it runs, a replay once it is over. See below. |
+
+## One chain
+
+`GET /itineraries/{itinerary_id}` answers with everything one trigger caused, read at one moment:
+
+| Field | What it is |
+|---|---|
+| `itinerary` | The chain, as `GET /itineraries` lists it. |
+| `runs` | Every run in it, alive or over, oldest first. Each says who sent it in `sent_by`: the agents whose flights started it — every arrival, for a released join — `[]` for work from outside the mesh (a person, a schedule, a resumed layover), and `null` when that was not recorded. |
+| `pending` | Its flights waiting for a slot. |
+| `map` | Its workflow's route map drawn for this chain alone: each agent `done`, `running`, `failed` or `queued` by what happened *here*, `×2` on one that ran twice, and the routes its work took marked `travelled`. |
+
+A workflow triggered three times is still one route map, coloured while *any* of its chains runs an
+agent; this is how to see one of them. It is read from the moment the chain began — its identifier
+carries when — so watching a chain does not read ninety days of history every few seconds. A chain
+nothing has run in, is running in or has queued for is `404`.
+
+`null` and `[]` are different on purpose. A run recorded by an earlier release, a join restarted
+after the Tower that released it went away, and a run the Reserve refused before it began do not
+know who sent them, and a route drawn from a guess would look exactly like one that was taken.
 
 ## Watching a run
 

@@ -59,6 +59,10 @@ pub struct Live {
     /// whose Tower has gone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub owner: Option<String>,
+    /// The agents whose flights started the run, as its history record will say: empty for work
+    /// from outside the mesh, `None` when not known. See `RunRecord::sent_by`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sent_by: Option<Vec<AgentName>>,
 }
 
 /// Where live-run records are kept.
@@ -203,6 +207,7 @@ mod tests {
             hangar: PathBuf::from("hangar"),
             queued: None,
             owner: None,
+            sent_by: None,
         }
     }
 

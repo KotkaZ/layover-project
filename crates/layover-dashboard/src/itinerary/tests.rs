@@ -37,6 +37,7 @@ fn run(
         queued_at: None,
         flags: std::collections::BTreeMap::new(),
         continues: None,
+        sent_by: None,
     }
 }
 

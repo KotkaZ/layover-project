@@ -30,8 +30,10 @@
 mod api;
 mod assets;
 pub mod auth;
+mod chain;
 mod itinerary;
 mod live;
+mod map;
 mod reply;
 mod stream;
 pub mod transcript;

@@ -107,6 +107,30 @@ impl std::fmt::Display for Dispatched {
     }
 }
 
+/// A flight that got past its barrier, if it had one, and is ready to be run.
+pub(crate) struct Passed {
+    /// What runs: for a released join, one flight carrying every arrival.
+    pub flight: Flight,
+    /// Whether that is several flights combined.
+    pub joined: bool,
+    /// The agents whose flights got it here, sorted; empty for work from outside the mesh.
+    pub sent_by: Vec<AgentName>,
+}
+
+/// What a run starts from, beside the flight it runs.
+pub(crate) struct Start<'q> {
+    /// Who the run is told sent its flight. `None` for a released join, whose body labels each
+    /// flight it carries.
+    pub origin: Option<&'q layover_core::flight::Origin>,
+    /// The flight as it was queued, kept in the run's live record so a Tower that comes back
+    /// after this run was interrupted can start it again.
+    pub queued: Option<&'q Queued>,
+    /// When its work was queued, for reading the wait back.
+    pub queued_at: Option<Timestamp>,
+    /// The agents whose flights started it, as its record will say. See `RunRecord::sent_by`.
+    pub sent_by: Option<Vec<AgentName>>,
+}
+
 /// What a drain did.
 #[derive(Debug, Default)]
 pub struct Drained {
@@ -267,7 +291,13 @@ impl Factory {
             Ok(authorised) => authorised,
             Err(refused) => return refused,
         };
-        let launched = match self.launch(itinerary.id(), authorised, flight, origin, None, None) {
+        let start = Start {
+            origin,
+            queued: None,
+            queued_at: None,
+            sent_by: Some(flight.from.agent().cloned().into_iter().collect()),
+        };
+        let launched = match self.launch(itinerary.id(), authorised, flight, start) {
             Ok(launched) => launched,
             Err(failed) => return failed,
         };
@@ -320,18 +350,19 @@ impl Factory {
 
     /// Starts an admitted run: composes what it is told, mints its token, spawns it, and writes
     /// down that it is alive.
-    ///
-    /// `queued` is the flight as it was queued, kept in the run's live record so a Tower that
-    /// comes back after this run was interrupted can start it again.
     pub(crate) fn launch<'a>(
         &'a self,
         chain: &ItineraryId,
         authorised: crate::dispatch::Authorised<'a>,
         flight: &Flight,
-        origin: Option<&layover_core::flight::Origin>,
-        queued: Option<&Queued>,
-        queued_at: Option<Timestamp>,
+        start: Start<'_>,
     ) -> Result<crate::dispatcher::Launched<'a>, Dispatched> {
+        let Start {
+            origin,
+            queued,
+            queued_at,
+            sent_by,
+        } = start;
         let scope = self.chains.scope_of(chain);
         let run = layover_core::RunId::generate();
         let hangar = layover_store::hangar::run_dir(
@@ -389,13 +420,10 @@ impl Factory {
         let started = match spawn::start(&plan) {
             Ok(started) => started,
             Err(error) => {
-                self.record(&self.never_started(
-                    &run,
-                    chain,
-                    &authorised,
-                    started_at,
-                    &error.to_string(),
-                ));
+                let mut record =
+                    self.never_started(&run, chain, &authorised, started_at, &error.to_string());
+                record.sent_by = sent_by;
+                self.record(&record);
                 self.revoke(token.as_deref());
                 return Err(Dispatched::Failed(error.to_string()));
             }
@@ -412,6 +440,7 @@ impl Factory {
             hangar,
             queued: queued.cloned(),
             owner: self.owner_id().map(str::to_owned),
+            sent_by: sent_by.clone(),
         };
         let _ = self.live.starting(&mark);
         self.hold(
@@ -429,6 +458,7 @@ impl Factory {
                 authorised,
                 started_at,
                 queued_at,
+                sent_by,
             },
             started,
             token,
@@ -508,6 +538,9 @@ impl Factory {
             pid: None,
             flags: self.recorded_flags(itinerary.id()),
             continues: self.chains.continues_of(itinerary.id()),
+            // Refused before it began, after admission had already lost which arrivals a join
+            // carried: not recorded rather than half right.
+            sent_by: None,
         });
         Some(Dispatched::Refused(Refusal::Rail(Denial::ReserveExhausted)))
     }
@@ -555,6 +588,7 @@ impl Factory {
             pid: None,
             flags: self.recorded_flags(&ticket.chain),
             continues: self.chains.continues_of(&ticket.chain),
+            sent_by: ticket.sent_by.clone(),
         });
 
         // Last, because until the outcome is written the run is still unaccounted for. Forgetting
@@ -630,6 +664,7 @@ impl Factory {
             pid: None,
             flags: self.recorded_flags(chain),
             continues: self.chains.continues_of(chain),
+            sent_by: None,
         }
     }
 
@@ -909,19 +944,32 @@ impl Factory {
         &self,
         flight: &Flight,
         report: &mut dyn FnMut(&Flight, &Dispatched),
-    ) -> Option<(Flight, bool)> {
+    ) -> Option<Passed> {
         // A join applies only in its scope, so the barrier is looked up in the chain's own graph:
         // a flight in a pipeline the join is not scoped to goes straight through.
         let graph = self
             .routes
             .for_scope(&self.chains.scope_of(&flight.itinerary));
+        let alone = |flight: Flight| Passed {
+            sent_by: flight.from.agent().cloned().into_iter().collect(),
+            flight,
+            joined: false,
+        };
         match self.barriers.deliver(&graph, flight.clone()) {
             // The common case: the destination declares no join at all.
-            None => Some((flight.clone(), false)),
-            Some(Delivery::Direct(direct)) => Some((*direct, false)),
+            None => Some(alone(flight.clone())),
+            Some(Delivery::Direct(direct)) => Some(alone(*direct)),
             Some(Delivery::Ready(arrived)) => {
-                let joined = arrived.len() > 1;
-                Some((combine(arrived), joined))
+                let mut sent_by: Vec<AgentName> = arrived
+                    .iter()
+                    .filter_map(|flight| flight.from.agent().cloned())
+                    .collect();
+                sent_by.sort();
+                Some(Passed {
+                    joined: arrived.len() > 1,
+                    flight: combine(arrived),
+                    sent_by,
+                })
             }
             Some(Delivery::Parked { waiting_for }) => {
                 report(flight, &Dispatched::Parked { waiting_for });

@@ -78,8 +78,10 @@ function showView(name) {
   document.querySelectorAll(".view").forEach((view) => {
     view.hidden = view.id !== name;
   });
+  // A chain is opened from the Chains tab and reads as part of it.
+  const tabbed = name === "chain" ? "chains" : name;
   document.querySelectorAll(".tab").forEach((tab) => {
-    tab.setAttribute("aria-current", String(tab.dataset.view === name));
+    tab.setAttribute("aria-current", String(tab.dataset.view === tabbed));
   });
   if (name === "map") loadMap();
   if (name === "chains") loadChains();
@@ -87,6 +89,7 @@ function showView(name) {
   if (name === "cost") loadCost();
   if (name === "journal") loadJournal();
   watchSessions(name === "sessions");
+  watchChain(name === "chain");
 }
 
 async function loadHealth() {
@@ -176,6 +179,16 @@ async function activityByWorkflow() {
   return stats;
 }
 
+/// Chains still going, or waiting for somebody to answer them.
+async function chainsGoing() {
+  try {
+    const { itineraries } = await get("/itineraries?window=last_7d");
+    return itineraries.filter((chain) => ["working", "awaiting_human"].includes(chain.state));
+  } catch {
+    return [];
+  }
+}
+
 async function loadMap() {
   const host = $("#workflows");
 
@@ -189,7 +202,7 @@ async function loadMap() {
     }
 
     const showing = scope() ? pipelines.filter((p) => p.name === scope()) : pipelines;
-    const activity = await activityByWorkflow();
+    const [activity, going] = await Promise.all([activityByWorkflow(), chainsGoing()]);
 
     for (const pipeline of showing) {
       const section = el("section", "workflow");
@@ -216,6 +229,9 @@ async function loadMap() {
           activity.get(pipeline.name) ?? { runs: 0, usd: 0, failed: 0, help: 0 },
         ),
       );
+      // One map per workflow, however many times it was triggered: these say which run is where.
+      const mine = going.filter((chain) => chain.pipeline === pipeline.name);
+      if (mine.length) section.append(inFlight(mine));
 
       const canvas = el("div", "canvas");
       canvas.append(el("p", "empty", "drawing\u2026"));
@@ -271,7 +287,14 @@ async function loadRuns() {
         ),
       );
       const chain = el("td");
-      chain.append(el("code", "", run.itinerary_id));
+      const open = el("button", "link", "");
+      open.append(el("code", "", run.itinerary_id));
+      open.title = "See this chain whole";
+      open.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openChain(run.itinerary_id);
+      });
+      chain.append(open);
       // How it got there, as its CLI printed it: live for a run still going, a replay otherwise.
       const watching = el("td");
       const transcript = el("button", "link", run.status === "running" ? "Watch" : "Transcript");
@@ -306,6 +329,15 @@ async function loadRuns() {
 // How a chain's state reads on the page. `awaiting_human` is the one that looked finished.
 const STATES = { awaiting_human: "waiting for you" };
 
+/// A chain's state, and for one that is working, where it is.
+function chainState(chain) {
+  const state = STATES[chain.state] ?? chain.state;
+  if (chain.state !== "working") return state;
+  if (chain.running) return `${state} · at ${chain.running.join(", ")}`;
+  if (chain.queued) return `${state} · queued`;
+  return state;
+}
+
 async function loadChains() {
   const body = $("#chains-table tbody");
   const count = $("#chains-count");
@@ -326,7 +358,7 @@ async function loadChains() {
         el("td", "", (chain.agents ?? []).join(" → ") || "—"),
         el("td", "num", String(chain.runs)),
         el("td", "num", cost),
-        el("td", `outcome ${chain.state}`, STATES[chain.state] ?? chain.state),
+        el("td", `outcome ${chain.state}`, chainState(chain)),
       );
 
       // What a person can do from here. A chain waiting for an answer gets the answer; any chain
@@ -351,6 +383,11 @@ async function loadChains() {
       // The reason lives in a tooltip rather than a column: it is a sentence, and a column wide
       // enough for it would squeeze out everything that is scannable.
       if (chain.detail) row.title = chain.detail;
+      row.classList.add("readable");
+      row.addEventListener("click", (event) => {
+        if (event.target.closest("button")) return;
+        openChain(chain.itinerary_id);
+      });
       body.append(row);
     }
 
@@ -624,9 +661,11 @@ async function submitTrigger(event) {
 
   event.preventDefault();
   try {
-    await send("/flights", "POST", { pipeline, body, flags });
+    const accepted = await send("/flights", "POST", { pipeline, body, flags });
     $("#trigger").close();
     loadQueued();
+    // What somebody who has just triggered a workflow wants next is to watch that run of it.
+    if (accepted.itinerary_id) openChain(accepted.itinerary_id);
   } catch (error) {
     $("#trigger-error").hidden = false;
     $("#trigger-error").textContent = `Not queued: ${error.message}`;
@@ -939,6 +978,7 @@ function start() {
   $("#runs-agent").addEventListener("input", loadRuns);
   startSessions();
   startReplies();
+  startChains();
 
   // One selector, so every view has to be told. Redrawing only the visible one would leave the
   // others showing another workflow's numbers under this workflow's name the moment you switch.
@@ -962,7 +1002,9 @@ function start() {
   // The pipeline list has to exist before the first draw, or the selector is empty on load.
   loadPipelines().then(() => {
     loadAgentNames();
-    showView("map");
+    const linked = chainInAddress();
+    if (linked) openChain(linked);
+    else showView("map");
   });
 }
 

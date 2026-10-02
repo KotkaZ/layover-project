@@ -37,6 +37,7 @@
 //!     # async fn judge_learning(&self, _: layover_http::JudgeLearningPath, _: layover_http::JudgeLearningRequest) -> Result<layover_http::Learning, Problem> { todo!() }
 //!     # async fn cancel_flight(&self, _: layover_http::CancelFlightPath) -> Result<layover_http::PendingList, Problem> { todo!() }
 //!     # async fn list_itineraries(&self, _: layover_http::ListItinerariesQuery) -> Result<layover_http::ItineraryList, Problem> { todo!() }
+//!     # async fn get_itinerary(&self, _: layover_http::GetItineraryPath) -> Result<layover_http::ItineraryDetail, Problem> { todo!() }
 //!     # async fn get_report(&self, _: layover_http::GetReportPath) -> Result<layover_http::Report, Problem> { todo!() }
 //!     # async fn engage_ground_stop(&self) -> Result<layover_http::GroundStop, Problem> { todo!() }
 //!     # async fn release_ground_stop(&self) -> Result<layover_http::GroundStop, Problem> { todo!() }

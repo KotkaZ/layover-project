@@ -44,7 +44,8 @@
       <li><span class="swatch line bypass"></span>bypasses it</li>
       <li><span class="swatch line spawn"></span>spawns a new itinerary</li>
       <li><span class="swatch line both"></span>either may send to the other</li>
-      <li class="tip">Hover an agent to trace its routes; click it to keep them lit and see what it runs on.</li>
+      <li><span class="tally-key">×2</span>runs alive at once</li>
+      <li class="tip">Hover an agent to trace its routes; click it to keep them lit and see what it runs on. Click a chain under a workflow to see that run on its own.</li>
     </ul>
   </section>
 
@@ -76,6 +77,41 @@
       </thead>
       <tbody></tbody>
     </table>
+  </section>
+
+  <section id="chain" class="view" hidden>
+    <div class="bar">
+      <button id="chain-back" class="link" type="button">← Chains</button>
+      <h2 id="chain-title" class="chain-title"></h2>
+      <span id="chain-state" class="outcome"></span>
+      <span id="chain-actions" class="actions"></span>
+      <button id="chain-refresh" type="button">Refresh</button>
+    </div>
+    <p id="chain-facts" class="hint"></p>
+    <p id="chain-flags" class="hint"></p>
+    <p id="chain-detail" class="caveat" hidden></p>
+    <p id="chain-error" class="caveat" hidden></p>
+    <div id="chain-canvas" class="canvas"></div>
+    <ul class="legend">
+      <li><span class="swatch done"></span>ran here, last run went well</li>
+      <li><span class="swatch running"></span>running</li>
+      <li><span class="swatch failed"></span>last run here failed</li>
+      <li><span class="swatch queued"></span>queued for a slot</li>
+      <li><span class="swatch line travelled"></span>route this chain took</li>
+      <li><span class="tally-key">×2</span>ran more than once</li>
+      <li class="tip">Only this chain: other runs of the same workflow are not on it.</li>
+    </ul>
+    <h2 class="spaced">Runs, in the order they happened</h2>
+    <table id="chain-runs">
+      <thead>
+        <tr>
+          <th class="num">#</th><th>Started</th><th>Agent</th><th>Sent by</th><th>Outcome</th>
+          <th class="num">Took</th><th class="num">Cost</th><th></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <p id="chain-empty" class="empty" hidden>Nothing has run in this chain yet.</p>
   </section>
 
   <section id="sessions" class="view" hidden>
@@ -278,6 +314,7 @@
 <script src="/routemap.js"></script>
 <script src="/sessions.js"></script>
 <script src="/reply.js"></script>
+<script src="/chain.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

@@ -115,6 +115,25 @@ impl ItineraryId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// When this identifier was minted, which is when its chain began.
+    ///
+    /// Lets a chain's runs be read from history starting where they can start, rather than across
+    /// every day retention keeps. `None` for an identifier not minted by [`Self::generate`].
+    #[must_use]
+    pub fn minted_at(&self) -> Option<Timestamp> {
+        let ulid: Ulid = self.0.strip_prefix("itn_")?.parse().ok()?;
+
+        Timestamp::from_millisecond(i64::try_from(ulid.timestamp_ms()).ok()?).ok()
+    }
+}
+
+/// Reads an identifier that came from outside — a URL path, say. Not validated, for the reason
+/// [`FlightId`]'s is not: an identifier that names nothing is answered with "no such chain".
+impl From<&str> for ItineraryId {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
 }
 
 /// Who sent a flight.
@@ -342,6 +361,22 @@ mod tests {
                 .minted_at()
                 .is_none()
         );
+    }
+
+    #[test]
+    fn a_chain_id_says_when_its_chain_began_and_a_stranger_says_nothing() {
+        let before = Timestamp::now();
+        let chain = ItineraryId::generate();
+
+        let minted = chain.minted_at().expect("a generated id decodes");
+        assert!(minted.as_millisecond() >= before.as_millisecond() - 1);
+        assert!(minted <= Timestamp::now());
+        assert!(
+            ItineraryId("run_01M31S7S94MCCD56RC8S6TFQ4Y".to_owned())
+                .minted_at()
+                .is_none()
+        );
+        assert!(ItineraryId("itn_x".to_owned()).minted_at().is_none());
     }
 
     #[test]

@@ -29,6 +29,7 @@
 
 use std::collections::BTreeMap;
 
+use layover_core::agent::AgentName;
 use layover_core::help::HelpRequest;
 use layover_core::queue::Queued;
 use layover_core::run::{Outcome, RunRecord};
@@ -63,6 +64,16 @@ pub fn itineraries(records: &[RunRecord], context: Context<'_>) -> Vec<Itinerary
             .push(record);
     }
 
+    // A chain whose first flight is still queued has no run to be grouped from, and it is exactly
+    // the chain somebody looks for after triggering a workflow while every slot is taken.
+    let mut unstarted: BTreeMap<&str, Vec<&Queued>> = BTreeMap::new();
+    for queued in context.pending {
+        let id = queued.flight.itinerary.as_str();
+        if !chains.contains_key(id) {
+            unstarted.entry(id).or_default().push(queued);
+        }
+    }
+
     let mut built: Vec<Itinerary> = chains
         .into_iter()
         .map(|(id, mut runs)| {
@@ -70,11 +81,66 @@ pub fn itineraries(records: &[RunRecord], context: Context<'_>) -> Vec<Itinerary
             build(&id, &runs, records, context)
         })
         .collect();
+    built.extend(
+        unstarted
+            .into_iter()
+            .map(|(id, queued)| not_started(id, &queued, context.ground_stop)),
+    );
 
     // Most recently started first: a dashboard is read from the top, and the thing somebody wants
     // is almost always the thing that just happened.
     built.sort_by(|a, b| b.started_at.cmp(&a.started_at));
     built
+}
+
+/// A chain with flights queued and nothing run yet: `working`, unless a Ground Stop means none of
+/// it is about to start.
+fn not_started(id: &str, queued: &[&Queued], ground_stop: bool) -> Itinerary {
+    let state = state_of(false, Activity::Waiting, None, false, ground_stop);
+    let opened = queued
+        .iter()
+        .map(|queued| queued.flight.sent_at)
+        .min()
+        .unwrap_or_else(jiff::Timestamp::now);
+
+    Itinerary {
+        itinerary_id: id.to_owned(),
+        pipeline: queued
+            .iter()
+            .find_map(|queued| queued.pipeline.as_ref().map(ToString::to_string)),
+        state,
+        agents: Some(Vec::new()),
+        runs: 0,
+        usd: 0.0,
+        measured: Some(true),
+        started_at: opened.to_string(),
+        finished_at: None,
+        detail: detail_for(state, None, None, &[]),
+        waiting_for: None,
+        flags: queued
+            .iter()
+            .find(|queued| queued.pipeline.is_some())
+            .map(|queued| queued.flags.clone()),
+        continues: queued
+            .iter()
+            .find_map(|queued| queued.continues.as_ref())
+            .map(|earlier| earlier.as_str().to_owned()),
+        continued_by: None,
+        running: None,
+        queued: names(queued.iter().map(|queued| &queued.flight.to)),
+    }
+}
+
+/// Agent names in the order first met, once each, or `None` when there are none.
+fn names<'a>(agents: impl Iterator<Item = &'a AgentName>) -> Option<Vec<String>> {
+    let mut found: Vec<String> = Vec::new();
+    for agent in agents {
+        let name = agent.to_string();
+        if !found.contains(&name) {
+            found.push(name);
+        }
+    }
+    (!found.is_empty()).then_some(found)
 }
 
 fn build(
@@ -122,25 +188,7 @@ fn build(
 
     // Both directions of a reply: the chain this one continues, and every chain that continues
     // it, whether its runs have started yet or it is only the answer on a request.
-    let mut continued_by: Vec<String> = help
-        .iter()
-        .filter(|request| request.itinerary.as_str() == id)
-        .filter_map(|request| request.reply.as_ref())
-        .map(|reply| reply.itinerary.as_str().to_owned())
-        .chain(
-            everything
-                .iter()
-                .filter(|record| {
-                    record
-                        .continues
-                        .as_ref()
-                        .is_some_and(|earlier| earlier.as_str() == id)
-                })
-                .map(|record| record.itinerary.as_str().to_owned()),
-        )
-        .collect();
-    continued_by.sort();
-    continued_by.dedup();
+    let continued_by = continued_by(id, help, everything);
 
     // Named in the order they first ran, which is the order somebody reading the chain thinks
     // about it. Alphabetical would put the publisher before the analyst.
@@ -199,7 +247,43 @@ fn build(
             .find_map(|record| record.continues.as_ref())
             .map(|earlier| earlier.as_str().to_owned()),
         continued_by: (!continued_by.is_empty()).then_some(continued_by),
+        running: names(
+            runs.iter()
+                .filter(|record| record.finished_at.is_none())
+                .map(|record| &record.agent),
+        ),
+        queued: names(
+            pending
+                .iter()
+                .filter(|queued| queued.flight.itinerary.as_str() == id)
+                .map(|queued| &queued.flight.to),
+        ),
     }
+}
+
+/// Every chain that continues `id`: the chains replies to its help requests started, and any run
+/// that says its chain continues this one.
+fn continued_by(id: &str, help: &[HelpRequest], everything: &[RunRecord]) -> Vec<String> {
+    let mut found: Vec<String> = help
+        .iter()
+        .filter(|request| request.itinerary.as_str() == id)
+        .filter_map(|request| request.reply.as_ref())
+        .map(|reply| reply.itinerary.as_str().to_owned())
+        .chain(
+            everything
+                .iter()
+                .filter(|record| {
+                    record
+                        .continues
+                        .as_ref()
+                        .is_some_and(|earlier| earlier.as_str() == id)
+                })
+                .map(|record| record.itinerary.as_str().to_owned()),
+        )
+        .collect();
+    found.sort();
+    found.dedup();
+    found
 }
 
 /// Whether anything is still happening in a chain.

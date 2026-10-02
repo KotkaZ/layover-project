@@ -102,6 +102,8 @@ pub struct Node {
     pub shape: Shape,
     /// What it is doing, if anything.
     pub activity: Option<Activity>,
+    /// A count drawn in its corner, such as `×2` for an agent that ran twice in a chain.
+    pub badge: Option<String>,
     /// Which column it sits in.
     pub layer: usize,
     /// Left edge.
@@ -222,6 +224,9 @@ pub struct Layout {
     pub width: f64,
     /// Total height, including margins.
     pub height: f64,
+    /// On one chain's map, the drawn edges its work took, by the identifiers of their two ends as
+    /// drawn. Empty on a workflow's map.
+    pub travelled: BTreeSet<(String, String)>,
 }
 
 impl Layout {
@@ -229,6 +234,14 @@ impl Layout {
     #[must_use]
     pub fn node(&self, id: &str) -> Option<&Node> {
         self.nodes.iter().find(|node| node.id == id)
+    }
+
+    /// Whether the chain this map is drawn for took `edge`.
+    #[must_use]
+    pub fn took(&self, edge: &Edge) -> bool {
+        self.travelled
+            .iter()
+            .any(|(from, to)| *from == edge.from && *to == edge.to)
     }
 
     /// Lays out a whole factory.
@@ -262,6 +275,7 @@ impl Layout {
         tidy::pair_up(&mut layout.edges);
         layout.order_by_barycentre();
         layout.size();
+        super::overlay::apply(&mut layout, live);
         layout
     }
 
@@ -292,6 +306,7 @@ impl Layout {
                 kind: NodeKind::Pipeline,
                 shape: Shape::Box,
                 activity: None,
+                badge: None,
                 layer: 0,
                 x: 0.0,
                 y: 0.0,
@@ -322,6 +337,7 @@ impl Layout {
                     Shape::Box
                 },
                 activity: live.activity.get(name).copied(),
+                badge: None,
                 layer,
                 x: 0.0,
                 y: 0.0,
@@ -797,12 +813,12 @@ fn precise(count: usize) -> f64 {
 }
 
 /// A stable identifier for an agent node.
-fn agent_id(name: &AgentName) -> String {
+pub(super) fn agent_id(name: &AgentName) -> String {
     format!("a_{name}")
 }
 
 /// A stable identifier for a pipeline node.
-fn pipeline_id(name: &PipelineName) -> String {
+pub(super) fn pipeline_id(name: &PipelineName) -> String {
     format!("p_{name}")
 }
 

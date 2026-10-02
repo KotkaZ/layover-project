@@ -143,6 +143,10 @@ pub fn run(record: &RunRecord) -> Run {
         blocked_on: record.blocked_on.clone(),
         hops_remaining: None,
         flags: (!record.flags.is_empty()).then(|| record.flags.clone()),
+        sent_by: record
+            .sent_by
+            .as_ref()
+            .map(|senders| senders.iter().map(ToString::to_string).collect()),
     }
 }
 

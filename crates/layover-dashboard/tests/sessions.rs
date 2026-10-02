@@ -113,6 +113,7 @@ entry = "eagle"
                 BTreeMap::new(),
             )),
             owner: None,
+            sent_by: None,
         };
         self.ledger().starting(&live).expect("records");
         live

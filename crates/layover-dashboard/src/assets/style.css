@@ -124,6 +124,20 @@ code { font-family: ui-monospace, "Cascadia Code", Menlo, monospace; font-size: 
 .node.running rect, .node.running polygon { fill: color-mix(in srgb, var(--ok) 18%, var(--panel)); stroke: var(--ok); stroke-width: 2.2; }
 .node.waiting rect, .node.waiting polygon { fill: color-mix(in srgb, var(--warn) 18%, var(--panel)); stroke: var(--warn); stroke-width: 2.2; }
 .node.failed rect, .node.failed polygon { fill: color-mix(in srgb, var(--bad) 16%, var(--panel)); stroke: var(--bad); stroke-width: 2.2; }
+/* One chain's map: what ran there and went well is quieter than what is running, so the eye goes
+   to where the chain is now; what is queued is drawn as an outline waiting to be filled. */
+.node.done rect, .node.done polygon { fill: color-mix(in srgb, var(--ok) 7%, var(--panel)); stroke: color-mix(in srgb, var(--ok) 55%, var(--panel)); }
+.node.queued rect, .node.queued polygon { stroke: var(--warn); stroke-width: 2; stroke-dasharray: 5 3; }
+.node.running rect, .node.running polygon { animation: alive 1.8s ease-in-out infinite; }
+@keyframes alive { 50% { stroke-opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .node.running rect, .node.running polygon { animation: none; } }
+/* How many: runs alive at once on a workflow's map, runs in the chain on a chain's. Specific enough
+   to beat the rules that colour a box by its state, which would otherwise paint the badge too. */
+.routemap .node rect.tally { fill: var(--ink); stroke: none; animation: none; }
+.routemap .node text.tally { fill: var(--panel); font-size: 11px; font-weight: 700; }
+.routemap .route.travelled .edge { stroke: var(--ok); stroke-width: 2.4; opacity: 1; }
+.routemap.chain .node.agent:not(.running):not(.done):not(.failed):not(.queued) { opacity: 0.45; }
+.routemap.chain .route:not(.travelled) .edge { opacity: 0.3; }
 .node:hover rect, .node:hover polygon { fill: color-mix(in srgb, var(--accent) 10%, var(--panel)); }
 .node { cursor: pointer; }
 .node:focus { outline: none; }
@@ -169,6 +183,27 @@ code { font-family: ui-monospace, "Cascadia Code", Menlo, monospace; font-size: 
 .swatch.failed { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 16%, var(--panel)); }
 .swatch.line { height: 0; border: 0; border-top: 2px solid var(--join); border-radius: 0; }
 .swatch.line.bypass { border-top: 2px dashed var(--bypass); }
+.swatch.done { border-color: color-mix(in srgb, var(--ok) 55%, var(--panel)); background: color-mix(in srgb, var(--ok) 7%, var(--panel)); }
+.swatch.queued { border: 2px dashed var(--warn); }
+.swatch.line.travelled { border-top: 2.5px solid var(--ok); width: 20px; }
+.tally-key { background: var(--ink); color: var(--panel); border-radius: 9px; padding: 0 6px; font-size: 11px; font-weight: 700; }
+
+/* The chains a workflow has going, under its map: one button each, saying where it is. */
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
+.chip { cursor: pointer; font: inherit; font-size: 12px; color: var(--ink); background: var(--panel); border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); border-radius: 999px; padding: 4px 11px; }
+.chip:hover { border-color: var(--accent); }
+.chip code { color: var(--accent); margin-right: 2px; }
+.chip.awaiting_human { border-color: var(--warn); }
+.chip.awaiting_human code { color: var(--warn); }
+
+/* One chain, whole. */
+.chain-title { margin: 0; display: flex; gap: 10px; align-items: baseline; font-size: 15px; text-transform: none; letter-spacing: -0.01em; color: var(--ink); font-weight: 650; }
+.chain-title code { color: var(--muted); font-weight: 400; }
+#chain .bar .actions { margin-left: auto; }
+#chain-facts, #chain-flags { margin: 0 2px 8px; }
+#chain-flags:empty { display: none; }
+#chain-runs tr.pending td { color: var(--muted); font-style: italic; }
+.outcome.queued { color: var(--warn); }
 
 table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }

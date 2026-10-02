@@ -65,6 +65,7 @@ pub(crate) struct Ticket<'a> {
     pub authorised: Authorised<'a>,
     pub started_at: Timestamp,
     pub queued_at: Option<Timestamp>,
+    pub sent_by: Option<Vec<AgentName>>,
 }
 
 /// A run whose process is alive.
@@ -444,12 +445,14 @@ impl Factory {
 
         // A restarted run of a released join goes straight to its agent. The barrier it passed
         // went with the Tower that held it, and a fresh one would wait for upstreams that finished
-        // long ago.
-        let (flight, joined) = if queued.released {
-            (queued.flight.clone(), true)
+        // long ago. Which arrivals it carried went with that Tower too, so they are not recorded
+        // rather than reduced to the first.
+        let (flight, joined, sent_by) = if queued.released {
+            (queued.flight.clone(), true, None)
         } else {
             let mut parked = |flight: &Flight, result: &Dispatched| report(flight, result);
-            self.past_the_barrier(&queued.flight, &mut parked)?
+            let passed = self.past_the_barrier(&queued.flight, &mut parked)?;
+            (passed.flight, passed.joined, Some(passed.sent_by))
         };
 
         // Waiting at a barrier is the design; only the wait after it releases says anything
@@ -495,14 +498,13 @@ impl Factory {
         };
 
         let origin = (!joined).then_some(&flight.from);
-        match self.launch(
-            &flight.itinerary,
-            authorised,
-            &flight,
+        let start = crate::factory::Start {
             origin,
-            Some(&kept),
-            Some(queued_at),
-        ) {
+            queued: Some(&kept),
+            queued_at: Some(queued_at),
+            sent_by,
+        };
+        match self.launch(&flight.itinerary, authorised, &flight, start) {
             Ok(launched) => Some((flight, launched)),
             Err(result) => {
                 report(&flight, &result);

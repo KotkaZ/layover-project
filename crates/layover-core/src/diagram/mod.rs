@@ -16,14 +16,16 @@
 mod caption;
 pub mod layout;
 pub mod mermaid;
+mod overlay;
 pub mod svg;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::agent::AgentName;
 
 pub use layout::{Edge, EdgeStyle, Layout, Node, NodeKind, Shape};
 pub use mermaid::{route_map, route_map_for};
+pub use overlay::{Leg, Sender, Tally};
 pub use svg::render as render_svg;
 
 /// Which workflow to draw.
@@ -63,6 +65,10 @@ pub enum Activity {
     Waiting,
     /// This agent's last run ended badly.
     Failed,
+    /// On one chain's map: this agent ran in the chain, and its last run there went well.
+    Done,
+    /// On one chain's map: work for this agent is queued, waiting for a free slot.
+    Queued,
 }
 
 impl Activity {
@@ -73,6 +79,8 @@ impl Activity {
             Self::Running => "running",
             Self::Waiting => "waiting",
             Self::Failed => "failed",
+            Self::Done => "done",
+            Self::Queued => "queued",
         }
     }
 }
@@ -85,6 +93,11 @@ impl Activity {
 pub struct Live {
     /// What each busy agent is doing.
     pub activity: BTreeMap<AgentName, Activity>,
+    /// How many runs to count on each agent: on one chain's map, how often it ran there; on a
+    /// workflow's, how many of its runs are alive at once.
+    pub tally: BTreeMap<AgentName, Tally>,
+    /// On one chain's map, the routes its work took.
+    pub travelled: BTreeSet<Leg>,
 }
 
 impl Live {
@@ -92,6 +105,23 @@ impl Live {
     #[must_use]
     pub fn with(mut self, agent: impl Into<AgentName>, activity: Activity) -> Self {
         self.activity.insert(agent.into(), activity);
+        self
+    }
+
+    /// Counts runs on an agent, saying over what: `"in this chain"`, `"alive now"`.
+    #[must_use]
+    pub fn counted(mut self, agent: impl Into<AgentName>, runs: usize, of: &'static str) -> Self {
+        self.tally.insert(agent.into(), Tally { runs, of });
+        self
+    }
+
+    /// Records that work went from `from` to `to`.
+    #[must_use]
+    pub fn travelled(mut self, from: Sender, to: impl Into<AgentName>) -> Self {
+        self.travelled.insert(Leg {
+            from,
+            to: to.into(),
+        });
         self
     }
 

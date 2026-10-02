@@ -8,6 +8,47 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+See one run of a workflow on its own, even while the same workflow runs several times at once.
+
+**Compatibility.** The configuration format is unchanged. The HTTP API only gains:
+`GET /itineraries/{itinerary_id}`, `sent_by` on a run, and `running` and `queued` on a chain. Two
+things behave differently in an existing factory. `GET /itineraries` now lists a chain from the
+moment its first flight is queued — `working`, with `runs: 0` — so a client that assumed every
+chain has a run will meet one that has none. And a workflow's route map is coloured by that
+workflow's runs: an agent it shares with another workflow no longer shows as running because the
+other workflow is running it. On disk, run records and live-run records gain an optional `sent_by`;
+everything an earlier release wrote still reads, and its runs simply light no routes. For library
+users, `RunRecord`, `layover_store::live::Live`, `diagram::Live`, `diagram::Node` and
+`diagram::Edge` gain fields, and `diagram::Activity` gains `Done` and `Queued`.
+
+### Added
+
+- **One chain, whole.** Open a chain — from **Chains**, from a run's chain in **Runs**, from the
+  buttons under its workflow's map, or straight after triggering it — and see its workflow's map
+  drawn for that chain alone: each agent done, running, failed or queued by what happened *in this
+  chain*, `×2` on one that ran twice, and the routes its work took drawn in green with the rest
+  faded. Below the map, every run in the order it happened with who sent it, how it ended, what it
+  took and cost, and **Watch**/**Transcript** and **Report**; then what it has queued. It keeps
+  itself current while the chain works, and its address (`#chain=itn_…`) survives a reload.
+- **Where each chain is.** Under a workflow's map, one button per chain it has going says where
+  that chain is — `46TNEG at coder`, `GDTHVD queued for analyst`. An agent with several runs alive
+  at once carries a count, `×2`, on the map. **Chains** says `working · at coder` or
+  `working · queued`.
+- **Triggering a workflow opens the chain it started**, so what you watch is that run of it.
+- **Runs record who sent them.** `sent_by` on a run's record names the agents whose flights started
+  it — every arrival, for a released join — and is `[]` for work from outside the mesh. A run it was
+  not recorded for says `null` rather than a guess.
+- `GET /itineraries/{itinerary_id}`: the chain, its runs oldest first, its queued flights, and its
+  map, read at one moment.
+
+### Fixed
+
+- **A chain triggered while every slot was taken was not on Chains** until its first run started:
+  chains were built from runs alone. It is listed as soon as it is queued.
+- **A workflow's map showed an agent running because another workflow was running it.** The map
+  is now coloured by its own workflow's chains, and by runs whose chain no workflow opened, which
+  could be anybody's.
+
 ## [1.5.1] — 2026-10-01
 
 Dependency and CI maintenance. Nothing a factory sees changes.

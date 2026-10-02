@@ -147,6 +147,7 @@ fn left_behind(temp: &Temp, pid: u32, agent: &str, queued: Option<Queued>) -> Li
         hangar,
         queued,
         owner: Some("tower-that-went-away".to_owned()),
+        sent_by: None,
     };
     Ledger::open(temp.0.join(".layover").join("state").join("runs"))
         .expect("ledger")
