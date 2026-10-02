@@ -74,6 +74,15 @@ function provenance(summary) {
   return ["", `${summary.runs} runs, all measured`];
 }
 
+// A spend figure as it can honestly be stated. Runs that reported nothing count as nothing in the
+// sum, so a total built partly from them is a floor and carries a `+`, and one built only from
+// them is not a figure at all: "$0.00" there reads as a free factory, and is how an operator whose
+// runner prints no cost comes to believe it costs nothing.
+function spend(summary) {
+  if (summary.runs > 0 && summary.unreported_runs === summary.runs) return "not reported";
+  return summary.unreported_runs > 0 ? `${money(summary.usd)}+` : money(summary.usd);
+}
+
 function showView(name) {
   document.querySelectorAll(".view").forEach((view) => {
     view.hidden = view.id !== name;
@@ -145,7 +154,7 @@ function summaryStrip(name, stats) {
 
   strip.append(
     cell("runs, 7d", `${stats.runs}`),
-    cell("spend, 7d", money(stats.usd)),
+    cell("spend, 7d", spend(stats), stats.unreported_runs > 0 ? "warn" : ""),
     cell("failed", `${stats.failed}`, stats.failed > 0 ? "bad" : ""),
     cell("open help", `${stats.help}`, stats.help > 0 ? "warn" : ""),
   );
@@ -158,7 +167,7 @@ async function activityByWorkflow() {
   const stats = new Map();
   const bump = (name, field, by = 1) => {
     if (!name) return;
-    const row = stats.get(name) ?? { runs: 0, usd: 0, failed: 0, help: 0 };
+    const row = stats.get(name) ?? { runs: 0, usd: 0, unreported_runs: 0, failed: 0, help: 0 };
     row[field] += by;
     stats.set(name, row);
   };
@@ -172,6 +181,7 @@ async function activityByWorkflow() {
   for (const bucket of costs?.by_pipeline ?? []) {
     bump(bucket.name, "runs", bucket.summary.runs);
     bump(bucket.name, "usd", bucket.summary.usd);
+    bump(bucket.name, "unreported_runs", bucket.summary.unreported_runs);
   }
   for (const run of runs?.runs ?? []) bump(run.pipeline, "failed");
   for (const request of help?.requests ?? []) bump(request.pipeline, "help");
@@ -226,7 +236,7 @@ async function loadMap() {
       section.append(
         summaryStrip(
           pipeline.name,
-          activity.get(pipeline.name) ?? { runs: 0, usd: 0, failed: 0, help: 0 },
+          activity.get(pipeline.name) ?? { runs: 0, usd: 0, unreported_runs: 0, failed: 0, help: 0 },
         ),
       );
       // One map per workflow, however many times it was triggered: these say which run is where.
@@ -439,7 +449,7 @@ async function toggleGroundStop() {
 function costCard(window, label, report, selected) {
   const card = el("div", `card${selected ? " selected" : ""}`);
   const button = el("button");
-  button.append(el("span", "k", label), el("span", "v", money(report.total.usd)));
+  button.append(el("span", "k", label), el("span", "v", spend(report.total)));
 
   const [tone, note] = provenance(report.total);
   if (note) button.append(el("span", `n ${tone}`, note));
@@ -466,7 +476,7 @@ function costRows(table, buckets) {
     row.append(
       el("td", "", bucket.name),
       el("td", "num", `${bucket.summary.runs}`),
-      el("td", `num ${tone}`, money(bucket.summary.usd)),
+      el("td", `num ${tone}`, spend(bucket.summary)),
     );
     body.append(row);
   }

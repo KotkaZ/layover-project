@@ -20,6 +20,10 @@ status](README.md#project-status).
   `unreported`. A run's recorded `model` is now the one its command line selects, falling back to
   the one the agent declares, so a factory that fixes the model in its runner sees it in **By
   model**.
+- **Spend that nobody reported read as `$0.00`.** A workflow whose runs all reported nothing showed
+  `$0.00` on the route map's **spend, 7d**, with no sign that it was not a figure, and the cost
+  cards and breakdowns showed the same sum with only a small note beside it. A total built partly
+  from silence now carries a `+`, and one built wholly from it reads **not reported**.
 
 ## [1.6.0] — 2026-10-02
 

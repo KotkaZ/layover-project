@@ -424,6 +424,11 @@ Every total carries its provenance, shown next to the figure rather than tucked 
 - *"n of m runs priced from a rate card"* — part of this is an estimate.
 - *"n of m runs reported nothing"* — part of this is a hole, and the total is a lower bound.
 
+A total with a hole in it is never shown as a plain figure. It carries a `+` — `$12.40+` — and one
+where *every* run reported nothing reads **not reported** rather than `$0.00`, here, in the
+breakdowns and in each workflow's **spend, 7d** on the route map. A plain `$0.00` beside runs that
+did work is how a factory whose runner prints no cost comes to look free.
+
 The weakest source wins. A figure that is 90% measured is still not measured, and saying so is the
 entire point of tracking where a number came from.
 
