@@ -8,6 +8,21 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+## [1.7.1] — 2026-10-05
+
+The documentation describes Layover as it is, and the code nothing used is gone. Layovers never
+backed off or expired, although the book said they did: it now says what waiting does, and when to
+stop is up to the waiting agent's prompt.
+
+**Compatibility.** The configuration format, the HTTP API, the MCP tools and the on-disk layout
+are unchanged; a layover is still written with `checks` and `max_checks`, so a factory can go back
+to 1.7.0. Two things are different in an existing factory:
+- A resumed run's brief says when the work was set down, and no longer "this is check 1".
+- `layover doctor` no longer has an "expired layovers" finding. It could never appear.
+
+Anyone using the crates as a library loses the items listed under **Removed**. That API is outside
+the semantic-versioning promise.
+
 ### Removed
 
 - **Library code nothing used**, for anyone depending on the crates. None of it changes what a
@@ -1318,7 +1333,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.7.1...HEAD
+[1.7.1]: https://github.com/KotkaZ/layover-project/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/KotkaZ/layover-project/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/KotkaZ/layover-project/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/KotkaZ/layover-project/compare/v1.5.0...v1.5.1
