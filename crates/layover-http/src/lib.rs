@@ -6,7 +6,7 @@
 //! document that describes it.
 //!
 //! This crate provides the *shape* of the API and nothing behind it. Implement [`Api`] to serve
-//! it; the Tower will, once it exists.
+//! it; `layover-dashboard` does, and `layover serve` puts that implementation on the network.
 //!
 //! ```no_run
 //! # use std::sync::Arc;

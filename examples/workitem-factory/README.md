@@ -297,8 +297,7 @@ Honest gaps, so nobody discovers them at runtime:
 
 ## 7. Running it
 
-The Tower does not exist yet — process supervision, the MCP server and the HTTP API are unbuilt.
-What works today is everything up to the first spawn.
+Check it, and read what an agent would be told, before anything runs:
 
 ```sh
 layover validate --config examples/workitem-factory/layover.toml --strict
@@ -310,14 +309,21 @@ layover prompt tester --config examples/workitem-factory/layover.toml --flag run
 cargo test -p layover-core --test workitem_factory --test workitem_factory_runtime
 ```
 
-When the Tower lands, this becomes:
+Then run it. `serve` fires the scheduled pipelines and serves the dashboard; a development chain
+starts from the dashboard's **Trigger a workflow**, or from the API with the token in the address
+`serve` prints:
 
 ```sh
-layover run --config examples/workitem-factory/layover.toml
+layover serve --config examples/workitem-factory/layover.toml
 curl -X POST localhost:7878/flights \
+  -H "authorization: Bearer $LAYOVER_TOKEN" \
   -H 'content-type: application/json' \
   -d '{"pipeline":"development","body":"<the request>","flags":{"run_e2e":true}}'
 ```
+
+Its Codex agents cannot reach Layover's MCP endpoint yet — see
+[Agent tools](https://kotkaz.github.io/layover-project/tools.html) — so run it with those agents
+moved to a Claude Code or Copilot CLI runner.
 
 Point `work_dir` at a checkout of the repository the factory should work on. Never at this one —
 a factory pointed at Layover's own source would be editing the supervisor that is running it, and

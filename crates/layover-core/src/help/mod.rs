@@ -15,8 +15,9 @@
 //!
 //! `summary` and `detail` are written by an agent explaining why something did not work, and the
 //! commonest reason is a credential. They are therefore redacted and capped on the way in — see
-//! [`redact`] — because from here they go to disk, to an unauthenticated HTTP API and to a
-//! dashboard, and none of those can take it back.
+//! [`redact`] — because from here they go to disk, to the HTTP API — readable by anyone holding its
+//! token, and by anyone at all under `--no-auth` — and to a dashboard, and none of those can take
+//! it back.
 //!
 //! # What the shape is for
 //!

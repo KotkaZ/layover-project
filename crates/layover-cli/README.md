@@ -10,13 +10,13 @@ Full documentation: <https://kotkaz.github.io/layover-project/>
 
 ## Install
 
-Layover is a single binary. No Rust toolchain needed.
+Layover is a single binary. From crates.io, if you have a Rust toolchain:
 
 ```sh
 cargo install layover-cli
 ```
 
-...or Homebrew on macOS and Linux:
+...or, with no Rust toolchain, Homebrew on macOS and Linux:
 
 ```sh
 brew install KotkaZ/tap/layover

@@ -30,7 +30,7 @@
 > Copilot CLI, one process, no intervention — **1,501 runs, all succeeded**, 12.6 MB of memory at
 > the end. See [the 1.0 notes](CHANGELOG.md#100--2026-09-23).
 >
-> Pre-1.0 and maintained by one person: expect breaking changes on a minor bump. See
+> Semantic versioning from 1.0, and maintained by one person. See
 > [project status](#project-status).
 
 Layover does not call LLMs. It is a *supervisor*: it spawns headless agent CLIs, gives them a way
@@ -134,23 +134,25 @@ Maintained by [@KotkaZ](https://github.com/KotkaZ). Contributions welcome — se
 
 | | |
 |---|---|
-| **Stability** | Pre-1.0. A minor bump may break things, and the changelog says when it does. |
-| **Versions** | Crate versions track releases of *what is built*. The **first runnable release** — the milestone where a factory actually runs — has not happened yet, and is a goal rather than a version number. |
+| **Stability** | [Semantic versioning](https://semver.org/) from 1.0: a breaking change to the configuration format, the HTTP API, the MCP tools or the on-disk layout needs a major version. The changelog flags anything an existing factory will notice, even in a minor release. |
+| **Versions** | One version for every crate, the binary and the API. 1.0 was the first runnable release — the milestone where a factory runs unattended — and shipped after the 48-hour soak below. |
 | **MSRV** | Whatever [`rust-toolchain.toml`](rust-toolchain.toml) pins, currently 1.98. It is the only toolchain tested, so claiming an older one would be a guess. Raised in a minor release. |
 | **Platforms** | Developed on Windows, CI on Linux, released for both plus macOS. |
 | **Changes** | [`CHANGELOG.md`](CHANGELOG.md) |
 
 ## Scope
 
-The first runnable release targets Claude Code, GitHub Copilot CLI and OpenAI Codex CLI, on a
-single machine. See [`docs/decisions.md`](docs/decisions.md) for the reasoning, what is still
-open, and what is explicitly out of scope.
+Layover targets Claude Code, GitHub Copilot CLI and OpenAI Codex CLI, on a single machine. Copilot
+CLI is the one proven end to end, by the soak; Codex cannot yet be told where Layover's MCP
+endpoint is (see [Agent tools](https://kotkaz.github.io/layover-project/tools.html)). See
+[`docs/decisions.md`](docs/decisions.md) for the reasoning, what is still open, and what is
+explicitly out of scope.
 
 ## Examples
 
-Four factories, smallest first — start at [`examples/`](examples/README.md). `planner.toml` is
-three agents in one screen; `workitem-factory/` is the scenario the first runnable release is
-sized against.
+Five factories, smallest first — start at [`examples/`](examples/README.md). `planner.toml` is
+three agents in one screen; `workitem-factory/` is the reference scenario, with the arithmetic
+that sizes its rails.
 
 ## The reference factory
 
@@ -258,8 +260,8 @@ Ground Stop left engaged. Every one of those looks like nothing on a dashboard, 
 "did the soak pass?" was a judgement call until now. On that first real run it caught a layover
 nobody would ever collect, which was not the bug anyone was looking for.
 
-What each remaining piece will do is settled rather than open: see
-[`docs/first-release.md`](docs/first-release.md).
+What remains unbuilt — worktree isolation above all — and what is still undecided about it is in
+[`docs/decisions.md`](docs/decisions.md#still-open).
 
 ## Contributing
 

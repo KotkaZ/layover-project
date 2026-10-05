@@ -288,22 +288,24 @@ the thing. Both rely on the agent looking, which is weaker than a key.
 ### 18. A runner that under-reports its cost defeats both money rails
 
 **What could happen.** Fuel and the Reserve are debited from a figure the child CLI prints about
-itself. Negative, `NaN` and infinite values are already ignored, and `$0` alongside real tokens is
-treated as silence rather than as a measurement — but a runner that reports a plausible-looking
-`$0.01` for a `$4` run is believed. Both money rails then under-count by the same factor, and the
-only rail left is `max_runs`, which counts invocations rather than money.
+itself. A runner that reports a plausible-looking `$0.01` for a `$4` run, with nothing beside it to
+check it against, is believed. Both money rails then under-count by the same factor, and the only
+rail left is `max_runs`, which counts invocations rather than money.
 
 Spawn compounds it: each spawned itinerary is minted with fresh Fuel and a fresh run cap, so
 generation depth bounds how deep spawning goes and nothing bounds how wide. The Reserve is meant
 to be the factory-wide backstop, and it reads the same untrusted number.
 
-**Why it is not fixed.** Nothing reports a cost yet, because nothing spawns a process. Deciding
-what to do about an implausible figure — clamp to a rate card, treat as unreported, refuse the
-runner — is a Tower behaviour and depends on what the CLIs actually emit.
+**What is in place.** Negative, `NaN` and infinite figures are ignored; `$0` beside real tokens is
+silence rather than a measurement; and a figure more than an order of magnitude below what its own
+token counts imply is treated as `unreported` rather than believed — an unreported run downgrades
+every total it is in, so the dashboard says "this is a floor" instead of showing a precise-looking
+lie. `CostSource` records where every figure came from and the weakest source wins.
 
-**Mitigation until then.** `max_runs` needs no cooperation from the child and is the honest rail.
-`CostSource` records where every figure came from and the weakest source wins, so a total that is
-partly unmeasured says so rather than looking precise.
+**What is still true.** A figure printed with no token counts beside it has nothing to be checked
+against, and is believed — and Copilot CLI prints credits and no token counts at all, so a Copilot
+run's `copilot_credits` figure is believed the same way. `max_runs` needs no cooperation from the
+child and remains the honest rail.
 
 ### 19. A learning is a standing instruction that no human approved
 

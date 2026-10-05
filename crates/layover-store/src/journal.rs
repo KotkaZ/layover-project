@@ -427,8 +427,8 @@ impl Journal {
 
     /// Removes a queued flight, reporting whether it was there.
     ///
-    /// The Tower will call this as it picks work up. Until one exists it is how a human cancels
-    /// something they queued by mistake.
+    /// The Tower calls this as it picks work up, before the run starts, so a flight is never run
+    /// twice; it is also how a person cancels something they queued by mistake.
     ///
     /// # Errors
     ///

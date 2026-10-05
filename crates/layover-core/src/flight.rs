@@ -12,7 +12,7 @@ use crate::pipeline::PipelineName;
 /// Identifier of one supervised CLI execution.
 ///
 /// Lives here with the other identifiers rather than with the cost ledger that first needed it: a
-/// run is a core domain object, and several parts of the Tower will key off it.
+/// run is a core domain object, and several parts of the Tower key off it.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct RunId(String);

@@ -265,7 +265,8 @@ to be depended on — at that point the dual licence becomes the right default a
 factory first actually runs, while the crates were already at 0.8.0 — so the project appeared to
 be both far behind and far ahead of itself, and a stranger could not tell which. Crate versions
 now track what is built and the milestone has a name instead of a number. A goal spelled like a
-version will be read as a version.
+version will be read as a version. The milestone was reached at 1.0, on 23 September 2026, and
+from there the version follows semantic versioning.
 
 **Why the declared MSRV is the pinned toolchain.** `rust-version` said 1.85 while
 `rust-toolchain.toml` pinned 1.98.1, which is the only compiler CI ever runs — so the older
@@ -941,13 +942,14 @@ Agents should ask rather than guess on any of these.
     the flags of every agent any chain can wake (the same starting set the dead-route check uses);
     it can only add findings, which is why it waits for a major version.
 
-## Beyond the first runnable release
+## Not yet built, and not yet decided
 
 Rough ordering, not commitments.
 
 - Safe concurrent read-write agents: path allow-lists or per-run worktrees
 - Resident agents with serialized runs
-- `join = "any"`, quorum joins, and joins that wait only for the upstreams actually dispatched
+- Quorum joins, and joins that wait only for the upstreams actually dispatched (`all` and `any`
+  exist)
 - Non-boolean pipeline parameters, if booleans turn out not to be enough
 - `include = [...]` for multi-file factory definitions
 - Two-phase Fuel reservation, replacing the floor

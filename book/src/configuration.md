@@ -7,7 +7,7 @@ a human is still watching.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `state_dir` | `.layover/state` | One hangar per agent: memory, transcripts, run history. |
+| `state_dir` | `.layover/state` | **Not honoured.** Everything Layover keeps — history, the journal, Hangars, live-run records — is in `.layover/` beside this file, wherever this says. |
 | `work_dir` | `workspace` | The shared working directory agents operate in, relative to this file. |
 | `logbook` | `.layover/logbook.md` | Shared memory. All writes serialised by the Tower. |
 | `prompt_dir` | `prompts` | What `prompt_file` paths resolve against, relative to this file. |

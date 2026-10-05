@@ -2,22 +2,17 @@
 
 Fifty questions were put to the maintainer as a worksheet and answered in one pass on
 18 September 2026. This file carries the reasoning behind each answer — *why*, not *what*, in the
-same shape as [the decision log](decisions.md).
+same shape as [the decision log](decisions.md). Where an answer was close, the counter-argument is
+recorded too, because a decision whose alternative has been forgotten cannot be revisited honestly.
 
-The split between the two files is what the decisions describe. [`decisions.md`](decisions.md)
-explains the system that exists; this explains the one being built. Each entry moves across as the
-code that embodies it lands.
-
-Scope and open questions are in [`decisions.md`](decisions.md); known hazards in
-[`risks.md`](risks.md); the design itself in [`architecture.md`](architecture.md).
+The first runnable release was **1.0, on 23 September 2026**, and most of what is decided here is
+built. This file is kept as the record of what was decided before it and why; it is not updated as
+the code moves on. Later decisions, what of this is still unbuilt — worktree isolation, resident
+agents, parts of the Reserve — and the questions still open are in [`decisions.md`](decisions.md).
+Known hazards are in [`risks.md`](risks.md); the design itself in
+[`architecture.md`](architecture.md).
 
 ---
-
-
-Fifty questions were put to the maintainer as a worksheet and answered in one pass on
-18 September 2026. What follows is the reasoning behind each answer, in the same shape as the
-decision log above: *why*, not *what*. Where an answer was close, the counter-argument is recorded
-too, because a decision whose alternative has been forgotten cannot be revisited honestly.
 
 ### Starting a run
 
@@ -272,8 +267,8 @@ single biggest comprehension cost for a newcomer, and that reasoning still holds
 
 It was reversed on a different axis: cost of churn against capability. Renaming touches config,
 the API, type names and every page of prose, and buys a week in which nothing the project does
-gets better. Set against a supervisor that does not yet exist, that is the wrong week to spend —
-and the comprehension cost, while real, is paid by readers who do not exist yet either.
+gets better. Set against a supervisor that did not yet exist, that was the wrong week to spend —
+and the comprehension cost, while real, was paid by readers who did not exist yet either.
 
 The consequence is accepted rather than argued away: the vocabulary is now load-bearing in the
 public API, so this stops being nearly free from here. Somebody will one day read `Hangar` and
@@ -347,7 +342,12 @@ read hopefully; an older one is migrated forward once, and says so. There is no 
 that rewrites its own binary while potentially supervising running children is a category of bug
 nobody needs, and the installers already handle it.
 
-### What the first runnable release has to prove
+### What the first runnable release had to prove
+
+> **Proven for 1.0.** The soak ran 48.46 hours against a throwaway repository, one process and no
+> intervention: 1,501 runs, all succeeded, and 12.6 MB of memory at the end. The figures are in the
+> [1.0 notes](../CHANGELOG.md#100--2026-09-23). What it could not catch — the slow failures below —
+> is still watched rather than proven.
 
 **Why "it ran for a week" rather than "it worked once".** The reference factory completing end to
 end is the criterion the design was sized against, and it is not sufficient. This project claims

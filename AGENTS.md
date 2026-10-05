@@ -15,9 +15,11 @@ Read `docs/architecture.md` before changing anything structural.
 
 ## Project status
 
-**Early implementation.**
+**Released and running unattended.** 1.0 shipped on 23 September 2026 after a 48-hour soak driving
+the real Copilot CLI — 1,501 runs, all succeeded — and semantic versioning applies from there. The
+current version is in the workspace `Cargo.toml`; what each release added is in `CHANGELOG.md`.
 
-What exists and is fully tested:
+The crates, all built and tested:
 
 - `crates/layover-core` — configuration, agents, routes, pipelines, prompt composition, the route
   graph, load-time validation, itinerary accounting (Hops, Fuel, run cap) and rendezvous barriers.
@@ -30,21 +32,23 @@ What exists and is fully tested:
 - `crates/layover-mcp` — the MCP surface agents talk to Layover through. Untrusted input arrives
   here; identity comes from the token and never from the request.
 - `crates/layover-cli` — the `layover` binary: `validate`, `explain`, `graph`, `prompt`, `serve`,
-  `run`, `autostart`.
+  `run`, `doctor`, `autostart`.
 
-**`layover serve` runs a factory unattended.** It fires scheduled pipelines, drains the queue,
-spawns agent CLIs with an MCP endpoint and a per-run token, holds work at rendezvous joins, and
-writes every run to history. An agent that calls `layover_send` queues a real flight and the same
-process runs the next agent, charging every hop to the one itinerary that began the chain.
+**`layover serve` runs a factory unattended.** It fires scheduled pipelines, drains the queue —
+up to `max_concurrent_runs` agents at once — spawns agent CLIs with an MCP endpoint and a per-run
+token, holds work at rendezvous joins, settles runs a previous Tower left behind, and writes every
+run to history. An agent that calls `layover_send` queues a real flight and the same process runs
+the next agent, charging every hop to the one itinerary that began the chain.
 
-The dashboard watches it: the route map, run history, cost, and each running agent's output as its
-CLI prints it, read-only. What does not exist is isolation between agents — `access` and
-`workspace` are declared and every agent still shares `work_dir` — and the claim this project is
-named for, forty-eight hours unattended without intervention, has not been proven.
+The dashboard watches it behind a token: the route map, each chain on its own, run history, cost,
+help requests a person can answer, and each running agent's output as its CLI prints it,
+read-only. What does not exist is isolation between agents — `access` and `workspace` are declared
+and every agent still shares `work_dir` — and Codex cannot yet be wired to the MCP endpoint.
 
-What was decided for the first runnable release is in
-[`docs/first-release.md`](docs/first-release.md). What is still genuinely undecided is the short
-list in `docs/decisions.md`; do not guess at those.
+Why the system is shaped as it is lives in the decision log in `docs/decisions.md`, and what is
+still genuinely undecided is the short list at its end; do not guess at those.
+[`docs/first-release.md`](docs/first-release.md) records the decisions made before 1.0, with their
+reasoning.
 
 ## The golden rule
 
@@ -74,7 +78,7 @@ repository is meant to be worked on by agents.
 
 | If you changed... | Then update... |
 |---|---|
-| Anything in `layover.toml`'s shape | `book/src/configuration.md`, both `examples/`, `docs/architecture.md` §6 |
+| Anything in `layover.toml`'s shape | `book/src/configuration.md`, every example in `examples/` that uses it, `docs/architecture.md` §6 |
 | Cost accounting, Fuel, the Reserve or a rate card | `book/src/cost.md`, `docs/risks.md` risks 4 and 5 |
 | Route, join or barrier semantics | `docs/routing.md`, `book/src/configuration.md` |
 | Pipelines, triggers or flags | `book/src/pipelines.md`, `examples/workitem-factory/` |
@@ -156,7 +160,7 @@ at a time rather than all at once:
 
 1. `version` in the workspace `Cargo.toml`.
 2. The inter-crate dependency versions in every `crates/*/Cargo.toml` — `layover-core = { path =
-   "…", version = "0.22.0" }`. Cargo refuses to resolve the workspace until these agree.
+   "…", version = "1.7.0" }`. Cargo refuses to resolve the workspace until these agree.
 3. `version:` in `api/openapi.yaml`.
 4. `cargo xtask generate-api`, because (3) changes the generated file.
 
@@ -182,14 +186,15 @@ this repository's own source**. `layover doctor` reports what the run left behin
 | `book/` | The published documentation site (mdBook → GitHub Pages) |
 | `docs/architecture.md` | System design |
 | `docs/decisions.md` | Why the system that exists is shaped as it is, and what is still open |
-| `docs/first-release.md` | Decisions made for the first runnable release, not yet built |
+| `docs/first-release.md` | Decisions made before 1.0, with their reasoning |
 | `docs/routing.md` | Route map semantics, joins, failure paths |
-
 | `docs/risks.md` | Known risks and mitigations |
-| `examples/workitem-factory/` | The reference v0.1 factory, with its sizing arithmetic |
+| `examples/workitem-factory/` | The reference factory, with its sizing arithmetic |
 | `crates/layover-core` | Domain types: config, agents, routes, pipelines, prompts, graph, validation, itinerary, barriers |
 | `crates/layover-http` | The generated HTTP surface and the `Api` trait |
-| `crates/layover-store` | On-disk run history and retention |
-| `crates/layover-dashboard` | The monitoring dashboard: route map, runs, cost |
+| `crates/layover-store` | On-disk run history, the journal, Hangars and retention |
+| `crates/layover-dashboard` | The monitoring dashboard: route map, chains, sessions, runs, cost |
+| `crates/layover-tower` | The supervisor: dispatch, rails, recovery — the only crate that starts a process |
+| `crates/layover-mcp` | The MCP endpoint agents call back into |
 | `crates/layover-cli` | The `layover` binary |
 | `xtask/` | `verify`, `generate-api` and `docs` |

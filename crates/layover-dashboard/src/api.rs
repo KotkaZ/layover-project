@@ -2,8 +2,9 @@
 //!
 //! Every handler is synchronous underneath: reading a few kilobytes of TOML and a handful of
 //! small files is faster than the scheduling it would take to move the work off-thread, and this
-//! is a single-user server on loopback. The `Api` trait is async because the Tower's eventual
-//! implementation will be, so the handlers here satisfy it without awaiting anything.
+//! is a single-user server, on loopback by default. The `Api` trait is async because it is
+//! generated for any implementation, which may need to await; the handlers here satisfy it without
+//! awaiting anything, and a live stream is a body that produces events, not a handler that waits.
 #![allow(clippy::unused_async_trait_impl)]
 
 use std::path::PathBuf;

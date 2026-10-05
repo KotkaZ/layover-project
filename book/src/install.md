@@ -52,9 +52,8 @@ If the above matters to you, skip the installers and do it by hand. This is fail
 mismatch stops it.
 
 ```sh
-VERSION=v0.8.0
 TARGET=x86_64-unknown-linux-gnu
-BASE=https://github.com/KotkaZ/layover-project/releases/download/$VERSION
+BASE=https://github.com/KotkaZ/layover-project/releases/latest/download   # or releases/download/v1.7.0
 
 curl -fsSLO "$BASE/layover-cli-$TARGET.tar.xz"
 curl -fsSLO "$BASE/layover-cli-$TARGET.tar.xz.sha256"
@@ -66,9 +65,8 @@ tar -xf "layover-cli-$TARGET.tar.xz"
 ```
 
 ```powershell
-$version = 'v0.8.0'
-$target  = 'x86_64-pc-windows-msvc'
-$base    = "https://github.com/KotkaZ/layover-project/releases/download/$version"
+$target = 'x86_64-pc-windows-msvc'
+$base   = 'https://github.com/KotkaZ/layover-project/releases/latest/download'   # or releases/download/v1.7.0
 
 Invoke-WebRequest "$base/layover-cli-$target.zip" -OutFile layover.zip
 $expected = (Invoke-WebRequest "$base/layover-cli-$target.zip.sha256").Content.Split(' ')[0]
@@ -80,9 +78,17 @@ Expand-Archive layover.zip -DestinationPath .
 
 `sha256.sum` on the release covers every artifact, if you would rather check them together.
 
-There is no signing or build provenance yet — a checksum published beside the file it describes
-proves the download was not corrupted, not who produced it. That is tracked in
-[`docs/decisions.md`](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md).
+A checksum published beside the file it describes proves the download was not corrupted, not who
+produced it. For that, every artifact carries a **build-provenance attestation**: proof that it was
+built from this repository by its release workflow, which the GitHub CLI checks.
+
+```sh
+gh attestation verify "layover-cli-$TARGET.tar.xz" --repo KotkaZ/layover-project
+```
+
+The binaries are not code-signed — no Authenticode on Windows and no notarization on macOS — so the
+operating system may still warn the first time one runs. Why provenance came first is in
+[`docs/first-release.md`](https://github.com/KotkaZ/layover-project/blob/main/docs/first-release.md).
 
 ## With npm
 
@@ -168,9 +174,8 @@ macOS, a systemd user unit on Linux — and prints the single command that regis
 It also refuses to write anything if the factory does not load, because a service that fails at
 every logon is worse than no service.
 
-What it starts is **`layover serve`**: the dashboard, on the factory you pointed it at. Not the
-factory itself — there is no `layover run` yet — so this gets you a monitoring page at login, and
-becomes the real thing when the Tower does.
+What it starts is **`layover serve`** on the factory you pointed it at: the Tower, which fires its
+schedules and runs its queue, and the dashboard beside it.
 
 All three run as **you**, never elevated and never machine-wide. Layover spawns agents that use
 your provider credentials, your git identity and your workspace; a system service would have none

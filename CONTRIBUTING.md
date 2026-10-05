@@ -65,10 +65,11 @@ and carries its tests and its documentation will move quickly.
 
 ## Where to start
 
-- **`docs/decisions.md`** has an open-questions section. The ones under *Run bootstrap* block
-  implementation and need a maintainer decision rather than a patch — but they are open to
-  argument, and a well-reasoned case in an issue is a real contribution.
-- **`docs/risks.md`** records known hazards that nobody has mitigated.
+- **`docs/decisions.md`** ends with the questions still open. They need a maintainer decision
+  rather than a patch — but they are open to argument, and a well-reasoned case in an issue is a
+  real contribution.
+- **`docs/risks.md`** records known hazards, and says which are mitigated and which nobody has
+  mitigated yet.
 - **The examples** in `examples/` are exercised by tests. A new one that demonstrates a shape the
   others do not is welcome.
 

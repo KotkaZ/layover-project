@@ -19,8 +19,10 @@ info:
   description: |
     The UI is purely a client of this API, so this document bounds what the UI can ever do.
 
-    Everything is local-first and unauthenticated by default: the Tower binds to loopback. Do not
-    expose it without putting something in front of it.
+    Everything is local-first: the Tower binds to loopback by default, and every request needs the
+    token `layover serve` mints at start and prints in the dashboard's address — as an
+    `Authorization: Bearer` header, a `?token=` query, or the cookie the page sets. `--no-auth`
+    turns that off; do not combine it with an address other machines can reach.
   license:
     name: Apache-2.0
     identifier: Apache-2.0

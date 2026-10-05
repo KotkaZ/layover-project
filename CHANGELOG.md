@@ -8,6 +8,24 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Documentation that described Layover as it was before 1.0.** `SECURITY.md` said the project
+  was pre-1.0 and that nothing spawned a process; the README said both "Status: 1.0" and "Pre-1.0:
+  expect breaking changes on a minor bump"; `AGENTS.md`, the book's front page and the reference
+  factory's walkthrough said the Tower, its MCP endpoint or the 48-hour soak did not exist yet; the
+  install page pinned `v0.8.0` and said releases carried no build provenance; and
+  `docs/architecture.md` described a disk layout, Flight envelope, tool list and crate tree from
+  the original design. All now describe 1.7.0, and say plainly what is still not built: worktree
+  isolation for `access` and `workspace`, resident agents, and Codex MCP wiring.
+- **`layover run --help` said there was no MCP server**, so agents could not hand work on. There
+  is, and work they hand on runs in the same drain.
+- **`[layover] state_dir` was documented as where Hangars live.** It is parsed and not honoured —
+  everything is kept in `.layover/` beside `layover.toml` — and now says so. `planner.toml` and the
+  reference factory no longer set it or `http_addr`, neither of which does anything.
+- **`SECURITY.md` advised bounding agents with `access`**, which is declared and not enforced. It
+  now says not to rely on it.
+
 ## [1.7.0] — 2026-10-02
 
 Spend nobody reported no longer reads as zero, and Layover says why a runner's costs are missing

@@ -113,12 +113,11 @@ enum Command {
     /// Run the queued work, once.
     ///
     /// Takes everything waiting in the queue and runs it to completion: each flight is authorised
-    /// against the route map and the rails, spawned, watched, and written to history.
+    /// against the route map and the rails, spawned, watched, and written to history. Agents reach
+    /// Layover over MCP while they run, so work they hand on runs too, until nothing is left.
     ///
-    /// Deliberately **not** a daemon yet. Nothing here routes a message from one agent to
-    /// another, and there is no MCP server for them to talk through, so a factory drains what was
-    /// asked for and stops. A command that looped forever would look like a working factory
-    /// that never does anything.
+    /// Deliberately **not** a daemon: it fires no schedules and exits when the queue is empty.
+    /// `serve` is what keeps a factory running.
     Run {
         /// Report what would happen without starting anything.
         #[arg(long)]

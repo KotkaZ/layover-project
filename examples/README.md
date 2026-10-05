@@ -24,8 +24,9 @@ layover --config examples/news-digest/layover.toml prompt scout
 layover --config examples/news-digest/layover.toml serve
 ```
 
-Nothing spawns a process yet, so this is the whole loop: check a factory, read the prompts it
-would send, and watch the dashboard. See
+`serve` runs the factory — it fires the schedule, spawns the agents and serves the dashboard at
+the address it prints. Point a factory's `work_dir` at a checkout you are happy for agents to
+change, and check the runner commands match the CLIs you have signed in. See
 [Status](https://kotkaz.github.io/layover-project/#status).
 
 ## A warning about the fifth

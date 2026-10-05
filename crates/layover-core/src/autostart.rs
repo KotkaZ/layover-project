@@ -6,14 +6,12 @@
 //!
 //! # What it starts
 //!
-//! [`Autostart::COMMAND`] — today, `serve`. Not `run`: the Tower does not exist, and an autostart
-//! entry that invokes a subcommand the binary does not have fails at every logon, reporting
-//! nothing anybody reads. The generated entry therefore starts the thing that *does* exist and is
-//! worth having at login, which is the dashboard.
-//!
-//! When the Tower lands this becomes `run`, and
-//! `layover-cli`'s `the_autostart_command_is_one_the_cli_accepts` is what stops it from becoming
-//! a command that does not.
+//! [`Autostart::COMMAND`]: `serve`, the lights-out command — the Tower, which fires the factory's
+//! schedules and runs its queue, and the dashboard beside it. Not `run`, which drains the queue
+//! once and exits: an entry that ends a minute after logon looks like a factory that started and
+//! does nothing. `layover-cli`'s `the_autostart_command_is_one_the_cli_accepts` is what stops this
+//! from ever naming a subcommand the binary does not have, which would fail at every logon and
+//! report nothing anybody reads.
 //!
 //! Generating rather than installing is deliberate for the part that can be: the text is
 //! inspectable, diffable and testable on any platform, so what gets written is decided by code

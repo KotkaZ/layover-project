@@ -12,8 +12,8 @@ Expect an acknowledgement within a week. This is a single-maintainer project, so
 
 ## What is supported
 
-Only the latest release. The project is pre-1.0 and there are no backports; a fix ships in the
-next tag.
+Only the latest release. Layover follows semantic versioning from 1.0 and there are no backports:
+a fix ships in the next release, as a patch release where it can.
 
 ## What Layover is, and why that shapes the scope
 
@@ -25,9 +25,11 @@ So the useful question is not "can it do something dangerous" — it is meant to
 something dangerous that the operator did not authorise, or that the rails were supposed to
 prevent".
 
-**Not yet built:** nothing spawns a process today. There is no Tower and no MCP server. Reports
-about the *design* of those are welcome and valuable, but they are design review rather than
-vulnerability reports, and `docs/decisions.md` is the better place for them.
+**What runs.** `layover serve` is the Tower: it spawns agent CLIs with a scrubbed environment, hosts
+the MCP endpoint each run reaches Layover through with a token of its own, and serves the dashboard
+and HTTP API behind a token minted at start. All of it is in scope. What is still only designed —
+worktree isolation for `access` and `workspace` — is design review rather than a vulnerability, and
+`docs/decisions.md` is the better place for it.
 
 ## In scope
 
@@ -52,8 +54,10 @@ vulnerability reports, and `docs/decisions.md` is the better place for them.
 - **The dashboard when it is run with `--no-auth`.** That flag means what it says, and choosing it
   is choosing this. By default a token is required.
 - **An agent doing something unwise within its authority.** Agents are LLMs; a factory pointed at
-  a repository can change that repository. Bound what they may do with `access`, the route map and
-  the rails.
+  a repository can change that repository. Bound what they may do with the route map, the rails
+  and the agent CLI's own tool permissions. `access = "read-only"` is declared but **not yet
+  enforced** — every agent runs in the same working directory — so do not rely on it as a
+  boundary (`docs/risks.md`, risk 2).
 - **Cost incurred inside configured budgets.** Spending money is the intended behaviour. Spending
   past a rail is not — report that.
 - **Findings against a factory definition you wrote that grants an agent broad powers.** The

@@ -5,11 +5,9 @@
 # being loadable.
 
 [layover]
-state_dir  = ".layover/state"
 work_dir   = "workspace"
 logbook    = ".layover/logbook.md"
 prompt_dir = "prompts"
-http_addr  = "127.0.0.1:7878"
 
 [defaults]
 runner = "claude"

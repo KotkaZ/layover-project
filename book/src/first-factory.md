@@ -17,7 +17,7 @@ file, so a factory can be run from anywhere.
 [Pipelines and triggers](./pipelines.md#sizing-the-rails).
 
 **`[runners.*]`** says how to invoke each CLI. The composed instructions reach the process on
-**stdin**, not on the command line — see [Configuration](./configuration.md#runners). A `{prompt}`
+**stdin**, not on the command line — see [Configuration](./configuration.md#runners--how-to-invoke-a-cli). A `{prompt}`
 placeholder, where a runner needs one, is a *path* to that text rather than the text itself.
 
 **`[agents.*]`** declares an agent. The table key is its name. `description` is what peers see
@@ -34,14 +34,15 @@ directions are written out. An edge that is not listed means the flight is refus
 layover validate --config examples/planner.toml --strict
 layover explain --config examples/planner.toml
 layover prompt planner --config examples/planner.toml
-layover serve --config examples/planner.toml     # the dashboard, on http://127.0.0.1:7878
+layover serve --config examples/planner.toml     # runs the factory and its dashboard; open the address it prints
 layover run --config examples/planner.toml --dry-run   # what is queued, without starting it
 ```
 
-> **`layover run` drains what is queued.** Trigger a workflow from the dashboard, then run it:
-> Layover authorises the flight against the route map and the rails, spawns the agent, watches it,
-> and records what happened. What it will not do yet is pass the result on — nothing routes between
-> agents — so a chain is one hop long. See [Status](./index.md#status).
+> **`layover serve` runs the factory.** Trigger a workflow from the dashboard and the Tower
+> authorises the flight against the route map and the rails, spawns the agent, watches it, and
+> records what happened. When the agent hands work on with `layover_send`, the next agent runs in
+> the same chain, on the same budget. `layover run` does the same once, for whatever is queued, and
+> then exits. See [Status](./index.md#status).
 
 ## What it does not say
 

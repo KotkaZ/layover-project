@@ -53,14 +53,16 @@ flowchart LR
 
 ## Status
 
-Early. A factory loads, validates and composes its prompts, and `layover serve` puts a dashboard
-on it — route map, run history, cost and the Reserve, help requests, learnings and each agent's
-report.
+**Released, and proven unattended.** 1.0 shipped on 23 September 2026 after a 48-hour soak driving
+the real Copilot CLI — one process, no intervention, 1,501 runs, all succeeded — and semantic
+versioning applies from there.
 
 **`layover serve` runs the factory.** It fires scheduled pipelines, runs agent CLIs — up to
 `max_concurrent_runs` at once — watches them, times them out if they wedge, reads what they cost
 and writes each run to history, and serves the MCP endpoint they call back into. After a restart
-it settles whatever the last Tower left running before it starts anything new.
+it settles whatever the last Tower left running before it starts anything new. The dashboard on the
+same port shows the route map, each chain on its own, every agent's output live, cost and the
+Reserve, help requests you can answer, and learnings.
 
 **Agents reach one another.** Each run gets a token minted for it alone. An agent that calls
 `layover_send` queues a real flight; the same drain picks it up and runs the next agent. Every hop
@@ -71,8 +73,8 @@ conversation rather than each message in it. The route map is enforced against t
 verdict it was waiting for. A barrier nothing can complete is given up and named rather than left
 to hang.
 
-**What is not proven is two days unattended**, which is the bar this project set for itself. All of
-the above is tested and has been watched working; none of it has been left alone.
+**What is not built is isolation between agents**: `access` and `workspace` are declared, and every
+agent still runs in the same `work_dir`.
 
 The [README](https://github.com/KotkaZ/layover-project#what-works-today) carries the built and
 not-built list, kept in one place so the two cannot disagree.
@@ -80,9 +82,9 @@ not-built list, kept in one place so the two cannot disagree.
 ## Where to start
 
 - [Install](./install.md) — a single binary, no toolchain needed
-- [Your first factory](./first-factory.md) — three agents, and the commands that work today
-- [The dashboard](./dashboard.md) — `layover serve`, the most useful thing here right now
-- [The reference factory](./reference-factory.md) — the shape the first runnable release is sized against
+- [Your first factory](./first-factory.md) — three agents, and the commands that run them
+- [The dashboard](./dashboard.md) — `layover serve`, and what it shows while a factory works
+- [The reference factory](./reference-factory.md) — everything awkward at once, with the arithmetic that sizes its rails
 
 ## Download
 

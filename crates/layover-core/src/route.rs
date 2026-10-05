@@ -24,9 +24,10 @@ pub enum Join {
 
 /// Delivery semantics for an edge.
 ///
-/// v0.1 has a single mode. Blocking request/response was superseded by rendezvous joins, which
-/// park flights instead of parking processes. The field exists so that a configuration written
-/// against the older design fails with a clear message rather than an unknown-field error.
+/// Two modes, both fire-and-forget: `async` continues the sender's itinerary, and `spawn` opens a
+/// new one. Blocking request/response was superseded by rendezvous joins, which park flights
+/// instead of parking processes; a configuration still asking for it fails with a clear message
+/// rather than an unknown-field error.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Mode {

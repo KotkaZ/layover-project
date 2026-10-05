@@ -5,8 +5,8 @@
 //! A help request is where an agent explains why it could not do something, and the most common
 //! reason by a wide margin is that a credential did not work. So the field most likely to contain
 //! a secret is the one whose entire purpose is to describe a failed authentication — and unlike a
-//! transcript, it is persisted as JSON Lines, served over an unauthenticated HTTP API, and
-//! rendered in a dashboard.
+//! transcript, it is persisted as JSON Lines, served over the HTTP API to anyone holding its token
+//! — or to anyone at all under `--no-auth` — and rendered in a dashboard.
 //!
 //! The agent is not being careless when it pastes the token it tried. It is being helpful.
 //!

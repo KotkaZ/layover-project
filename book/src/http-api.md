@@ -102,8 +102,12 @@ masked — so a forty-minute run that wrote tens of megabytes arrives as what a 
 
 ## Queueing work
 
+`layover serve` prints the dashboard's address with a token in it; send that token with every
+request. A Tower started with `--no-auth` needs none.
+
 ```sh
-curl -X POST localhost:8080/flights \
+curl -X POST localhost:7878/flights \
+  -H "authorization: Bearer $LAYOVER_TOKEN" \
   -H 'content-type: application/json' \
   -d '{
         "pipeline": "development",
