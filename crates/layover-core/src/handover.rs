@@ -153,12 +153,6 @@ pub struct Resumption {
     pub waiting_for: String,
     /// When it was set down.
     pub booked_at: Timestamp,
-    /// How many times it has been picked up and found nothing yet.
-    ///
-    /// Told to the agent because it changes what a reasonable response is. Finding nothing on the
-    /// first check is normal; finding nothing on the twelfth is worth saying out loud rather than
-    /// quietly booking a thirteenth.
-    pub checks: u32,
 }
 
 /// Why a run is being started.
@@ -302,12 +296,7 @@ impl Handover {
                     resumption.booked_by.as_str(),
                     resumption.waiting_for.trim()
                 );
-                let _ = writeln!(
-                    out,
-                    "It was set down at {}, and this is check {}.\n",
-                    resumption.booked_at,
-                    resumption.checks.saturating_add(1)
-                );
+                let _ = writeln!(out, "It was set down at {}.\n", resumption.booked_at);
                 out.push_str(
                     "Nothing was left half-done: the earlier run ended cleanly. Your job is to \
                      see whether the thing it was waiting for has happened, and to act on it if \
@@ -740,7 +729,6 @@ mod tests {
             booked_by: ItineraryId::generate(),
             waiting_for: "comments on pull request 41".to_owned(),
             booked_at: "2026-09-19T09:56:18Z".parse().expect("valid"),
-            checks: 0,
         }
     }
 
@@ -777,6 +765,20 @@ mod tests {
         assert!(brief.contains("comments on pull request 41"), "{brief}");
         assert!(!brief.contains("woke the run"), "{brief}");
         assert!(!brief.contains("reported"), "{brief}");
+    }
+
+    #[test]
+    fn a_resumed_run_is_told_when_the_work_was_set_down_and_not_a_check_count() {
+        // A run that finds nothing books a new layover, so every resumption is the first of its
+        // layover. The brief used to say "this is check 1" on the tenth look as on the first, which
+        // told an agent deciding whether to keep waiting the one thing that was never true.
+        let brief = Handover::resumed(resumption(), Vec::new()).brief();
+
+        assert!(
+            brief.contains("It was set down at 2026-09-19T09:56:18Z."),
+            "{brief}"
+        );
+        assert!(!brief.contains("check"), "{brief}");
     }
 
     #[test]

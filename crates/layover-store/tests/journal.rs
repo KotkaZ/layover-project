@@ -466,7 +466,6 @@ fn layover(waiting_for: &str, due: &str) -> layover_core::layover::Layover {
         ),
         at("2026-09-16T10:00:00Z"),
         at(due),
-        8,
     )
 }
 
@@ -507,34 +506,6 @@ fn only_layovers_whose_time_has_come_are_due() {
 
     assert_eq!(due.len(), 1);
     assert_eq!(due[0].waiting_for, "soon");
-}
-
-#[test]
-fn setting_a_layover_down_again_persists_its_backoff() {
-    // Otherwise every restart resets the polling rate, and a week-old follow-up starts checking
-    // every fifteen minutes again.
-    let dir = TempDir::new("lay-backoff");
-    let journal = journal(&dir);
-    journal
-        .book(layover("comments", "2026-09-16T11:00:00Z"))
-        .expect("books");
-    let id = journal.layovers().expect("reads")[0].id.clone();
-
-    for _ in 0..3 {
-        journal
-            .amend(&id, |layover| {
-                layover.set_down_again(at("2026-09-16T12:00:00Z"));
-            })
-            .expect("amends");
-    }
-
-    let back = journal.layovers().expect("reads");
-    assert_eq!(back[0].checks, 3);
-    assert_eq!(
-        back[0].minutes_until_due(at("2026-09-16T12:00:00Z")),
-        Some(60),
-        "fifteen, thirty, sixty"
-    );
 }
 
 #[test]

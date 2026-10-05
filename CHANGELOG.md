@@ -25,6 +25,11 @@ status](README.md#project-status).
   - `HelpRequest::is_same_ask_as`, never wired to anything; `Ledger::for_itinerary` and
     `Summary::is_fully_measured` (use `confidence().is_measured()`); `diagram::Live::is_idle`;
     `Factory::env_for`.
+  - Layover back-off and expiry: `Layover::set_down_again`, `cancel`, `minutes_until_due`, the
+    `Expired` and `Cancelled` standings, and `book`'s `max_checks` argument. Nothing outside their
+    tests ever called them, so no layover was ever expired or cancelled; `layover doctor` loses the
+    "expired layovers" finding that could therefore never appear. A layover's `checks` and
+    `max_checks` are still written, as 0, because releases up to 1.7.0 need them to read it back.
 
 ### Fixed
 
@@ -43,6 +48,13 @@ status](README.md#project-status).
   reference factory no longer set it or `http_addr`, neither of which does anything.
 - **`SECURITY.md` advised bounding agents with `access`**, which is declared and not enforced. It
   now says not to rely on it.
+- **Layovers were documented to back off and expire, and never did.** The book said each fruitless
+  check pushed the next one further out, from fifteen minutes to six hours, and gave up after
+  twelve. In every release a resumed run that finds nothing books a *new* layover, for whatever
+  wait it asks for, and nothing stops it asking again. The book and `docs/decisions.md` now say
+  that, and that when to stop waiting belongs in the waiting agent's prompt; the reference
+  factory's follower now checks hourly, then daily, and stops after a week. A resumed run's brief
+  no longer says "this is check 1", which it said every time.
 
 ## [1.7.0] — 2026-10-02
 

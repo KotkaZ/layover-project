@@ -32,7 +32,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use jiff::{Timestamp, ToSpan};
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
@@ -84,10 +84,6 @@ pub enum Standing {
     Booked,
     /// A new itinerary has been opened for it.
     Resumed,
-    /// Given up on: it was checked too many times without the thing it waits for happening.
-    Expired,
-    /// Cancelled, because the work it was following stopped mattering.
-    Cancelled,
 }
 
 impl Standing {
@@ -103,15 +99,13 @@ impl Standing {
         match self {
             Self::Booked => "booked",
             Self::Resumed => "resumed",
-            Self::Expired => "expired",
-            Self::Cancelled => "cancelled",
         }
     }
 
     /// Parses a slug.
     #[must_use]
     pub fn from_slug(slug: &str) -> Option<Self> {
-        [Self::Booked, Self::Resumed, Self::Expired, Self::Cancelled]
+        [Self::Booked, Self::Resumed]
             .into_iter()
             .find(|standing| standing.slug() == slug)
     }
@@ -140,13 +134,14 @@ pub struct Layover {
     pub booked_at: Timestamp,
     /// The soonest it should be picked up.
     pub due_at: Timestamp,
-    /// How many times it has been picked up and set down again.
+    /// Always 0. A layover is picked up once: a run that finds nothing yet books a new one.
     ///
-    /// A layover waiting on a human is checked repeatedly and usually finds nothing. Counting
-    /// gives the difference between "waiting patiently" and "waiting forever", which is the
-    /// difference between a follow-up and a leak.
+    /// Written because releases up to 1.7.0 require it when they read a layover back, so a
+    /// downgrade does not lose the work set down.
+    #[serde(default)]
     pub checks: u32,
-    /// How many checks it may have before it is given up on.
+    /// Always 0, and written for the same reason as `checks`.
+    #[serde(default)]
     pub max_checks: u32,
     /// Where it has got to.
     pub standing: Standing,
@@ -185,7 +180,6 @@ impl Layover {
         handover: Handover,
         booked_at: Timestamp,
         due_at: Timestamp,
-        max_checks: u32,
     ) -> Self {
         Self {
             id: LayoverId::generate(),
@@ -198,7 +192,7 @@ impl Layover {
             // booking time is the floor.
             due_at: due_at.max(booked_at),
             checks: 0,
-            max_checks,
+            max_checks: 0,
             standing: Standing::Booked,
             flags: BTreeMap::new(),
             run: None,
@@ -233,53 +227,10 @@ impl Layover {
         self.standing.is_pending() && now >= self.due_at
     }
 
-    /// Records that it was picked up and the thing it waits for had not happened.
-    ///
-    /// Each check pushes the next one further out, so a layover waiting on a human does not poll
-    /// at the same rate on day six as on minute one. Backing off is what makes a long wait
-    /// affordable — the alternative is paying for a run every few minutes to be told nothing has
-    /// changed.
-    pub fn set_down_again(&mut self, now: Timestamp) {
-        self.checks = self.checks.saturating_add(1);
-
-        if self.checks >= self.max_checks {
-            self.standing = Standing::Expired;
-            return;
-        }
-
-        let minutes = backoff_minutes(self.checks);
-        self.due_at = now.checked_add(minutes.minutes()).unwrap_or(Timestamp::MAX);
-    }
-
     /// Records that a new itinerary has been opened for this work.
     pub fn resumed(&mut self) {
         self.standing = Standing::Resumed;
     }
-
-    /// Gives up on it, because the work it was following stopped mattering.
-    pub fn cancel(&mut self) {
-        self.standing = Standing::Cancelled;
-    }
-
-    /// How long until it is next due, in whole minutes, or `None` when it is due now.
-    #[must_use]
-    pub fn minutes_until_due(&self, now: Timestamp) -> Option<i64> {
-        let seconds = self.due_at.as_second() - now.as_second();
-        (seconds > 0).then_some(seconds / 60)
-    }
-}
-
-/// How long to wait before the next check, after `checks` fruitless ones.
-///
-/// Doubling from fifteen minutes, capped at six hours. The cap matters: without it the tenth
-/// check would be days out, so a comment arriving on a quiet pull request would sit unanswered
-/// for longer than the work took.
-fn backoff_minutes(checks: u32) -> i64 {
-    const FIRST: i64 = 15;
-    const CAP: i64 = 6 * 60;
-
-    let doublings = checks.saturating_sub(1).min(8);
-    (FIRST << doublings).min(CAP)
 }
 
 #[cfg(test)]
@@ -306,7 +257,6 @@ mod tests {
             ),
             at("2026-09-16T10:00:00Z"),
             at(due),
-            8,
         )
     }
 
@@ -317,10 +267,6 @@ mod tests {
         assert_eq!(layover.standing, Standing::Booked);
         assert!(!layover.is_due(at("2026-09-16T10:30:00Z")));
         assert!(layover.is_due(at("2026-09-16T11:00:00Z")));
-        assert_eq!(
-            layover.minutes_until_due(at("2026-09-16T10:30:00Z")),
-            Some(30)
-        );
     }
 
     #[test]
@@ -332,66 +278,12 @@ mod tests {
     }
 
     #[test]
-    fn checking_and_finding_nothing_pushes_the_next_check_further_out() {
-        // A layover waiting on a human should not poll at the same rate on day six as on minute
-        // one. Paying for a run every few minutes to be told nothing changed is how a follow-up
-        // becomes more expensive than the work.
-        let mut layover = booked("2026-09-16T11:00:00Z");
-
-        layover.set_down_again(at("2026-09-16T11:00:00Z"));
-        let first = layover.minutes_until_due(at("2026-09-16T11:00:00Z"));
-
-        layover.set_down_again(at("2026-09-16T11:15:00Z"));
-        let second = layover.minutes_until_due(at("2026-09-16T11:15:00Z"));
-
-        assert_eq!(first, Some(15));
-        assert_eq!(second, Some(30));
-        assert!(second > first);
-    }
-
-    #[test]
-    fn the_backoff_is_capped_so_a_late_comment_is_not_ignored_for_days() {
-        // Without a cap the tenth check lands days out, and a comment on a quiet pull request
-        // waits longer than the work took.
-        let mut layover = booked("2026-09-16T11:00:00Z");
-        layover.max_checks = 40;
-
-        for _ in 0..20 {
-            layover.set_down_again(at("2026-09-16T11:00:00Z"));
-        }
-
-        assert_eq!(
-            layover.minutes_until_due(at("2026-09-16T11:00:00Z")),
-            Some(6 * 60)
-        );
-    }
-
-    #[test]
-    fn a_layover_that_waits_forever_is_given_up_on() {
-        // The difference between waiting patiently and leaking. Something waiting on a human who
-        // has moved on must eventually stop costing money.
-        let mut layover = booked("2026-09-16T11:00:00Z");
-
-        for _ in 0..8 {
-            layover.set_down_again(at("2026-09-16T11:00:00Z"));
-        }
-
-        assert_eq!(layover.standing, Standing::Expired);
-        assert!(!layover.is_due(at("2027-01-01T00:00:00Z")));
-    }
-
-    #[test]
-    fn resuming_and_cancelling_both_take_it_out_of_the_queue() {
+    fn resuming_takes_it_out_of_the_queue() {
         let mut resumed = booked("2026-09-16T11:00:00Z");
         resumed.resumed();
 
-        let mut cancelled = booked("2026-09-16T11:00:00Z");
-        cancelled.cancel();
-
-        for layover in [&resumed, &cancelled] {
-            assert!(!layover.standing.is_pending());
-            assert!(!layover.is_due(at("2026-09-16T12:00:00Z")));
-        }
+        assert!(!resumed.standing.is_pending());
+        assert!(!resumed.is_due(at("2026-09-16T12:00:00Z")));
     }
 
     #[test]
@@ -405,12 +297,7 @@ mod tests {
 
     #[test]
     fn standings_round_trip() {
-        for standing in [
-            Standing::Booked,
-            Standing::Resumed,
-            Standing::Expired,
-            Standing::Cancelled,
-        ] {
+        for standing in [Standing::Booked, Standing::Resumed] {
             assert_eq!(Standing::from_slug(standing.slug()), Some(standing));
         }
         assert_eq!(Standing::from_slug("parked"), None);
@@ -426,5 +313,23 @@ mod tests {
             "{line}"
         );
         assert!(line.contains("comments on PR 1543477"), "{line}");
+    }
+
+    #[test]
+    fn a_layover_still_carries_the_fields_older_releases_need() {
+        // Releases up to 1.7.0 refuse a layover without `checks` and `max_checks`, so dropping
+        // them would strand every layover across a downgrade. Reading one without them is the
+        // other direction, for when they are finally gone.
+        let layover = booked("2026-09-16T11:00:00Z");
+        let mut value = serde_json::to_value(&layover).expect("serialises");
+
+        assert_eq!(value["checks"], 0, "{value}");
+        assert_eq!(value["max_checks"], 0, "{value}");
+
+        let object = value.as_object_mut().expect("an object");
+        object.remove("checks");
+        object.remove("max_checks");
+        let read: Layover = serde_json::from_value(value).expect("reads without them");
+        assert_eq!(read.id, layover.id);
     }
 }

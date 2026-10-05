@@ -99,6 +99,12 @@ request it books one — "come back when there are comments" — and exits. Noth
 between; forty-five minutes later the follower is handed that chain's handover and decides whether
 there is anything to send back to the developer.
 
+If there is not, it sets the work down again. Nothing gives up on a layover by itself, so
+[`prompts/follower.md`](prompts/follower.md) says when to stop: it looks hourly for the first day
+and daily after that, and a week after the work was first set down it reports that the pull request
+has had no response, and stops. Each look is a new chain with fresh Fuel; what bounds them all
+together is the Reserve.
+
 That is the whole reason a chain can wait days for a human without holding a process open, and it
 is what the project is named after.
 

@@ -19,8 +19,8 @@ use layover_store::Journal;
 /// that way.
 ///
 /// What carries over is context, not budget: the resumed run is told which chain set this down,
-/// what it was waiting for, how many times it has looked, the message that woke the run that set it
-/// down, and what that run reported — each cut to size.
+/// what it was waiting for and when, the message that woke the run that set it down, and what that
+/// run reported — each cut to size.
 pub(super) fn resume_due(
     config: &Config,
     journal: &Journal,
@@ -48,7 +48,6 @@ pub(super) fn resume_due(
             booked_by: layover.booked_by.clone(),
             waiting_for: layover.waiting_for.clone(),
             booked_at: layover.booked_at,
-            checks: layover.checks,
         };
 
         // What the run that set this down concluded. Looked up now rather than stored at booking,
@@ -151,7 +150,6 @@ resumes = true
                     .expect("in range"),
                 now.checked_sub(jiff::SignedDuration::from_hours(1))
                     .expect("in range"),
-                12,
             ))
             .expect("books");
 
@@ -204,7 +202,6 @@ resumes = true
                 layover_core::handover::Handover::dispatch(Vec::new()),
                 now,
                 now,
-                12,
             ))
             .expect("books");
 
@@ -256,7 +253,6 @@ draft = { default = true }
                     layover_core::handover::Handover::dispatch(Vec::new()),
                     now,
                     now,
-                    12,
                 )
                 .with_flags(std::collections::BTreeMap::from([(
                     "deep".to_owned(),
@@ -323,7 +319,6 @@ resumes = true
                     layover_core::handover::Handover::dispatch(vec![woke]),
                     now,
                     now,
-                    12,
                 )
                 .booked_in(booking_run.clone()),
             )
@@ -387,7 +382,6 @@ resumes = true
                 layover_core::handover::Handover::dispatch(Vec::new()),
                 now,
                 now,
-                12,
             );
             let layover = match scope {
                 Some(scope) => layover.booked_within(scope),
@@ -451,7 +445,6 @@ resumes = true
                 now,
                 now.checked_add(jiff::SignedDuration::from_hours(2))
                     .expect("in range"),
-                12,
             ))
             .expect("books");
 
@@ -490,7 +483,6 @@ resumes = true
                 layover_core::handover::Handover::dispatch(Vec::new()),
                 now,
                 now,
-                12,
             ))
             .expect("books");
 
@@ -543,7 +535,6 @@ trigger = { every = "1h" }
                 layover_core::handover::Handover::dispatch(Vec::new()),
                 now,
                 now,
-                12,
             ))
             .expect("books");
 

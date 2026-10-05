@@ -280,21 +280,6 @@ fn stranded_layovers(journal: &Journal, config: &Config, report: &mut Report) {
         return;
     };
 
-    let expired = all
-        .iter()
-        .filter(|layover| layover.standing == layover_core::layover::Standing::Expired)
-        .count();
-
-    if expired > 0 {
-        report.findings.push(Finding {
-            severity: Severity::Warning,
-            summary: format!("{expired} layover(s) gave up after being checked too many times"),
-            advice: "Each was waiting for something that never happened. That is either a \
-                     follow-up nobody answered or an agent waiting on the wrong signal."
-                .to_owned(),
-        });
-    }
-
     let waiting = all
         .iter()
         .filter(|layover| layover.standing.is_pending())
@@ -466,7 +451,6 @@ mod tests {
                 layover_core::handover::Handover::dispatch(Vec::new()),
                 Timestamp::now(),
                 Timestamp::now(),
-                3,
             ))
             .expect("books");
 

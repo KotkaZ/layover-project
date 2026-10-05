@@ -206,10 +206,9 @@ a route only when the pipeline whose chain set the work down permits it too. Any
 reach another workflow's agents by setting its work down and waiting to be woken there.
 
 What carries over is context. The run is told which chain set this down, what it was waiting for,
-when, and how many times it has already looked — and it is composed with the **flags** the booking
-chain was triggered with, for every flag the resuming pipeline declares, so a follow-up does not
-quietly revert to defaults the operator had overridden. It is also handed the two things that say
-*which work this is*: the message that woke the run that set it down, and what that run reported
+and when — and it is composed with the **flags** the booking chain was triggered with, for every
+flag the resuming pipeline declares, so a follow-up does not quietly revert to defaults the
+operator had overridden. It is also handed the two things that say *which work this is*: the message that woke the run that set it down, and what that run reported
 with `layover_report`, each quoted and cut to 2,000 characters:
 
 ```text
@@ -218,7 +217,7 @@ with `layover_report`, each quoted and cut to 2,000 characters:
 An earlier chain (itn_01M2WH…) finished what it could and chose to come back to this later.
 It was waiting for: comments on pull request 41
 
-It was set down at 2026-09-19T09:56:18Z, and this is check 1.
+It was set down at 2026-09-19T09:56:18Z.
 
 Nothing was left half-done: the earlier run ended cleanly. Your job is to see whether the thing
 it was waiting for has happened, and to act on it if it has. If it has not, set the work down
@@ -246,13 +245,20 @@ hunting something that was never there.
 
 ### When a wait becomes a leak
 
-Each fruitless check pushes the next one further out, doubling from fifteen minutes and capping at
-six hours. Backing off is what makes a long wait affordable; the alternative is paying for a run
-every few minutes to be told nothing has changed.
+**Nothing gives up on a layover by itself.** A resumed run that finds nothing sets the work down
+again with `layover_wait`, which books a *new* layover for whatever wait the agent chooses: the
+delay is the agent's every time, and nothing limits how many times it does it. Each check is a run
+on a fresh chain with fresh Fuel, so what bounds the spend across all of them is the factory's
+Reserve, which counts only runs that [report a cost](cost.md).
 
-After twelve fruitless checks — a little over two days of looking — the layover expires. That is
-the difference between waiting patiently and waiting forever, which is the difference between a
-follow-up and a leak.
+So the decision belongs in the prompt of the agent that sets work down: how far apart its checks
+should be, and when to stop and say nobody answered — *"check hourly for a day, then daily; after a
+week, report that the pull request has had no response and stop"*. A resumed run is told only when
+*this* layover was set down, so an agent that should stop after a week has to carry the first date
+forward itself: in each `layover_report`, which the next check is handed, or in its own notes.
+[`examples/workitem-factory/`](https://github.com/KotkaZ/layover-project/tree/main/examples/workitem-factory)'s
+follower does this. `layover doctor` reports the layovers still waiting, and faults a factory where
+no pipeline will ever collect them.
 
 ## A prompt cannot name a tool that does not exist
 

@@ -470,7 +470,6 @@ impl Runtime for FactoryRuntime {
             handover,
             now,
             due_at,
-            DEFAULT_MAX_CHECKS,
         )
         .with_flags(session.flags.clone())
         .booked_in(session.run.clone())
@@ -595,13 +594,6 @@ impl Runtime for FactoryRuntime {
         })
     }
 }
-
-/// How many fruitless checks a layover gets before it is given up on.
-///
-/// Twelve, against the backoff in `layover_core::layover`, is a little over two days of looking.
-/// Long enough for a review to come back over a weekend; short enough that something nobody ever
-/// answers stops costing money.
-const DEFAULT_MAX_CHECKS: u32 = 12;
 
 /// Reads a wait as a number of seconds.
 ///

@@ -10,9 +10,13 @@ anything else.
 Look at the pull request. Decide which of three things is true.
 
 1. **Nothing has changed.** No new comments, no new votes, still waiting. Set the work down again
-   with `layover_wait`, say in one `layover_report` which pull request and work item this is and
-   what you checked — the next check is handed that report — and stop. This is the common case,
-   and doing anything else costs money to achieve nothing.
+   with `layover_wait` — an hour while the pull request is less than a day old, a day after that —
+   say in one `layover_report` which pull request and work item this is, what you checked, and the
+   date it was first set down (the report you were handed says, or it is today), and stop. The next
+   check is handed that report. This is the common case, and doing anything else costs money to
+   achieve nothing.
+   Once it was first set down more than seven days ago, do not set it down again: report that the
+   pull request has had no response for a week, and stop. Nothing else gives up on it.
 2. **There is something to address.** Comments that ask for a change, a failed check, a rejected
    vote. Send the developer what needs doing, quoting the comment and saying who raised it.
 3. **It is done.** Merged, abandoned, or approved with nothing outstanding. Say so and stop; the

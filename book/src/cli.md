@@ -186,7 +186,7 @@ The failures it looks for are the quiet ones — the ones that look like nothing
 | Runs reporting no cost | The total reads *not reported* or carries a `+`, which says *that* it is unknown and not *why*. The finding names each runner the silent runs ran on and what to change: the output flag its CLI needs, a rate card row for a Codex model, or — when the command is already right — that the runs ended before printing a cost or predate Layover reading one |
 | A schedule that never fired | A schedule that is not firing looks exactly like one with nothing to do |
 | Open help requests | The channel that reaches a person is the one nobody is there to read |
-| Expired layovers | Work set down that nothing ever picked up |
+| Layovers nothing will collect | Work an agent set down to come back to, in a factory where no pipeline `resumes` |
 | A Ground Stop left engaged | The factory is up, the dashboard is green, and nothing is running |
 | The Reserve refusing work | A factory that may not spend any more looks exactly like one with nothing to do |
 | Work that waited with a slot free | Queued longer than `timeout_sec` while fewer than `max_concurrent_runs` runs were alive, it looks like a busy factory. It is one where nothing was starting the work |

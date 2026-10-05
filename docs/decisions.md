@@ -693,9 +693,13 @@ arrives knowing nothing: which work item, what was tried, what the earlier chain
 run books a layover, and a resuming pipeline opens a *new* itinerary seeded with a `Handover`.
 Nothing stays alive in between — no process, no parked chain, no held budget — which is the same
 answer recovery and steering reached, for the same reason: what the later run needs is the earlier
-one's context, not its process. Checks back off and eventually expire, because something waiting
-on a human who has moved on must stop costing money, and the difference between waiting patiently
-and leaking is a count.
+one's context, not its process. Nothing gives up on a layover by itself: a resumed run that finds
+nothing books a new one, for a wait it chooses. A back-off and an expiry after twelve checks were
+designed for this and written, and never wired to the resume path, so for every release up to
+1.7.0 they were documented and did not happen; they were removed rather than left to look like a
+bound. When to stop waiting is a judgement about the work — a review that is a day late and one
+that is a month late are different — so it lives in the prompt of the agent that waits, and the
+Reserve bounds what all the checks cost together.
 
 **Why a resumed run is handed what woke the booking run and what it reported, cut to size.** A
 layover's whole case over a bare schedule is that the later run arrives knowing which work this is,
