@@ -52,6 +52,9 @@ fn exited() -> u32 {
 /// What 1.3.0 left: no work, no owner, a run that started six hours ago and last wrote to its
 /// transcript `last_written` ago.
 fn left_by_1_3(temp: &Temp, chain: &ItineraryId, last_written: Option<SignedDuration>) -> Live {
+    // One instant for both, so the run's length is exact: two readings of the clock a few
+    // milliseconds apart made it a second short whenever a second boundary fell between them.
+    let now = Timestamp::now();
     let run = RunId::generate();
     let hangar = temp
         .0
@@ -63,7 +66,7 @@ fn left_by_1_3(temp: &Temp, chain: &ItineraryId, last_written: Option<SignedDura
     if let Some(ago) = last_written {
         let transcript = hangar.join("transcript.log");
         std::fs::write(&transcript, "working…\n").expect("writes");
-        let when = std::time::SystemTime::now() - ago.unsigned_abs();
+        let when = std::time::SystemTime::from(now) - ago.unsigned_abs();
         std::fs::File::options()
             .write(true)
             .open(&transcript)
@@ -75,7 +78,7 @@ fn left_by_1_3(temp: &Temp, chain: &ItineraryId, last_written: Option<SignedDura
         itinerary: chain.clone(),
         agent: AgentName::new("bob"),
         pid: exited(),
-        started_at: Timestamp::now() - SignedDuration::from_hours(6),
+        started_at: now - SignedDuration::from_hours(6),
         hangar,
         queued: None,
         owner: None,
