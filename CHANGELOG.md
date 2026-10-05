@@ -8,6 +8,24 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+### Removed
+
+- **Library code nothing used**, for anyone depending on the crates. None of it changes what a
+  factory does: the configuration, the HTTP API, the MCP tools and the on-disk layout are untouched,
+  which is what the semantic-versioning promise covers.
+  - `layover_core::slots` (`Slots`, `Admission`). It predated the dispatcher, which since 1.4.0 has
+    counted the runs it holds alive instead, and nothing ever used it.
+  - `layover_tower::Factory::run_flight`, the one-flight-at-a-time path from before 1.4.0. Nothing
+    but its own tests took it; they now run their flight through `drain`, as `serve` does.
+    `Dispatched` gains `Clone`.
+  - The itinerary's count of runs that reported no cost (`Itinerary::note_unreported_cost`,
+    `has_cost_reporting_gap`, `unreported_runs`, `metered_share`). Nothing read it; that a run
+    measured nothing is carried by its record's cost source, which is what the dashboard, the
+    costs API and `layover doctor` read.
+  - `HelpRequest::is_same_ask_as`, never wired to anything; `Ledger::for_itinerary` and
+    `Summary::is_fully_measured` (use `confidence().is_measured()`); `diagram::Live::is_idle`;
+    `Factory::env_for`.
+
 ### Fixed
 
 - **Documentation that described Layover as it was before 1.0.** `SECURITY.md` said the project

@@ -140,12 +140,11 @@ impl Waiting {
 /// Debited even when the run failed. Money spent is money spent, and a chain that could retry
 /// forever on failures without paying for them is not bounded. Dollars a runner printed and Copilot
 /// credits priced at a published rate are both measurements; a guess or a hole is not, and debits
-/// nothing.
+/// nothing. That a run measured nothing is kept where it is read — its record's cost source, which
+/// turns every total it is part of into a floor — rather than in a count on the chain nothing reads.
 pub(crate) fn charge(itinerary: &mut Itinerary, reported: &Reported) {
     if reported.source.is_measured() {
         itinerary.debit_fuel(reported.usd);
-    } else {
-        itinerary.note_unreported_cost();
     }
 }
 

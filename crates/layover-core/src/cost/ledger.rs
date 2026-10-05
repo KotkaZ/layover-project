@@ -13,7 +13,6 @@ use std::collections::BTreeMap;
 
 use super::{CostSource, RunCost, TokenUsage};
 use crate::agent::AgentName;
-use crate::flight::ItineraryId;
 use crate::pipeline::PipelineName;
 
 /// Totals over some set of runs.
@@ -78,12 +77,6 @@ impl Summary {
         let inferred = self.unreported_runs.saturating_add(self.estimated_runs);
         f64::from(self.runs.saturating_sub(inferred)) / f64::from(self.runs)
     }
-
-    /// Returns `true` when every figure in this total came from a runner.
-    #[must_use]
-    pub fn is_fully_measured(&self) -> bool {
-        self.confidence().is_measured()
-    }
 }
 
 /// An append-only record of run costs.
@@ -138,12 +131,6 @@ impl Ledger {
             summary.add(cost);
         }
         summary
-    }
-
-    /// Totals for one chain.
-    #[must_use]
-    pub fn for_itinerary(&self, itinerary: &ItineraryId) -> Summary {
-        self.summarise(|cost| &cost.itinerary == itinerary)
     }
 
     /// Totals for runs that finished at or after `since`.
@@ -222,7 +209,7 @@ impl Ledger {
 mod tests {
     use super::*;
     use crate::cost::TokenUsage;
-    use crate::flight::RunId;
+    use crate::flight::{ItineraryId, RunId};
     use std::time::Duration;
 
     fn usage(output: u64) -> TokenUsage {
@@ -319,7 +306,7 @@ mod tests {
 
         let total = ledger.total();
         assert_eq!(total.confidence(), CostSource::Unreported);
-        assert!(!total.is_fully_measured());
+        assert!(!total.confidence().is_measured());
         assert_eq!(total.unreported_runs, 1);
         assert!((total.measured_share() - 0.8).abs() < 1e-9);
     }
@@ -347,7 +334,7 @@ mod tests {
     fn an_empty_ledger_is_fully_measured() {
         let total = Ledger::new().total();
 
-        assert!(total.is_fully_measured());
+        assert!(total.confidence().is_measured());
         assert!((total.measured_share() - 1.0).abs() < f64::EPSILON);
         assert!(Ledger::new().is_empty());
     }
@@ -364,7 +351,7 @@ mod tests {
         let total = ledger.total();
         assert_eq!(total.credit_runs, 1);
         assert_eq!(total.confidence(), CostSource::CopilotCredits);
-        assert!(total.is_fully_measured());
+        assert!(total.confidence().is_measured());
         assert!((total.measured_share() - 1.0).abs() < 1e-9);
         assert!((total.usd - 19.11).abs() < 1e-9);
     }
@@ -388,20 +375,6 @@ mod tests {
         let total = ledger.total();
         assert_eq!(total.confidence(), CostSource::Unreported);
         assert!((total.measured_share() - 0.5).abs() < 1e-9);
-    }
-
-    #[test]
-    fn spend_is_attributable_to_one_chain() {
-        let itinerary = ItineraryId::generate();
-        let mut ledger = ledger();
-        ledger.record(RunCost {
-            itinerary: itinerary.clone(),
-            ..reported("publisher", "codex-mini", 3.00)
-        });
-
-        let summary = ledger.for_itinerary(&itinerary);
-        assert_eq!(summary.runs, 1);
-        assert!((summary.usd - 3.00).abs() < 1e-9);
     }
 
     #[test]

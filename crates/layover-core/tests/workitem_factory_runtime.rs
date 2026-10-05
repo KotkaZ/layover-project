@@ -276,14 +276,9 @@ fn the_run_cap_covers_the_whole_loop_without_relying_on_cost_reporting() {
         itinerary
             .record_run_started()
             .unwrap_or_else(|error| panic!("run {run} must be permitted: {error}"));
-        // No runner in this factory is assumed to report cost.
-        itinerary.note_unreported_cost();
+        // No runner in this factory is assumed to report cost, so nothing is debited.
     }
 
-    assert!(
-        itinerary.has_cost_reporting_gap(),
-        "the Tower must be able to surface silent metering"
-    );
     assert!(
         itinerary.runs_remaining() > 0,
         "the cap must leave headroom rather than land exactly on the expected count"

@@ -68,11 +68,12 @@ breadth — Hops bounds depth alone — a silent metering failure removes the so
 an exponential fan-out spending unbounded money.
 
 *Mitigation, in place:* the gap is measured rather than merely flagged. Every run records a
-[`CostSource`] of `reported`, `copilot_credits`, `rate_card` or `unreported`; an itinerary counts
-how many of its runs went unmetered and exposes `metered_share()`; and every total in the ledger
-reports the *weakest* source that fed it, so a mostly-measured figure still reads as an estimate. A
-rate card can price a run that reported tokens but no dollars — labelled as an estimate, never
-folded in as a measurement.
+[`CostSource`] of `reported`, `copilot_credits`, `rate_card` or `unreported`; every total in the
+ledger reports the *weakest* source that fed it, so a mostly-measured figure still reads as an
+estimate; and `measured_share` says what fraction of a window's runs were measured — on the costs
+API, on the dashboard as "n of m runs reported nothing", and in `layover doctor`, which names the
+runner responsible. A rate card can price a run that reported tokens but no dollars — labelled as
+an estimate, never folded in as a measurement.
 
 *Still unresolved:* none of this makes an unreporting runner report. The deterministic run cap is
 what actually holds, and an operator has to look at `measured_share` to know whether Fuel is

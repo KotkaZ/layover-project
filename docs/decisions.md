@@ -571,7 +571,8 @@ and holding the whole factory behind a single Teams sender is not.
 line of run identifiers, but a queued flight has no run yet, and the line work actually waits in is
 the journal's queue — durable, and read back after a restart. A second line in memory would be a
 second source of truth that dies with the process. So the dispatcher counts the runs it holds alive
-against the limit and takes the next eligible flight off the journal's queue.
+against the limit and takes the next eligible flight off the journal's queue. The `Slots` type,
+written before the dispatcher and never used by it, has since been removed.
 
 **Why a restarting Tower stops a run it finds still alive.** Such a run is cut off: its MCP endpoint
 and token died with the Tower that minted them, so nothing it sends, reports or books can arrive,

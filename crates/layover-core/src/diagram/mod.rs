@@ -124,10 +124,4 @@ impl Live {
         });
         self
     }
-
-    /// Returns `true` when nothing is happening.
-    #[must_use]
-    pub fn is_idle(&self) -> bool {
-        self.activity.is_empty()
-    }
 }

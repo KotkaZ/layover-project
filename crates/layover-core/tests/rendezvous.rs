@@ -229,15 +229,11 @@ fn a_chain_terminates_when_hops_run_out() {
 fn the_run_cap_holds_when_a_runner_reports_no_cost() {
     let mut itinerary = Itinerary::new(ItineraryId::generate(), 8, 1.00, 4);
 
+    // Four runs that report nothing debit nothing.
     for _ in 0..4 {
         itinerary.record_run_started().expect("within the cap");
-        itinerary.note_unreported_cost();
     }
 
-    assert!(
-        itinerary.has_cost_reporting_gap(),
-        "the Tower must be able to surface silent metering"
-    );
     assert!(
         !itinerary.fuel_exhausted(),
         "fuel metered nothing, so it cannot be what stops this"

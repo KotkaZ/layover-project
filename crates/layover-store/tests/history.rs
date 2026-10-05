@@ -304,7 +304,7 @@ fn a_ledger_built_from_history_totals_the_window() {
 
     assert_eq!(ledger.total().runs, 2);
     assert!((ledger.total().usd - 4.50).abs() < 1e-9);
-    assert!(ledger.total().is_fully_measured());
+    assert!(ledger.total().confidence().is_measured());
 }
 
 #[test]

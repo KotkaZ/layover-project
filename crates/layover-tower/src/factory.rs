@@ -57,7 +57,7 @@ use crate::tokens::{ENDPOINT_VAR, TOKEN_VAR, Tokens};
 use crate::wait::{Ended, wait_for};
 
 /// What happened to one piece of work the factory picked up.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Dispatched {
     /// A run started, finished, and was recorded.
     Ran {
@@ -256,54 +256,6 @@ impl Factory {
             .get_or_init(|| crate::owner::Owner::claim(self.live.root()).ok())
             .as_ref()
             .map(crate::owner::Owner::id)
-    }
-
-    /// Runs one flight to completion, recording what happened.
-    ///
-    /// `sender` is `None` for work that entered the mesh from outside it: a person, a schedule, a
-    /// resumed layover. The run is told who sent the flight, from `flight.from`.
-    ///
-    /// # Errors
-    ///
-    /// Never returns `Err`; a failure is reported as [`Dispatched::Failed`] so that one bad flight
-    /// cannot stop a factory draining the rest of its queue.
-    pub fn run_flight(
-        &self,
-        itinerary: &mut Itinerary,
-        sender: Option<&AgentName>,
-        flight: &Flight,
-    ) -> Dispatched {
-        self.run(itinerary, sender, flight, Some(&flight.from))
-    }
-
-    /// Runs one flight start to finish on this thread, against an itinerary the caller holds.
-    ///
-    /// `origin` is `None` for a released join: its body already labels each flight it carries,
-    /// and naming one sender above them would be wrong about the rest.
-    fn run(
-        &self,
-        itinerary: &mut Itinerary,
-        sender: Option<&AgentName>,
-        flight: &Flight,
-        origin: Option<&layover_core::flight::Origin>,
-    ) -> Dispatched {
-        let authorised = match self.admit(itinerary, sender, flight) {
-            Ok(authorised) => authorised,
-            Err(refused) => return refused,
-        };
-        let start = Start {
-            origin,
-            queued: None,
-            queued_at: None,
-            sent_by: Some(flight.from.agent().cloned().into_iter().collect()),
-        };
-        let launched = match self.launch(itinerary.id(), authorised, flight, start) {
-            Ok(launched) => launched,
-            Err(failed) => return failed,
-        };
-        self.finish(launched, |reported| {
-            crate::dispatcher::charge(itinerary, reported);
-        })
     }
 
     /// Decides whether a flight may start, and charges its chain for starting it.
@@ -988,16 +940,6 @@ impl Factory {
     pub fn root(&self) -> &Path {
         &self.root
     }
-
-    /// Variables the factory would pass to `agent`, for reporting rather than for spawning.
-    #[must_use]
-    pub fn env_for(&self, agent: &AgentName) -> BTreeMap<String, String> {
-        self.config
-            .agents
-            .get(agent)
-            .map(declared_values)
-            .unwrap_or_default()
-    }
 }
 
 /// What a run is told about where its work came from, beside the work itself.
@@ -1068,6 +1010,11 @@ mod tests {
 
     /// A factory whose one agent is a real, harmless command.
     fn factory(temp: &Temp, command: &str) -> Factory {
+        capped(temp, command, 10)
+    }
+
+    /// The same factory, with a run cap of `max_runs` on every chain.
+    fn capped(temp: &Temp, command: &str, max_runs: u32) -> Factory {
         let text = format!(
             r#"
 [layover]
@@ -1077,7 +1024,7 @@ work_dir = "work"
 runner = "shell"
 max_hops = 4
 fuel_usd = 5.0
-max_runs = 10
+max_runs = {max_runs}
 timeout_sec = 30
 
 [runners.shell]
@@ -1114,8 +1061,23 @@ entry = "worker"
         )
     }
 
-    fn itinerary(flight: &Flight) -> Itinerary {
-        Itinerary::new(flight.itinerary.clone(), 4, 5.0, 10)
+    /// Runs flights the way the Tower does — queued, then drained — and says what became of each.
+    fn dispatch_all(factory: &Factory, flights: &[Flight]) -> Vec<Dispatched> {
+        let mut seen = Vec::new();
+        factory.drain(
+            flights
+                .iter()
+                .map(|flight| Queued::new(flight.clone(), None, BTreeMap::new()))
+                .collect(),
+            |_| {},
+            |_, result| seen.push(result.clone()),
+        );
+        seen
+    }
+
+    /// What became of one flight, or `None` when nothing was started or refused at all.
+    fn dispatch(factory: &Factory, flight: &Flight) -> Option<Dispatched> {
+        dispatch_all(factory, std::slice::from_ref(flight)).pop()
     }
 
     #[test]
@@ -1124,15 +1086,15 @@ entry = "worker"
         let factory = factory(&temp, &shell("echo working"));
         let flight = flight();
 
-        let result = factory.run_flight(&mut itinerary(&flight), None, &flight);
+        let result = dispatch(&factory, &flight);
 
         assert!(
             matches!(
                 result,
-                Dispatched::Ran {
+                Some(Dispatched::Ran {
                     outcome: Outcome::Succeeded,
                     ..
-                }
+                })
             ),
             "{result:?}"
         );
@@ -1152,7 +1114,7 @@ entry = "worker"
         let factory = factory(&temp, &shell("echo done"));
         let flight = flight();
 
-        factory.run_flight(&mut itinerary(&flight), None, &flight);
+        dispatch(&factory, &flight);
 
         assert!(factory.live.live().expect("reads").is_empty());
     }
@@ -1163,15 +1125,15 @@ entry = "worker"
         let factory = factory(&temp, &shell("exit 4"));
         let flight = flight();
 
-        let result = factory.run_flight(&mut itinerary(&flight), None, &flight);
+        let result = dispatch(&factory, &flight);
 
         assert!(
             matches!(
                 result,
-                Dispatched::Ran {
+                Some(Dispatched::Ran {
                     outcome: Outcome::Failed,
                     ..
-                }
+                })
             ),
             "{result:?}"
         );
@@ -1202,7 +1164,7 @@ entry = "worker"
         let factory = factory(&temp, &shell(script));
         let flight = flight();
 
-        factory.run_flight(&mut itinerary(&flight), None, &flight);
+        dispatch(&factory, &flight);
 
         let record = the_recorded_run(&factory);
         assert_eq!(record.outcome, Outcome::Failed);
@@ -1221,7 +1183,7 @@ entry = "worker"
         let factory = factory(&temp, &shell("echo fine"));
         let flight = flight();
 
-        factory.run_flight(&mut itinerary(&flight), None, &flight);
+        dispatch(&factory, &flight);
 
         let record = the_recorded_run(&factory);
         assert_eq!(record.outcome, Outcome::Succeeded);
@@ -1273,12 +1235,11 @@ entry = "worker"
         std::fs::create_dir_all(temp.0.join(".layover")).expect("dirs");
         std::fs::write(temp.0.join(".layover").join("ground-stop"), "").expect("engages");
 
-        let flight = flight();
-        let result = factory.run_flight(&mut itinerary(&flight), None, &flight);
+        let result = dispatch(&factory, &flight());
 
         assert!(
-            matches!(result, Dispatched::Refused(Refusal::GroundStop)),
-            "{result:?}"
+            result.is_none(),
+            "a stopped factory starts nothing: {result:?}"
         );
         assert!(
             !factory.history_dir().exists(),
@@ -1291,38 +1252,61 @@ entry = "worker"
         // A run that starts and is never seen to finish has still been started. A cap that counted
         // only completions would let a crashing agent run forever.
         let temp = Temp::new("cap");
-        let factory = factory(&temp, &shell("echo one"));
-        let flight = flight();
-        let mut chain = Itinerary::new(flight.itinerary.clone(), 4, 5.0, 1);
+        let factory = capped(&temp, &shell("echo one"), 1);
+        let first = flight();
+        let second = Flight::new(
+            first.itinerary.clone(),
+            Origin::Human,
+            AgentName::new("worker"),
+            "and again",
+            4,
+        );
 
-        assert!(matches!(
-            factory.run_flight(&mut chain, None, &flight),
-            Dispatched::Ran { .. }
-        ));
+        // Both are admitted while the first is still running, so only a cap counted at the start
+        // refuses the second.
+        let results = dispatch_all(&factory, &[first, second]);
 
-        let second = factory.run_flight(&mut chain, None, &flight);
-        assert!(
-            matches!(second, Dispatched::Refused(Refusal::Rail(_))),
-            "the second run should hit the cap: {second:?}"
+        let ran = results
+            .iter()
+            .filter(|r| matches!(r, Dispatched::Ran { .. }))
+            .count();
+        let refused = results
+            .iter()
+            .filter(|r| matches!(r, Dispatched::Refused(Refusal::Rail(Denial::RunCapReached))))
+            .count();
+        assert_eq!(
+            (ran, refused),
+            (1, 1),
+            "the second run should hit the cap: {results:?}"
         );
     }
 
     #[test]
-    fn a_run_that_reports_nothing_is_counted_as_a_reporting_gap() {
-        // An agent that prints prose and no cost has spent money nobody can see. The itinerary
-        // has to know that its own total is a lower bound.
+    fn a_run_that_reports_nothing_is_recorded_as_unreported_rather_than_free() {
+        // An agent that prints prose and no cost has spent money nobody can see. Its record says
+        // so, which is what turns every total it is part of into a floor.
         let temp = Temp::new("silent");
         let factory = factory(&temp, &shell("echo just talking"));
-        let flight = flight();
-        let mut chain = itinerary(&flight);
 
-        factory.run_flight(&mut chain, None, &flight);
+        let result = dispatch(&factory, &flight());
 
         assert!(
-            chain.has_cost_reporting_gap(),
+            matches!(
+                result,
+                Some(Dispatched::Ran {
+                    source: CostSource::Unreported,
+                    ..
+                })
+            ),
+            "{result:?}"
+        );
+        let record = the_recorded_run(&factory);
+        assert_eq!(
+            record.source,
+            CostSource::Unreported,
             "silence is not a measurement"
         );
-        assert_eq!(chain.unreported_runs(), 1);
+        assert!(record.usd.abs() < f64::EPSILON);
     }
 
     #[test]
@@ -1813,8 +1797,7 @@ join = "all"
         std::fs::create_dir_all(notes.parent().expect("a parent")).expect("dirs");
         std::fs::write(&notes, "The e2e suite needs the VPN.\n").expect("writes");
 
-        let mut itinerary = itinerary(&flight());
-        factory.run_flight(&mut itinerary, None, &flight());
+        dispatch(&factory, &flight());
 
         let prompt = std::fs::read_dir(temp.0.join(".layover").join("hangars").join("worker"))
             .expect("a Hangar")
@@ -1844,8 +1827,7 @@ join = "all"
             .save_learnings(&learnings)
             .expect("writes learnings");
 
-        let mut itinerary = itinerary(&flight());
-        factory.run_flight(&mut itinerary, None, &flight());
+        dispatch(&factory, &flight());
 
         let prompt = std::fs::read_dir(temp.0.join(".layover").join("hangars").join("worker"))
             .expect("a Hangar")
@@ -1883,8 +1865,7 @@ join = "all"
             .expect("one")
             .runs_left;
 
-        let mut itinerary = itinerary(&flight());
-        factory.run_flight(&mut itinerary, None, &flight());
+        dispatch(&factory, &flight());
 
         let after = factory
             .journal

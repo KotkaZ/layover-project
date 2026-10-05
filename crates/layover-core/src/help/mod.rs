@@ -236,17 +236,6 @@ impl HelpRequest {
     pub fn is_open(&self) -> bool {
         self.resolved_at.is_none()
     }
-
-    /// Returns `true` when this asks for the same thing as `other`.
-    ///
-    /// Used to keep a recurring blocker from being filed on every run. A factory whose
-    /// credentials expired does not need forty identical requests; it needs one, and a count.
-    #[must_use]
-    pub fn is_same_ask_as(&self, other: &Self) -> bool {
-        self.agent == other.agent
-            && self.blocker == other.blocker
-            && crate::learning::says_the_same_thing(&self.summary, &other.summary)
-    }
 }
 
 #[cfg(test)]
@@ -302,32 +291,6 @@ mod tests {
 
         assert!(!asked.is_open());
         assert_eq!(asked.resolved_at, Some(at("2026-09-16T11:00:00Z")));
-    }
-
-    #[test]
-    fn the_same_blocker_asked_twice_is_recognised() {
-        // A factory whose credentials expired does not need forty identical requests. It needs
-        // one, and a count.
-        let first = request("publisher", Blocker::Access, "The ADO token has expired");
-        let again = request("publisher", Blocker::Access, "the ADO token  has expired.");
-
-        assert!(first.is_same_ask_as(&again));
-    }
-
-    #[test]
-    fn a_different_agent_or_category_is_a_different_ask() {
-        let publisher = request("publisher", Blocker::Access, "the ADO token is expired");
-
-        assert!(!publisher.is_same_ask_as(&request(
-            "developer",
-            Blocker::Access,
-            "the ADO token is expired"
-        )));
-        assert!(!publisher.is_same_ask_as(&request(
-            "publisher",
-            Blocker::Tooling,
-            "the ADO token is expired"
-        )));
     }
 
     #[test]
