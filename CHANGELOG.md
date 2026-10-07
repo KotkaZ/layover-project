@@ -8,6 +8,16 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+## [1.8.0] — 2026-10-07
+
+What a factory will do next is on the dashboard: every scheduled tick by the Tower's own clock,
+every layover with when it will actually be picked up, the queue, and the ticks that were skipped.
+
+**Compatibility.** Additions only. The configuration format and the MCP tools are unchanged; the
+HTTP API gains an endpoint and the on-disk layout a file, which an older release ignores. For
+anyone using the crates as a library, `layover_dashboard::Dashboard::timetable` and the
+`Timetable` trait are new.
+
 ### Added
 
 - **The dashboard shows what is going to start, and when.** A new **Upcoming** tab lists, in the
@@ -23,11 +33,6 @@ status](README.md#project-status).
   `--watch-only` server answers with `clock: null` and no ticks rather than guessing.
 - **Skipped ticks are written down**, to `.layover/journal/skips-<day>.jsonl`, pruned on the same
   90-day horizon as the rest of the journal.
-
-**Compatibility.** Additions only. The configuration format and the MCP tools are unchanged; the
-HTTP API gains an endpoint and the on-disk layout a file, which an older release ignores. For
-anyone using the crates as a library, `layover_dashboard::Dashboard::timetable` and the
-`Timetable` trait are new.
 
 ## [1.7.1] — 2026-10-05
 
@@ -1354,7 +1359,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.7.1...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/KotkaZ/layover-project/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/KotkaZ/layover-project/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/KotkaZ/layover-project/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/KotkaZ/layover-project/compare/v1.5.1...v1.6.0
