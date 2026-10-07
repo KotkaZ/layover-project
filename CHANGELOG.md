@@ -8,6 +8,20 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+## [1.9.0] — 2026-10-07
+
+An agent declares its own reasoning effort and context tier beside its model, so one runner serves
+every agent with the same permissions; and every run records which effort and context it ran at.
+
+**Compatibility.** Additive. Existing factories — including ones whose runners fix an effort or a
+context in their command — load, validate and run unchanged; `validate` warns about nothing new
+unless a runner both fixes a value and has the placeholder for it. Two things are different in an
+existing factory:
+- A runner whose `{model}` an agent leaves unset no longer hands the CLI a flag without its value,
+  or the literal `{model}`; the argument is left out, with its option. Such runs failed at spawn.
+- Run records gain `effort` and `context`, and `GET /runs` gains `reasoning_effort` and `context`;
+  older releases and records simply lack them.
+
 ### Added
 
 - **An agent declares its own `effort` and `context`**, beside its `model`, and a runner carries
@@ -1398,7 +1412,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/KotkaZ/layover-project/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/KotkaZ/layover-project/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/KotkaZ/layover-project/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/KotkaZ/layover-project/compare/v1.6.0...v1.7.0
