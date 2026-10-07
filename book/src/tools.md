@@ -196,6 +196,9 @@ A resuming pipeline does not open fresh work on its tick — it goes looking for
 due. An ordinary pipeline never collects them, so a factory's hourly sweep cannot quietly start
 following up somebody else's work.
 
+So a layover is picked up at the first tick of a resuming pipeline at or after its due time, not
+at the due time itself. The dashboard's **Upcoming** tab lists every layover waiting with both.
+
 The resumed run gets a **new chain with a fresh budget**. The chain that booked the layover is over;
 its Hops and Fuel are spent, and reviving it would make the second follow-up cheaper than the first
 and the tenth refused. A layover is new work about an old subject, and it is priced that way.

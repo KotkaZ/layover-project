@@ -8,6 +8,27 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+### Added
+
+- **The dashboard shows what is going to start, and when.** A new **Upcoming** tab lists, in the
+  order it will happen: work queued for a slot, with **Cancel**; every tick of every scheduled
+  workflow in the next 6 hours to 7 days, marking a tick held by a Ground Stop and the next tick of
+  a workflow whose previous run is still going; every layover waiting, with when it is due and when
+  a resuming workflow will actually pick it up; and the ticks skipped in the last seven days. The
+  route map gains **next 14:00 · in 23 min** beside each scheduled workflow's trigger, and its strip
+  a count of skipped ticks. Until now none of this was visible: a trigger said `every 1h` and not
+  when, layovers were not shown at all, and a skipped tick was a line on the Tower's console.
+- **`GET /upcoming?hours=`**, which the tab reads. The times come from the clock of the Tower in the
+  same process, because an `every` schedule counts from when that Tower started; a
+  `--watch-only` server answers with `clock: null` and no ticks rather than guessing.
+- **Skipped ticks are written down**, to `.layover/journal/skips-<day>.jsonl`, pruned on the same
+  90-day horizon as the rest of the journal.
+
+**Compatibility.** Additions only. The configuration format and the MCP tools are unchanged; the
+HTTP API gains an endpoint and the on-disk layout a file, which an older release ignores. For
+anyone using the crates as a library, `layover_dashboard::Dashboard::timetable` and the
+`Timetable` trait are new.
+
 ## [1.7.1] — 2026-10-05
 
 The documentation describes Layover as it is, and the code nothing used is gone. Layovers never

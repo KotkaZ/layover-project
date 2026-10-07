@@ -99,6 +99,7 @@ function showView(name) {
   if (name === "journal") loadJournal();
   watchSessions(name === "sessions");
   watchChain(name === "chain");
+  watchUpcoming(name === "upcoming");
 }
 
 async function loadHealth() {
@@ -144,7 +145,8 @@ function describeTrigger(trigger) {
 ///
 /// A route map shows what *may* happen. This shows what did — and the two questions are asked at
 /// the same moment, by someone who has just opened the page wondering whether anything is wrong.
-function summaryStrip(name, stats) {
+/// `skipped` is null for a workflow with no schedule, which has no ticks to skip.
+function summaryStrip(name, stats, skipped) {
   const strip = el("div", "summary");
   const cell = (label, value, className) => {
     const box = el("div", `stat ${className || ""}`);
@@ -158,8 +160,28 @@ function summaryStrip(name, stats) {
     cell("failed", `${stats.failed}`, stats.failed > 0 ? "bad" : ""),
     cell("open help", `${stats.help}`, stats.help > 0 ? "warn" : ""),
   );
+  // A schedule that skips every tick has a quiet strip: few runs, nothing failed. This is the
+  // number that says why.
+  if (skipped !== null) {
+    strip.append(cell("skipped ticks, 7d", `${skipped}`, skipped > 0 ? "warn" : ""));
+  }
   strip.dataset.workflow = name;
   return strip;
+}
+
+/// When a scheduled workflow next fires, as a rail beside its trigger: "next 14:00 · in 23 min".
+///
+/// Only when the Tower in this process keeps the clock. A watching dashboard does not know, and
+/// says nothing rather than a time worked out from a schedule counted from somebody else's start.
+function nextRail(scheduled, now) {
+  if (!scheduled?.next_at) return null;
+  const node = rail("next", "next", `${clockTime(scheduled.next_at)} · ${fromNow(scheduled.next_at, now)}`);
+  node.title = new Date(scheduled.next_at).toLocaleString();
+  if (scheduled.working && !scheduled.overlaps) {
+    node.classList.add("risk");
+    node.title += " — its previous run is still going, so this tick is skipped unless that finishes first";
+  }
+  return node;
 }
 
 /// Counts recent activity per workflow in three requests, not three per workflow.
@@ -212,7 +234,13 @@ async function loadMap() {
     }
 
     const showing = scope() ? pipelines.filter((p) => p.name === scope()) : pipelines;
-    const [activity, going] = await Promise.all([activityByWorkflow(), chainsGoing()]);
+    const [activity, going, upcoming] = await Promise.all([
+      activityByWorkflow(),
+      chainsGoing(),
+      get("/upcoming").catch(() => null),
+    ]);
+    const scheduled = new Map((upcoming?.workflows ?? []).map((w) => [w.pipeline, w]));
+    const now = upcoming ? new Date(upcoming.now) : new Date();
 
     for (const pipeline of showing) {
       const section = el("section", "workflow");
@@ -221,8 +249,10 @@ async function loadMap() {
       if (pipeline.description) header.append(el("span", "what", pipeline.description));
 
       const rails = el("div", "rails");
+      rails.append(rail("trigger", "", describeTrigger(pipeline.trigger)));
+      const next = nextRail(scheduled.get(pipeline.name), now);
+      if (next) rails.append(next);
       rails.append(
-        rail("trigger", "", describeTrigger(pipeline.trigger)),
         // The two rails that bound a chain, and they bound different things: Hops is depth,
         // Fuel is breadth. Showing one without the other invites the assumption that Hops caps
         // spending, which it does not.
@@ -237,6 +267,7 @@ async function loadMap() {
         summaryStrip(
           pipeline.name,
           activity.get(pipeline.name) ?? { runs: 0, usd: 0, unreported_runs: 0, failed: 0, help: 0 },
+          scheduled.get(pipeline.name)?.skipped_7d ?? null,
         ),
       );
       // One map per workflow, however many times it was triggered: these say which run is where.
@@ -698,9 +729,15 @@ async function loadQueued() {
     if (pending.length === 0) {
       note.textContent = `${running}.`;
     } else if (by) {
-      note.textContent = `${running} · ${pending.length} flight(s) queued, started by ${by} as slots free.`;
+      note.textContent = `${running} · ${pending.length} flight(s) queued, started by ${by} as slots free. `;
     } else {
-      note.textContent = `${running} · ${pending.length} flight(s) queued. Nothing in this process starts them — it is watching only — so they wait for a Tower (\`layover serve\`) or \`layover run\`.`;
+      note.textContent = `${running} · ${pending.length} flight(s) queued. Nothing in this process starts them — it is watching only — so they wait for a Tower (\`layover serve\`) or \`layover run\`. `;
+    }
+    if (pending.length > 0) {
+      const see = el("button", "link", "See the queue");
+      see.type = "button";
+      see.addEventListener("click", () => showView("upcoming"));
+      note.append(see);
     }
   } catch {
     note.hidden = true;
@@ -989,6 +1026,7 @@ function start() {
   startSessions();
   startReplies();
   startChains();
+  startUpcoming();
 
   // One selector, so every view has to be told. Redrawing only the visible one would leave the
   // others showing another workflow's numbers under this workflow's name the moment you switch.
@@ -1001,6 +1039,7 @@ function start() {
     loadJournal();
     loadHelpBadge();
     if (!$("#sessions").hidden) loadSessions();
+    if (!$("#upcoming").hidden) loadUpcoming();
   });
 
   loadHealth();

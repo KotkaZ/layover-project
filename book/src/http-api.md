@@ -33,6 +33,7 @@ Point any OpenAPI tool at the file to get a client, a mock server or rendered do
 | `POST` | `/flights` | | **Queue** work. The Tower starts it within seconds. Answers with the new chain's `itinerary_id`. |
 | `GET` | `/flights` | | What is queued and waiting. |
 | `DELETE` | `/flights/{flight_id}` | | Cancel queued work. Only what has not started. |
+| `GET` | `/upcoming` | `hours` | What will start on its own. See below. |
 | `GET` | `/itineraries` | `window`, `state` | Chains of work, and whether each finished, stalled or is waiting for a person (`awaiting_human`). Each carries its `flags`, `waiting_for` when it waits, the chains it `continues` or is `continued_by`, and where a working chain is: the agents `running` in it and those it has work `queued` for. A chain is listed from the moment its first flight is queued, with no runs yet. |
 | `GET` | `/itineraries/{itinerary_id}` | | One chain, whole. See below. |
 | `GET` | `/runs` | `status`, `itinerary_id`, `agent`, `pipeline`, `window`, `limit` | Runs, live and historical. Runs alive now come first, as `running`, read from the Tower's live records — history holds a run only once it is over. |
@@ -137,6 +138,54 @@ no flags. Naming an undeclared flag is a `400`, not a silent no-op.
 
 A `409` means a Ground Stop is engaged. A kill switch that halted running work while still
 accepting more would not be a kill switch.
+
+## What starts on its own
+
+`GET /upcoming?hours=24` answers what nobody has to trigger, over a window of 1 to 168 hours:
+
+- `workflows` — every scheduled pipeline: `next_at`, whether it is `working` (its last wave still
+  queued or running, so its next tick is skipped), `fires_in_window`, and `skipped_7d` with
+  `last_skipped_at`.
+- `fires` — each tick in the window, soonest first and at most 24 per pipeline. `overdue` marks a
+  tick held back, by a Ground Stop usually, that fires as soon as it can; `may_skip` marks the next
+  tick of a pipeline still working; `collects` says how many layovers a resuming tick picks up.
+- `layovers` — every layover waiting, soonest due first, with `collected_at` and `collected_by`:
+  the first tick of a resuming pipeline at or after `due_at`, which is later than `due_at` by up to
+  one interval.
+- `skips` — ticks skipped in the last seven days, most recent first, with a `reason`.
+
+```json
+{
+  "now": "2026-10-07T09:54:42Z",
+  "until": "2026-10-08T09:54:42Z",
+  "clock": "the Tower in `layover serve` (process 9376)",
+  "ground_stop": false,
+  "workflows": [
+    { "pipeline": "follow_up", "next_at": "2026-10-07T10:39:20Z", "resumes": true,
+      "overlaps": false, "working": false, "fires_in_window": 32, "skipped_7d": 0 }
+  ],
+  "fires": [
+    { "pipeline": "follow_up", "at": "2026-10-07T10:39:20Z", "overdue": false,
+      "resumes": true, "may_skip": false, "collects": 0 }
+  ],
+  "layovers": [
+    { "layover_id": "lay_01M4...", "agent": "publisher", "waiting_for": "comments on pull request 41",
+      "booked_by": "itn_01M4...", "pipeline": "development",
+      "booked_at": "2026-10-07T09:54:30Z", "due_at": "2026-10-07T11:54:30Z",
+      "collected_at": "2026-10-07T12:09:20Z", "collected_by": "follow_up" }
+  ],
+  "skips": []
+}
+```
+
+**The times are the Tower's.** An `every` schedule is counted from when the Tower started, so only
+the Tower keeping the clock knows when it next fires. A server with no Tower in its process —
+`--watch-only` — answers with `clock: null` and no `fires`, rather than a timetable that looks
+exact and is wrong by however long ago the real Tower started. Its layovers and skips are still
+listed, read from disk.
+
+Work already queued is not here: `GET /flights` lists it, oldest first, which is the order it
+starts in.
 
 ## Run status
 

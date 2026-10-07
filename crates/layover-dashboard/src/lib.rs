@@ -37,8 +37,10 @@ mod map;
 mod reply;
 mod stream;
 pub mod transcript;
+mod upcoming;
 mod view;
 
 pub use api::{Dashboard, DashboardState};
 pub use assets::router;
 pub use auth::Guard;
+pub use upcoming::Timetable;

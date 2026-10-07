@@ -21,9 +21,9 @@ A factory holds several pipelines, and they are separate workflows that happen t
 page that totals them together answers a question nobody asked: "is the build healthy" is about one
 of them, and reading it off a combined figure means doing the separation by eye.
 
-The **Workflow** selector in the header scopes the whole page — the route map, runs, cost totals and
-breakdowns, and help requests. It defaults to *All workflows*, and it is hidden entirely when a
-factory declares only one.
+The **Workflow** selector in the header scopes the whole page — the route map, runs, what is
+coming up, cost totals and breakdowns, and help requests. It defaults to *All workflows*, and it is
+hidden entirely when a factory declares only one.
 
 Two things deliberately do not narrow:
 
@@ -79,6 +79,36 @@ run's Hangar (`.layover/hangars/<agent>/<run>/`). Credentials are masked the way
 run's failure detail. Copilot CLI's JSON events and Claude Code's `stream-json` are understood;
 anything else — Codex, a script — is shown as it was printed.
 
+## What starts next
+
+**Upcoming** answers what will happen without anybody pressing anything, in the order it will
+happen, over the next 6 hours to 7 days:
+
+- **Waiting for a slot** — work already queued, first in first out, with its position, the agent it
+  goes to, its chain and the first line of its prompt, and **Cancel** for each. Above it,
+  `2 of 4 run(s) alive` and what starts the queue.
+- **Scheduled** — every tick of every workflow with a schedule, grouped by day: when, how long
+  until, and what it does — `starts analyst`, or for a resuming workflow `picks up 1 layover`. A
+  run of ticks of one workflow with nothing to say about them is folded into one row
+  (`10:00 – 10:23 · starts poller · 24 ticks`), so a one-minute schedule does not bury the hourly
+  one. A tick is marked when its workflow's previous run is still going — *skipped unless it
+  finishes first* — and when it is held: a tick that comes due during a Ground Stop fires once, the
+  moment it is released, and the ones after it count from then.
+- **Layovers** — work an agent set down, what it is waiting for, the chain that set it down, when it
+  is due, and **when it will actually be picked up**: the first tick of a resuming workflow after it
+  is due, which can be most of an interval later. With no resuming schedule it says *never*.
+- **Skipped ticks** — every tick in the last seven days that found its workflow still working, and
+  a count per workflow. A schedule that skips every tick has a quiet history — few runs, nothing
+  failed — and this is where it shows.
+
+**The times are the Tower's.** An `every` schedule counts from when the Tower started, so a page
+working the times out for itself would be wrong by however long ago that was. A `--watch-only`
+dashboard has no clock and says so; its queue, layovers and skipped ticks are still shown.
+
+The same clock puts **next** beside each scheduled workflow's trigger on the route map — `next
+14:00 · in 23 min`, amber when that tick may be skipped — and the strip under it gains **skipped
+ticks, 7d**.
+
 ## Reading what an agent did
 
 Every row on **Runs** opens the report that agent wrote about its own run: a headline, the body,
@@ -109,7 +139,7 @@ It is a file on disk rather than state in memory, so it survives a crash and can
 when nothing is responding. The Tower reads it on every pass, so it takes effect within seconds
 rather than at the next restart.
 
-Queued work can be cancelled individually. Only work that has *not started*: a run already going
+Queued work can be cancelled individually, from **Upcoming**. Only work that has *not started*: a run already going
 is stopped with a Ground Stop, which is a different decision with a different blast radius — one
 flight versus the whole factory — and saying "cancelled" about something still opening pull
 requests is the most dangerous thing this surface could say.
@@ -324,14 +354,15 @@ together they read as one very confused process, so each gets its own diagram, s
 page — or just the selected one, when the header narrows the page to it.
 
 Above each diagram is what that workflow has actually been doing: runs and spend over the last
-seven days, failures, and open help requests. The diagram says what *may* happen; the strip says
-what did, and both questions get asked at the same moment by someone who has just opened the page
-wondering whether anything is wrong.
+seven days, failures, open help requests and, for a scheduled workflow, the ticks it skipped. The
+diagram says what *may* happen; the strip says what did, and both questions get asked at the same
+moment by someone who has just opened the page wondering whether anything is wrong.
 
 Each carries the rails that bound a chain started there:
 
 | Rail | What it bounds |
 |---|---|
+| **next** | Not a bound: when a scheduled workflow next fires, by the Tower's clock. See [What starts next](#what-starts-next). |
 | **hops** | **Depth.** Flights before the chain is cut. Branches inherit the count rather than splitting it, so it says nothing about width. |
 | **fuel** | **Breadth.** The shared budget, honouring the entry agent''s own `fuel_usd` where it sets one. |
 | **workspace** | Whether two instances share a working directory or get one each. |
@@ -471,6 +502,7 @@ back than 90 days reports a lower bound and says so.
 |---|---|---|
 | `.layover/history/runs-*.jsonl` | One record per run | Yes, whole files |
 | `.layover/journal/help-*.jsonl` | Help requests | Yes, whole files |
+| `.layover/journal/skips-*.jsonl` | Scheduled ticks that were skipped | Yes, whole files |
 | `.layover/hangars/<agent>/run_*/` | A run's prompt and transcript | Yes, whole directories |
 | `.layover/hangars/<agent>/memory.md` | What the agent wrote for itself | **No** |
 | `.layover/journal/learnings.jsonl` | Confirmed learnings | **No** |

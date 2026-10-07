@@ -32,6 +32,7 @@
 //! of a Ground Stop, a restart and a dashboard in another task.
 
 mod resume;
+mod timetable;
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -60,6 +61,7 @@ type Now = Arc<dyn Fn() -> Timestamp + Send + Sync>;
 pub struct Tower {
     stop: Arc<AtomicBool>,
     thread: Option<std::thread::JoinHandle<()>>,
+    timetable: Arc<timetable::TowerTimetable>,
 }
 
 impl Tower {
@@ -74,6 +76,11 @@ impl Tower {
         announce: impl Fn(String) + Send + 'static,
     ) -> std::io::Result<Self> {
         Self::start_at(factory, journal, announce, Arc::new(Timestamp::now))
+    }
+
+    /// The Tower's clock and what it counts as still working, for the dashboard in this process.
+    pub fn timetable(&self) -> Arc<dyn layover_dashboard::Timetable> {
+        Arc::clone(&self.timetable) as Arc<dyn layover_dashboard::Timetable>
     }
 
     fn start_at(
@@ -92,16 +99,27 @@ impl Tower {
             announce(settled.to_string());
         }
 
+        // Shared rather than owned by the loop, so the dashboard can ask when each schedule next
+        // fires — the one thing about a schedule only the Tower keeping it knows.
+        let factory = Arc::new(factory);
+        let clock = Arc::new(Clock::new(factory.config(), now()));
+        let timetable = Arc::new(timetable::TowerTimetable::new(
+            Arc::clone(&clock),
+            Arc::clone(&factory),
+            Arc::clone(&journal),
+        ));
+
         let stop = Arc::new(AtomicBool::new(false));
         let stopping = Arc::clone(&stop);
 
         let thread = std::thread::Builder::new()
             .name("layover-tower".to_owned())
-            .spawn(move || run_loop(&factory, &journal, &stopping, &announce, &*now))?;
+            .spawn(move || run_loop(&factory, &clock, &journal, &stopping, &announce, &*now))?;
 
         Ok(Self {
             stop,
             thread: Some(thread),
+            timetable,
         })
     }
 }
@@ -121,13 +139,13 @@ impl Drop for Tower {
 
 fn run_loop(
     factory: &Factory,
+    clock: &Clock,
     journal: &Journal,
     stop: &AtomicBool,
     announce: &dyn Fn(String),
     now: &dyn Fn() -> Timestamp,
 ) {
     let config = factory.config().clone();
-    let clock = Clock::new(&config, now());
 
     while !stop.load(Ordering::Relaxed) {
         // Read from disk every pass rather than cached: a kill switch whose state was sampled at
@@ -137,7 +155,7 @@ fn run_loop(
             continue;
         }
 
-        let tick = || fire_due(factory, journal, &clock, &config, now(), announce);
+        let tick = || fire_due(factory, journal, clock, &config, now(), announce);
         tick();
         dispatch(factory, journal, stop, announce, &tick);
 
@@ -188,7 +206,11 @@ fn fire_due(
 
     for skipped in due.skipped {
         // Said out loud, because a schedule quietly skipping every tick because its work
-        // always overruns looks exactly like one that is running fine.
+        // always overruns looks exactly like one that is running fine. Written down too, because
+        // the console is the one place nobody looks a day later.
+        if let Err(error) = journal.record_skip(&skipped.record(now)) {
+            announce(format!("could not record a skipped tick: {error}"));
+        }
         announce(format!("skipped: {skipped}"));
     }
 }

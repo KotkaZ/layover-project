@@ -238,8 +238,6 @@ pub fn serve(
     hangar::prune(&state_dir(path, history).join("hangars"), horizon)
         .map_err(|error| error.to_string())?;
 
-    let dashboard = dashboard_for(path, store, &journal, &history_dir, watch_only);
-
     // Held for the lifetime of the command. Dropping either stops it: the endpoint frees its port,
     // and the Tower finishes whatever run it is watching before the thread joins.
     let factory_root = path.parent().unwrap_or_else(|| Path::new("."));
@@ -259,6 +257,15 @@ pub fn serve(
 
         Some((served, tower))
     };
+
+    // After the Tower, because the dashboard reads its clock.
+    let dashboard = dashboard_for(
+        path,
+        store,
+        &journal,
+        &history_dir,
+        running.as_ref().map(|(_, tower)| tower.timetable()),
+    );
 
     // Copied out before the async block, which would otherwise take ownership of the pair and
     // Minted before anything binds, so the address that gets printed is the address that works.
@@ -592,14 +599,15 @@ pub fn doctor(path: &Path, window: &str) -> Result<(String, bool), Failure> {
 
 /// The dashboard `serve` puts on a factory.
 ///
-/// It names the Tower only when this process runs the queue. A watching dashboard that claimed a
-/// dispatcher would show a queue that looks like it is moving when nothing here will move it.
+/// It names the Tower, and reads its clock, only when this process runs the queue. A watching
+/// dashboard that claimed a dispatcher would show a queue that looks like it is moving when nothing
+/// here will move it, and one that claimed a clock would show times nothing here keeps.
 fn dashboard_for(
     path: &Path,
     history: History,
     journal: &Arc<Journal>,
     history_dir: &Path,
-    watch_only: bool,
+    timetable: Option<Arc<dyn layover_dashboard::Timetable>>,
 ) -> Dashboard {
     let dashboard = Dashboard::new(DashboardState {
         config_path: path.to_path_buf(),
@@ -607,13 +615,17 @@ fn dashboard_for(
         journal: Arc::clone(journal),
         ground_stop: history_dir.with_file_name("ground-stop"),
     });
-    if watch_only {
-        dashboard
-    } else {
-        dashboard.dispatched_by(format!(
-            "the Tower in `layover serve` (process {})",
-            std::process::id()
-        ))
+    match timetable {
+        None => dashboard,
+        Some(timetable) => {
+            let tower = format!(
+                "the Tower in `layover serve` (process {})",
+                std::process::id()
+            );
+            dashboard
+                .dispatched_by(tower.clone())
+                .timetable(tower, timetable)
+        }
     }
 }
 

@@ -169,6 +169,40 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
 
+  /upcoming:
+    get:
+      operationId: getUpcoming
+      summary: What will start on its own, and the scheduled ticks that did not.
+      description: |
+        Work nobody has to trigger: every tick of a scheduled pipeline due within the window, and
+        every layover waiting to be picked up, with the tick expected to collect it. Beside them,
+        the ticks skipped in the last seven days because the pipeline's previous wave was still
+        going — a schedule that skips every tick looks, from its runs alone, like one that is
+        running fine.
+
+        When a tick comes due is known only to the Tower that keeps the clock, because an `every`
+        schedule is counted from when that Tower started. A dashboard with no Tower in its process
+        (`--watch-only`) says so with a null `clock` and lists no ticks, rather than guessing.
+
+        Work already queued is not here: `GET /flights` lists it, oldest first, which is the order
+        it starts in.
+      tags: [work]
+      parameters:
+        - name: hours
+          in: query
+          required: false
+          description: How far ahead to look, in hours. Defaults to 24; held between 1 and 168.
+          schema:
+            type: integer
+            format: int32
+      responses:
+        "200":
+          description: Upcoming ticks, layovers and recent skips.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Upcoming"
+
   /itineraries:
     get:
       operationId: listItineraries
@@ -1722,6 +1756,181 @@ components:
           description: |
             How many runs may be alive at once, from `[defaults] max_concurrent_runs`. Queued work
             waits for a slot rather than being refused.
+
+    SkipReason:
+      type: string
+      description: |
+        Why a scheduled tick that came due did not start. `still_working`: the pipeline's previous
+        wave was still queued or running, and it does not set `overlap = "allow"`.
+      enum: [still_working]
+
+    ScheduledWorkflow:
+      type: object
+      description: One scheduled pipeline, and when it next fires.
+      required: [pipeline, resumes, overlaps, working, fires_in_window, skipped_7d]
+      properties:
+        pipeline:
+          type: string
+          description: The pipeline.
+        next_at:
+          type: [string, "null"]
+          format: date-time
+          description: |
+            When its next tick is due, by the Tower's clock. Null when no clock is known in this
+            process, or for a cron expression that never matches. A time already past is a tick
+            held back — by a Ground Stop, usually — that fires as soon as it can.
+        resumes:
+          type: boolean
+          description: True when its ticks collect due layovers rather than starting fresh work.
+        overlaps:
+          type: boolean
+          description: True when it sets `overlap = "allow"`, so a tick starts whatever is running.
+        working:
+          type: boolean
+          description: |
+            Its previous wave is queued or running now. Unless that finishes first, its next tick
+            is skipped.
+        fires_in_window:
+          type: integer
+          format: int32
+          description: |
+            How many ticks are due before `until`. Counted whole up to 10,000; `fires` lists at most
+            24 of them, so a one-minute schedule does not bury every other.
+        skipped_7d:
+          type: integer
+          format: int32
+          description: Ticks of it skipped in the last seven days.
+        last_skipped_at:
+          type: [string, "null"]
+          format: date-time
+          description: The most recent of those, if any.
+
+    ScheduledFire:
+      type: object
+      description: One tick of a scheduled pipeline.
+      required: [pipeline, at, overdue, resumes, may_skip, collects]
+      properties:
+        pipeline:
+          type: string
+          description: The pipeline that fires.
+        at:
+          type: string
+          format: date-time
+          description: When it is due.
+        overdue:
+          type: boolean
+          description: |
+            It is already due and has not fired: held by a Ground Stop, or by a Tower busy starting
+            work. It fires as soon as it can, and the ticks after it count from then.
+        resumes:
+          type: boolean
+          description: It collects due layovers rather than starting fresh work.
+        may_skip:
+          type: boolean
+          description: |
+            The pipeline's previous wave is still going, so this tick is skipped unless that
+            finishes first. Only ever the next tick: what is running later is not known now.
+        collects:
+          type: integer
+          format: int32
+          description: For a resuming tick, the layovers expected to be picked up by it.
+
+    WaitingLayover:
+      type: object
+      description: Work an agent set down to be picked up later, and when it will be.
+      required: [layover_id, agent, waiting_for, booked_by, booked_at, due_at]
+      properties:
+        layover_id:
+          type: string
+          description: Identifier of the layover.
+        agent:
+          type: string
+          description: The agent the resumed work goes to.
+        waiting_for:
+          type: string
+          description: What it is waiting for, in the words of the agent that set it down.
+        booked_by:
+          type: string
+          description: The chain that set it down.
+        pipeline:
+          type: [string, "null"]
+          description: The workflow that chain belonged to, when that was recorded.
+        booked_at:
+          type: string
+          format: date-time
+          description: When it was set down.
+        due_at:
+          type: string
+          format: date-time
+          description: The soonest it may be picked up.
+        collected_at:
+          type: [string, "null"]
+          format: date-time
+          description: |
+            The first tick of a resuming pipeline at or after `due_at`, which is when it will be
+            picked up unless that tick is skipped. Null when no clock is known in this process, or
+            when no scheduled pipeline `resumes` — then nothing will ever pick it up.
+        collected_by:
+          type: [string, "null"]
+          description: The resuming pipeline whose tick that is.
+
+    SkippedTick:
+      type: object
+      description: A scheduled tick that came due and did not start.
+      required: [pipeline, at, reason]
+      properties:
+        pipeline:
+          type: string
+          description: The pipeline whose tick it was.
+        at:
+          type: string
+          format: date-time
+          description: When the Tower decided not to start it.
+        reason:
+          $ref: "#/components/schemas/SkipReason"
+          description: Why.
+
+    Upcoming:
+      type: object
+      description: What will start on its own within a window, and the ticks that recently did not.
+      required: [now, until, clock, ground_stop, workflows, fires, layovers, skips]
+      properties:
+        now:
+          type: string
+          format: date-time
+          description: The moment this was worked out, so "in 20 minutes" is measured from it.
+        until:
+          type: string
+          format: date-time
+          description: The end of the window.
+        clock:
+          type: [string, "null"]
+          description: |
+            What keeps the schedule: the Tower in this process. Null when nothing here does
+            (`--watch-only`): when ticks fall is then unknown, and `fires` is empty.
+        ground_stop:
+          type: boolean
+          description: A Ground Stop is engaged, so nothing here fires until it is released.
+        workflows:
+          type: array
+          description: Every pipeline with a schedule, by name.
+          items:
+            $ref: "#/components/schemas/ScheduledWorkflow"
+        fires:
+          type: array
+          description: Ticks due before `until`, soonest first, at most 24 per pipeline.
+          items:
+            $ref: "#/components/schemas/ScheduledFire"
+        layovers:
+          type: array
+          description: Layovers waiting to be picked up, soonest due first.
+          items:
+            $ref: "#/components/schemas/WaitingLayover"
+        skips:
+          type: array
+          description: Ticks skipped in the last seven days, most recent first, at most 100.
+          items:
+            $ref: "#/components/schemas/SkippedTick"
 
     Report:
       type: object

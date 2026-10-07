@@ -860,6 +860,52 @@ pub enum RunStatus {
     Interrupted,
 }
 
+/// One tick of a scheduled pipeline.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScheduledFire {
+    /// When it is due.
+    pub at: String,
+    /// For a resuming tick, the layovers expected to be picked up by it.
+    pub collects: i32,
+    /// The pipeline's previous wave is still going, so this tick is skipped unless that
+    /// finishes first. Only ever the next tick: what is running later is not known now.
+    pub may_skip: bool,
+    /// It is already due and has not fired: held by a Ground Stop, or by a Tower busy starting
+    /// work. It fires as soon as it can, and the ticks after it count from then.
+    pub overdue: bool,
+    /// The pipeline that fires.
+    pub pipeline: String,
+    /// It collects due layovers rather than starting fresh work.
+    pub resumes: bool,
+}
+
+/// One scheduled pipeline, and when it next fires.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScheduledWorkflow {
+    /// How many ticks are due before `until`. Counted whole up to 10,000; `fires` lists at most
+    /// 24 of them, so a one-minute schedule does not bury every other.
+    pub fires_in_window: i32,
+    /// The most recent of those, if any.
+    #[serde(default)]
+    pub last_skipped_at: Option<String>,
+    /// When its next tick is due, by the Tower's clock. Null when no clock is known in this
+    /// process, or for a cron expression that never matches. A time already past is a tick
+    /// held back — by a Ground Stop, usually — that fires as soon as it can.
+    #[serde(default)]
+    pub next_at: Option<String>,
+    /// True when it sets `overlap = "allow"`, so a tick starts whatever is running.
+    pub overlaps: bool,
+    /// The pipeline.
+    pub pipeline: String,
+    /// True when its ticks collect due layovers rather than starting fresh work.
+    pub resumes: bool,
+    /// Ticks of it skipped in the last seven days.
+    pub skipped_7d: i32,
+    /// Its previous wave is queued or running now. Unless that finishes first, its next tick
+    /// is skipped.
+    pub working: bool,
+}
+
 /// Exactly one of `pipeline` and `to` must be given, and flags are only accepted alongside a
 /// pipeline, because a pipeline is what declares them.
 ///
@@ -879,6 +925,26 @@ pub struct SendFlightRequest {
     /// Name of an `entry = true` agent to send to directly.
     #[serde(default)]
     pub to: Option<String>,
+}
+
+/// Why a scheduled tick that came due did not start. `still_working`: the pipeline's previous
+/// wave was still queued or running, and it does not set `overlap = "allow"`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SkipReason {
+    /// `still_working`
+    #[serde(rename = "still_working")]
+    StillWorking,
+}
+
+/// A scheduled tick that came due and did not start.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SkippedTick {
+    /// When the Tower decided not to start it.
+    pub at: String,
+    /// The pipeline whose tick it was.
+    pub pipeline: String,
+    /// Why.
+    pub reason: SkipReason,
 }
 
 /// Liveness of the Tower itself.
@@ -926,6 +992,57 @@ pub enum TriggerKind {
     /// `scheduled`
     #[serde(rename = "scheduled")]
     Scheduled,
+}
+
+/// What will start on its own within a window, and the ticks that recently did not.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Upcoming {
+    /// What keeps the schedule: the Tower in this process. Null when nothing here does
+    /// (`--watch-only`): when ticks fall is then unknown, and `fires` is empty.
+    #[serde(default)]
+    pub clock: Option<String>,
+    /// Ticks due before `until`, soonest first, at most 24 per pipeline.
+    pub fires: Vec<ScheduledFire>,
+    /// A Ground Stop is engaged, so nothing here fires until it is released.
+    pub ground_stop: bool,
+    /// Layovers waiting to be picked up, soonest due first.
+    pub layovers: Vec<WaitingLayover>,
+    /// The moment this was worked out, so "in 20 minutes" is measured from it.
+    pub now: String,
+    /// Ticks skipped in the last seven days, most recent first, at most 100.
+    pub skips: Vec<SkippedTick>,
+    /// The end of the window.
+    pub until: String,
+    /// Every pipeline with a schedule, by name.
+    pub workflows: Vec<ScheduledWorkflow>,
+}
+
+/// Work an agent set down to be picked up later, and when it will be.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WaitingLayover {
+    /// The agent the resumed work goes to.
+    pub agent: String,
+    /// When it was set down.
+    pub booked_at: String,
+    /// The chain that set it down.
+    pub booked_by: String,
+    /// The first tick of a resuming pipeline at or after `due_at`, which is when it will be
+    /// picked up unless that tick is skipped. Null when no clock is known in this process, or
+    /// when no scheduled pipeline `resumes` — then nothing will ever pick it up.
+    #[serde(default)]
+    pub collected_at: Option<String>,
+    /// The resuming pipeline whose tick that is.
+    #[serde(default)]
+    pub collected_by: Option<String>,
+    /// The soonest it may be picked up.
+    pub due_at: String,
+    /// Identifier of the layover.
+    pub layover_id: String,
+    /// The workflow that chain belonged to, when that was recorded.
+    #[serde(default)]
+    pub pipeline: Option<String>,
+    /// What it is waiting for, in the words of the agent that set it down.
+    pub waiting_for: String,
 }
 
 /// A resolved window, and an honest account of how it was arrived at.
@@ -1111,6 +1228,14 @@ pub struct StreamRunQuery {
     /// Resume from here: the `id` of the last event received. Omit to start at the beginning.
     #[serde(default)]
     pub after: Option<i64>,
+}
+
+/// query parameters for `getUpcoming`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GetUpcomingQuery {
+    /// How far ahead to look, in hours. Defaults to 24; held between 1 and 168.
+    #[serde(default)]
+    pub hours: Option<i32>,
 }
 
 /// Everything the Tower must implement to serve this API.
@@ -1393,6 +1518,26 @@ pub trait Api: Send + Sync + 'static {
         path: StreamRunPath,
         query: StreamRunQuery,
     ) -> impl core::future::Future<Output = Result<EventStream, Problem>> + Send;
+    /// What will start on its own, and the scheduled ticks that did not.
+    ///
+    /// Work nobody has to trigger: every tick of a scheduled pipeline due within the window, and
+    /// every layover waiting to be picked up, with the tick expected to collect it. Beside them,
+    /// the ticks skipped in the last seven days because the pipeline's previous wave was still
+    /// going — a schedule that skips every tick looks, from its runs alone, like one that is
+    /// running fine.
+    ///
+    /// When a tick comes due is known only to the Tower that keeps the clock, because an `every`
+    /// schedule is counted from when that Tower started. A dashboard with no Tower in its process
+    /// (`--watch-only`) says so with a null `clock` and lists no ticks, rather than guessing.
+    ///
+    /// Work already queued is not here: `GET /flights` lists it, oldest first, which is the order
+    /// it starts in.
+    ///
+    /// `GET /upcoming`
+    fn get_upcoming(
+        &self,
+        query: GetUpcomingQuery,
+    ) -> impl core::future::Future<Output = Result<Upcoming, Problem>> + Send;
 }
 
 /// Builds the axum router for this API.
@@ -1448,6 +1593,7 @@ pub fn router<A: Api>(api: std::sync::Arc<A>) -> axum::Router {
             "/runs/{run_id}/stream",
             axum::routing::get(handle_stream_run::<A>),
         )
+        .route("/upcoming", axum::routing::get(handle_get_upcoming::<A>))
         .with_state(api)
 }
 
@@ -1657,10 +1803,20 @@ async fn handle_stream_run<A: Api>(
     }
 }
 
+async fn handle_get_upcoming<A: Api>(
+    axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
+    axum::extract::Query(query): axum::extract::Query<GetUpcomingQuery>,
+) -> axum::response::Response {
+    match api.get_upcoming(query).await {
+        Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
+        Err(problem) => problem.into_response(),
+    }
+}
+
 /// Every operation the specification declares, as (method, path, operationId).
 ///
 /// Exposed so tests can assert the router and the specification agree.
-pub const OPERATIONS: [(&str, &str, &str); 21] = [
+pub const OPERATIONS: [(&str, &str, &str); 22] = [
     ("GET", "/agents", "listAgents"),
     ("GET", "/costs", "getCosts"),
     ("GET", "/flights", "listPending"),
@@ -1682,4 +1838,5 @@ pub const OPERATIONS: [(&str, &str, &str); 21] = [
     ("GET", "/runs/{run_id}", "getRun"),
     ("GET", "/runs/{run_id}/report", "getReport"),
     ("GET", "/runs/{run_id}/stream", "streamRun"),
+    ("GET", "/upcoming", "getUpcoming"),
 ];

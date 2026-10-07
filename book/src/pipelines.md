@@ -83,6 +83,10 @@ resuming pipeline is what brings that work back. See [the tools an agent has](./
 A resuming pipeline that finds nothing due does nothing, which is the ordinary case — and that is
 what makes checking every forty-five minutes affordable.
 
+A layover is picked up at the first tick of a resuming pipeline **after** it comes due, not the
+moment it does: one due at 11:54 behind a 45-minute schedule that ticks at 11:24 and 12:09 is
+picked up at 12:09. The dashboard's **Upcoming** tab shows both times for every layover waiting.
+
 **Resumed work goes back to the agent that booked it**, not to the pipeline's `entry`. A layover
 records which agent set it down, and sending a follow-up to whatever happens to be a pipeline's
 entry point would hand the publisher's pull request to the analyst. `entry` is still required by
@@ -170,7 +174,10 @@ overlap = "allow"          # start another anyway
 
 Every skip is reported, because a schedule quietly skipping every tick because its work always
 overruns looks exactly like a schedule that is running fine — and the difference is that nothing
-is happening.
+is happening. The Tower says so on its console and writes it to
+`.layover/journal/skips-<day>.jsonl`, and the dashboard's **Upcoming** tab lists the last seven
+days of them, counts them per workflow, and marks the next tick of a workflow that is still
+working. See [the dashboard](./dashboard.md#what-starts-next).
 
 `overlap = "allow"` is the right answer when instances genuinely cannot interfere: agents that
 only read, and — once it is enforced — a `per-itinerary` workspace. `layover validate` warns when
@@ -194,6 +201,11 @@ were, restarting would be expensive enough to avoid.
 Next firings are computed from the clock, not from when the last run finished — otherwise the
 period drifts by however long the work took, and an hourly job slowly becomes a ninety-minute one.
 A Tower that was asleep for six hours fires **once** on waking rather than six times in a row.
+
+An `every` schedule counts from when the Tower started, so a restart moves it: an hourly sweep
+started at 09:20 fires at 10:20, 11:20 and so on. When each schedule next fires, by the clock the
+Tower is actually keeping, is on the dashboard's **Upcoming** tab and beside the trigger on the
+route map.
 
 ## Flags
 

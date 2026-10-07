@@ -14,6 +14,7 @@
     <button class="tab" data-view="map" aria-current="true">Route map</button>
     <button class="tab" data-view="chains">Chains<span id="stalled-badge" class="badge" hidden></span><span id="awaiting-badge" class="badge waiting" title="Chains waiting for you to answer" hidden></span></button>
     <button class="tab" data-view="sessions">Sessions<span id="live-badge" class="badge live" hidden></span></button>
+    <button class="tab" data-view="upcoming">Upcoming</button>
     <button class="tab" data-view="runs">Runs</button>
     <button class="tab" data-view="cost">Cost</button>
     <button class="tab" data-view="journal">Help &amp; learnings<span id="help-badge" class="badge" hidden></span></button>
@@ -132,6 +133,63 @@
         <div id="terminals"></div>
       </div>
     </div>
+  </section>
+
+  <section id="upcoming" class="view" hidden>
+    <div class="bar">
+      <label>Look ahead
+        <select id="upcoming-hours">
+          <option value="6">6 hours</option>
+          <option value="24" selected>24 hours</option>
+          <option value="72">3 days</option>
+          <option value="168">7 days</option>
+        </select>
+      </label>
+      <button id="upcoming-refresh" type="button">Refresh</button>
+    </div>
+    <p id="upcoming-clock" class="hint"></p>
+    <p id="upcoming-stop" class="caveat" hidden></p>
+
+    <h2 class="spaced">Waiting for a slot</h2>
+    <p id="queue-note" class="hint"></p>
+    <table id="queue-table">
+      <thead>
+        <tr><th class="num">#</th><th>Queued</th><th>Agent</th><th>Workflow</th><th>Chain</th><th>Prompt</th><th></th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <p id="queue-empty" class="empty" hidden></p>
+
+    <h2 class="spaced">Scheduled</h2>
+    <p class="hint">
+      Every tick of a workflow with a schedule. A tick finding its workflow's previous run still
+      going is skipped, unless the workflow sets <code>overlap = "allow"</code>.
+    </p>
+    <table id="fires-table">
+      <thead><tr><th>When</th><th></th><th>Workflow</th><th>What</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <p id="fires-empty" class="empty" hidden></p>
+    <p id="fires-more" class="hint" hidden></p>
+
+    <h2 class="spaced">Layovers</h2>
+    <p class="hint">
+      Work an agent set down to come back to. It is picked up by the first tick of a resuming
+      workflow after it is due — not the moment it is due.
+    </p>
+    <table id="layovers-table">
+      <thead><tr><th>Waiting for</th><th>Agent</th><th>Set down</th><th>Due</th><th>Picked up</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <p id="layovers-empty" class="empty" hidden></p>
+
+    <h2 class="spaced">Skipped ticks</h2>
+    <p id="skips-note" class="caveat" hidden></p>
+    <table id="skips-table">
+      <thead><tr><th>When</th><th>Workflow</th><th>Why</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <p id="skips-empty" class="empty" hidden></p>
   </section>
 
   <section id="runs" class="view" hidden>
@@ -315,6 +373,7 @@
 <script src="/sessions.js"></script>
 <script src="/reply.js"></script>
 <script src="/chain.js"></script>
+<script src="/upcoming.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

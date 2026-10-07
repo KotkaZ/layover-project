@@ -182,7 +182,8 @@ impl Journal {
         let help = crate::segment::prune_segments(&self.root, "help", horizon)?;
         let reports = crate::segment::prune_segments(&self.root, "reports", horizon)?;
         let stalls = crate::segment::prune_segments(&self.root, "stalls", horizon)?;
-        Ok(help + reports + stalls)
+        let skips = crate::segment::prune_segments(&self.root, "skips", horizon)?;
+        Ok(help + reports + stalls + skips)
     }
 
     /// Reads the learnings.

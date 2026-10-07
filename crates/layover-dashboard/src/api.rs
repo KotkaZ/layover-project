@@ -22,11 +22,12 @@ use layover_core::run::Outcome;
 use layover_http::{
     AgentList, Api, CancelFlightPath, CostBucket, CostReport, CostWindow, EventStream,
     FlightAccepted, GetCostsQuery, GetGraphQuery, GetItineraryPath, GetReportPath, GetRunPath,
-    GroundStop, Health, HelpList, HelpReplied, HelpReplyRequest, HelpResolved, ItineraryDetail,
-    ItineraryList, ItineraryState, JudgeLearningPath, JudgeLearningRequest, Judgement, Learning,
-    LearningList, ListHelpQuery, ListItinerariesQuery, ListLearningsQuery, ListRunsQuery,
-    PendingList, PipelineList, Problem, Report, ReserveState, ResolveHelpRequest, RouteMap, Run,
-    RunList, RunStatus, SendFlightRequest, Status, StreamRunPath, StreamRunQuery,
+    GetUpcomingQuery, GroundStop, Health, HelpList, HelpReplied, HelpReplyRequest, HelpResolved,
+    ItineraryDetail, ItineraryList, ItineraryState, JudgeLearningPath, JudgeLearningRequest,
+    Judgement, Learning, LearningList, ListHelpQuery, ListItinerariesQuery, ListLearningsQuery,
+    ListRunsQuery, PendingList, PipelineList, Problem, Report, ReserveState, ResolveHelpRequest,
+    RouteMap, Run, RunList, RunStatus, SendFlightRequest, Status, StreamRunPath, StreamRunQuery,
+    Upcoming,
 };
 use layover_store::{HelpFilter, History, Journal, RunFilter};
 
@@ -56,15 +57,20 @@ pub struct DashboardState {
 /// route map changes with it. A factory definition is a few kilobytes of TOML, so the cost of
 /// re-reading it is not worth the surprise of a stale diagram.
 #[derive(Debug, Clone)]
-pub struct Dashboard(Arc<DashboardState>, Option<Arc<str>>);
+pub struct Dashboard(
+    Arc<DashboardState>,
+    Option<Arc<str>>,
+    Option<crate::upcoming::Clocked>,
+);
 
 impl Dashboard {
     /// Creates a dashboard over a configuration file and a history directory.
     ///
-    /// It says nothing is running the queue until [`Dashboard::dispatched_by`] says what is.
+    /// It says nothing is running the queue until [`Dashboard::dispatched_by`] says what is, and
+    /// that it has no clock until [`Dashboard::timetable`] gives it one.
     #[must_use]
     pub fn new(state: DashboardState) -> Self {
-        Self(Arc::new(state), None)
+        Self(Arc::new(state), None, None)
     }
 
     /// Names what runs this factory's queue — the Tower in the same process — so the dashboard can
@@ -73,6 +79,26 @@ impl Dashboard {
     pub fn dispatched_by(mut self, dispatcher: impl Into<String>) -> Self {
         self.1 = Some(Arc::from(dispatcher.into()));
         self
+    }
+
+    /// Gives the dashboard the clock of the Tower in the same process, and says what keeps it, so
+    /// `GET /upcoming` can say when each schedule next fires instead of that it cannot know.
+    #[must_use]
+    pub fn timetable(
+        mut self,
+        keeper: impl Into<String>,
+        timetable: Arc<dyn crate::upcoming::Timetable>,
+    ) -> Self {
+        self.2 = Some(crate::upcoming::Clocked {
+            keeper: Arc::from(keeper.into()),
+            timetable,
+        });
+        self
+    }
+
+    /// The clock of the Tower in this process, if there is one.
+    pub(crate) fn clock(&self) -> Option<&crate::upcoming::Clocked> {
+        self.2.as_ref()
     }
 
     /// How many runs are alive, factory-wide: the live records Towers keep in `state/runs`, one per
@@ -708,6 +734,10 @@ impl Api for Dashboard {
         }
 
         Ok(self.ground_stop())
+    }
+
+    async fn get_upcoming(&self, query: GetUpcomingQuery) -> Result<Upcoming, Problem> {
+        self.upcoming(&query)
     }
 }
 

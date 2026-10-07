@@ -211,6 +211,7 @@ test and doc build, with warnings denied. CI runs the same command, unchanged.
 | **`serve`: the Tower — fires schedules, runs the queue in parallel, hosts MCP, serves the dashboard** | |
 | **Restart recovery: a run the last Tower left is stopped, recorded and restarted** | |
 | **Schedules: `every` and `cron`, skipping a tick whose previous wave is still going** | |
+| **Upcoming: every scheduled tick, layover and queued flight, in the order it will start** | |
 | **Rendezvous joins: work is parked and its agent wakes once, with every verdict** | |
 | **Layovers: an agent sets work down and a resuming pipeline brings it back** | |
 | **Memory and learnings: injected into every run, and all ten agent tools connected** | |

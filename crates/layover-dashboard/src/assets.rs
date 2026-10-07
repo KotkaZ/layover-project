@@ -28,6 +28,8 @@ const SESSIONS: &str = include_str!("assets/sessions.js");
 const REPLY: &str = include_str!("assets/reply.js");
 /// One chain, whole: its map drawn for it alone, and its runs in order.
 const CHAIN: &str = include_str!("assets/chain.js");
+/// What starts next: the queue, scheduled ticks, layovers and skipped ticks.
+const UPCOMING: &str = include_str!("assets/upcoming.js");
 
 /// Builds the complete server: the JSON API, plus the dashboard on top of it.
 ///
@@ -63,6 +65,10 @@ pub fn router(dashboard: Dashboard, guard: Guard) -> Router {
         .route(
             "/chain.js",
             get(|| async { asset("text/javascript", CHAIN) }),
+        )
+        .route(
+            "/upcoming.js",
+            get(|| async { asset("text/javascript", UPCOMING) }),
         )
         .merge(api)
         .layer(axum::middleware::from_fn_with_state(

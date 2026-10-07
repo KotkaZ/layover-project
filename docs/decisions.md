@@ -562,6 +562,16 @@ already under way. Ticked from the dispatcher between one step and the next, not
 looks. The dispatcher looks for new work every quarter second while runs are alive, so schedules
 still fire on time.
 
+**Why the dashboard asks the Tower when a schedule next fires.** A cron expression could be
+evaluated anywhere, but an `every` schedule counts from when the Tower started, and a tick held by
+a Ground Stop fires when it is released — neither is in `layover.toml`. A page that worked the
+times out for itself would show a timetable that looks exact and is wrong by however long ago the
+Tower started. So `serve` hands its dashboard the clock it ticks, and the same "still working"
+answer the clock consults before it skips, and a `--watch-only` dashboard says it has no clock
+rather than guessing. Skipped ticks are written to the journal as well as printed, because a
+schedule that skips every tick leaves a history that looks healthy — few runs, none failed — and
+the console line was the only evidence.
+
 **Why the next flight is the oldest one that can start.** First in, first out, among flights whose
 agent is below its own `max_concurrent`. A flight for an agent at its cap waits where it is, and
 flights behind it for other agents go ahead: waiting for the one agent is what the cap asks for,

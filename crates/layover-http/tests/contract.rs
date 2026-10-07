@@ -18,13 +18,14 @@ use http_body_util::BodyExt as _;
 use layover_http::{
     Access, Agent, AgentList, Api, Blocker, CancelFlightPath, CostBucket, CostReport, CostSource,
     CostSummary, CostWindow, EventStream, FlightAccepted, GetCostsQuery, GetGraphQuery,
-    GetItineraryPath, GetReportPath, GetRunPath, GroundStop, Health, HelpList, HelpReplied,
-    HelpReplyRequest, HelpRequest, HelpResolved, Impact, Itinerary, ItineraryDetail, ItineraryList,
-    ItineraryState, JudgeLearningPath, JudgeLearningRequest, Learning, LearningList, LearningState,
-    ListHelpQuery, ListItinerariesQuery, ListLearningsQuery, ListRunsQuery, OPERATIONS,
-    PendingFlight, PendingList, Pipeline, PipelineList, Problem, Report, ReserveState,
-    ResolveHelpRequest, RouteMap, Run, RunList, RunStatus, SendFlightRequest, Status,
-    StreamRunPath, StreamRunQuery, TokenUsage, Trigger, TriggerKind, WindowSpan, Workspace, router,
+    GetItineraryPath, GetReportPath, GetRunPath, GetUpcomingQuery, GroundStop, Health, HelpList,
+    HelpReplied, HelpReplyRequest, HelpRequest, HelpResolved, Impact, Itinerary, ItineraryDetail,
+    ItineraryList, ItineraryState, JudgeLearningPath, JudgeLearningRequest, Learning, LearningList,
+    LearningState, ListHelpQuery, ListItinerariesQuery, ListLearningsQuery, ListRunsQuery,
+    OPERATIONS, PendingFlight, PendingList, Pipeline, PipelineList, Problem, Report, ReserveState,
+    ResolveHelpRequest, RouteMap, Run, RunList, RunStatus, ScheduledFire, ScheduledWorkflow,
+    SendFlightRequest, SkipReason, SkippedTick, Status, StreamRunPath, StreamRunQuery, TokenUsage,
+    Trigger, TriggerKind, Upcoming, WaitingLayover, WindowSpan, Workspace, router,
 };
 use tower::ServiceExt as _;
 
@@ -388,6 +389,52 @@ impl Api for Stub {
             since: None,
         })
     }
+
+    async fn get_upcoming(&self, query: GetUpcomingQuery) -> Result<Upcoming, Problem> {
+        Ok(Upcoming {
+            now: "2026-10-07T09:00:00Z".to_owned(),
+            until: format!(
+                "2026-10-07T{:02}:00:00Z",
+                9 + query.hours.unwrap_or(24).clamp(1, 14)
+            ),
+            clock: Some("the Tower in `layover serve` (process 7)".to_owned()),
+            ground_stop: false,
+            workflows: vec![ScheduledWorkflow {
+                pipeline: "follow_up".to_owned(),
+                next_at: Some("2026-10-07T09:20:00Z".to_owned()),
+                resumes: true,
+                overlaps: false,
+                working: false,
+                fires_in_window: 19,
+                skipped_7d: 1,
+                last_skipped_at: Some("2026-10-06T18:05:00Z".to_owned()),
+            }],
+            fires: vec![ScheduledFire {
+                pipeline: "follow_up".to_owned(),
+                at: "2026-10-07T09:20:00Z".to_owned(),
+                overdue: false,
+                resumes: true,
+                may_skip: false,
+                collects: 1,
+            }],
+            layovers: vec![WaitingLayover {
+                layover_id: "lyv_1".to_owned(),
+                agent: "follower".to_owned(),
+                waiting_for: "comments on pull request 41".to_owned(),
+                booked_by: "itn_1".to_owned(),
+                pipeline: Some("development".to_owned()),
+                booked_at: "2026-10-07T08:00:00Z".to_owned(),
+                due_at: "2026-10-07T09:00:00Z".to_owned(),
+                collected_at: Some("2026-10-07T09:20:00Z".to_owned()),
+                collected_by: Some("follow_up".to_owned()),
+            }],
+            skips: vec![SkippedTick {
+                pipeline: "follow_up".to_owned(),
+                at: "2026-10-06T18:05:00Z".to_owned(),
+                reason: SkipReason::StillWorking,
+            }],
+        })
+    }
 }
 
 async fn call(method: &str, uri: &str, body: Option<&str>) -> (StatusCode, String, String) {
@@ -429,7 +476,7 @@ fn json(body: &str) -> serde_json::Value {
 
 #[test]
 fn every_specified_operation_is_routed() {
-    assert_eq!(OPERATIONS.len(), 21);
+    assert_eq!(OPERATIONS.len(), 22);
 
     for (method, path, operation) in OPERATIONS {
         assert!(path.starts_with('/'), "`{operation}` has an odd path");
@@ -540,6 +587,20 @@ async fn query_parameters_are_optional_and_typed() {
     let (status, _, filtered) = call("GET", "/runs?status=running&limit=5", None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json(&filtered)["runs"].as_array().map(Vec::len), Some(0));
+}
+
+#[tokio::test]
+async fn upcoming_work_is_served_with_its_window_and_a_typed_skip_reason() {
+    let (status, _, body) = call("GET", "/upcoming?hours=6", None).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let upcoming = json(&body);
+    assert_eq!(upcoming["until"], "2026-10-07T15:00:00Z", "{upcoming}");
+    assert_eq!(upcoming["skips"][0]["reason"], "still_working");
+    assert_eq!(upcoming["layovers"][0]["collected_by"], "follow_up");
+
+    let (status, _, _) = call("GET", "/upcoming", None).await;
+    assert_eq!(status, StatusCode::OK, "the window is optional");
 }
 
 #[tokio::test]

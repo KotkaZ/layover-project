@@ -255,7 +255,8 @@ Everything a factory accumulates lives in `.layover/`, beside its `layover.toml`
 │   ├── learnings.jsonl          # what agents proposed, and what became of it
 │   ├── help-2026-09-23.jsonl    # help requests, segmented by day
 │   ├── reports-2026-09-23.jsonl # what each run said it concluded
-│   └── stalls-2026-09-23.jsonl  # barriers given up as unreachable
+│   ├── stalls-2026-09-23.jsonl  # barriers given up as unreachable
+│   └── skips-2026-09-23.jsonl   # scheduled ticks that came due and did not start
 ├── state/
 │   └── runs/
 │       ├── run_01JRX....json    # a live run: written before it spawns, removed once recorded
@@ -337,6 +338,7 @@ exists in the specification but is not implemented is a compile error.
 | `GET` | `/health` | Liveness, version, and whether a Ground Stop is engaged |
 | `GET` | `/agents` · `/pipelines` · `/graph` | What the factory is made of, and its route map drawn |
 | `POST` · `GET` · `DELETE` | `/flights` · `/flights/:id` | Queue work, see what is waiting, cancel what has not started |
+| `GET` | `/upcoming` | What starts on its own: scheduled ticks by the Tower's clock, layovers and when each is picked up, skipped ticks |
 | `GET` | `/itineraries` · `/itineraries/:id` | Chains, and one chain whole with its runs and its map |
 | `GET` | `/runs` · `/runs/:id` · `/runs/:id/report` | Runs, live and historical, and what each concluded |
 | `GET` | `/runs/:id/stream` | SSE: a run's CLI output, rendered — live, or a replay once it is over |

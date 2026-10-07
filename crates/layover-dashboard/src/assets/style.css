@@ -309,6 +309,17 @@ h2.spaced { margin-top: 30px; }
 .rail.trigger { border-color: var(--accent); color: var(--accent); }
 .rail.hops { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .rail.fuel { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+.rail.next { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.rail.next.risk { border-color: var(--warn); color: var(--warn); }
+
+/* Upcoming. Times line up, and a day starts with its name. */
+td.when { white-space: nowrap; font-variant-numeric: tabular-nums; }
+td.warn { color: var(--warn); }
+td.bad { color: var(--bad); font-weight: 600; }
+td.prompt { max-width: 42ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+#fires-table tr.day th { background: color-mix(in srgb, var(--muted) 8%, transparent); color: var(--ink); text-transform: none; letter-spacing: 0; font-size: 13px; }
+#upcoming-clock, #queue-note { margin: 0 2px 10px; }
+#fires-more { margin-top: 8px; }
 
 /* Trigger and report windows. */
 dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--ink); padding: 0; max-width: 680px; width: 92vw; box-shadow: 0 24px 60px rgba(0,0,0,0.25); }

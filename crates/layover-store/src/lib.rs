@@ -34,6 +34,7 @@ pub mod layout;
 pub mod live;
 pub mod lock;
 mod segment;
+mod skips;
 
 pub use answer::Answered;
 pub use history::{History, RunFilter, StoreError};

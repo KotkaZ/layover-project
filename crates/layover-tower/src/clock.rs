@@ -50,6 +50,19 @@ impl std::fmt::Display for Skipped {
     }
 }
 
+impl Skipped {
+    /// The record kept of it, so a schedule that skips every tick shows up somewhere other than
+    /// the console of the Tower that skipped it.
+    #[must_use]
+    pub fn record(&self, at: Timestamp) -> layover_core::skip::Skip {
+        match self {
+            Self::StillWorking { pipeline } => {
+                layover_core::skip::Skip::still_working(pipeline.clone(), at)
+            }
+        }
+    }
+}
+
 /// What a tick found.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Due {

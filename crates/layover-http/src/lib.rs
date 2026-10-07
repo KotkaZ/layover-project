@@ -41,6 +41,7 @@
 //!     # async fn get_report(&self, _: layover_http::GetReportPath) -> Result<layover_http::Report, Problem> { todo!() }
 //!     # async fn engage_ground_stop(&self) -> Result<layover_http::GroundStop, Problem> { todo!() }
 //!     # async fn release_ground_stop(&self) -> Result<layover_http::GroundStop, Problem> { todo!() }
+//!     # async fn get_upcoming(&self, _: layover_http::GetUpcomingQuery) -> Result<layover_http::Upcoming, Problem> { todo!() }
 //! }
 //!
 //! let app = router(Arc::new(Stub));
