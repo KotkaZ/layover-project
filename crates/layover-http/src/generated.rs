@@ -30,8 +30,9 @@ pub enum Access {
 pub struct Agent {
     /// Whether the agent writes to the shared workspace.
     pub access: Access,
-    /// The context-window tier, from a `--context` flag on the command line, such as
-    /// `long_context`. Null when the command line does not set it.
+    /// The context-window tier, such as `long_context`: the agent's `context` (or
+    /// `[defaults] context`) where its runner carries a `{context}` placeholder, or a
+    /// `--context` its runner's command fixes. Null when the command line sets none.
     #[serde(default)]
     pub context: Option<String>,
     /// One line saying what the agent is.
@@ -49,8 +50,9 @@ pub struct Agent {
     /// A longer statement of when to route work here.
     #[serde(default)]
     pub purpose: Option<String>,
-    /// How hard the model is asked to reason, from a `--reasoning-effort` flag on the command
-    /// line. Null when the command line does not set it.
+    /// How hard the model is asked to reason: the agent's `effort` (or `[defaults] effort`)
+    /// where its runner carries an `{effort}` placeholder, or a `--reasoning-effort` its
+    /// runner's command fixes. Null when the command line sets none.
     #[serde(default)]
     pub reasoning_effort: Option<String>,
     /// Whether the agent is pinned resident rather than transient.
@@ -769,6 +771,10 @@ pub struct Run {
     /// blocked run looks exactly like a clean one on a list.
     #[serde(default)]
     pub blocked_on: Option<String>,
+    /// The context-window tier the run's command line chose, such as `long_context`. Null
+    /// when it chose none, and for runs recorded before Layover kept it.
+    #[serde(default)]
+    pub context: Option<String>,
     /// Where `cost_usd` came from.
     pub cost_source: CostSource,
     /// Null when the runner reported no cost, which the Tower logs loudly.
@@ -808,6 +814,11 @@ pub struct Run {
     /// The pipeline that started this run's chain, when one did.
     #[serde(default)]
     pub pipeline: Option<String>,
+    /// The reasoning effort the run's command line gave the model — from the agent's
+    /// `effort`, `[defaults]`, or a value its runner fixes. Null when the command line set
+    /// none, and for runs recorded before Layover kept it.
+    #[serde(default)]
+    pub reasoning_effort: Option<String>,
     /// Identifier of this run.
     pub run_id: String,
     /// The agents whose flights started this run — for a released join, every arrival. Empty

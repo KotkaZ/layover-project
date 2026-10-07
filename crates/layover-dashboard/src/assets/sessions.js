@@ -57,7 +57,9 @@ class Terminal {
 
   describe() {
     const run = this.run;
-    const parts = [run.agent, run.pipeline, run.model].filter(Boolean);
+    const effort = run.reasoning_effort ? `effort ${run.reasoning_effort}` : null;
+    const context = run.context ? run.context.replace(/[_-]/g, " ") : null;
+    const parts = [run.agent, run.pipeline, run.model, effort, context].filter(Boolean);
     this.title.textContent = parts.join(" · ");
     this.title.title = `${run.run_id}\nchain ${run.itinerary_id}`;
   }

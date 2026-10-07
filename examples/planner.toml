@@ -29,8 +29,11 @@ timeout_sec = 900
 command = ["claude", "-p", "--model", "{model}", "--output-format", "stream-json"]
 mcp     = { flag = "--mcp-config", format = "claude_json" }
 
+# A runner may also fix a value itself rather than carry an agent's: every agent on this one reasons
+# at `high`, whatever it declares. workitem-factory/ shows the other way, with `{effort}`.
 [runners.copilot]
-command = ["copilot", "--model", "{model}", "--allow-all-tools", "--output-format", "json"]
+command = ["copilot", "--model", "{model}", "--reasoning-effort", "high", "--allow-all-tools",
+           "--output-format", "json"]
 mcp     = { flag = "--additional-mcp-config", format = "claude_json", prefix = "@" }
 
 [runners.codex]

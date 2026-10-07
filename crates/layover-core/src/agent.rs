@@ -92,9 +92,24 @@ pub struct Agent {
     /// Runner to invoke; falls back to [`crate::config::Defaults::runner`].
     #[serde(default)]
     pub runner: Option<String>,
-    /// Model identifier passed to the runner.
+    /// Model identifier passed to the runner's `{model}` placeholder.
     #[serde(default)]
     pub model: Option<String>,
+    /// How hard the model is asked to reason, passed to the runner's `{effort}` placeholder:
+    /// `high`, `xhigh`, whatever the CLI accepts for the model.
+    ///
+    /// Belongs to the agent rather than the runner for the same reason the model does: a runner
+    /// says how to invoke a CLI and what an agent may do there, and two agents with the same
+    /// permissions should not need two runners because one thinks harder. Passed through as
+    /// written — Layover keeps no catalog of the levels each model accepts; the CLI refuses one it
+    /// does not support. Falls back to [`crate::config::Defaults::effort`].
+    #[serde(default)]
+    pub effort: Option<String>,
+    /// The context-window tier, passed to the runner's `{context}` placeholder: Copilot CLI's
+    /// `default` or `long_context`, say. Passed through as written, and falls back to
+    /// [`crate::config::Defaults::context`].
+    #[serde(default)]
+    pub context: Option<String>,
     /// The agent's standing instructions, written inline.
     ///
     /// Mutually exclusive with [`Agent::prompt_file`]; use [`Agent::prompt_spec`] rather than

@@ -387,6 +387,11 @@ pub fn explain(path: &Path) -> Result<String, Failure> {
             },
             agent.description_or_placeholder()
         );
+        // Read from the command line the agent will run, so a value its runner cannot carry is
+        // not reported as though it would be.
+        if let Some(running_on) = running_on(&config, name) {
+            let _ = writeln!(out, "      runs on {running_on}");
+        }
     }
 
     // Said once, under the list it qualifies. `explain` is where an operator checks what they
@@ -430,6 +435,36 @@ fn join(names: &[AgentName]) -> String {
         .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+/// What `agent` runs on and through which runner, as `layover prompt` says beside the prompt:
+/// `` `eagle` runs on claude-opus-5.5 · effort xhigh · long context, through runner `analysis` ``.
+///
+/// `None` when the factory does not load, the agent is unknown, or its command line names none of
+/// it — `prompt` itself reports the first two.
+#[must_use]
+pub fn runs_on(path: &Path, agent: &str) -> Option<String> {
+    let (config, _) = load(path).ok()?;
+    let name = AgentName::from(agent);
+    let (runner, _) = config.runner_of(config.agents.get(&name)?)?;
+    let running_on = running_on(&config, &name)?;
+
+    Some(format!(
+        "`{agent}` runs on {running_on}, through runner `{runner}`"
+    ))
+}
+
+/// What an agent's command line selects, said as a person would: the model, its effort and its
+/// context — and, where the command names an effort or context but no model, that the model is
+/// the CLI's choice. `None` when the command line names none of it.
+fn running_on(config: &Config, agent: &AgentName) -> Option<String> {
+    let choice = layover_core::ModelChoice::of(config, agent);
+    let summary = choice.summary()?;
+    Some(if choice.model.is_some() {
+        summary
+    } else {
+        format!("the CLI's default model · {summary}")
+    })
 }
 
 /// Renders an agent's prompt exactly as a run would receive it.
@@ -860,6 +895,43 @@ mod tests {
         assert!(output.contains("--flag run_e2e=false"), "{output}");
         assert!(output.contains("tester [read-only]"), "{output}");
         assert!(output.contains("[join = all]"), "{output}");
+    }
+
+    #[test]
+    fn explain_says_what_each_agent_runs_on_as_its_command_line_will() {
+        let output = explain(&example("workitem-factory/layover.toml")).expect("explains");
+
+        assert!(output.contains("      runs on claude-opus-4\n"), "{output}");
+        assert!(
+            output.contains(
+                "developer [read-write] Implements the work item and repairs what review rejects\n      \
+                 runs on the CLI's default model · effort xhigh · default context\n"
+            ),
+            "its own effort and the default context: {output}"
+        );
+        assert!(
+            output.contains("runs on the CLI's default model · effort medium · long context"),
+            "kusto: the default effort and its own context: {output}"
+        );
+    }
+
+    #[test]
+    fn prompt_names_what_the_agent_runs_on_without_touching_the_prompt() {
+        let path = example("workitem-factory/layover.toml");
+
+        assert_eq!(
+            runs_on(&path, "developer").as_deref(),
+            Some(
+                "`developer` runs on the CLI's default model · effort xhigh · default context, \
+                 through runner `copilot`"
+            )
+        );
+        assert_eq!(runs_on(&path, "ghost"), None);
+        assert_eq!(
+            runs_on(&path, "investigator"),
+            None,
+            "its command line names nothing, and nothing is made up"
+        );
     }
 
     #[test]

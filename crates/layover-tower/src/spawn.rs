@@ -25,7 +25,7 @@ use std::process::{Command, Stdio};
 
 use jiff::Timestamp;
 use layover_core::agent::AgentName;
-use layover_core::config::Runner;
+use layover_core::config::{Runner, Selection};
 
 /// Everything needed to start one run.
 ///
@@ -37,8 +37,9 @@ pub struct Plan {
     pub agent: AgentName,
     /// How to invoke its CLI.
     pub runner: Runner,
-    /// The model to pass, when the agent declared one.
-    pub model: Option<String>,
+    /// What fills the runner's `{model}`, `{effort}` and `{context}`, as the agent and
+    /// `[defaults]` declare them.
+    pub selection: Selection,
     /// The composed payload, from `layover_core::payload::compose`.
     pub payload: String,
     /// Where this run's files go: the payload, the transcript, the state record.
@@ -304,7 +305,7 @@ pub fn start(plan: &Plan) -> Result<Started, SpawnError> {
 
     let argv = plan.runner.invocation_with_mcp(
         payload_arg.as_deref(),
-        plan.model.as_deref(),
+        &plan.selection,
         mcp_arg.as_deref(),
     );
     let (program, arguments) = argv.split_first().ok_or(SpawnError::EmptyCommand)?;
@@ -419,7 +420,7 @@ mod tests {
         Plan {
             agent: AgentName::new("tester"),
             runner,
-            model: None,
+            selection: Selection::default(),
             payload: payload.to_owned(),
             hangar: temp.0.join("hangar"),
             work_dir: temp.0.clone(),

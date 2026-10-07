@@ -18,7 +18,7 @@ mod copilot;
 mod runner;
 
 pub use copilot::CopilotConfig;
-pub use runner::{McpWiring, Runner};
+pub use runner::{McpWiring, Runner, Selection};
 
 /// Filesystem and network locations used by the Tower.
 #[derive(Debug, Clone, Deserialize)]
@@ -60,6 +60,16 @@ pub struct Defaults {
     /// Runner used by agents that do not name one.
     #[serde(default)]
     pub runner: Option<String>,
+    /// Reasoning effort for agents that do not set their own `effort`.
+    ///
+    /// An agent's own value wins. A factory whose agents mostly think equally hard says so once;
+    /// it reaches only runners whose command has an `{effort}` placeholder.
+    #[serde(default)]
+    pub effort: Option<String>,
+    /// Context-window tier for agents that do not set their own `context`. An agent's own value
+    /// wins, and it reaches only runners whose command has a `{context}` placeholder.
+    #[serde(default)]
+    pub context: Option<String>,
     /// Names of environment variables forwarded to every agent's CLI.
     ///
     /// Most factories run one CLI that needs one credential, and repeating it under every agent
@@ -114,6 +124,8 @@ impl Default for Defaults {
     fn default() -> Self {
         Self {
             runner: None,
+            effort: None,
+            context: None,
             env_from: Vec::new(),
             max_hops: default_max_hops(),
             fuel_usd: default_fuel_usd(),
@@ -234,6 +246,36 @@ impl Config {
             source,
         })?;
         Self::from_toml(&text, path)
+    }
+
+    /// What `agent` asks its runner for: its own `model`, `effort` and `context`, with
+    /// `[defaults]` filling in an effort or context it does not set.
+    ///
+    /// An empty value counts as unset, here and when the runner's command is built, so an agent
+    /// cannot hand its CLI an empty argument by writing `effort = ""`.
+    #[must_use]
+    pub fn selection(&self, agent: &Agent) -> Selection {
+        fn set(value: Option<&String>) -> Option<String> {
+            value.filter(|value| !value.trim().is_empty()).cloned()
+        }
+
+        Selection {
+            model: set(agent.model.as_ref()),
+            effort: set(agent.effort.as_ref()).or_else(|| set(self.defaults.effort.as_ref())),
+            context: set(agent.context.as_ref()).or_else(|| set(self.defaults.context.as_ref())),
+        }
+    }
+
+    /// The runner `agent` runs on: its own, or the factory's default.
+    #[must_use]
+    pub fn runner_of(&self, agent: &Agent) -> Option<(&str, &Runner)> {
+        let name = agent
+            .runner
+            .as_deref()
+            .or(self.defaults.runner.as_deref())?;
+        self.runners
+            .get_key_value(name)
+            .map(|(name, runner)| (name.as_str(), runner))
     }
 
     /// Returns the agents a human or a schedule may send flights to.

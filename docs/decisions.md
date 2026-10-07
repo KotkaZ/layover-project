@@ -839,14 +839,45 @@ knows to look further rather than assuming the agent stopped there.
 show each agent's model, reasoning effort and context tier. The obvious source was `agent.model`,
 and it was wrong for the factories where the question matters most: those that fix the model in
 the runner command, one runner per model and permission set, and so declare no `model` at all.
-A new `context` or `effort` field was rejected for the reason `{model}` exists instead of a
-`model_flag` field — every CLI spells these differently, and the runner command is already the one
-place that knows how to invoke a given CLI; a second place would disagree with it the first time
-somebody edited one. Reading the command line with the agent's model substituted is also the only
-honest answer: a declared model whose runner has no `{model}` placeholder never reaches the CLI.
+A `context` or `effort` field that *named the flag* was rejected for the reason `{model}` exists
+instead of a `model_flag` field — every CLI spells these differently, and the runner command is
+already the one place that knows how to invoke a given CLI; a second place would disagree with it
+the first time somebody edited one. (The *values* later became agent fields, carried by
+placeholders exactly as the model is; see below.) Reading the command line with the agent's values
+substituted is also the only honest answer: a declared model whose runner has no `{model}`
+placeholder never reaches the CLI.
 Only flags whose meaning is certain are read — `--model`, and Copilot CLI's `--reasoning-effort`
 and `--context` — because a display that guessed at unknown flags would state a wrong model with
 the same confidence as a right one.
+
+**Why an agent declares its effort and context, and the runner only carries them.** With the
+values fixed in runner commands, a runner was a model setting *times* a permission set: tuning one
+agent's effort meant a new runner and a copied deny list. A real factory did it three times in two
+days, ended with two byte-identical runners nobody noticed, and lost two deny rules from every
+runner for a week in one of those copy-and-edit rewrites. A runner should say what an agent may do;
+how hard it thinks and how much it can read belong to the agent, like its model. So `effort` and
+`context` are agent keys carried by `{effort}` and `{context}` the way `{model}` carries a model,
+and passed through as written — Copilot CLI refuses an effort a model does not support, and a
+catalog in Layover would be a second, staler copy of what only the CLI knows. `[defaults]` gives
+both a fallback because a factory usually wants one context tier everywhere; it does not give one
+for `model`, which was not asked for and would change what an agent with no model has always run
+on.
+
+**Why an unset value takes its flag with it.** Effort and context are optional far more often than
+a model, so a placeholder with nothing to fill it had to disappear cleanly. It used not to: a bare
+`"--model", "{model}"` with no model left `--model` in front of the next flag, which Copilot CLI
+refuses outright, and a joined `--model={model}` reached the CLI as that literal text. The rule now
+is one rule for all three: an argument carrying an unset placeholder is left out whole, and when it
+is the value of the option before it — the preceding argument starts with `-` and carries no `=` —
+the option goes too. Refusing the separate form at validation was the alternative, and was
+rejected: it would force every agent on a shared runner to set every value, and it cannot cover
+Codex's `-c model_reasoning_effort={effort}`, where the joined form does not exist. The one shape
+the pairing can misread — a positional placeholder right after a boolean flag — is not one any
+supported CLI uses, and the documentation says to put such a placeholder first. Every factory this
+changes was handing its CLI a flag without a value; none of them worked before. A runner that
+leaves an agent's effort or context unset is warned about, and a missing model is not, because
+factories have long relied on a joined `--model={model}` dropping out and a new warning would fail
+their `validate --strict`.
 
 **Why a route each way is drawn as one line.** Most routes in a real factory come in reciprocal
 pairs, and the layered layout drew every reverse direction as a return path: a loop under the

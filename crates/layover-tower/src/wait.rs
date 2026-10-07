@@ -182,7 +182,7 @@ mod tests {
         Plan {
             agent: AgentName::new("tester"),
             runner,
-            model: None,
+            selection: layover_core::config::Selection::default(),
             payload: "go".to_owned(),
             hangar: temp.0.join("hangar"),
             work_dir: temp.0.clone(),

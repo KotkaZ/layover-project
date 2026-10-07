@@ -40,6 +40,15 @@ Describes the factory in prose: its agents, what each one is for, its pipelines 
 triggers, and the route map as a list of edges. The quickest way to check that what you wrote is
 what you meant.
 
+Under each agent is what it runs on, read from its runner's command with its own `model`,
+`effort` and `context` filled in — so a value its runner cannot carry does not appear:
+
+```text
+Agents
+  developer [read-write] Implements the work item and repairs what review rejects
+      runs on the CLI's default model · effort xhigh · default context
+```
+
 A route [scoped to workflows](./configuration.md#scoping-a-route-to-workflows) carries its scope
 on its line, and once any route is scoped each pipeline also says which agents its chains can
 reach over the routes they may use:
@@ -82,6 +91,13 @@ layover prompt tester --pipeline development --flag run_e2e=true
 Renders an agent's prompt exactly as a run would receive it, with `@include` directives resolved
 and conditional sections resolved against the flags. This is the only way to see what an agent
 will actually be told before it costs anything to find out.
+
+What the agent runs on is printed beside it, on **stderr**, so the prompt itself can still be piped
+or diffed:
+
+```text
+`eagle` runs on claude-opus-5.5 · effort xhigh · long context, through runner `copilot-analysis`
+```
 
 ## `serve`
 

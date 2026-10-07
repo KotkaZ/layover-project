@@ -15,6 +15,7 @@ mod prompts;
 mod reach;
 mod routes;
 mod scopes;
+mod selection;
 mod wiring;
 
 use crate::config::Config;
@@ -87,7 +88,9 @@ pub fn validate(config: &Config) -> Vec<Diagnostic> {
     agents::check_copilot_price_is_usable(config, &mut found);
     costs::check_runners_report_cost(config, &mut found);
     agents::check_concurrency_is_usable(config, &mut found);
-    agents::check_model_reaches_its_runner(config, &mut found);
+    selection::check_model_reaches_its_runner(config, &mut found);
+    selection::check_effort_and_context_reach_their_runner(config, &mut found);
+    selection::check_runners_do_not_fix_what_they_carry(config, &mut found);
     reach::check_entry_points(config, &mut found);
     routes::check_joins_are_unambiguous(config, &mut found);
     routes::check_read_write_fan_out(config, &mut found);

@@ -129,6 +129,8 @@ pub fn run(record: &RunRecord) -> Run {
         agent: record.agent.to_string(),
         pipeline: record.pipeline.as_ref().map(ToString::to_string),
         model: record.model.clone(),
+        reasoning_effort: record.effort.clone(),
+        context: record.context.clone(),
         status: status(record.outcome),
         started_at: record.started_at.to_string(),
         finished_at: record.finished_at.map(|at| at.to_string()),

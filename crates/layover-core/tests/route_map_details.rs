@@ -129,6 +129,44 @@ fn an_agent_shows_the_model_it_declares_when_its_runner_carries_it() {
 }
 
 #[test]
+fn agents_on_one_runner_show_the_effort_and_context_each_declares() {
+    // The runner carries the values; the agents choose them. Each box says what its own agent
+    // will be run at, not what the runner happens to say.
+    let text = FACTORY
+        .replace(
+            r#"command = ["copilot", "--allow-all-tools"]"#,
+            r#"command = ["copilot", "--model", "{model}", "--reasoning-effort={effort}", "--context", "{context}", "--allow-all-tools"]"#,
+        )
+        .replace(
+            "[agents.mailman]\nprompt = \"post\"\nrunner = \"plain\"\n",
+            "[agents.mailman]\nprompt = \"post\"\nrunner = \"plain\"\nmodel = \"claude-sonnet-5\"\neffort = \"high\"\ncontext = \"default\"\n",
+        )
+        .replace(
+            "[pipelines.devforge]",
+            "[agents.eagle]\nprompt = \"review\"\nrunner = \"plain\"\nmodel = \"claude-opus-5.5\"\neffort = \"xhigh\"\ncontext = \"long_context\"\n\n[pipelines.devforge]",
+        )
+        .replace(r#"to = ["bob", "mailman"]"#, r#"to = ["bob", "mailman", "eagle"]"#);
+    let layout = layout(&text);
+
+    let mailman = layout.node("a_mailman").expect("drawn");
+    assert_eq!(
+        mailman.subtitle.as_deref(),
+        Some("claude-sonnet-5 · effort high")
+    );
+    assert_eq!(
+        mailman.caption.as_deref(),
+        Some("default context · read-only")
+    );
+
+    let eagle = layout.node("a_eagle").expect("drawn");
+    assert_eq!(
+        eagle.subtitle.as_deref(),
+        Some("claude-opus-5.5 · effort xhigh")
+    );
+    assert_eq!(eagle.caption.as_deref(), Some("long context"));
+}
+
+#[test]
 fn the_context_tier_is_on_the_box_beside_the_access() {
     let svg = render_svg(&layout(FACTORY));
 

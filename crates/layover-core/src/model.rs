@@ -1,10 +1,11 @@
 //! Which model an agent runs on, and with how much reasoning and context.
 //!
-//! Read from the command line Layover will actually run, not from `agent.model` alone. A factory
-//! is free to fix the model in its runner command — one runner per model and permission set is a
-//! common shape — and anything that consulted only `agent.model` showed nothing for exactly those
-//! factories. The command line is also the only honest answer: a model an agent declares whose
-//! runner has no `{model}` placeholder never reaches the CLI, so it is not what the agent runs on.
+//! Read from the command line Layover will actually run, not from the agent's declarations alone.
+//! A factory is free to fix the model, effort or context in its runner command, and anything that
+//! consulted only `agent.model` showed nothing for exactly those factories. The command line is
+//! also the only honest answer: a value an agent declares whose runner has no placeholder for it
+//! never reaches the CLI, so it is not what the agent runs on. The agent's own `model`, `effort` and
+//! `context` are substituted first, so two agents sharing one runner each report their own.
 //!
 //! Only flags whose meaning has been confirmed are read: `--model`, which every supported CLI
 //! accepts, and Copilot CLI's `--reasoning-effort` and `--context`. A flag this does not know is
@@ -26,7 +27,9 @@ pub struct ModelChoice {
 }
 
 impl ModelChoice {
-    /// What `agent` runs on, read from its runner's command with its own model substituted.
+    /// What `agent` runs on, read from its runner's command with its own model, effort and context
+    /// substituted — so a value the agent declares is reported where its runner carries it, and a
+    /// value the runner fixes is reported where it fixes one.
     ///
     /// Empty for an agent that does not exist or whose runner does not, which validation reports
     /// on its own.
@@ -35,21 +38,22 @@ impl ModelChoice {
         let Some(definition) = config.agents.get(agent) else {
             return Self::default();
         };
-        let Some(runner) = definition
-            .runner
-            .as_ref()
-            .or(config.defaults.runner.as_ref())
-            .and_then(|name| config.runners.get(name))
-        else {
+        let Some((_, runner)) = config.runner_of(definition) else {
             return Self::default();
         };
 
-        let declared = definition.model.as_deref();
-        let mut choice = Self::read(&runner.invocation(None, declared));
-        // A placeholder that stands alone, or sits in a flag this does not know, still carries
-        // the declared model to the CLI.
+        let selection = config.selection(definition);
+        let mut choice = Self::read(&runner.invocation(None, &selection));
+        // A placeholder that stands alone, or sits in a flag this does not know — Codex's
+        // `-c model_reasoning_effort={effort}` — still carries the value to the CLI.
         if choice.model.is_none() && runner.takes_model() {
-            choice.model = declared.map(ToOwned::to_owned);
+            choice.model = selection.model;
+        }
+        if choice.reasoning_effort.is_none() && runner.takes_effort() {
+            choice.reasoning_effort = selection.effort;
+        }
+        if choice.context.is_none() && runner.takes_context() {
+            choice.context = selection.context;
         }
         choice
     }
@@ -70,6 +74,23 @@ impl ModelChoice {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.model.is_none() && self.reasoning_effort.is_none() && self.context.is_none()
+    }
+
+    /// What it all comes to, on one line: `claude-opus-5.5 · effort xhigh · long context`, or
+    /// `None` when the command line says none of it.
+    #[must_use]
+    pub fn summary(&self) -> Option<String> {
+        let said: Vec<String> = [
+            self.model.clone(),
+            self.reasoning_effort
+                .as_ref()
+                .map(|effort| format!("effort {effort}")),
+            self.context_label(),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        (!said.is_empty()).then(|| said.join(" · "))
     }
 
     /// The context tier as a person would say it: `long_context` is "long context", and a tier
@@ -256,5 +277,160 @@ mod tests {
 
         assert!(ModelChoice::of(&config, &"a".into()).is_empty());
         assert!(ModelChoice::of(&config, &"missing".into()).is_empty());
+    }
+
+    const SHARED: &str = r#"
+[runners.shared]
+command = ["copilot", "--model", "{model}", "--reasoning-effort={effort}", "--context", "{context}", "--allow-all-tools"]
+
+[agents.eagle]
+prompt = "review"
+runner = "shared"
+model = "claude-opus-5.5"
+effort = "xhigh"
+context = "long_context"
+
+[agents.tars]
+prompt = "triage"
+runner = "shared"
+model = "claude-opus-5.5"
+effort = "high"
+"#;
+
+    fn chosen(model: &str, effort: Option<&str>, context: Option<&str>) -> ModelChoice {
+        ModelChoice {
+            model: Some(model.to_owned()),
+            reasoning_effort: effort.map(ToOwned::to_owned),
+            context: context.map(ToOwned::to_owned),
+        }
+    }
+
+    #[test]
+    fn two_agents_on_one_runner_run_at_their_own_effort() {
+        // The point of the placeholders: the same permissions, a different effort, and no second
+        // runner copying the first's deny list.
+        let config = config(SHARED);
+        let line = |agent: &str| {
+            let definition = &config.agents[&AgentName::from(agent)];
+            config.runners["shared"].invocation(None, &config.selection(definition))
+        };
+
+        assert_eq!(
+            line("eagle"),
+            [
+                "copilot",
+                "--model",
+                "claude-opus-5.5",
+                "--reasoning-effort=xhigh",
+                "--context",
+                "long_context",
+                "--allow-all-tools"
+            ]
+        );
+        assert_eq!(
+            line("tars"),
+            [
+                "copilot",
+                "--model",
+                "claude-opus-5.5",
+                "--reasoning-effort=high",
+                "--allow-all-tools"
+            ],
+            "no context set, so `--context` is left out with it"
+        );
+
+        assert_eq!(
+            ModelChoice::of(&config, &"eagle".into()),
+            chosen("claude-opus-5.5", Some("xhigh"), Some("long_context"))
+        );
+        assert_eq!(
+            ModelChoice::of(&config, &"tars".into()),
+            chosen("claude-opus-5.5", Some("high"), None)
+        );
+    }
+
+    #[test]
+    fn the_defaults_fill_in_what_an_agent_leaves_unset_and_no_more() {
+        let config = Config::from_toml(
+            r#"
+            [layover]
+            work_dir = "work"
+
+            [defaults]
+            runner = "shared"
+            effort = "medium"
+            context = "long_context"
+
+            [runners.shared]
+            command = ["copilot", "--model", "{model}", "--reasoning-effort", "{effort}", "--context={context}"]
+
+            [agents.plain]
+            prompt = "p"
+            model = "m"
+
+            [agents.keen]
+            prompt = "p"
+            model = "m"
+            effort = "xhigh"
+            context = "default"
+            "#,
+            "defaults.toml",
+        )
+        .expect("parses");
+
+        assert_eq!(
+            ModelChoice::of(&config, &"plain".into()),
+            chosen("m", Some("medium"), Some("long_context"))
+        );
+        assert_eq!(
+            ModelChoice::of(&config, &"keen".into()),
+            chosen("m", Some("xhigh"), Some("default")),
+            "an agent's own value wins"
+        );
+    }
+
+    #[test]
+    fn an_effort_in_a_flag_this_does_not_read_is_still_reported() {
+        // Codex takes effort as a config key. The command carries it; reading it back is not
+        // something to guess at, so the declared value is what is reported.
+        let config = config(
+            r#"
+[runners.codex]
+command = ["codex", "exec", "--model", "{model}", "-c", "model_reasoning_effort={effort}", "-"]
+
+[agents.a]
+prompt = "p"
+runner = "codex"
+model = "gpt-5.4"
+effort = "high"
+"#,
+        );
+
+        assert_eq!(
+            ModelChoice::of(&config, &"a".into()),
+            chosen("gpt-5.4", Some("high"), None)
+        );
+    }
+
+    #[test]
+    fn a_runner_that_fixes_its_effort_still_reports_it() {
+        // The shape every factory had before the placeholders existed, and which still works: the
+        // command says what runs, and an effort the agent declares there is not it.
+        let config = config(
+            r#"
+[runners.analysis]
+command = ["copilot", "--model", "claude-opus-5.5", "--reasoning-effort", "xhigh", "--context", "long_context"]
+
+[agents.a]
+prompt = "p"
+runner = "analysis"
+effort = "low"
+"#,
+        );
+
+        assert_eq!(
+            ModelChoice::of(&config, &"a".into()),
+            chosen("claude-opus-5.5", Some("xhigh"), Some("long_context"))
+        );
     }
 }

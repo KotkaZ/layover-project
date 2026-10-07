@@ -325,10 +325,10 @@ to reason. A model name too long to share its line puts the effort at the start 
 box grows a third small line rather than cut anything off.
 
 All of it is read from the command line Layover will run for that agent — its runner's `command`,
-with the agent's own `model` filled in — so a model or effort fixed in the runner is shown as
-readily as a model the agent declares. See
-[how a runner carries a model](./configuration.md#runners--how-to-invoke-a-cli) for which flags are
-read. An agent whose command line names no model or effort is drawn as it always was.
+with the agent's own `model`, `effort` and `context` filled in — so two agents sharing one runner
+each show their own, and a value fixed in the runner is shown as readily as one the agent
+declares. See [what is reported](./configuration.md#what-is-reported) for which flags are read. An
+agent whose command line names no model or effort is drawn as it always was.
 
 Hover over a box for the rest: its description, runner and access. `GET /agents` reports the same
 `model`, `reasoning_effort` and `context` for each agent.
@@ -398,6 +398,11 @@ workflow's diagram.
 ## Runs
 
 Every supervised execution, newest first, filterable by window, outcome and agent.
+
+Each run keeps the **model, effort and context** its command line gave it, so history answers
+"which effort did that run use?" without opening a transcript; a session's header shows them, and
+`GET /runs` returns them as `model`, `reasoning_effort` and `context`. Runs recorded before Layover
+kept effort and context have neither.
 
 | Outcome | Means |
 |---|---|

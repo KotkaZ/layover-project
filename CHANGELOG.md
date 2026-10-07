@@ -8,6 +8,45 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+### Added
+
+- **An agent declares its own `effort` and `context`**, beside its `model`, and a runner carries
+  them with `{effort}` and `{context}` placeholders exactly as `{model}` carries a model —
+  `"--reasoning-effort={effort}"`, `"--context={context}"`, or Codex's
+  `"-c", "model_reasoning_effort={effort}"`. A runner now describes a CLI and a permission set, and
+  is shared by every agent with those permissions whatever its model, effort and context: tuning one
+  agent no longer means a new runner and a copied deny list. `[defaults] effort` and
+  `[defaults] context` fill in for agents that set none; an agent's own value wins. Values are
+  passed through as written — Layover keeps no catalog of the levels a model accepts.
+- **`layover validate` warns** when an agent's effort or context has no placeholder to reach its
+  runner, when a runner with a placeholder serves an agent that sets no value and has no default,
+  when a runner fixes a value beside its own placeholder (the CLI would get two), when a
+  `[defaults]` value reaches no runner, and when a value is empty.
+- **Every run records the model, effort and context it ran with**, in `runs-*.jsonl` as `effort`
+  and `context`, and in `GET /runs` as `reasoning_effort` and `context`; a session's header shows
+  them. History says which effort a run used without its transcript. Older records lack the fields.
+- **`layover explain` says what each agent runs on**, and `layover prompt` prints it on stderr
+  beside the prompt, both read from the command line with the agent's own values filled in.
+
+### Fixed
+
+- **An unset `{model}` no longer hands the CLI a flag without its value.** `"--model", "{model}"`
+  with no model left `--model` in front of the next flag, which Copilot CLI refuses outright, and a
+  joined `--model={model}` reached the CLI as that literal text. An argument carrying an unset
+  placeholder is now left out whole, together with the option it is the value of. The reference
+  factory's Copilot and Codex agents, which declare no model, were affected.
+
+### Changed
+
+- For anyone using the crates as a library: `Runner::invocation` and `invocation_with_mcp` take a
+  `Selection` instead of a model, `spawn::Plan` carries a `selection`, and `cost::of_run` returns a
+  `ModelChoice`. `Runner` and `McpWiring` moved to `config/runner.rs` and are still reached as
+  `layover_core::config::Runner`.
+
+A rate card is still keyed by model alone. A provider that bills a long-context tier at a higher
+rate above a token threshold is not modelled, so a card for such a model is a lower bound on its
+long-context runs; Copilot runs are priced from the credits they report and are unaffected.
+
 ## [1.8.0] — 2026-10-07
 
 What a factory will do next is on the dashboard: every scheduled tick by the Tower's own clock,

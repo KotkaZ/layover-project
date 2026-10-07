@@ -60,7 +60,12 @@ impl Dashboard {
             record.continues.clone_from(&queued.continues);
         }
         record.sent_by.clone_from(&live.sent_by);
-        record.model = config.and_then(|config| ModelChoice::of(config, &live.agent).model);
+        let ran_on = config
+            .map(|config| ModelChoice::of(config, &live.agent))
+            .unwrap_or_default();
+        record.model = ran_on.model;
+        record.effort = ran_on.reasoning_effort;
+        record.context = ran_on.context;
         record
     }
 

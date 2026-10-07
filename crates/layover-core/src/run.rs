@@ -111,6 +111,17 @@ pub struct RunRecord {
     /// Which model, when the runner said.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// The reasoning effort the run's command line gave the model, when it gave one — from the
+    /// agent's `effort`, `[defaults]`, or a value the runner fixes.
+    ///
+    /// Kept so history can say which effort a run used without reading its transcript. Absent in
+    /// records written before it was kept.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
+    /// The context-window tier the run's command line chose, when it chose one. Absent in records
+    /// written before it was kept.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<String>,
     /// How it ended.
     pub outcome: Outcome,
     /// When the work it ran was queued, so the wait between the two can be read back.
@@ -200,6 +211,8 @@ impl RunRecord {
             agent,
             pipeline: None,
             model: None,
+            effort: None,
+            context: None,
             outcome: Outcome::Running,
             queued_at: None,
             started_at,
@@ -313,6 +326,30 @@ mod tests {
             "developer".into(),
             at("2026-09-16T10:00:00Z"),
         )
+    }
+
+    #[test]
+    fn a_runs_effort_and_context_are_kept_and_an_older_record_reads_without_them() {
+        // History has to say which effort a run used; it used to be recoverable only from the
+        // transcript. A record written before it was kept still reads.
+        let mut record = record();
+        record.model = Some("claude-opus-5.5".to_owned());
+        record.effort = Some("xhigh".to_owned());
+        record.context = Some("long_context".to_owned());
+        let line = serde_json::to_string(&record).expect("serialises");
+
+        assert!(line.contains(r#""effort":"xhigh""#), "{line}");
+        assert!(line.contains(r#""context":"long_context""#), "{line}");
+        assert_eq!(
+            serde_json::from_str::<RunRecord>(&line).expect("reads"),
+            record
+        );
+
+        let older = line
+            .replace(r#","effort":"xhigh""#, "")
+            .replace(r#","context":"long_context""#, "");
+        let read: RunRecord = serde_json::from_str(&older).expect("an older record reads");
+        assert_eq!((read.effort, read.context), (None, None));
     }
 
     #[test]

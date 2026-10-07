@@ -199,7 +199,10 @@ A run is priced from the card only when all three hold:
 - **It printed token counts and no dollar figure at all.** A figure it printed and that was not
   believed stays `unreported` — an estimate would be a different number with no better claim.
 - **Its model is known from its command line**: `--model`, or the agent's `model` carried by its
-  runner's `{model}`. The table is keyed by that exact name.
+  runner's `{model}`. The table is keyed by that exact name, and by nothing else: a run at a
+  higher effort costs more because it uses more tokens, which the card already prices, but a
+  provider that bills a long-context tier at a higher rate above some token threshold is not
+  modelled. A card for such a model is a lower bound on its long-context runs.
 - **The card has a row for that model.** An unknown model stays `unreported`, never a flattering
   zero.
 

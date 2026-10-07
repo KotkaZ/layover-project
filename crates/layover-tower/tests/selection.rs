@@ -1,0 +1,112 @@
+//! Two agents on one runner, each run at its own effort and context, and the run records saying
+//! which.
+//!
+//! The runner echoes its own arguments, so the transcript is the command line the CLI was handed —
+//! which is the only proof that matters: a value that reached the record but not `argv` would be a
+//! report of something that did not happen.
+
+use layover_tower::Dispatched;
+
+mod runs;
+use runs::{Temp, factory, history, human};
+
+/// A runner that prints its arguments, with the three placeholders in both of their forms.
+fn echoes() -> String {
+    let args = r#""--model", "{model}", "--reasoning-effort={effort}", "--context", "{context}", "--allow-all-tools""#;
+    if cfg!(windows) {
+        format!(r#"["cmd", "/c", "echo", {args}]"#)
+    } else {
+        format!(r#"["echo", {args}]"#)
+    }
+}
+
+fn transcript_of(temp: &Temp, agent: &str) -> String {
+    let hangar = temp.0.join(".layover").join("hangars").join(agent);
+    std::fs::read_dir(&hangar)
+        .expect("the agent ran")
+        .filter_map(Result::ok)
+        .filter_map(|run| std::fs::read_to_string(run.path().join("transcript.log")).ok())
+        .collect()
+}
+
+#[test]
+fn two_agents_on_one_runner_are_run_and_recorded_at_their_own_effort_and_context() {
+    let temp = Temp::new("selection");
+    let factory = factory(
+        &temp,
+        &format!(
+            r#"
+[layover]
+work_dir = "work"
+
+[defaults]
+runner = "shared"
+timeout_sec = 30
+effort = "medium"
+
+[runners.shared]
+command = {}
+
+[agents.eagle]
+prompt = "review"
+model = "claude-opus-5.5"
+effort = "xhigh"
+context = "long_context"
+entry = true
+
+[agents.tars]
+prompt = "triage"
+model = "claude-opus-5.5"
+entry = true
+"#,
+            echoes()
+        ),
+    );
+
+    let mut ran = 0;
+    factory.drain(
+        vec![human("eagle"), human("tars")],
+        |_| {},
+        |_, result| {
+            if matches!(result, Dispatched::Ran { .. }) {
+                ran += 1;
+            }
+        },
+    );
+    assert_eq!(ran, 2);
+
+    let eagle = transcript_of(&temp, "eagle");
+    assert!(
+        eagle.contains("--model claude-opus-5.5 --reasoning-effort=xhigh --context long_context"),
+        "{eagle}"
+    );
+    let tars = transcript_of(&temp, "tars");
+    assert!(
+        tars.contains("--model claude-opus-5.5 --reasoning-effort=medium --allow-all-tools"),
+        "the default effort, and no `--context` left without its value: {tars}"
+    );
+
+    let runs = history(&temp.0);
+    let record = |agent: &str| {
+        runs.iter()
+            .find(|run| run.agent.as_str() == agent)
+            .map(|run| (run.model.clone(), run.effort.clone(), run.context.clone()))
+            .expect("recorded")
+    };
+    assert_eq!(
+        record("eagle"),
+        (
+            Some("claude-opus-5.5".to_owned()),
+            Some("xhigh".to_owned()),
+            Some("long_context".to_owned())
+        )
+    );
+    assert_eq!(
+        record("tars"),
+        (
+            Some("claude-opus-5.5".to_owned()),
+            Some("medium".to_owned()),
+            None
+        )
+    );
+}

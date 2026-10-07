@@ -57,6 +57,8 @@ fn sample_run() -> Run {
         agent: "analyst".to_owned(),
         pipeline: Some("development".to_owned()),
         model: None,
+        reasoning_effort: None,
+        context: None,
         status: RunStatus::Interrupted,
         started_at: "2026-09-15T12:00:00Z".to_owned(),
         finished_at: None,

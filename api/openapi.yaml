@@ -820,13 +820,15 @@ components:
         reasoning_effort:
           type: [string, "null"]
           description: |
-            How hard the model is asked to reason, from a `--reasoning-effort` flag on the command
-            line. Null when the command line does not set it.
+            How hard the model is asked to reason: the agent's `effort` (or `[defaults] effort`)
+            where its runner carries an `{effort}` placeholder, or a `--reasoning-effort` its
+            runner's command fixes. Null when the command line sets none.
         context:
           type: [string, "null"]
           description: |
-            The context-window tier, from a `--context` flag on the command line, such as
-            `long_context`. Null when the command line does not set it.
+            The context-window tier, such as `long_context`: the agent's `context` (or
+            `[defaults] context`) where its runner carries a `{context}` placeholder, or a
+            `--context` its runner's command fixes. Null when the command line sets none.
         access:
           $ref: "#/components/schemas/Access"
           description: Whether the agent writes to the shared workspace.
@@ -1080,6 +1082,17 @@ components:
         model:
           type: [string, "null"]
           description: Which model the runner used, when it said.
+        reasoning_effort:
+          type: [string, "null"]
+          description: |
+            The reasoning effort the run's command line gave the model — from the agent's
+            `effort`, `[defaults]`, or a value its runner fixes. Null when the command line set
+            none, and for runs recorded before Layover kept it.
+        context:
+          type: [string, "null"]
+          description: |
+            The context-window tier the run's command line chose, such as `long_context`. Null
+            when it chose none, and for runs recorded before Layover kept it.
         status:
           $ref: "#/components/schemas/RunStatus"
           description: How it ended, or that it has not.

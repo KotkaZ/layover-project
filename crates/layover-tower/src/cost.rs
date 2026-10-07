@@ -207,31 +207,43 @@ pub fn priced(text: &str, prices: &Prices<'_>) -> Reported {
     }
 }
 
-/// What a run of `agent` cost, read from its transcript and priced as `config` says, and the model
-/// to record it under.
+/// What a run of `agent` cost, read from its transcript and priced as `config` says, and what it
+/// ran on, as its record names it.
 ///
 /// The rate card is consulted for the model the agent's command line selects — `--model`, or the
 /// declared model its runner's `{model}` carries — because that is what the run ran on. A model the
 /// agent declares and its runner never passes is not priced; it is still what the record names,
-/// as it always was, so history reads the same as before.
+/// as it always was, so history reads the same as before. See [`ran_on`].
 #[must_use]
-pub fn of_run(config: &Config, agent: &AgentName, transcript: &str) -> (Reported, Option<String>) {
-    let ran_on = ModelChoice::of(config, agent).model;
+pub fn of_run(config: &Config, agent: &AgentName, transcript: &str) -> (Reported, ModelChoice) {
+    let ran_on_line = ModelChoice::of(config, agent);
     let reported = priced(
         transcript,
         &Prices {
             usd_per_credit: config.copilot.usd_per_credit,
             rates: &config.rates,
-            model: ran_on.as_deref(),
+            model: ran_on_line.model.as_deref(),
         },
     );
-    let named = ran_on.or_else(|| {
-        config
+    (reported, named(config, agent, ran_on_line))
+}
+
+/// What a run of `agent` is recorded as running on: the model, effort and context its command line
+/// selects, and — for the model only — the declared one where the command line names none, which
+/// is what records have always said.
+#[must_use]
+pub fn ran_on(config: &Config, agent: &AgentName) -> ModelChoice {
+    named(config, agent, ModelChoice::of(config, agent))
+}
+
+fn named(config: &Config, agent: &AgentName, mut choice: ModelChoice) -> ModelChoice {
+    if choice.model.is_none() {
+        choice.model = config
             .agents
             .get(agent)
-            .and_then(|definition| definition.model.clone())
-    });
-    (reported, named)
+            .and_then(|definition| definition.model.clone());
+    }
+    choice
 }
 
 /// What the rate card says tokens a run reported cost, or the run unchanged — unreported — when

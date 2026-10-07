@@ -139,6 +139,7 @@ prompt_dir = "prompts"            # what prompt_file paths resolve against
 
 [defaults]
 runner      = "claude"
+effort      = "medium"    # for agents that set none, where their runner has `{effort}`
 max_hops    = 8
 fuel_usd    = 5.00
 max_runs    = 64
@@ -148,16 +149,19 @@ max_concurrent_runs = 4   # runs alive at once, factory-wide; the rest wait in t
 # ── How to invoke each supported CLI ───────────────────────────────
 # The prompt goes to stdin, so none of these name it: `-p` and its kin take the prompt *text*,
 # and `{prompt}` is a path. A CLI handed the path would be told to do whatever that string says.
+# `{model}`, `{effort}` and `{context}` carry each agent's own values; one left unset is left out,
+# with the flag it is the value of.
 [runners.claude]
-command = ["claude", "-p", "--output-format", "stream-json"]
+command = ["claude", "-p", "--model", "{model}", "--output-format", "stream-json"]
 mcp     = { flag = "--mcp-config", format = "claude_json" }
 
 [runners.copilot]
-command = ["copilot", "--allow-all-tools", "--output-format", "json"]
+command = ["copilot", "--model", "{model}", "--reasoning-effort={effort}", "--context={context}",
+           "--allow-all-tools", "--output-format", "json"]
 mcp     = { flag = "--additional-mcp-config", format = "claude_json", prefix = "@" }
 
 [runners.codex]
-command = ["codex", "exec", "{mcp}", "-"]
+command = ["codex", "exec", "-c", "model_reasoning_effort={effort}", "{mcp}", "-"]
 mcp     = { flag = "-c", format = "codex_toml" }
 
 # ── What the whole factory may spend, and how Copilot is priced ────
@@ -180,8 +184,11 @@ Record durable conclusions with layover_memory_write.
 """
 
 [agents.coder]
-runner = "copilot"
-prompt = "You implement the task described in the incoming flight."
+runner  = "copilot"
+model   = "claude-opus-5.5"
+effort  = "xhigh"        # the agent's own: another agent on this runner can run at another
+context = "long_context"
+prompt  = "You implement the task described in the incoming flight."
 max_concurrent = 1       # two coders in one working tree would overwrite each other
 
 [agents.reviewer]

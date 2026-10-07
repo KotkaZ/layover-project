@@ -12,6 +12,12 @@ prompt_dir = "prompts"
 [defaults]
 runner = "claude"
 
+# How hard an agent reasons, and how much it can read, unless it says otherwise. Each reaches only
+# a runner whose command has the placeholder for it -- below, `copilot` takes both and `codex` takes
+# an effort -- so the agents on `claude` are untouched by either.
+effort  = "medium"
+context = "default"
+
 # The agent CLI needs its own credential before it can do anything. Only the *name* goes here;
 # the Tower reads the value from its own environment at spawn time, so this file stays
 # committable. Name whichever your runner wants -- ANTHROPIC_API_KEY for `claude`, GH_TOKEN or
@@ -76,16 +82,23 @@ cache_write_usd = 6.25
 # command line at 32,767 characters and a real agent prompt goes well past it. `{prompt}` is
 # therefore a *path* to the composed instructions, for CLIs that take one; the rest have the
 # instructions prepended to stdin.
+#
+# `{model}`, `{effort}` and `{context}` carry each agent's own values, so one runner serves every
+# agent with the same permissions whatever they run on. Prefer the joined `--flag={effort}` form:
+# an argument whose value is not set is left out whole. A placeholder standing alone after its flag
+# (`"--model", "{model}"`) takes the flag with it when unset, and Codex's `-c key={effort}` takes its
+# `-c` -- so no CLI is ever handed a flag without its value.
 [runners.claude]
 command = ["claude", "-p", "--model", "{model}", "--output-format", "stream-json"]
 mcp     = { flag = "--mcp-config", format = "claude_json" }
 
 [runners.copilot]
-command = ["copilot", "--model", "{model}", "--allow-all-tools", "--output-format", "json"]
+command = ["copilot", "--model", "{model}", "--reasoning-effort={effort}", "--context={context}",
+           "--allow-all-tools", "--output-format", "json"]
 mcp     = { flag = "--additional-mcp-config", format = "claude_json", prefix = "@" }
 
 [runners.codex]
-command = ["codex", "exec", "--model", "{model}", "{mcp}", "-"]
+command = ["codex", "exec", "--model", "{model}", "-c", "model_reasoning_effort={effort}", "{mcp}", "-"]
 mcp     = { flag = "-c", format = "codex_toml" }
 
 # ── Intake ─────────────────────────────────────────────────────────
@@ -121,6 +134,8 @@ it affects, when it started, which build introduced it.
 runner      = "copilot"
 access      = "read-only"
 prompt_file = "kusto.md"
+# Telemetry answers are long tables, so this agent asks for the larger context window.
+context     = "long_context"
 
 # The Kusto agent needs a Kusto server; Layover's own MCP endpoint is wired up separately and
 # always. Note what is NOT here: credentials. `env` is for values that are safe in a committed
@@ -141,6 +156,8 @@ is finished, because both verdicts rendezvous here.
 """
 runner      = "copilot"
 prompt_file = "developer.md"
+# The one agent that writes code, and the one whose mistakes cost a whole review cycle.
+effort      = "xhigh"
 
 [agents.tester]
 description = "Builds the change and runs the suite, then returns a verdict"
@@ -161,6 +178,7 @@ run the suite, so that a green build and a sound design are established separate
 runner      = "codex"
 access      = "read-only"
 prompt_file = "reviewer.md"
+effort      = "high"
 
 # ── Delivery ───────────────────────────────────────────────────────
 
@@ -172,6 +190,8 @@ workspace is not in a publishable state.
 """
 runner      = "copilot"
 prompt_file = "publisher.md"
+# Commits and opens a pull request: mechanical work that a high effort only makes slower.
+effort      = "low"
 
 # The one irreversible step in this factory. If a run is interrupted after it pushed a branch but
 # before it recorded that it had, restarting it automatically would open a second pull request.
@@ -195,6 +215,7 @@ an hourly schedule does not re-review the same work forever.
 runner      = "copilot"
 access      = "read-only"
 prompt_file = "pr-scanner.md"
+effort      = "low"
 
 # ── Pipelines: how work enters the mesh ────────────────────────────
 

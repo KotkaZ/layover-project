@@ -70,19 +70,8 @@ pub(crate) fn agent(config: &Config, name: &AgentName, agent: &Agent) -> Words {
     if let Some(description) = &agent.description {
         tooltip.push(description.clone());
     }
-    let running_on: Vec<String> = [
-        choice.model.clone(),
-        choice
-            .reasoning_effort
-            .as_ref()
-            .map(|effort| format!("effort {effort}")),
-        choice.context_label(),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
-    if !running_on.is_empty() {
-        tooltip.push(running_on.join(" · "));
+    if let Some(running_on) = choice.summary() {
+        tooltip.push(running_on);
     }
     let runner = agent.runner.as_ref().or(config.defaults.runner.as_ref());
     let access = match agent.access {

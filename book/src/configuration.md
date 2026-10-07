@@ -49,6 +49,8 @@ layout must be interchangeable, or the layout number means nothing.
 | Key | Default | Meaning |
 |---|---|---|
 | `runner` | — | Runner used by agents that do not name one. |
+| `effort` | — | Reasoning effort for agents that set none; an agent's own wins. Reaches only runners with an `{effort}` placeholder. |
+| `context` | — | Context-window tier for agents that set none; an agent's own wins. Reaches only runners with a `{context}` placeholder. |
 | `max_hops` | `8` | Maximum flights in one chain. Bounds **depth**. |
 | `fuel_usd` | `5.00` | Shared cost budget for an itinerary. Bounds **breadth**. |
 | `max_runs` | `64` | Deterministic run cap; holds when a runner reports no cost. |
@@ -192,21 +194,79 @@ and then fails on the first agent worth running.
 instructions to before spawning. Include it only for CLIs that accept a file of instructions as a
 flag; runners without it have the instructions prepended to the stdin payload instead.
 
-`{model}` carries the agent's `model` into the command. Every CLI spells the flag differently, so
-the spelling stays here rather than in a field of its own — write `"--model", "{model}"` or
-`"--model={model}"`, whichever yours wants. An agent that declares a `model` whose runner has no
-placeholder gets a warning at load time, because otherwise the run would quietly use the CLI's own
-default and nothing would say the declaration was ignored.
+### Placeholders
 
-A bare `"{model}"` argument disappears when no model is set, rather than becoming an empty
-argument — several CLIs read an empty string in `argv` as a positional.
+A runner's command may name these, and each is filled in per run:
 
-The dashboard, `GET /agents` and the tooltips on the route map report which model each agent
-runs on by reading this command line with the agent's `model` filled in. A model you fix in the
-command itself — one runner per model is a common shape — is therefore reported as readily as one
-an agent declares. Only flags whose meaning is certain are read: `--model` (or `--model=…`), and
-Copilot CLI's `--reasoning-effort` and `--context`. Nothing else is guessed at, so a CLI that
-spells these differently shows only a model the agent declares.
+| Placeholder | Filled with |
+|---|---|
+| `{model}` | The agent's `model`. |
+| `{effort}` | The agent's `effort`, or `[defaults] effort`. |
+| `{context}` | The agent's `context`, or `[defaults] context`. |
+| `{prompt}` | The **path** to the composed instructions, for a CLI that takes a file. |
+| `{mcp}` | The `mcp` flag and the path to the run's MCP configuration — two arguments. Optional: without it they are appended at the end, which is what `claude` and `copilot` want; `codex exec … -` needs them before its final `-`. |
+
+`{model}`, `{effort}` and `{context}` exist so that **a runner describes a CLI and a permission
+set, and nothing about how hard an agent thinks or how much it can read**. Every CLI spells these
+flags differently, so the spelling stays in the command and the value comes from the agent:
+
+```toml
+[runners.copilot-analysis]
+command = ["copilot", "--model", "{model}", "--reasoning-effort={effort}", "--context={context}",
+           "--allow-all-tools", "--deny-tool=shell(git push)", "--output-format", "json"]
+
+[agents.eagle]
+runner  = "copilot-analysis"
+model   = "claude-opus-5.5"
+effort  = "xhigh"
+context = "long_context"
+
+[agents.tars]
+runner  = "copilot-analysis"     # the same permissions, so the same runner
+model   = "claude-opus-5.5"
+effort  = "high"                 # a different effort needs no second runner
+context = "long_context"
+```
+
+Codex takes effort as a configuration key, and the placeholder works there too:
+`"-c", "model_reasoning_effort={effort}"`.
+
+Values are passed through **exactly as written**. Layover keeps no catalog of models or of the
+efforts and context tiers each accepts — Copilot CLI refuses an effort a model does not support,
+with a message naming both, and only the CLI knows which those are.
+
+#### A value that is not set
+
+An agent may leave any of the three unset, and then it runs on whatever its CLI defaults to. No
+empty argument and no flag without its value ever reaches the CLI — every CLI that takes a value
+refuses a flag without one, and some read the next flag as the value instead:
+
+- An argument that **contains** an unset placeholder is left out whole: `--reasoning-effort={effort}`
+  disappears entirely, never as `--reasoning-effort=` or as the literal text.
+- When that argument is the **value of the option before it** — `"--reasoning-effort", "{effort}"`,
+  or Codex's `"-c", "model_reasoning_effort={effort}"` — the option goes with it.
+
+"The option before it" is the argument immediately before, when it starts with `-` and carries no
+`=` and no placeholder of its own. That is how every supported CLI pairs a separate value with its
+flag, but **prefer the joined form**, `--flag={effort}`: it needs no pairing at all. A CLI that
+takes a placeholder positionally right after a boolean flag should put the placeholder first.
+
+This applies to `{model}` too. A separate `"--model", "{model}"` with no model used to leave a
+bare `--model` in front of the next flag, and a joined `--model={model}` used to reach the CLI as
+that literal text; both now disappear. A factory where every agent sets a model is unchanged.
+
+`layover validate` warns about every way these go wrong quietly:
+
+| Warning | Because |
+|---|---|
+| An agent sets `effort` or `context` and its runner has no placeholder for it | The value never reaches the CLI. Also said for `model`. |
+| A runner has `{effort}` or `{context}` and an agent on it sets none, with no default | The flag is left out, and the CLI's default applies — say so if you mean it. |
+| A runner fixes a value beside its placeholder (`--reasoning-effort high` and `{effort}`) | The CLI gets two, and keeps whichever comes last. |
+| A `[defaults]` effort or context reaches no runner | Every agent relying on it runs on a runner without the placeholder. |
+| An `effort` or `context` is empty | It counts as unset. |
+
+A runner may still **fix** these itself, as every runner had to before the placeholders existed;
+every agent on it then runs at the runner's values, and nothing warns:
 
 ```toml
 [runners.copilot-deep]
@@ -214,7 +274,16 @@ command = ["copilot", "--model", "claude-opus-5.5", "--reasoning-effort", "xhigh
            "--context", "long_context", "--output-format", "json"]
 ```
 
-`mcp` says how this runner is told where Layover's MCP server is.
+#### What is reported
+
+The dashboard, `GET /agents`, the route map, `layover explain` and `layover prompt` report what
+each agent runs on by reading its command line **with its own values filled in**, so a value the
+runner fixes is reported as readily as one the agent declares, and a value its runner cannot carry
+is not reported at all. Only flags whose meaning is certain are read back — `--model`, and Copilot
+CLI's `--reasoning-effort` and `--context`, separate or joined. A value carried by a flag this does
+not read, such as Codex's `-c`, is reported as the agent declares it. Every run's record keeps the
+model, effort and context it ran with; see [Runs](./dashboard.md#runs).
+
 
 ## `[agents.*]` — who exists
 
@@ -236,7 +305,9 @@ prompt_file = "tester.md"
 | `description` | recommended | One line. Handed to peers by `layover_peers()`. |
 | `purpose` | optional | Longer: when to route work here. |
 | `runner` | if no default | Which runner invokes it. |
-| `model` | optional | Model identifier passed to the runner. |
+| `model` | optional | Model identifier, passed to the runner's `{model}`. |
+| `effort` | optional | Reasoning effort, passed to the runner's `{effort}`: `high`, `xhigh`, whatever the CLI accepts for the model. Falls back to `[defaults] effort`. |
+| `context` | optional | Context-window tier, passed to the runner's `{context}`: Copilot CLI's `default` or `long_context`. Falls back to `[defaults] context`. |
 | `prompt` | one of | Instructions, written inline. |
 | `prompt_file` | one of | Instructions from a file, which may [compose others](./prompts.md). |
 | `access` | `read-write` | `read-only` is meant to give the agent a git worktree snapshot. **Declared, not yet enforced** — see below. |

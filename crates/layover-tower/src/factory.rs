@@ -468,13 +468,16 @@ impl Factory {
     ) -> Option<Dispatched> {
         let now = Timestamp::now();
         let why = crate::reserve::refusal(&self.config, &self.history_dir(), now)?;
+        let ran_on = crate::cost::ran_on(&self.config, &authorised.name);
 
         self.record(&RunRecord {
             run: layover_core::RunId::generate(),
             itinerary: itinerary.id().clone(),
             agent: authorised.name.clone(),
             pipeline: self.chains.pipeline_of(itinerary.id()),
-            model: authorised.agent.model.clone(),
+            model: ran_on.model,
+            effort: ran_on.reasoning_effort,
+            context: ran_on.context,
             outcome: Outcome::Halted,
             queued_at: None,
             started_at: now,
@@ -510,7 +513,7 @@ impl Factory {
         charge: impl FnOnce(&crate::cost::Reported),
     ) -> Dispatched {
         let transcript = std::fs::read_to_string(&finished.transcript).unwrap_or_default();
-        let (reported, model) =
+        let (reported, ran_on) =
             crate::cost::of_run(&self.config, &ticket.authorised.name, &transcript);
 
         charge(&reported);
@@ -522,7 +525,9 @@ impl Factory {
             itinerary: ticket.chain.clone(),
             agent: ticket.authorised.name.clone(),
             pipeline: self.chains.pipeline_of(&ticket.chain),
-            model,
+            model: ran_on.model,
+            effort: ran_on.reasoning_effort,
+            context: ran_on.context,
             outcome,
             queued_at: ticket.queued_at,
             started_at: ticket.started_at,
@@ -598,12 +603,15 @@ impl Factory {
         started_at: Timestamp,
         why: &str,
     ) -> RunRecord {
+        let ran_on = crate::cost::ran_on(&self.config, &authorised.name);
         RunRecord {
             run: run.clone(),
             itinerary: chain.clone(),
             agent: authorised.name.clone(),
             pipeline: self.chains.pipeline_of(chain),
-            model: authorised.agent.model.clone(),
+            model: ran_on.model,
+            effort: ran_on.reasoning_effort,
+            context: ran_on.context,
             outcome: Outcome::Failed,
             queued_at: None,
             started_at,
@@ -810,7 +818,7 @@ impl Factory {
         Ok(Plan {
             agent: authorised.name.clone(),
             runner: runner.clone(),
-            model: authorised.agent.model.clone(),
+            selection: self.config.selection(authorised.agent),
             payload,
             hangar: hangar.to_path_buf(),
             work_dir,

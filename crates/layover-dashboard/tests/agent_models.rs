@@ -80,6 +80,9 @@ command = ["copilot", "--model", "claude-opus-5.5", "--reasoning-effort", "xhigh
 [runners.claude]
 command = ["claude", "-p", "--model", "{model}"]
 
+[runners.analysis]
+command = ["copilot", "--model", "{model}", "--reasoning-effort={effort}", "--context={context}", "--allow-all-tools"]
+
 [agents.analyst]
 prompt = "analyse"
 
@@ -88,12 +91,25 @@ prompt = "build"
 runner = "claude"
 model = "claude-sonnet-5"
 
+[agents.eagle]
+prompt = "review"
+runner = "analysis"
+model = "claude-opus-5.5"
+effort = "xhigh"
+context = "long_context"
+
+[agents.tars]
+prompt = "triage"
+runner = "analysis"
+model = "claude-opus-5.5"
+effort = "high"
+
 [pipelines.devforge]
 entry = "analyst"
 
 [[routes]]
 from = "analyst"
-to = "bob"
+to = ["bob", "eagle", "tars"]
 "#;
 
 fn agent<'a>(body: &'a serde_json::Value, name: &str) -> &'a serde_json::Value {
@@ -137,6 +153,81 @@ async fn a_workflows_map_names_each_agents_model() {
         "{svg}"
     );
     assert!(svg.contains(">claude-sonnet-5</text>"), "{svg}");
+}
+
+#[tokio::test]
+async fn agents_sharing_a_runner_report_their_own_effort_and_context() {
+    // One runner, one permission set; the effort and context belong to each agent.
+    let factory = Factory::new("shared", FACTORY);
+    let (_, body) = factory.get("/agents").await;
+
+    let eagle = agent(&body, "eagle");
+    assert_eq!(eagle["model"], "claude-opus-5.5", "{eagle}");
+    assert_eq!(eagle["reasoning_effort"], "xhigh", "{eagle}");
+    assert_eq!(eagle["context"], "long_context", "{eagle}");
+
+    let tars = agent(&body, "tars");
+    assert_eq!(tars["reasoning_effort"], "high", "{tars}");
+    assert!(
+        tars["context"].is_null(),
+        "it sets none, so its runner passes none: {tars}"
+    );
+}
+
+#[tokio::test]
+async fn the_map_draws_each_agent_on_a_shared_runner_at_its_own_effort() {
+    let factory = Factory::new("shared-map", FACTORY);
+    let (_, body) = factory.get("/graph?pipeline=devforge").await;
+    let svg = body["mermaid"].as_str().expect("a drawing");
+
+    let node = |id: &str| {
+        svg.split(&format!(r#"id="{id}""#))
+            .nth(1)
+            .and_then(|rest| rest.split("</g>").next())
+            .unwrap_or_else(|| panic!("{id} is drawn: {svg}"))
+            .to_owned()
+    };
+    let eagle = node("a_eagle");
+    assert!(
+        eagle.contains(">claude-opus-5.5 · effort xhigh</text>"),
+        "{eagle}"
+    );
+    assert!(eagle.contains(">long context</text>"), "{eagle}");
+    let tars = node("a_tars");
+    assert!(
+        tars.contains(">claude-opus-5.5 · effort high</text>"),
+        "{tars}"
+    );
+    assert!(!tars.contains("long context"), "{tars}");
+}
+
+#[tokio::test]
+async fn a_run_says_which_effort_and_context_it_ran_at() {
+    let factory = Factory::new("run-effort", FACTORY);
+    let mut record = layover_core::run::RunRecord::started(
+        layover_core::RunId::generate(),
+        layover_core::flight::ItineraryId::generate(),
+        "eagle".into(),
+        jiff::Timestamp::now(),
+    )
+    .finished(
+        layover_core::run::Outcome::Succeeded,
+        jiff::Timestamp::now(),
+    );
+    record.model = Some("claude-opus-5.5".to_owned());
+    record.effort = Some("xhigh".to_owned());
+    record.context = Some("long_context".to_owned());
+    History::open(factory.0.join("history"))
+        .expect("opens history")
+        .append(&record)
+        .expect("records");
+
+    let (_, body) = factory.get("/runs").await;
+    let run = &body["runs"][0];
+
+    assert_eq!(run["model"], "claude-opus-5.5", "{run}");
+    assert_eq!(run["reasoning_effort"], "xhigh", "{run}");
+    assert_eq!(run["context"], "long_context", "{run}");
 }
 
 #[tokio::test]
