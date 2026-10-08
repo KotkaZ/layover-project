@@ -65,11 +65,11 @@ function dayHeading(iso) {
   return new Date(iso).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
 }
 
-function chainLink(id) {
+function chainLink(id, name) {
   const open = el("button", "link", "");
   open.type = "button";
-  open.append(el("code", "", id));
-  open.title = "See this chain whole";
+  open.append(name ? el("span", "", name) : el("code", "", id));
+  open.title = name ? `${id} — see this chain whole` : "See this chain whole";
   open.addEventListener("click", () => openChain(id));
   return open;
 }
@@ -119,7 +119,7 @@ function showQueue(queue) {
     const actions = el("td", "actions");
     actions.append(cancel);
     const chain = el("td");
-    chain.append(chainLink(flight.itinerary_id));
+    chain.append(chainLink(flight.itinerary_id, flight.name));
     row.append(
       el("td", "num", `${all.indexOf(flight) + 1}`),
       el("td", "when", when(flight.queued_at)),

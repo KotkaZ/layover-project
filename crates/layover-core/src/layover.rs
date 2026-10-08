@@ -36,6 +36,8 @@ use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 
+use crate::chosen::Chosen;
+
 use crate::agent::AgentName;
 use crate::flight::{ItineraryId, RunId};
 use crate::handover::Handover;
@@ -168,6 +170,10 @@ pub struct Layover {
     /// routes as it always did.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<ChainScope>,
+    /// What the person who triggered the booking chain chose for it — its name, and agents to run
+    /// differently — so the follow-up is known by the same name and run the same way.
+    #[serde(default, skip_serializing_if = "Chosen::is_empty")]
+    pub chosen: Chosen,
 }
 
 impl Layover {
@@ -197,7 +203,15 @@ impl Layover {
             flags: BTreeMap::new(),
             run: None,
             scope: None,
+            chosen: Chosen::default(),
         }
+    }
+
+    /// Records what the person who triggered the booking chain chose for it.
+    #[must_use]
+    pub fn with_chosen(mut self, chosen: Chosen) -> Self {
+        self.chosen = chosen;
+        self
     }
 
     /// Records which routes the booking chain could use, so its follow-up is held to them.

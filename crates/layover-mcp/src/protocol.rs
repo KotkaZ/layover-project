@@ -471,6 +471,7 @@ mod tests {
             flags: std::collections::BTreeMap::new(),
             flight: None,
             within: std::collections::BTreeSet::new(),
+            chosen: layover_core::chosen::Chosen::default(),
         }
     }
 

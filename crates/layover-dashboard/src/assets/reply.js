@@ -122,8 +122,8 @@ async function submitReply(event) {
 }
 
 // The trigger dialog, set to a chain's workflow and flags, and saying where they came from.
-function continueChain(pipeline, flags, from) {
-  openTrigger({ pipeline, flags, from });
+function continueChain(pipeline, flags, from, name) {
+  openTrigger({ pipeline, flags, from, name });
 }
 
 function startReplies() {

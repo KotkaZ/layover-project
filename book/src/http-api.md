@@ -28,15 +28,15 @@ Point any OpenAPI tool at the file to get a client, a mock server or rendered do
 |---|---|---|---|
 | `GET` | `/health` | | Liveness, version, and whether a Ground Stop is engaged. |
 | `GET` | `/agents` | | Every agent and the route map between them. Each agent's `model`, `reasoning_effort` and `context` are read from the command line Layover will run for it — with its own `model`, `effort` and `context` filled into its runner's placeholders — and are `null` where it sets none. A route's `pipelines` lists the workflows whose chains may use it, and is `null` for a global route. |
-| `GET` | `/pipelines` | | Declared pipelines, their triggers and their flags. |
+| `GET` | `/pipelines` | | Declared pipelines, their triggers and their flags, and `agents`: every agent each one's chains reach, entry first, with the `model`, `reasoning_effort` and `context` it runs at in that workflow and whether its runner can carry each (`takes_model`, `takes_effort`, `takes_context`) — what a trigger may choose differently. Empty for a pipeline that `resumes`. |
 | `GET` | `/graph` | `pipeline` | The route map as a rendered diagram, optionally for one workflow — drawn over the routes that workflow's chains may use. An agent with several runs alive at once — the workflow triggered twice — carries a count such as `×2`. |
 | `POST` | `/flights` | | **Queue** work. The Tower starts it within seconds. Answers with the new chain's `itinerary_id`. |
-| `GET` | `/flights` | | What is queued and waiting. |
+| `GET` | `/flights` | | What is queued and waiting, each with its chain's `name`. |
 | `DELETE` | `/flights/{flight_id}` | | Cancel queued work. Only what has not started. |
 | `GET` | `/upcoming` | `hours` | What will start on its own. See below. |
-| `GET` | `/itineraries` | `window`, `state` | Chains of work, and whether each finished, stalled or is waiting for a person (`awaiting_human`). Each carries its `flags`, `waiting_for` when it waits, the chains it `continues` or is `continued_by`, and where a working chain is: the agents `running` in it and those it has work `queued` for. A chain is listed from the moment its first flight is queued, with no runs yet. |
+| `GET` | `/itineraries` | `window`, `state` | Chains of work, and whether each finished, stalled or is waiting for a person (`awaiting_human`). Each carries its `name`, its `flags`, `waiting_for` when it waits, the chains it `continues` or is `continued_by`, and where a working chain is: the agents `running` in it and those it has work `queued` for. A chain is listed from the moment its first flight is queued, with no runs yet. |
 | `GET` | `/itineraries/{itinerary_id}` | | One chain, whole. See below. |
-| `GET` | `/runs` | `status`, `itinerary_id`, `agent`, `pipeline`, `window`, `limit` | Runs, live and historical. Runs alive now come first, as `running`, read from the Tower's live records — history holds a run only once it is over. Each says the `model`, `reasoning_effort` and `context` it ran with, `null` for what its command line did not set and for runs recorded before Layover kept them. |
+| `GET` | `/runs` | `status`, `itinerary_id`, `agent`, `pipeline`, `window`, `limit` | Runs, live and historical. Runs alive now come first, as `running`, read from the Tower's live records — history holds a run only once it is over. Each says the `model`, `reasoning_effort` and `context` it ran with, `null` for what its command line did not set and for runs recorded before Layover kept them, and its chain's `chain_name`. |
 | `GET` | `/runs/{run_id}` | | One run, including how it ended. |
 | `GET` | `/runs/{run_id}/report` | | What that agent wrote about its own run. |
 | `GET` | `/costs` | `window`, `pipeline` | What the factory has spent, and how much of it is measured. Each total's `confidence` is the weakest `CostSource` in it — `reported`, `copilot_credits`, `rate_card` or `unreported` — and `credit_runs` counts the runs priced from Copilot AI credits, which `measured_share` counts as measured. |
@@ -113,7 +113,9 @@ curl -X POST localhost:7878/flights \
   -d '{
         "pipeline": "development",
         "body": "The retry policy drops the last attempt. Fix it.",
-        "flags": { "run_e2e": true }
+        "flags": { "run_e2e": true },
+        "name": "Retry policy: last attempt",
+        "agents": { "reviewer": { "effort": "max" } }
       }'
 ```
 
@@ -135,6 +137,14 @@ under `--watch-only`.
 Give either a `pipeline` or a `to`. A pipeline is the normal way in — it names the entry agent and
 declares which flags may be set. A bare `to` sends to an agent marked `entry = true` and accepts
 no flags. Naming an undeclared flag is a `400`, not a silent no-op.
+
+`name` and `agents` are optional and belong to the chain, like its flags: everything it causes
+keeps them. `name` is one line of at most 120 characters. `agents` chooses a `model`, `effort` or
+`context` for particular agents in this chain only, overriding their workflow's values; each value
+is a plain token (letters, digits and `._:/-`), and a choice is a `400` when the agent is not one the
+workflow runs or its runner has no placeholder to carry the value — a choice that would not happen
+is refused rather than accepted and ignored. A choice can never add arguments: what an agent is
+denied is decided in `layover.toml`, not at trigger time.
 
 A `409` means a Ground Stop is engaged. A kill switch that halted running work while still
 accepting more would not be a kill switch.

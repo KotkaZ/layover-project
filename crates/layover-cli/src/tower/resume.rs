@@ -95,9 +95,11 @@ pub(super) fn resume_due(
             })
             .unwrap_or_default();
 
-        if let Err(error) =
-            journal.queue(Queued::new(flight, Some(name.clone()), flags).narrowed_by(within))
-        {
+        // Known by the same name, and running its agents as the booking chain was asked to.
+        let follow_up = Queued::new(flight, Some(name.clone()), flags)
+            .narrowed_by(within)
+            .choosing(layover.chosen.clone());
+        if let Err(error) = journal.queue(follow_up) {
             announce(format!("could not resume {}: {error}", layover.id));
             continue;
         }
@@ -281,6 +283,51 @@ draft = { default = true }
             Some(&true),
             "a flag the booking chain never had takes the resuming pipeline's default"
         );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_follow_up_is_known_by_the_name_its_booking_chain_was_given() {
+        let root = temp("resume-name");
+        let journal = Journal::open(root.join("journal")).expect("opens");
+        let config = factory_config(
+            r#"
+[pipelines.follow_up]
+entry = "worker"
+resumes = true
+"#,
+        );
+        let chosen = layover_core::chosen::Chosen {
+            name: Some("Retry banner".to_owned()),
+            agents: std::collections::BTreeMap::new(),
+        };
+
+        let now = Timestamp::now();
+        journal
+            .book(
+                layover_core::layover::Layover::book(
+                    AgentName::new("worker"),
+                    ItineraryId::generate(),
+                    "comments on pull request 41",
+                    layover_core::handover::Handover::dispatch(Vec::new()),
+                    now,
+                    now,
+                )
+                .with_chosen(chosen.clone()),
+            )
+            .expect("books");
+
+        resume_due(
+            &config,
+            &journal,
+            &PipelineName::new("follow_up"),
+            now,
+            &|_| {},
+        )
+        .expect("collects");
+
+        assert_eq!(journal.pending().expect("readable")[0].chosen, chosen);
 
         let _ = std::fs::remove_dir_all(&root);
     }

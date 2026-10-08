@@ -45,6 +45,18 @@ impl ModelChoice {
         agent: &AgentName,
         pipeline: Option<&crate::pipeline::PipelineName>,
     ) -> Self {
+        Self::in_chain(config, agent, pipeline, None)
+    }
+
+    /// What `agent` runs on in one chain: its workflow's overrides, and then whatever the person
+    /// who triggered the chain chose for it.
+    #[must_use]
+    pub fn in_chain(
+        config: &Config,
+        agent: &AgentName,
+        pipeline: Option<&crate::pipeline::PipelineName>,
+        chosen: Option<&crate::chosen::Chosen>,
+    ) -> Self {
         let Some(definition) = config.agents.get(agent) else {
             return Self::default();
         };
@@ -52,7 +64,7 @@ impl ModelChoice {
             return Self::default();
         };
 
-        Self::running(runner, config.selection_in(agent, pipeline))
+        Self::running(runner, config.selection_in(agent, pipeline, chosen))
     }
 
     /// What `runner`'s command line selects with `selection` filled in.

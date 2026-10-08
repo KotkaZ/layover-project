@@ -322,7 +322,7 @@ impl Layout {
             // Agents no pipeline can reach still have to appear — an unreachable agent is
             // precisely the thing somebody opened the diagram to find.
             let layer = layers.get(name).copied().unwrap_or(0) + 1;
-            let words = caption::agent(config, name, agent, scope.pipeline());
+            let words = caption::agent(config, name, agent, scope.pipeline(), &live.chosen);
             columns.entry(layer).or_default().push(Node {
                 id: agent_id(name),
                 label: name.as_str().to_owned(),

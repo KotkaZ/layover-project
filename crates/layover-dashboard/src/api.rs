@@ -430,6 +430,7 @@ impl Api for Dashboard {
 
         let (to, pipeline) = resolve_target(&config, &body)?;
         let flags = resolve_flags(&config, pipeline.as_ref(), &body)?;
+        let chosen = resolve_chosen(&config, pipeline.as_ref(), &body)?;
 
         let itinerary = ItineraryId::generate();
         let flight = Flight::new(
@@ -443,7 +444,7 @@ impl Api for Dashboard {
 
         self.0
             .journal
-            .queue(Queued::new(flight, pipeline, flags))
+            .queue(Queued::new(flight, pipeline, flags).choosing(chosen))
             .map_err(|error| {
                 Problem::new(StatusCode::INTERNAL_SERVER_ERROR, "the queue is unwritable")
                     .with_detail(error.to_string())
@@ -739,6 +740,38 @@ impl Api for Dashboard {
     async fn get_upcoming(&self, query: GetUpcomingQuery) -> Result<Upcoming, Problem> {
         self.upcoming(&query)
     }
+}
+
+/// Checks the name and per-agent choices a trigger carries, refusing one that would not happen —
+/// an agent the workflow never runs, a value its runner cannot carry — rather than accepting it and
+/// quietly running as though it had not been asked.
+fn resolve_chosen(
+    config: &layover_core::config::Config,
+    pipeline: Option<&PipelineName>,
+    body: &SendFlightRequest,
+) -> Result<layover_core::chosen::Chosen, Problem> {
+    let agents = body
+        .agents
+        .iter()
+        .flatten()
+        .map(|(agent, choice)| {
+            (
+                agent.clone(),
+                layover_core::chosen::AgentChoice {
+                    model: choice.model.clone(),
+                    effort: choice.effort.clone(),
+                    context: choice.context.clone(),
+                },
+            )
+        })
+        .collect();
+
+    layover_core::chosen::Chosen::checked(config, pipeline, body.name.as_deref(), &agents).map_err(
+        |refused| {
+            Problem::new(StatusCode::BAD_REQUEST, "that choice cannot be made")
+                .with_detail(refused.0)
+        },
+    )
 }
 
 /// Works out which agent a trigger is addressed to, and through which pipeline.

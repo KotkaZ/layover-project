@@ -25,6 +25,7 @@ pub mod agent;
 pub mod autostart;
 pub mod barrier;
 pub mod brief;
+pub mod chosen;
 pub mod config;
 pub mod cost;
 pub mod diagram;
@@ -54,6 +55,7 @@ pub use agent::{Access, Agent, AgentName, PromptSpec, PromptSpecError};
 pub use autostart::{Autostart, Platform};
 pub use barrier::{Barrier, BarrierKey, Delivery};
 pub use brief::brief;
+pub use chosen::{AgentChoice, Chosen};
 pub use config::{Config, ConfigError, Defaults, McpWiring, Paths, ReserveConfig, Runner};
 pub use cost::{
     CostSource, Ledger, ModelRates, RateCard, Reserve, ReserveState, RunCost, Summary, TokenUsage,

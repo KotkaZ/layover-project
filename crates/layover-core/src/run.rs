@@ -122,6 +122,12 @@ pub struct RunRecord {
     /// written before it was kept.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
+    /// What the run's chain is called, when the person who triggered it gave it a name.
+    ///
+    /// Kept on every run so history can say which named piece of work a run was part of after the
+    /// queue that carried the name is gone. Absent in records written before it was kept.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chain_name: Option<String>,
     /// How it ended.
     pub outcome: Outcome,
     /// When the work it ran was queued, so the wait between the two can be read back.
@@ -213,6 +219,7 @@ impl RunRecord {
             model: None,
             effort: None,
             context: None,
+            chain_name: None,
             outcome: Outcome::Running,
             queued_at: None,
             started_at,

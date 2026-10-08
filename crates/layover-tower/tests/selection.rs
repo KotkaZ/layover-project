@@ -186,3 +186,58 @@ args = ["--deny-tool=shell(git)"]
         "{lines}"
     );
 }
+
+#[test]
+fn a_named_chain_runs_with_its_choices_and_every_record_says_its_name() {
+    let temp = Temp::new("chosen");
+    let named = if cfg!(windows) {
+        r#"["cmd", "/c", "echo", "--name={name}", "--reasoning-effort={effort}"]"#
+    } else {
+        r#"["echo", "--name={name}", "--reasoning-effort={effort}"]"#
+    };
+    let factory = factory(
+        &temp,
+        &format!(
+            r#"
+[layover]
+work_dir = "work"
+
+[defaults]
+runner = "named"
+timeout_sec = 30
+
+[runners.named]
+command = {named}
+
+[agents.reviewer]
+prompt = "review"
+effort = "xhigh"
+entry = true
+"#
+        ),
+    );
+
+    let mut queued = human("reviewer");
+    queued.chosen = layover_core::chosen::Chosen {
+        name: Some("Retry banner".to_owned()),
+        agents: [(
+            layover_core::agent::AgentName::new("reviewer"),
+            layover_core::chosen::AgentChoice {
+                effort: Some("max".to_owned()),
+                ..layover_core::chosen::AgentChoice::default()
+            },
+        )]
+        .into(),
+    };
+    factory.drain(vec![queued], |_| {}, |_, _| {});
+
+    // `cmd /c echo` shows the quotes Windows puts round an argument with spaces in it.
+    let line = transcript_of(&temp, "reviewer").replace('"', "");
+    assert!(
+        line.contains("--name=Retry banner - reviewer --reasoning-effort=max"),
+        "{line}"
+    );
+    let runs = history(&temp.0);
+    assert_eq!(runs[0].chain_name.as_deref(), Some("Retry banner"));
+    assert_eq!(runs[0].effort.as_deref(), Some("max"));
+}

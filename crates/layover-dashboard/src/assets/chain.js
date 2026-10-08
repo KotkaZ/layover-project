@@ -47,7 +47,8 @@ function sentBy(run) {
 
 function chainHeader(chain, runs) {
   $("#chain-title").replaceChildren(
-    el("span", "", chain.pipeline ?? "no workflow"),
+    ...(chain.name ? [el("span", "", chain.name)] : []),
+    el("span", chain.name ? "muted" : "", chain.pipeline ?? "no workflow"),
     el("code", "", chain.itinerary_id),
   );
   const state = $("#chain-state");
@@ -88,7 +89,7 @@ function chainHeader(chain, runs) {
     const onward = el("button", "link", "Continue…");
     onward.title = "Trigger this workflow again, with this chain's flags.";
     onward.addEventListener("click", () =>
-      continueChain(chain.pipeline, chain.flags ?? null, chain.itinerary_id),
+      continueChain(chain.pipeline, chain.flags ?? null, chain.itinerary_id, chain.name),
     );
     actions.append(onward);
   }
@@ -217,7 +218,10 @@ function inFlight(chains) {
       : chain.queued
         ? `queued for ${chain.queued.join(", ")}`
         : STATES[chain.state] ?? chain.state;
-    chip.append(el("code", "", chain.itinerary_id.slice(-6)), document.createTextNode(` ${where}`));
+    chip.append(
+      chain.name ? el("b", "", chain.name) : el("code", "", chain.itinerary_id.slice(-6)),
+      document.createTextNode(` ${where}`),
+    );
     chip.title = `${chain.itinerary_id} · started ${when(chain.started_at)} · ${chain.runs} run(s)`;
     chip.addEventListener("click", () => openChain(chain.itinerary_id));
     strip.append(chip);

@@ -317,7 +317,7 @@ async function loadRuns() {
       row.append(
         el("td", "", when(run.finished_at ?? run.started_at)),
         el("td", "", run.agent),
-        el("td", "", run.pipeline ?? "—"),
+        workflowCell(run.pipeline, run.chain_name),
         el("td", `outcome ${run.status}`, run.status.replace("_", " ")),
         el("td", "num", duration(run.duration_sec)),
         // A run still going has not been billed yet, which is not the same as reporting nothing.
@@ -371,6 +371,14 @@ async function loadRuns() {
 const STATES = { awaiting_human: "waiting for you" };
 
 /// A chain's state, and for one that is working, where it is.
+/// A workflow, and beneath it the name the chain was given when it was triggered, if it was.
+function workflowCell(pipeline, name) {
+  const cell = el("td");
+  if (name) cell.append(el("b", "", name), document.createElement("br"));
+  cell.append(el("span", name ? "muted" : "", pipeline ?? "—"));
+  return cell;
+}
+
 function chainState(chain) {
   const state = STATES[chain.state] ?? chain.state;
   if (chain.state !== "working") return state;
@@ -395,7 +403,7 @@ async function loadChains() {
 
       row.append(
         el("td", "", when(chain.started_at)),
-        el("td", "", chain.pipeline ?? "—"),
+        workflowCell(chain.pipeline, chain.name),
         el("td", "", (chain.agents ?? []).join(" → ") || "—"),
         el("td", "num", String(chain.runs)),
         el("td", "num", cost),
@@ -415,7 +423,7 @@ async function loadChains() {
         const onward = el("button", "link", "Continue…");
         onward.title = "Trigger this workflow again, with this chain's flags.";
         onward.addEventListener("click", () =>
-          continueChain(chain.pipeline, chain.flags ?? null, chain.itinerary_id),
+          continueChain(chain.pipeline, chain.flags ?? null, chain.itinerary_id, chain.name),
         );
         actions.append(onward);
       }
@@ -617,102 +625,6 @@ async function send(path, method, payload) {
   return value;
 }
 
-function showFlags(name) {
-  const box = $("#trigger-flags");
-  const pipeline = pipelinesByName.get(name);
-  box.querySelectorAll(".flag").forEach((node) => node.remove());
-
-  const flags = pipeline?.flags ?? [];
-  $("#trigger-noflags").hidden = flags.length > 0;
-
-  for (const flag of flags) {
-    const row = el("label", "flag");
-    const box2 = document.createElement("input");
-    box2.type = "checkbox";
-    box2.dataset.flag = flag.name;
-    // Start from the declared default, so the window shows what would happen if you changed
-    // nothing rather than a set of switches that all read false.
-    box2.checked = flag.default;
-
-    const text = el("span");
-    text.append(el("span", "n", flag.name));
-    if (flag.description) text.append(document.createElement("br"), el("span", "d", flag.description));
-
-    row.append(box2, text);
-    box.append(row);
-  }
-}
-
-// `preset` continues a chain: its workflow selected and its flags set, saying where they came from.
-// Without one the dialog starts from the workflow's defaults, which is what a fresh trigger means.
-async function openTrigger(preset) {
-  const select = $("#trigger-pipeline");
-  select.replaceChildren(
-    ...[...pipelinesByName.values()].map((pipeline) => {
-      const option = el("option", "", pipeline.name);
-      option.value = pipeline.name;
-      return option;
-    }),
-  );
-
-  $("#trigger-error").hidden = true;
-  $("#trigger-body").value = "";
-  const origin = $("#trigger-origin");
-  origin.hidden = true;
-  if (preset?.pipeline && pipelinesByName.has(preset.pipeline)) select.value = preset.pipeline;
-  showFlags(select.value);
-
-  if (preset?.from) {
-    origin.hidden = false;
-    if (preset.flags) {
-      for (const box of $("#trigger-flags").querySelectorAll("input[type=checkbox]")) {
-        if (box.dataset.flag in preset.flags) box.checked = preset.flags[box.dataset.flag];
-      }
-      origin.className = "hint";
-      origin.textContent = `Continuing chain ${preset.from}: the workflow and flags are set as that chain had them. Change them if you need to.`;
-    } else {
-      origin.className = "caveat";
-      origin.textContent = `Chain ${preset.from} did not record its flags — it ran before they were kept. These are ${select.value}'s defaults: set them as it had them.`;
-    }
-  }
-
-  const { dispatched_by: by } = await get("/flights").catch(() => ({ dispatched_by: null }));
-  $("#trigger-note").textContent = by
-    ? `Queued work is started by ${by} as soon as a slot is free.`
-    : "This queues the work. Nothing in this process starts it — the dashboard is watching only — so it waits until a Tower (`layover serve`) or `layover run` picks it up.";
-
-  $("#trigger").showModal();
-}
-
-async function submitTrigger(event) {
-  const pipeline = $("#trigger-pipeline").value;
-  const body = $("#trigger-body").value.trim();
-
-  if (!body) {
-    event.preventDefault();
-    $("#trigger-error").hidden = false;
-    $("#trigger-error").textContent = "Give the entry agent something to start from.";
-    return;
-  }
-
-  const flags = {};
-  for (const box of $("#trigger-flags").querySelectorAll("input[type=checkbox]")) {
-    flags[box.dataset.flag] = box.checked;
-  }
-
-  event.preventDefault();
-  try {
-    const accepted = await send("/flights", "POST", { pipeline, body, flags });
-    $("#trigger").close();
-    loadQueued();
-    // What somebody who has just triggered a workflow wants next is to watch that run of it.
-    if (accepted.itinerary_id) openChain(accepted.itinerary_id);
-  } catch (error) {
-    $("#trigger-error").hidden = false;
-    $("#trigger-error").textContent = `Not queued: ${error.message}`;
-  }
-}
-
 // Runs alive against the factory's limit, and what is waiting for a slot. Shown whenever either is
 // non-zero, because "four of four alive, six queued" is the difference between a busy factory and
 // a stuck one.
@@ -755,7 +667,7 @@ async function openReport(runId, run) {
   onward.hidden = !run?.pipeline;
   onward.onclick = () => {
     $("#report").close();
-    continueChain(run.pipeline, run.flags ?? null, run.itinerary_id);
+    continueChain(run.pipeline, run.flags ?? null, run.itinerary_id, run.chain_name);
   };
   try {
     const report = await get(`/runs/${encodeURIComponent(runId)}/report`);
@@ -1010,13 +922,7 @@ function start() {
     tab.addEventListener("click", () => showView(tab.dataset.view));
   });
   $("#refresh").addEventListener("click", loadMap);
-  $("#trigger-open").addEventListener("click", () => openTrigger());
-  $("#trigger-pipeline").addEventListener("change", (e) => {
-    // Another workflow is not the chain being continued, so its flags say nothing about it.
-    $("#trigger-origin").hidden = true;
-    showFlags(e.target.value);
-  });
-  $("#trigger-send").addEventListener("click", submitTrigger);
+  startTrigger();
   $("#ground-stop").addEventListener("click", toggleGroundStop);
   ["#runs-window", "#runs-status"].forEach((id) => $(id).addEventListener("change", loadRuns));
   ["#chains-window", "#chains-state"].forEach((id) =>

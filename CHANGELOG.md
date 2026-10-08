@@ -22,8 +22,17 @@ status](README.md#project-status).
 - **A workflow can run an agent differently.** `[pipelines.<name>.agents.<agent>]` sets the model,
   effort or context that workflow's chains run the agent at, and `args` it adds, so an agent shared
   by two workflows needs neither a second agent nor a second runner. It wins over the agent's own
-  values and `[defaults]`. Each workflow's map, `explain` and
+  values and `[defaults]`; a choice made when triggering wins over it. Each workflow's map, `explain` and
   `prompt --pipeline` show the agent as that workflow runs it, and run records name what it ran on.
+- **A run can be named when it is triggered**, and agents run differently for that run only. The
+  dashboard's trigger window takes a name — "Login page: retry banner" — and, per agent the workflow
+  runs, a model, effort or context to use instead; `POST /flights` takes them as `name` and
+  `agents`. Both stay with everything the chain causes: hand-offs, spawned chains, follow-ups, and
+  the work a reply to its help requests continues. The name is shown on Chains, the chain's page,
+  Sessions, Upcoming and Runs, kept in run records as `chain_name`, and passed to Copilot as the
+  session's `--name`. A choice its runner cannot carry, for an agent the workflow never runs, or
+  that is not a plain value is refused with the reason. `GET /pipelines` lists each workflow's
+  agents with what they run at in it, and a chain's own map shows what its agents ran at in it.
 - **`layover validate`** refuses a runner with neither `cli` nor `command`, both, or `args` beside a
   `command`; and warns when a runner or agent repeats an option its preset already supplies, when
   an agent's `args` fix a value its runner carries a placeholder for, and when `args` would follow a

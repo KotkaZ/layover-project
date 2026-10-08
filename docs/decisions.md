@@ -897,6 +897,20 @@ preset, because a preset has to wire MCP and how Codex is handed MCP servers is 
 Agents differ from their runner by `args` that are only ever *added*, so a runner stays the
 permission floor for every agent on it.
 
+**Why a chain's name and per-agent choices travel exactly as its flags do.** A name is how a person
+finds *their* run of a workflow among three going at once, so it has to stay with everything that
+run causes — a hand-off, a spawned review, a follow-up two days later, the continuation a reply
+starts — or the second half of the work is unnamed. A per-agent choice is the same: asking for the
+reviewer at `max` on one hard change means every review in that change. So both ride on the queued
+flight, the Tower's record of the chain, the MCP session, the layover and the help request, the
+path flags already proved, and an agent can neither read nor set them through a tool. A trigger may
+choose a model, effort or context — values a runner already carries through a placeholder — and
+never arguments, because arguments are how a runner denies things and the dashboard is not where
+permissions are decided. A choice that could not take effect (an agent the workflow never runs, a
+value with no placeholder) is refused, because accepted and ignored is the failure this project
+keeps finding. A chain's own map is captioned from what its runs were recorded running at, rather
+than from configuration, because configuration can change after a chain ran and the record cannot.
+
 **Why a route each way is drawn as one line.** Most routes in a real factory come in reciprocal
 pairs, and the layered layout drew every reverse direction as a return path: a loop under the
 whole diagram in a lane of its own. A twenty-route workflow became eleven loops stacked four

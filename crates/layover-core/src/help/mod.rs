@@ -148,6 +148,10 @@ pub struct HelpRequest {
     /// The flags the chain that raised it ran with, resolved, for the same reason.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub flags: BTreeMap<String, bool>,
+    /// What the person who triggered the chain chose for it, so the work an answer continues keeps
+    /// its name and runs its agents the same way.
+    #[serde(default, skip_serializing_if = "crate::chosen::Chosen::is_empty")]
+    pub chosen: crate::chosen::Chosen,
     /// How a person answered it, when they did by replying rather than only marking it dealt with.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reply: Option<Reply>,
@@ -190,6 +194,7 @@ impl HelpRequest {
             resolved_at: None,
             scope: None,
             flags: BTreeMap::new(),
+            chosen: crate::chosen::Chosen::default(),
             reply: None,
         }
     }
@@ -199,6 +204,13 @@ impl HelpRequest {
     pub fn raised_in(mut self, scope: ChainScope, flags: BTreeMap<String, bool>) -> Self {
         self.scope = Some(scope);
         self.flags = flags;
+        self
+    }
+
+    /// Records what the person who triggered the chain chose for it.
+    #[must_use]
+    pub fn chosen_as(mut self, chosen: crate::chosen::Chosen) -> Self {
+        self.chosen = chosen;
         self
     }
 

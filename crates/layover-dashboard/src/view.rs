@@ -13,8 +13,9 @@ use layover_core::route::Join as CoreJoin;
 use layover_core::run::{Outcome, RunRecord};
 use layover_http::{
     Access, Agent, AgentList, Blocker, CostSource, CostSummary, CostWindow, Flag, FlagValue,
-    HelpRequest, Impact, Join, Learning, LearningState, PendingFlight, Pipeline, PipelineList,
-    Report, Route, Run, RunStatus, TokenUsage, Trigger, TriggerKind, WindowSpan, Workspace,
+    HelpRequest, Impact, Join, Learning, LearningState, PendingFlight, Pipeline, PipelineAgent,
+    PipelineList, Report, Route, Run, RunStatus, TokenUsage, Trigger, TriggerKind, WindowSpan,
+    Workspace,
 };
 
 /// Describes the factory's agents and the edges between them.
@@ -86,6 +87,7 @@ pub fn pipelines(config: &Config) -> PipelineList {
                     layover_core::pipeline::Workspace::PerItinerary => Workspace::PerItinerary,
                 },
                 resumes: pipeline.resumes,
+                agents: pipeline_agents(config, name, pipeline),
                 flags: pipeline
                     .flags
                     .iter()
@@ -98,6 +100,38 @@ pub fn pipelines(config: &Config) -> PipelineList {
             })
             .collect(),
     }
+}
+
+/// Every agent a pipeline's chains can reach, entry first, as that pipeline runs it — and which of
+/// its model, effort and context a trigger may choose, which is what its runner can carry.
+fn pipeline_agents(
+    config: &Config,
+    name: &layover_core::pipeline::PipelineName,
+    pipeline: &layover_core::pipeline::Pipeline,
+) -> Vec<PipelineAgent> {
+    if pipeline.resumes {
+        return Vec::new();
+    }
+    let reached = layover_core::graph::RouteGraph::for_pipeline(config, Some(name))
+        .workflow_from(&pipeline.entry);
+    let ordered = std::iter::once(&pipeline.entry)
+        .chain(reached.iter().filter(|agent| **agent != pipeline.entry));
+
+    ordered
+        .filter_map(|agent| {
+            let (_, runner) = config.runner_of(config.agents.get(agent)?)?;
+            let choice = ModelChoice::in_pipeline(config, agent, Some(name));
+            Some(PipelineAgent {
+                agent: agent.to_string(),
+                model: choice.model,
+                reasoning_effort: choice.reasoning_effort,
+                context: choice.context,
+                takes_model: runner.takes_model(),
+                takes_effort: runner.takes_effort(),
+                takes_context: runner.takes_context(),
+            })
+        })
+        .collect()
 }
 
 /// Describes what starts a pipeline.
@@ -129,6 +163,7 @@ pub fn run(record: &RunRecord) -> Run {
         agent: record.agent.to_string(),
         pipeline: record.pipeline.as_ref().map(ToString::to_string),
         model: record.model.clone(),
+        chain_name: record.chain_name.clone(),
         reasoning_effort: record.effort.clone(),
         context: record.context.clone(),
         status: status(record.outcome),
@@ -321,6 +356,7 @@ pub fn pending(queued: &layover_core::queue::Queued) -> PendingFlight {
         to: flight.to.to_string(),
         pipeline: queued.pipeline.as_ref().map(ToString::to_string),
         body: flight.body.clone(),
+        name: queued.chosen.name.clone(),
         flags: Some(
             queued
                 .flags

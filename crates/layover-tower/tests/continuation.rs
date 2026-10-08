@@ -102,6 +102,7 @@ fn session(pipeline: Option<&str>, flags: &[(&str, bool)]) -> Session {
             .collect(),
         flight: None,
         within: BTreeSet::from([Some(PipelineName::new("follow-up"))]),
+        chosen: layover_core::chosen::Chosen::default(),
     }
 }
 

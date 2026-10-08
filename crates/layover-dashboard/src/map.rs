@@ -170,5 +170,38 @@ pub(crate) fn chain(
     }
 
     live.travelled.extend(legs);
+    live.chosen = chosen_in(records, pending);
     live
+}
+
+/// What the chain's agents run at in it, for its map: what the person who triggered it chose, as
+/// queued work carries it, and — for an agent that has run — what its latest run was recorded
+/// running at, which is the one answer that cannot be out of date.
+fn chosen_in(records: &[RunRecord], pending: &[Queued]) -> layover_core::chosen::Chosen {
+    let mut chosen = pending
+        .iter()
+        .map(|queued| &queued.chosen)
+        .find(|chosen| !chosen.is_empty())
+        .cloned()
+        .unwrap_or_default();
+    let mut latest: BTreeMap<&AgentName, &RunRecord> = BTreeMap::new();
+    for record in records {
+        let seen = latest.entry(&record.agent).or_insert(record);
+        if record.started_at >= seen.started_at {
+            *seen = record;
+        }
+    }
+    for (agent, record) in latest {
+        if record.model.is_some() || record.effort.is_some() || record.context.is_some() {
+            chosen.agents.insert(
+                agent.clone(),
+                layover_core::chosen::AgentChoice {
+                    model: record.model.clone(),
+                    effort: record.effort.clone(),
+                    context: record.context.clone(),
+                },
+            );
+        }
+    }
+    chosen
 }

@@ -443,6 +443,8 @@ impl Factory {
         );
         self.chains
             .continuing(&queued.flight.itinerary, queued.continues.as_ref());
+        self.chains
+            .chosen_by(&queued.flight.itinerary, &queued.chosen);
 
         // A restarted run of a released join goes straight to its agent. The barrier it passed
         // went with the Tower that held it, and a fresh one would wait for upstreams that finished

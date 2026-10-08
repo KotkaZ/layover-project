@@ -123,9 +123,12 @@ pub fn continuation(
         config.defaults.max_hops,
     );
 
+    // The continuation is the same piece of work, so it keeps its name and runs its agents as the
+    // chain that asked was asked to.
     Ok(Queued::new(flight, pipeline, flags)
         .narrowed_by(within)
-        .continuing(first.itinerary.clone()))
+        .continuing(first.itinerary.clone())
+        .choosing(first.chosen.clone()))
 }
 
 /// The flags a request recorded, within what its workflow declares now, as a resumed layover's are:

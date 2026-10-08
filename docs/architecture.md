@@ -299,7 +299,8 @@ set by hand when nothing else is responding.
 
 `from` is `{ "agent": … }` for a flight an agent sent, and `"human"` for work from outside the mesh,
 with a `via` naming a schedule or a resumed layover where one sent it. A queued flight is wrapped
-with the pipeline that opened its chain and the flags it runs with.
+with the pipeline that opened its chain, the flags it runs with, and what the person who triggered
+it chose: the chain's name, and agents to run at a different model, effort or context.
 
 `hops_remaining` is **mirrored into the envelope for the transcript only**, and Fuel is not carried
 at all. The authoritative values live in the Tower, keyed by the itinerary. See §4.2.

@@ -44,6 +44,20 @@ that pipeline declares — each starting from its declared default, so the windo
 happen if you changed nothing. A flag the pipeline does not declare is refused rather than ignored:
 silently dropping it would let a typo change nothing while appearing to work.
 
+**Name** it, optionally — `Login page: retry banner` — and that is what the run is called wherever
+it appears: the Chains list, the chain's own page, Sessions, Upcoming and Runs. Three DevForge runs
+going at once are three names rather than three identifiers. The name stays with everything the
+run causes — its hand-offs, a chain it spawns, a follow-up days later, and the work a reply to one
+of its help requests continues — and is kept in each run's record. A Copilot run's session is
+called by it too (`--name`), with the agent after it, so you can find it among your own sessions.
+
+**Model, effort and context for this run** lists every agent the workflow runs, with what each runs
+at now — the workflow's values, `[pipelines.<name>.agents.<agent>]` included. Type a different value
+to run that agent differently in this run and everything it causes; leave a box empty to keep it. A
+box is disabled where the agent's runner has no placeholder to carry the value, because a choice its
+CLI would never see is worse than none, and the Tower refuses one that arrives anyway. Values are
+the CLI's, typed as it takes them; the suggestions are only values already used in the factory.
+
 **The work is queued, and the Tower starts it.** Under `layover serve` it starts as soon as a slot
 is free, and the window names the Tower that will pick it up. Once it is queued the page opens
 [the chain it started](#one-chain-whole), so you watch that run of the workflow rather than the
@@ -155,9 +169,9 @@ in the Help &amp; learnings tab, each with **Reply** and **Resolved**.
 
 **Reply answers it and continues the work.** The window opens with what the agent asked, quoted, so
 you can answer between its questions. Sending starts a new run of the agent that asked — a new
-chain, with a fresh budget, in the same workflow with the same flags and routes as the chain that
-asked. Never the workflow's defaults: a chain that was allowed to open a pull request still is, and
-the window says which flags it carries. The agent is told a person sent it, and its work begins with
+chain, with a fresh budget, in the same workflow with the same flags, routes, name and per-agent
+choices as the chain that asked. Never the workflow's defaults: a chain that was allowed to open a
+pull request still is, and the window says which flags it carries. The agent is told a person sent it, and its work begins with
 a line naming the request it answers, then your words exactly as you wrote them:
 
 ```text
@@ -187,7 +201,8 @@ of every future run; keeping does not, because it only preserves what is already
 
 A run is one agent doing one thing. A **chain** is everything one trigger caused, and the budget
 they share — Hops, Fuel and the run cap are per chain, so "what did this cost" and "did this
-finish" are questions about a chain rather than a run.
+finish" are questions about a chain rather than a run. A chain somebody named when they triggered
+it is listed by its name, above its workflow.
 
 | State | Meaning |
 |---|---|
@@ -235,7 +250,9 @@ under its workflow's map, or straight after triggering it — shows that chain o
 
 - **Its workflow's map, drawn for it alone.** The same drawing, so the two can be compared at a
   glance, coloured by what happened *in this chain*, with the routes its work actually took drawn
-  in green and the rest faded.
+  in green and the rest faded. Each box says what its agent ran at *in this chain*: what its runs
+  were recorded running at, or what was chosen when the chain was triggered — which can differ from
+  the workflow's own map.
 - **Every run, in the order it happened**, with who sent it, how it ended, how long it took and
   what it cost, and **Watch** or **Transcript** and **Report** beside each.
 - **What it is waiting for**: flights it has queued, at the end of the list.

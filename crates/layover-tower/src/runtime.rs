@@ -16,6 +16,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use layover_core::agent::AgentName;
+use layover_core::chosen::Chosen;
 use layover_core::config::Config;
 use layover_core::flight::{Flight, ItineraryId, Origin};
 use layover_core::handover::Handover;
@@ -52,6 +53,10 @@ pub struct Chains {
     within: Mutex<HashMap<String, BTreeSet<Option<PipelineName>>>>,
     /// The chain each one continues, for a chain a person's reply to a help request started.
     continues: Mutex<HashMap<String, ItineraryId>>,
+    /// What the person who triggered each chain chose for it — its name, agents to run
+    /// differently. Recorded from queued work like the flags, which is what carries it across a
+    /// restart.
+    chosen: Mutex<HashMap<String, Chosen>>,
 }
 
 impl Chains {
@@ -127,6 +132,28 @@ impl Chains {
                 .entry(id.as_str().to_owned())
                 .or_insert_with(|| flags.clone());
         }
+    }
+
+    /// Remembers what the person who triggered chain `id` chose for it. The first queued flight
+    /// that carries a choice decides, like the flags.
+    pub fn chosen_by(&self, id: &ItineraryId, chosen: &Chosen) {
+        if !chosen.is_empty()
+            && let Ok(mut known) = self.chosen.lock()
+        {
+            known
+                .entry(id.as_str().to_owned())
+                .or_insert_with(|| chosen.clone());
+        }
+    }
+
+    /// What the person who triggered chain `id` chose for it; nothing for a chain nobody chose for.
+    #[must_use]
+    pub fn chosen_of(&self, id: &ItineraryId) -> Chosen {
+        self.chosen
+            .lock()
+            .ok()
+            .and_then(|known| known.get(id.as_str()).cloned())
+            .unwrap_or_default()
     }
 
     /// Remembers that chain `id` continues `earlier`. The first to say decides, like the pipeline.
@@ -336,7 +363,8 @@ impl Runtime for FactoryRuntime {
         // So does its scope, taken from the session and never from the call: a spawn gives a chain
         // a fresh budget, not a fresh set of permissions.
         let queued = Queued::new(flight, session.pipeline.clone(), session.flags.clone())
-            .narrowed_by(session.within.clone());
+            .narrowed_by(session.within.clone())
+            .choosing(session.chosen.clone());
 
         (self.queue)(queued).map_err(|detail| ToolError::Unavailable { detail })?;
 
@@ -385,7 +413,8 @@ impl Runtime for FactoryRuntime {
             } else {
                 BTreeMap::new()
             },
-        );
+        )
+        .chosen_as(session.chosen.clone());
         request.fatal = fatal;
 
         // To the journal, which is what the dashboard's help tab, `doctor` and the run record's
@@ -472,6 +501,7 @@ impl Runtime for FactoryRuntime {
             due_at,
         )
         .with_flags(session.flags.clone())
+        .with_chosen(session.chosen.clone())
         .booked_in(session.run.clone())
         .booked_within(ChainScope::new(
             session.pipeline.clone(),
@@ -804,6 +834,7 @@ mode = "spawn"
             flags: BTreeMap::new(),
             flight: None,
             within: std::collections::BTreeSet::new(),
+            chosen: layover_core::chosen::Chosen::default(),
         }
     }
 
@@ -814,6 +845,58 @@ mode = "spawn"
             flags: BTreeMap::from([("run_e2e".to_owned(), true)]),
             ..session(agent, 3)
         }
+    }
+
+    #[test]
+    fn a_chains_name_and_choices_travel_with_everything_it_causes() {
+        // A hand-off, a spawned chain, work set down and a request for help are all the same
+        // piece of work, so each keeps what the person who triggered it chose.
+        let fixture = Fixture::new("chosen");
+        let chosen = layover_core::chosen::Chosen {
+            name: Some("Retry banner".to_owned()),
+            agents: BTreeMap::from([(
+                AgentName::new("developer"),
+                layover_core::chosen::AgentChoice {
+                    effort: Some("max".to_owned()),
+                    ..layover_core::chosen::AgentChoice::default()
+                },
+            )]),
+        };
+        let caller = Session {
+            chosen: chosen.clone(),
+            ..triggered("analyst")
+        };
+
+        let runtime = &fixture.runtime;
+        runtime
+            .send(&caller, &AgentName::new("developer"), "build it")
+            .expect("hands off");
+        runtime
+            .send(&caller, &AgentName::new("reviewer"), "review it")
+            .expect("spawns");
+        runtime.wait(&caller, "2h", "the review").expect("books");
+        runtime
+            .help(
+                &caller,
+                layover_core::help::Blocker::Access,
+                "no token",
+                "401",
+                false,
+            )
+            .expect("asks");
+
+        let sent = fixture.sent();
+        assert_eq!(sent.len(), 2);
+        assert!(
+            sent.iter().all(|queued| queued.chosen == chosen),
+            "{sent:?}"
+        );
+        assert_ne!(
+            sent[1].flight.itinerary, caller.itinerary,
+            "the spawn is a new chain, and still the same named work"
+        );
+        assert_eq!(fixture.booked()[0].chosen, chosen);
+        assert_eq!(fixture.asked()[0].chosen, chosen);
     }
 
     #[test]

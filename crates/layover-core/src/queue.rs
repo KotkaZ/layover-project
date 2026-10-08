@@ -18,6 +18,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
+use crate::chosen::Chosen;
 use crate::flight::{Flight, ItineraryId};
 use crate::handover::Recovery;
 use crate::pipeline::PipelineName;
@@ -68,6 +69,11 @@ pub struct Queued {
     /// two, so each can say where the other went.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub continues: Option<ItineraryId>,
+    /// What the person who triggered the chain chose for it: its name, and agents to run
+    /// differently. Carried like the flags, so a restart, a hand-off, a spawned chain and a
+    /// follow-up all keep it. See [`crate::chosen`].
+    #[serde(default, skip_serializing_if = "Chosen::is_empty")]
+    pub chosen: Chosen,
 }
 
 impl Queued {
@@ -86,7 +92,15 @@ impl Queued {
             recovering: None,
             released: false,
             continues: None,
+            chosen: Chosen::default(),
         }
+    }
+
+    /// Records what the person who triggered the chain chose for it.
+    #[must_use]
+    pub fn choosing(mut self, chosen: Chosen) -> Self {
+        self.chosen = chosen;
+        self
     }
 
     /// Marks the flight as continuing the chain `earlier`.

@@ -30,6 +30,8 @@ const REPLY: &str = include_str!("assets/reply.js");
 const CHAIN: &str = include_str!("assets/chain.js");
 /// What starts next: the queue, scheduled ticks, layovers and skipped ticks.
 const UPCOMING: &str = include_str!("assets/upcoming.js");
+/// Triggering a workflow: its flags, its name, and agents to run differently.
+const TRIGGER: &str = include_str!("assets/trigger.js");
 
 /// Builds the complete server: the JSON API, plus the dashboard on top of it.
 ///
@@ -69,6 +71,10 @@ pub fn router(dashboard: Dashboard, guard: Guard) -> Router {
         .route(
             "/upcoming.js",
             get(|| async { asset("text/javascript", UPCOMING) }),
+        )
+        .route(
+            "/trigger.js",
+            get(|| async { asset("text/javascript", TRIGGER) }),
         )
         .merge(api)
         .layer(axum::middleware::from_fn_with_state(

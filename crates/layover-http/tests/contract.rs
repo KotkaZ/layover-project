@@ -57,6 +57,7 @@ fn sample_run() -> Run {
         agent: "analyst".to_owned(),
         pipeline: Some("development".to_owned()),
         model: None,
+        chain_name: None,
         reasoning_effort: None,
         context: None,
         status: RunStatus::Interrupted,
@@ -117,6 +118,7 @@ impl Api for Stub {
                 fuel_usd: 12.0,
                 workspace: Workspace::PerItinerary,
                 resumes: false,
+                agents: Vec::new(),
                 flags: Vec::new(),
             }],
         })
@@ -300,6 +302,7 @@ impl Api for Stub {
             itineraries: vec![Itinerary {
                 itinerary_id: "itn_1".to_owned(),
                 pipeline: Some("development".to_owned()),
+                name: Some("Retry banner".to_owned()),
                 state: ItineraryState::Stalled,
                 agents: Some(vec!["tester".to_owned(), "reviewer".to_owned()]),
                 runs: 2,
@@ -349,6 +352,7 @@ impl Api for Stub {
                 itinerary_id: "itn_1".to_owned(),
                 to: "analyst".to_owned(),
                 pipeline: Some("development".to_owned()),
+                name: Some("Retry banner".to_owned()),
                 body: "work item 1543477".to_owned(),
                 flags: None,
                 queued_at: "2026-09-17T10:00:00Z".to_owned(),

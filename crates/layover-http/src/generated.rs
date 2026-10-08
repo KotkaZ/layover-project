@@ -62,6 +62,20 @@ pub struct Agent {
     pub runner: Option<String>,
 }
 
+/// A model, effort or context chosen for one agent in one chain.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AgentChoice {
+    /// Its context-window tier.
+    #[serde(default)]
+    pub context: Option<String>,
+    /// How hard to ask it to reason.
+    #[serde(default)]
+    pub effort: Option<String>,
+    /// The model to run it on.
+    #[serde(default)]
+    pub model: Option<String>,
+}
+
 /// The factory's agents and the edges between them.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AgentList {
@@ -413,6 +427,9 @@ pub struct Itinerary {
     /// against it.
     #[serde(default)]
     pub measured: Option<bool>,
+    /// What the person who triggered it called it, when they gave it a name.
+    #[serde(default)]
+    pub name: Option<String>,
     /// The pipeline it was triggered through, when one was named.
     #[serde(default)]
     pub pipeline: Option<String>,
@@ -590,6 +607,9 @@ pub struct PendingFlight {
     pub flight_id: String,
     /// The chain it will begin.
     pub itinerary_id: String,
+    /// What its chain is called, when the person who triggered it named it.
+    #[serde(default)]
+    pub name: Option<String>,
     /// The pipeline it was triggered through, when one was named.
     #[serde(default)]
     pub pipeline: Option<String>,
@@ -622,6 +642,11 @@ pub struct PendingList {
 /// A named entry point into the mesh.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Pipeline {
+    /// Every agent this pipeline's chains can reach over the routes they may use, entry
+    /// first, as this pipeline runs it: with its `[pipelines.<name>.agents.<agent>]` override
+    /// applied. What a trigger can choose differently for each, and what it would otherwise
+    /// be. Empty for a pipeline that `resumes`, whose chains wake whoever set work down.
+    pub agents: Vec<PipelineAgent>,
     /// One line saying what this pipeline is for.
     #[serde(default)]
     pub description: Option<String>,
@@ -647,6 +672,28 @@ pub struct Pipeline {
     /// schedule fires whether or not the last instance finished, so anything reaching a
     /// read-write agent wants its own.
     pub workspace: Workspace,
+}
+
+/// One agent as a pipeline runs it, and what a trigger may choose for it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PipelineAgent {
+    /// The agent.
+    pub agent: String,
+    /// Its context-window tier in this pipeline.
+    #[serde(default)]
+    pub context: Option<String>,
+    /// The model it runs on in this pipeline, read from its command line.
+    #[serde(default)]
+    pub model: Option<String>,
+    /// The effort it runs at in this pipeline.
+    #[serde(default)]
+    pub reasoning_effort: Option<String>,
+    /// Its runner carries `{context}`, so a trigger may choose a context for it.
+    pub takes_context: bool,
+    /// Its runner carries `{effort}`, so a trigger may choose an effort for it.
+    pub takes_effort: bool,
+    /// Its runner carries `{model}`, so a trigger may choose a model for it.
+    pub takes_model: bool,
 }
 
 /// Every declared pipeline.
@@ -771,6 +818,10 @@ pub struct Run {
     /// blocked run looks exactly like a clean one on a list.
     #[serde(default)]
     pub blocked_on: Option<String>,
+    /// What the run's chain is called, when the person who triggered it named it. Null for an
+    /// unnamed chain and for runs recorded before Layover kept it.
+    #[serde(default)]
+    pub chain_name: Option<String>,
     /// The context-window tier the run's command line chose, such as `long_context`. Null
     /// when it chose none, and for runs recorded before Layover kept it.
     #[serde(default)]
@@ -925,11 +976,23 @@ pub struct ScheduledWorkflow {
 /// that satisfies this schema can still be rejected.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SendFlightRequest {
+    /// Agents to run differently in this chain only, keyed by agent: a model, effort or context
+    /// instead of what the factory declares. Each agent must be one the workflow runs, and its
+    /// runner must carry the value through a placeholder; values are plain tokens. Kept by
+    /// everything the chain causes, like `name`.
+    #[serde(default)]
+    pub agents: Option<std::collections::BTreeMap<String, AgentChoice>>,
     /// What the receiving agent is being asked to do.
     pub body: String,
     /// Flag overrides, keyed by flag name. Unset flags take their declared default.
     #[serde(default)]
     pub flags: Option<std::collections::BTreeMap<String, bool>>,
+    /// What to call the chain this starts — "Login page: retry banner" — so it can be told apart
+    /// from other runs of the same workflow. One line, at most 120 characters. Kept by
+    /// everything the chain causes: hand-offs, spawned chains, follow-ups and the work a reply
+    /// to one of its help requests continues. A Copilot run's session is called by it.
+    #[serde(default)]
+    pub name: Option<String>,
     /// Name of the pipeline to start.
     #[serde(default)]
     pub pipeline: Option<String>,

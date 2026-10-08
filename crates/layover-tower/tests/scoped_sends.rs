@@ -93,6 +93,7 @@ fn session(agent: &str, pipeline: Option<&str>) -> Session {
         flags: BTreeMap::new(),
         flight: None,
         within: BTreeSet::new(),
+        chosen: layover_core::chosen::Chosen::default(),
     }
 }
 
@@ -218,6 +219,7 @@ fn a_resumed_chain_uses_the_resuming_pipelines_routes_narrowed_by_its_booking_ch
 
     let resumed_from = |booked: &str| Session {
         within: BTreeSet::from([Some(name(booked))]),
+        chosen: layover_core::chosen::Chosen::default(),
         ..session("eagle", Some("follow-up"))
     };
 
@@ -249,6 +251,7 @@ fn work_a_chain_sends_on_carries_its_narrowing_with_it() {
     let fixture = Fixture::new("carried");
     let resumed = Session {
         within: BTreeSet::from([Some(name("eagle-eye"))]),
+        chosen: layover_core::chosen::Chosen::default(),
         ..session("eagle", Some("follow-up"))
     };
 

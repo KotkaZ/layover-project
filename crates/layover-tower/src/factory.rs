@@ -342,6 +342,7 @@ impl Factory {
                 flags: flags.to_map(),
                 flight: Some(flight.clone()),
                 within: scope.within.clone(),
+                chosen: self.chains.chosen_of(chain),
             })
         });
 
@@ -488,6 +489,7 @@ impl Factory {
             model: ran_on.model,
             effort: ran_on.reasoning_effort,
             context: ran_on.context,
+            chain_name: self.chains.chosen_of(itinerary.id()).name,
             outcome: Outcome::Halted,
             queued_at: None,
             started_at: now,
@@ -542,6 +544,7 @@ impl Factory {
             model: ran_on.model,
             effort: ran_on.reasoning_effort,
             context: ran_on.context,
+            chain_name: self.chains.chosen_of(&ticket.chain).name,
             outcome,
             queued_at: ticket.queued_at,
             started_at: ticket.started_at,
@@ -630,6 +633,7 @@ impl Factory {
             model: ran_on.model,
             effort: ran_on.reasoning_effort,
             context: ran_on.context,
+            chain_name: self.chains.chosen_of(chain).name,
             outcome: Outcome::Failed,
             queued_at: None,
             started_at,
@@ -773,8 +777,11 @@ impl Factory {
         chain: &ItineraryId,
         agent: &AgentName,
     ) -> layover_core::config::Selection {
-        self.config
-            .selection_in(agent, self.chains.pipeline_of(chain).as_ref())
+        self.config.selection_in(
+            agent,
+            self.chains.pipeline_of(chain).as_ref(),
+            Some(&self.chains.chosen_of(chain)),
+        )
     }
 
     /// The flags to write into a run's record: those its chain was composed with, for a chain a

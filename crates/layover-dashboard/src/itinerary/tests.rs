@@ -26,6 +26,7 @@ fn run(
         model: None,
         effort: None,
         context: None,
+        chain_name: None,
         outcome,
         started_at,
         finished_at: finished.then(|| started_at.checked_add(1_i32.minute()).expect("in range")),

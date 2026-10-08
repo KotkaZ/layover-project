@@ -76,9 +76,11 @@ Each applies to every run of that agent in a chain belonging to the workflow —
 spawned and a layover it resumes — and is carried by the runner's `{model}`, `{effort}`,
 `{context}` and `{args}` exactly as the agent's own values are. Who wins, for each value:
 
-1. the workflow's `[pipelines.<name>.agents.<agent>]`;
-2. the agent's own `model`, `effort`, `context`;
-3. `[defaults] effort` and `context`.
+1. what the person triggering the chain chose for that agent in the dashboard (or `POST /flights`'s
+   `agents`), for that chain and everything it causes;
+2. the workflow's `[pipelines.<name>.agents.<agent>]`;
+3. the agent's own `model`, `effort`, `context`;
+4. `[defaults] effort` and `context`.
 
 `args` are not a choice in that list: the runner's, the agent's and the workflow's are all added,
 in that order. A workflow can take more away from an agent; it cannot give back what the runner

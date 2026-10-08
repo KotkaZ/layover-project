@@ -309,6 +309,10 @@
       <select id="trigger-pipeline"></select>
     </label>
 
+    <label class="field">Name <span class="muted">— optional, so you can tell this run from others of the same workflow</span>
+      <input id="trigger-name" type="text" maxlength="120" placeholder="e.g. Login page: retry banner">
+    </label>
+
     <label class="field">Prompt
       <textarea id="trigger-body" rows="7" placeholder="A work item id, a bug report, or whatever the entry agent should start from."></textarea>
     </label>
@@ -317,6 +321,21 @@
       <legend>Flags</legend>
       <p class="hint" id="trigger-noflags" hidden>This workflow declares no flags.</p>
     </fieldset>
+
+    <details id="trigger-agents" hidden>
+      <summary>Model, effort and context for this run</summary>
+      <p class="hint">
+        Each agent runs at what its workflow says unless you choose otherwise here, for this run and
+        everything it causes. Leave a box empty to keep it.
+      </p>
+      <table>
+        <thead><tr><th>Agent</th><th>Model</th><th>Effort</th><th>Context</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <datalist id="trigger-models"></datalist>
+      <datalist id="trigger-efforts"></datalist>
+      <datalist id="trigger-contexts"></datalist>
+    </details>
 
     <p id="trigger-error" class="caveat" hidden></p>
 
@@ -374,6 +393,7 @@
 <script src="/reply.js"></script>
 <script src="/chain.js"></script>
 <script src="/upcoming.js"></script>
+<script src="/trigger.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

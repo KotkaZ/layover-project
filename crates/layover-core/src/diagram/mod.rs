@@ -98,6 +98,9 @@ pub struct Live {
     pub tally: BTreeMap<AgentName, Tally>,
     /// On one chain's map, the routes its work took.
     pub travelled: BTreeSet<Leg>,
+    /// On one chain's map, what its agents run at in it where that differs from the workflow:
+    /// what the person who triggered it chose, and what its runs were recorded running at.
+    pub chosen: crate::chosen::Chosen,
 }
 
 impl Live {

@@ -98,6 +98,7 @@ fn session() -> Session {
         flags: BTreeMap::new(),
         flight: None,
         within: BTreeSet::new(),
+        chosen: layover_core::chosen::Chosen::default(),
     }
 }
 

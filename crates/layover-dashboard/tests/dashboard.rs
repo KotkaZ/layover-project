@@ -279,6 +279,7 @@ async fn the_page_and_its_assets_are_served_from_the_binary() {
         ("/reply.js", "async function submitReply"),
         ("/chain.js", "async function openChain"),
         ("/upcoming.js", "async function loadUpcoming"),
+        ("/trigger.js", "async function openTrigger"),
     ] {
         let (status, body) = call(factory.router(), path).await;
         assert_eq!(status, StatusCode::OK, "{path}");

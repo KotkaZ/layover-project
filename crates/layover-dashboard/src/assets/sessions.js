@@ -59,7 +59,7 @@ class Terminal {
     const run = this.run;
     const effort = run.reasoning_effort ? `effort ${run.reasoning_effort}` : null;
     const context = run.context ? run.context.replace(/[_-]/g, " ") : null;
-    const parts = [run.agent, run.pipeline, run.model, effort, context].filter(Boolean);
+    const parts = [run.agent, run.chain_name, run.pipeline, run.model, effort, context].filter(Boolean);
     this.title.textContent = parts.join(" · ");
     this.title.title = `${run.run_id}\nchain ${run.itinerary_id}`;
   }
@@ -221,7 +221,11 @@ function sessionItem(run) {
   item.type = "button";
   item.dataset.run = run.run_id;
   const top = el("span", "who");
-  top.append(el("span", `dot ${run.status}`), el("b", "", run.agent), el("span", "muted", run.pipeline ?? ""));
+  top.append(
+    el("span", `dot ${run.status}`),
+    el("b", "", run.agent),
+    el("span", "muted", [run.chain_name, run.pipeline].filter(Boolean).join(" · ")),
+  );
   const sub = el(
     "span",
     "muted",

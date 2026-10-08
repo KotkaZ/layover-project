@@ -269,11 +269,17 @@ impl Config {
     }
 
     /// What `name` runs with in a chain of `pipeline`: [`Self::selection`], with whatever the
-    /// pipeline's `[pipelines.<name>.agents.<agent>]` changes applied on top.
+    /// pipeline's `[pipelines.<name>.agents.<agent>]` changes applied on top, and then whatever the
+    /// person who triggered the chain chose — including what its session is called.
     ///
     /// Empty for an agent that is not declared.
     #[must_use]
-    pub fn selection_in(&self, name: &AgentName, pipeline: Option<&PipelineName>) -> Selection {
+    pub fn selection_in(
+        &self,
+        name: &AgentName,
+        pipeline: Option<&PipelineName>,
+        chosen: Option<&crate::chosen::Chosen>,
+    ) -> Selection {
         let Some(agent) = self.agents.get(name) else {
             return Selection::default();
         };
@@ -283,6 +289,9 @@ impl Config {
             .and_then(|pipeline| pipeline.agents.get(name))
         {
             changes.apply_to(&mut selection);
+        }
+        if let Some(chosen) = chosen {
+            chosen.apply_to(name, &mut selection);
         }
         selection
     }

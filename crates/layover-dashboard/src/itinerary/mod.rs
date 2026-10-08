@@ -108,6 +108,7 @@ fn not_started(id: &str, queued: &[&Queued], ground_stop: bool) -> Itinerary {
         pipeline: queued
             .iter()
             .find_map(|queued| queued.pipeline.as_ref().map(ToString::to_string)),
+        name: queued.iter().find_map(|queued| queued.chosen.name.clone()),
         state,
         agents: Some(Vec::new()),
         runs: 0,
@@ -141,6 +142,19 @@ fn names<'a>(agents: impl Iterator<Item = &'a AgentName>) -> Option<Vec<String>>
         }
     }
     (!found.is_empty()).then_some(found)
+}
+
+/// What a chain is called: from its runs, or — for a chain whose runs were recorded before names
+/// were kept, or have not been recorded yet — from work of it still queued.
+fn name_of(id: &str, runs: &[&RunRecord], pending: &[Queued]) -> Option<String> {
+    runs.iter()
+        .find_map(|record| record.chain_name.clone())
+        .or_else(|| {
+            pending
+                .iter()
+                .filter(|queued| queued.flight.itinerary.as_str() == id)
+                .find_map(|queued| queued.chosen.name.clone())
+        })
 }
 
 fn build(
@@ -223,6 +237,7 @@ fn build(
         pipeline: runs
             .iter()
             .find_map(|r| r.pipeline.as_ref().map(ToString::to_string)),
+        name: name_of(id, runs, pending),
         state,
         agents: Some(agents),
         runs: i32::try_from(runs.len()).unwrap_or(i32::MAX),

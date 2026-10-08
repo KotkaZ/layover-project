@@ -154,7 +154,14 @@ impl Factory {
             .as_ref()
             .and_then(|queued| queued.pipeline.clone())
             .or_else(|| self.pipeline_on_record(&live.itinerary));
-        let selection = self.config.selection_in(&live.agent, pipeline.as_ref());
+        let chosen = live
+            .queued
+            .as_ref()
+            .map(|queued| queued.chosen.clone())
+            .unwrap_or_default();
+        let selection = self
+            .config
+            .selection_in(&live.agent, pipeline.as_ref(), Some(&chosen));
         let (reported, ran_on) =
             crate::cost::of_run(&self.config, &live.agent, &selection, &transcript);
 
@@ -194,6 +201,7 @@ impl Factory {
             model: ran_on.model,
             effort: ran_on.reasoning_effort,
             context: ran_on.context,
+            chain_name: chosen.name.clone(),
             outcome: Outcome::Interrupted,
             queued_at: None,
             started_at: live.started_at,

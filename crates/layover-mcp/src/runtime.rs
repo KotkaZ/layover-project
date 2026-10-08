@@ -52,6 +52,10 @@ pub struct Session {
     /// The Tower's record, like the pipeline: a tool call can neither read it from nor write it
     /// into the arguments, so nothing an agent sends can widen what its chain may reach.
     pub within: BTreeSet<Option<PipelineName>>,
+    /// What the person who triggered this chain chose for it: its name, and agents to run
+    /// differently. The Tower's record like the flags, so work this run sends on, spawns or sets
+    /// down keeps it, and nothing an agent sends can change it.
+    pub chosen: layover_core::chosen::Chosen,
 }
 
 /// An agent this one may send to.

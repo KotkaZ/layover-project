@@ -951,7 +951,7 @@ components:
     Pipeline:
       type: object
       description: A named entry point into the mesh.
-      required: [name, entry, trigger, flags, max_hops, fuel_usd, workspace, resumes]
+      required: [name, entry, trigger, flags, max_hops, fuel_usd, workspace, resumes, agents]
       properties:
         name:
           type: string
@@ -994,6 +994,42 @@ components:
           description: The boolean parameters this pipeline accepts.
           items:
             $ref: "#/components/schemas/Flag"
+        agents:
+          type: array
+          description: |
+            Every agent this pipeline's chains can reach over the routes they may use, entry
+            first, as this pipeline runs it: with its `[pipelines.<name>.agents.<agent>]` override
+            applied. What a trigger can choose differently for each, and what it would otherwise
+            be. Empty for a pipeline that `resumes`, whose chains wake whoever set work down.
+          items:
+            $ref: "#/components/schemas/PipelineAgent"
+
+    PipelineAgent:
+      type: object
+      description: One agent as a pipeline runs it, and what a trigger may choose for it.
+      required: [agent, takes_model, takes_effort, takes_context]
+      properties:
+        agent:
+          type: string
+          description: The agent.
+        model:
+          type: [string, "null"]
+          description: The model it runs on in this pipeline, read from its command line.
+        reasoning_effort:
+          type: [string, "null"]
+          description: The effort it runs at in this pipeline.
+        context:
+          type: [string, "null"]
+          description: Its context-window tier in this pipeline.
+        takes_model:
+          type: boolean
+          description: Its runner carries `{model}`, so a trigger may choose a model for it.
+        takes_effort:
+          type: boolean
+          description: Its runner carries `{effort}`, so a trigger may choose an effort for it.
+        takes_context:
+          type: boolean
+          description: Its runner carries `{context}`, so a trigger may choose a context for it.
 
     PipelineList:
       type: object
@@ -1032,6 +1068,37 @@ components:
           additionalProperties:
             type: boolean
             description: Whether the flag is on.
+        name:
+          type: [string, "null"]
+          description: |
+            What to call the chain this starts — "Login page: retry banner" — so it can be told apart
+            from other runs of the same workflow. One line, at most 120 characters. Kept by
+            everything the chain causes: hand-offs, spawned chains, follow-ups and the work a reply
+            to one of its help requests continues. A Copilot run's session is called by it.
+        agents:
+          type: object
+          description: |
+            Agents to run differently in this chain only, keyed by agent: a model, effort or context
+            instead of what the factory declares. Each agent must be one the workflow runs, and its
+            runner must carry the value through a placeholder; values are plain tokens. Kept by
+            everything the chain causes, like `name`.
+          additionalProperties:
+            $ref: "#/components/schemas/AgentChoice"
+            description: What to run that agent at.
+
+    AgentChoice:
+      type: object
+      description: A model, effort or context chosen for one agent in one chain.
+      properties:
+        model:
+          type: [string, "null"]
+          description: The model to run it on.
+        effort:
+          type: [string, "null"]
+          description: How hard to ask it to reason.
+        context:
+          type: [string, "null"]
+          description: Its context-window tier.
 
     FlightAccepted:
       type: object
@@ -1082,6 +1149,11 @@ components:
         model:
           type: [string, "null"]
           description: Which model the runner used, when it said.
+        chain_name:
+          type: [string, "null"]
+          description: |
+            What the run's chain is called, when the person who triggered it named it. Null for an
+            unnamed chain and for runs recorded before Layover kept it.
         reasoning_effort:
           type: [string, "null"]
           description: |
@@ -1528,6 +1600,9 @@ components:
         body:
           type: string
           description: The prompt the run will be given.
+        name:
+          type: [string, "null"]
+          description: What its chain is called, when the person who triggered it named it.
         flags:
           type: array
           description: The flags set for this run.
@@ -1627,6 +1702,9 @@ components:
         pipeline:
           type: [string, "null"]
           description: The pipeline it was triggered through, when one was named.
+        name:
+          type: [string, "null"]
+          description: What the person who triggered it called it, when they gave it a name.
         state:
           $ref: "#/components/schemas/ItineraryState"
           description: What became of the chain.

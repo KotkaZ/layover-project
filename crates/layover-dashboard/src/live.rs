@@ -64,9 +64,11 @@ impl Dashboard {
             .queued
             .as_ref()
             .and_then(|queued| queued.pipeline.as_ref());
+        let chosen = live.queued.as_ref().map(|queued| &queued.chosen);
         let ran_on = config
-            .map(|config| ModelChoice::in_pipeline(config, &live.agent, pipeline))
+            .map(|config| ModelChoice::in_chain(config, &live.agent, pipeline, chosen))
             .unwrap_or_default();
+        record.chain_name = chosen.and_then(|chosen| chosen.name.clone());
         record.model = ran_on.model;
         record.effort = ran_on.reasoning_effort;
         record.context = ran_on.context;
