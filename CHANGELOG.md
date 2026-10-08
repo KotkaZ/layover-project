@@ -8,6 +8,21 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+## [1.10.0] — 2026-10-08
+
+A runner says only what its agents are denied: for Copilot CLI and Claude Code, Layover supplies
+the rest. A workflow can run a shared agent at its own model, effort or context, and whoever
+triggers a run can name it and choose those for that run alone.
+
+**Compatibility.** Additive. Existing factories — written-out `command` runners included — load,
+validate and run unchanged, and `validate` warns about nothing new in them. What is different:
+- A written-out `command` containing the literal text `{name}` or `{args}` now has it filled in —
+  the chain's name, the agent's `args` — or left out when there is none.
+- `POST /flights` takes optional `name` and `agents`; `GET /pipelines` gains each workflow's
+  `agents`, itineraries and pending flights a `name`, and runs a `chain_name`. Run records, queued
+  flights, layovers and help requests keep the chain's name and choices where it has them; older
+  releases ignore them, and older records simply lack them.
+
 ### Added
 
 - **Runner presets.** `cli = "copilot"` or `cli = "claude"` has Layover supply everything an
@@ -1456,7 +1471,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/KotkaZ/layover-project/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/KotkaZ/layover-project/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/KotkaZ/layover-project/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/KotkaZ/layover-project/compare/v1.7.0...v1.7.1
