@@ -166,6 +166,10 @@ A model, effort, context or name that is not set is left out whole, so the CLI u
 default; on a preset that is not warned about, because nobody wrote those placeholders to be
 filled. A run triggered without a name has no `--name`.
 
+A preset starts the CLI by its plain name. On Windows that finds only an `.exe` — WinGet's Copilot
+CLI, Claude Code's native build — and not the `.cmd` shim an npm install provides; for that, write
+the runner's `command` out naming it, `copilot.cmd`. See [Install](./install.md#agent-clis).
+
 Nothing a preset supplies takes anything away: every restriction an agent runs under is written in
 `layover.toml`, where it can be reviewed. Claude Code's permission mode is left to the runner's
 `args` — `--permission-mode`, `--allowedTools`, `--disallowedTools` — because what a bypass grants

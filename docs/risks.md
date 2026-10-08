@@ -258,8 +258,8 @@ Size the Reserve with that headroom in mind.
 
 **What could happen.** Hops, Fuel, Slots and the route map govern Tower-mediated flights and runs.
 They say nothing about what a child process does once started: it runs as the same OS user, the
-shipped runners pass `--allow-all-tools`, and MCP wiring grants a whole server rather than named
-tools. A compromised reviewer can use a write-capable MCP tool to open a pull request directly,
+Copilot preset passes `--allow-all-tools --allow-all-paths --allow-all-urls` — an unattended run
+cannot answer a permission prompt — and MCP wiring grants a whole server rather than named tools. A compromised reviewer can use a write-capable MCP tool to open a pull request directly,
 bypassing the publisher route and its `recovery = "manual"` policy entirely — and consuming no
 Hops, because none of it is a flight.
 
@@ -268,7 +268,10 @@ MCP allowlists. Both belong with process supervision.
 
 **What this means for reading the rails.** They bound *the shape of the factory*, not the
 authority of an agent. An agent given a write-capable tool has that authority whatever the route
-map says. Grant tools as narrowly as the runner allows.
+map says. Grant tools as narrowly as the runner allows: on a preset, every restriction is a
+`--deny-tool` or `--deny-url` a runner, an agent or a workflow writes in `args`, and those only
+ever add up, so a rule written on the runner cannot be dropped by an agent's or a workflow's. A
+runner that wants an allow-list instead writes its `command` out.
 
 ### 17. External effects have no idempotency key
 

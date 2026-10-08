@@ -13,8 +13,8 @@ prompt_dir = "prompts"
 runner = "claude"
 
 # How hard an agent reasons, and how much it can read, unless it says otherwise. Each reaches only
-# a runner whose command has the placeholder for it -- below, `copilot` takes both and `codex` takes
-# an effort -- so the agents on `claude` are untouched by either.
+# a runner that carries it -- below, `copilot` takes both and `codex` takes an effort -- so the
+# agents on `claude`, whose CLI takes neither on its command line, are untouched by either.
 effort  = "medium"
 context = "default"
 
@@ -83,20 +83,22 @@ cache_write_usd = 6.25
 # therefore a *path* to the composed instructions, for CLIs that take one; the rest have the
 # instructions prepended to stdin.
 #
-# `{model}`, `{effort}` and `{context}` carry each agent's own values, so one runner serves every
-# agent with the same permissions whatever they run on. Prefer the joined `--flag={effort}` form:
-# an argument whose value is not set is left out whole. A placeholder standing alone after its flag
-# (`"--model", "{model}"`) takes the flag with it when unset, and Codex's `-c key={effort}` takes its
-# `-c` -- so no CLI is ever handed a flag without its value.
+# `cli = "claude"` and `cli = "copilot"` have Layover supply what an unattended run of that CLI
+# needs -- print mode, the output a cost is read from, the agent's model (and for Copilot its effort
+# and context), and the MCP wiring -- so a runner says only what is particular to it. Neither grants
+# Claude Code a permission mode: add the one you mean to `args`.
 [runners.claude]
-command = ["claude", "-p", "--model", "{model}", "--output-format", "stream-json"]
-mcp     = { flag = "--mcp-config", format = "claude_json" }
+cli = "claude"
 
 [runners.copilot]
-command = ["copilot", "--model", "{model}", "--reasoning-effort={effort}", "--context={context}",
-           "--allow-all-tools", "--output-format", "json"]
-mcp     = { flag = "--additional-mcp-config", format = "claude_json", prefix = "@" }
+cli = "copilot"
 
+# Codex has no preset yet, so its runner writes the command out. `{model}` and `{effort}` carry
+# each agent's own values, so one runner serves every agent with the same permissions whatever they
+# run on. Prefer the joined `--flag={effort}` form: an argument whose value is not set is left out
+# whole. A placeholder standing alone after its flag (`"--model", "{model}"`) takes the flag with it
+# when unset, and Codex's `-c key={effort}` takes its `-c` -- so no CLI is ever handed a flag
+# without its value.
 [runners.codex]
 command = ["codex", "exec", "--model", "{model}", "-c", "model_reasoning_effort={effort}", "{mcp}", "-"]
 mcp     = { flag = "-c", format = "codex_toml" }

@@ -869,6 +869,7 @@ mod tests {
             "pr-review/layover.toml",
             "news-digest/layover.toml",
             "build-and-review/layover.toml",
+            "multi-workflow/layover.toml",
         ] {
             let output = validate_config(&example(name), true)
                 .unwrap_or_else(|error| panic!("{name} does not validate: {error}"));

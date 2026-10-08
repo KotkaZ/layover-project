@@ -1,0 +1,250 @@
+# A team's factory: four workflows that share their agents.
+#
+#   development            a person triggers it with a task; it goes through spec, build, test
+#                          and review, and as far as a published pull request as its flags allow
+#   development-follow-up  picks up published pull requests the publisher set down, and answers
+#                          their review comments through the same gates
+#   review-sweep           every two hours, reviews every open pull request the team is asked to
+#                          review, one itinerary per pull request
+#   upstream-watch         every morning, reads what changed upstream and says what could break
+#
+# The shape is taken from a real factory that has run for weeks: agents are shared between
+# workflows, each workflow may use only its own routes, and only two agents ever speak outside the
+# factory — the publisher (the code host) and the messenger (the team chat). Walked through in
+# README.md beside this file, and parsed and validated by crates/layover-core/tests/examples.rs.
+
+[layover]
+work_dir   = "workspace"
+prompt_dir = "prompts"
+
+[defaults]
+runner = "copilot"
+# How hard an agent thinks and how much it can read, unless it or its workflow says otherwise.
+effort  = "xhigh"
+context = "long_context"
+# The agent CLI's credential. Only the *name* goes here; the Tower reads the value from its own
+# environment when it starts a run, so this file stays committable.
+env_from = ["GH_TOKEN"]
+# A development chain is about fifteen flights on its happy path; a review loop that keeps
+# finding things can double that. Hops bound depth, the run cap is the backstop when a runner
+# reports no cost, and Fuel bounds what one chain may spend.
+max_hops    = 48
+max_runs    = 64
+fuel_usd    = 60.00
+timeout_sec = 7200
+# Four agent CLIs at once: a sweep's reviews run side by side, and the rest queue.
+max_concurrent_runs   = 4
+max_spawn_generations = 1
+
+# What the whole factory may spend in any rolling 24 hours, whatever its schedules do.
+[reserve]
+fuel_usd     = 400.00
+window_hours = 24
+
+# ── One runner ─────────────────────────────────────────────────────
+# A runner is a CLI and a permission set. `cli = "copilot"` has Layover supply everything an
+# unattended Copilot run needs: the agent's --model, --reasoning-effort and --context, the session's
+# --name, --allow-all-tools/paths/urls, --no-ask-user, --output-format json and the MCP wiring. So
+# `args` say only what every agent here is *denied*. What one agent is denied beyond that is in its
+# own `args`, and what a workflow adds is in `[pipelines.<name>.agents.<agent>]`. Nothing an agent
+# or workflow adds can take away what this says.
+[runners.copilot]
+cli  = "copilot"
+args = ["--disable-builtin-mcps", "--deny-tool=shell(gh:*)", "--deny-tool=shell(copilot:*)",
+        "--deny-url=chat.example.com"]
+
+# ── Agents ─────────────────────────────────────────────────────────
+# `access` records intent and is not enforced yet: every agent runs in `work_dir`. The `args`
+# below are what is enforced, by the CLI.
+
+[agents.analyst]
+description = "Turns a task into a spec with acceptance criteria, and decides when a question is the person's to answer"
+prompt_file = "analyst.md"
+model       = "claude-opus-5.5"
+access      = "read-only"
+args        = ["--deny-tool=shell(git commit)", "--deny-tool=shell(git push)"]
+
+[agents.investigator]
+description = "Finds the root cause of one specific failure from logs, telemetry and code"
+prompt_file = "investigator.md"
+model       = "claude-opus-5.5"
+access      = "read-only"
+args        = ["--deny-tool=shell(git commit)", "--deny-tool=shell(git push)"]
+
+[agents.builder]
+description = "Implements the change and its tests on a branch; the only agent that edits code"
+prompt_file = "builder.md"
+model       = "claude-opus-5.5"
+access      = "read-write"
+# Pushing twice, or leaving a branch half-edited, does damage: a person decides whether to restart.
+recovery    = "manual"
+
+[agents.tester]
+description = "Verifies a change independently: builds it, runs its tests and judges behaviour, never style"
+prompt_file = "tester.md"
+# A different model family from the builder's, so the tester does not share its blind spots.
+model       = "gpt-6.1-sol"
+access      = "read-only"
+args        = ["--deny-tool=shell(git commit)", "--deny-tool=shell(git push)",
+               "--deny-tool=shell(git reset)", "--deny-tool=shell(git stash)"]
+
+[agents.reviewer]
+description = "Reviews a spec, a change or a pull request adversarially, and says what must be fixed"
+prompt_file = "reviewer.md"
+model       = "claude-opus-5.5"
+access      = "read-only"
+args        = ["--deny-tool=shell(git commit)", "--deny-tool=shell(git push)"]
+
+[agents.publisher]
+description = "The factory's only voice in the code host: opens and publishes pull requests, posts reviews, follows them up"
+prompt_file = "publisher.md"
+model       = "claude-opus-5.5"
+# Procedure, not judgement: it carries out what the gates decided.
+effort      = "high"
+access      = "read-only"
+args        = ["--deny-tool=shell(git push)"]
+recovery    = "manual"
+
+[agents.publisher.mcp.codehost]
+command  = ["codehost-mcp"]
+env_from = ["CODEHOST_TOKEN"]
+
+[agents.messenger]
+description = "The factory's only voice in the team chat: posts what the publisher or the monitor asks it to"
+prompt_file = "messenger.md"
+model       = "claude-sonnet-5.5"
+effort      = "high"
+context     = "default"
+access      = "read-only"
+args        = ["--deny-tool=shell(git:*)"]
+# One sender at a time, so two runs never announce the same thing.
+max_concurrent = 1
+recovery       = "manual"
+
+[agents.messenger.mcp.chat]
+command  = ["chat-mcp"]
+env_from = ["CHAT_TOKEN"]
+
+[agents.monitor]
+description = "Reads what changed upstream since its last look, and reports what could break the product"
+prompt_file = "monitor.md"
+model       = "claude-opus-5.5"
+access      = "read-only"
+args        = ["--deny-tool=shell(git commit)", "--deny-tool=shell(git push)"]
+
+# ── Workflows ──────────────────────────────────────────────────────
+# FLAGS are chosen per run when a person triggers `development` from the dashboard, and kept by
+# everything that run causes. A schedule always runs with the defaults. Every workflow that can
+# reach an agent whose prompt tests a flag must declare it: the publisher's and the tester's
+# prompts test them, and three workflows reach those two, so each declares the same set.
+
+[pipelines.development]
+description = "Take a task through spec, build, test and review, and as far as a published pull request as the flags allow"
+entry       = "analyst"
+trigger     = "manual"
+
+[pipelines.development.flags]
+publish_pr  = { default = false, description = "The publisher opens and publishes the pull request once tester and reviewer approve" }
+announce_pr = { default = false, description = "The messenger announces the published pull request in the team chat" }
+run_e2e     = { default = false, description = "The tester also runs the end-to-end suite" }
+
+# Collects the work the publisher sets down after publishing, so a pull request can be followed
+# for days without anything running in between. Resumed work goes back to whoever set it down.
+[pipelines.development-follow-up]
+description = "Pick up published pull requests the publisher set down, to answer their review comments"
+entry       = "publisher"
+trigger     = { cron = "0,30 * * * *" }
+resumes     = true
+
+[pipelines.development-follow-up.flags]
+publish_pr  = { default = false, description = "The publisher opens and publishes the pull request once tester and reviewer approve" }
+announce_pr = { default = false, description = "The messenger announces the published pull request in the team chat" }
+run_e2e     = { default = false, description = "The tester also runs the end-to-end suite" }
+
+[pipelines.review-sweep]
+description = "Every two hours, review every open pull request the team is asked to review"
+entry       = "publisher"
+trigger     = { cron = "0 */2 * * *" }
+
+[pipelines.review-sweep.flags]
+publish_pr  = { default = false, description = "The publisher opens and publishes the pull request once tester and reviewer approve" }
+announce_pr = { default = false, description = "The messenger announces the published pull request in the team chat" }
+run_e2e     = { default = false, description = "The tester also runs the end-to-end suite" }
+
+# The same reviewer runs here as in development, more cheaply: a dozen pull requests every two
+# hours, where development's gate reviews one change at a time. And in a sweep it reviews the
+# pull request as published, so it never checks anything out.
+[pipelines.review-sweep.agents.reviewer]
+effort = "high"
+args   = ["--deny-tool=shell(git checkout)"]
+
+[pipelines.upstream-watch]
+description = "Every morning, report upstream changes that could break the product"
+entry       = "monitor"
+trigger     = { cron = "0 7 * * *" }
+
+# A digest of a few lines a day needs less thought than an announcement in development.
+[pipelines.upstream-watch.agents.messenger]
+effort = "medium"
+
+# ── Route map ──────────────────────────────────────────────────────
+# Who may send to whom; nothing else is permitted. Every route is scoped to the workflows whose
+# chains may use it, so an agent shared by two workflows has only that workflow's edges in each:
+# a sweep's reviewer reads pull request text written by anyone, and cannot hand the builder work
+# whatever that text says. A follow-up is held to what the development chain that set it down
+# could reach.
+
+# ── development, and its follow-up ──
+[[routes]]
+from      = "analyst"
+to        = ["investigator", "reviewer", "builder"]
+pipelines = ["development", "development-follow-up"]
+
+[[routes]]
+from      = "investigator"
+to        = "analyst"
+pipelines = ["development", "development-follow-up"]
+
+[[routes]]
+from      = "builder"
+to        = ["analyst", "tester", "reviewer", "publisher"]
+pipelines = ["development", "development-follow-up"]
+
+[[routes]]
+from      = "tester"
+to        = "builder"
+pipelines = ["development", "development-follow-up"]
+
+[[routes]]
+from      = "reviewer"
+to        = ["analyst", "builder"]
+pipelines = ["development", "development-follow-up"]
+
+[[routes]]
+from      = "publisher"
+to        = ["builder", "messenger"]
+pipelines = ["development", "development-follow-up"]
+
+# ── review-sweep ──
+# One fresh itinerary per pull request, so a dozen pull requests never compete for one budget.
+[[routes]]
+from      = "publisher"
+to        = "reviewer"
+mode      = "spawn"
+pipelines = "review-sweep"
+
+[[routes]]
+from      = "reviewer"
+to        = ["publisher", "investigator", "tester"]
+pipelines = "review-sweep"
+
+[[routes]]
+from      = ["investigator", "tester"]
+to        = "reviewer"
+pipelines = "review-sweep"
+
+# ── upstream-watch ──
+[[routes]]
+from      = "monitor"
+to        = "messenger"
+pipelines = "upstream-watch"

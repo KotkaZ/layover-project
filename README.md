@@ -121,6 +121,11 @@ flowchart LR
   This is the most opinionated idea in the project, and it is deliberate.
 - **The route map is a directed graph.** No edge means the flight is refused.
 - **Work enters through pipelines.** Named, triggerable entry points — manual, or on a clock.
+  Workflows share agents, and each may use only its own routes and run a shared agent at its own
+  model, effort or context. A person triggering one can name the run and choose those for it.
+- **A runner is a CLI and a permission set.** For Copilot CLI and Claude Code, Layover supplies
+  everything an unattended run needs; a runner lists what its agents are denied, and an agent or a
+  workflow adds its own — never removes.
 - **Prompts compose.** An agent's instructions can pull in extra sections depending on the flags a
   run was triggered with.
 - **Runaway swarms are bounded by construction** — every itinerary burns Hops and Fuel, and the
@@ -150,9 +155,10 @@ explicitly out of scope.
 
 ## Examples
 
-Five factories, smallest first — start at [`examples/`](examples/README.md). `planner.toml` is
-three agents in one screen; `workitem-factory/` is the reference scenario, with the arithmetic
-that sizes its rails.
+Six factories, smallest first — start at [`examples/`](examples/README.md). `planner.toml` is
+three agents in one screen; `multi-workflow/` is a team's factory, four workflows sharing their
+agents and one runner; `workitem-factory/` is the reference scenario, with the arithmetic that
+sizes its rails.
 
 ## The reference factory
 

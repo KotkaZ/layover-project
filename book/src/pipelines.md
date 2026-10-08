@@ -95,6 +95,10 @@ an agent no chain of that workflow can reach, a value whose runner has no placeh
 `layover prompt --pipeline` show each agent as that workflow runs it, and every run records the
 model, effort and context it actually ran with.
 
+[`examples/multi-workflow/`](https://github.com/KotkaZ/layover-project/tree/main/examples/multi-workflow)
+is a factory of four workflows built this way: one runner, eight shared agents, and a review sweep
+that runs the development workflow's reviewer at a lower effort with one more deny rule.
+
 ## Triggers
 
 | Form | Meaning |

@@ -233,6 +233,20 @@ straight to an `entry = true` agent belongs to none and uses global routes only.
 which pipeline a chain belongs to; no agent can name one. See
 [`routing.md`](routing.md#8-scoping-routes-to-workflows).
 
+A pipeline may also change how a shared agent runs in its own chains, without a second agent or a
+second runner:
+
+```toml
+[pipelines.nightly.agents.reviewer]
+effort = "high"                              # replaces the agent's own, in nightly's chains only
+args   = ["--deny-tool=shell(git checkout)"] # added to the runner's and the agent's
+```
+
+`model`, `effort` and `context` replace the agent's; `args` only ever add. A person triggering a
+workflow may choose a model, effort or context per agent for that one run, and name it; both are
+recorded on the chain and travel exactly as its flags do. See
+[Pipelines and triggers](https://kotkaz.github.io/layover-project/pipelines.html#an-agent-in-one-workflow).
+
 Route validation runs at config load, not at first flight — unknown agent names and unreachable
 entry points must fail fast, while a human is still watching.
 
@@ -242,7 +256,9 @@ Edges also carry fan-out, rendezvous joins and failure paths. Those semantics ar
 A factory exercising all of it — intake, a rendezvous back onto the entry agent, a test/review
 loop that turns until two agents agree, and a publishing step — is in
 [`examples/workitem-factory/`](../examples/workitem-factory/README.md). That is the reference
-scenario, and the shape the rails are sized against.
+scenario, and the shape the rails are sized against. A team's factory of several workflows sharing
+their agents and one runner — scoped routes, per-workflow agent changes, a follow-up and named runs
+— is in [`examples/multi-workflow/`](../examples/multi-workflow/README.md).
 
 ## 7. Disk layout
 
@@ -370,7 +386,7 @@ layover/
 │   ├── layover-tower/    # the supervisor: clock, dispatch, rails, recovery, ground stop
 │   ├── layover-dashboard/# the monitoring page and the Api implementation behind it
 │   └── layover-cli/      # the `layover` binary
-├── examples/             # five factories, parsed and validated by the test suite
+├── examples/             # six factories, parsed and validated by the test suite
 └── xtask/                # cargo xtask verify / generate-api / docs
 ```
 

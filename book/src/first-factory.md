@@ -16,9 +16,12 @@ file, so a factory can be run from anywhere.
 `fuel_usd` and `max_runs` bound how *wide* it can spread. They are not interchangeable — see
 [Pipelines and triggers](./pipelines.md#sizing-the-rails).
 
-**`[runners.*]`** says how to invoke each CLI. The composed instructions reach the process on
-**stdin**, not on the command line — see [Configuration](./configuration.md#runners--how-to-invoke-a-cli). A `{prompt}`
-placeholder, where a runner needs one, is a *path* to that text rather than the text itself.
+**`[runners.*]`** says how to invoke each CLI. For one Layover knows — Copilot CLI or Claude Code —
+`cli` is the whole runner, and Layover supplies everything an unattended run of it needs. Any other
+writes its `command` out, as a runner may also do to fix a value itself. The composed instructions
+reach the process on **stdin**, not on the command line — see
+[Configuration](./configuration.md#runners--how-to-invoke-a-cli). A `{prompt}` placeholder, where a
+runner needs one, is a *path* to that text rather than the text itself.
 
 **`[agents.*]`** declares an agent. The table key is its name. `description` is what peers see
 when they ask Layover who they can reach, so write it for another agent to read.

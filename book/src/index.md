@@ -48,6 +48,10 @@ flowchart LR
 - **Every run is a clean slate.** Nothing carries over implicitly between runs, which makes an
   agent's memory exactly what it chose to write down.
 - **The route map is a directed graph.** No edge means the flight is refused.
+- **Workflows share agents.** Each uses only its own routes, may run a shared agent at its own
+  model, effort or context, and can be named and tuned by whoever triggers it.
+- **A runner is a CLI and a permission set.** For Copilot CLI and Claude Code, Layover supplies what
+  an unattended run needs; a runner lists what its agents are denied.
 - **Runaway swarms are bounded by construction** — every itinerary burns Hops and Fuel, and the
   Tower, not the agent, holds the counters.
 

@@ -39,6 +39,18 @@ status](README.md#project-status).
   command's final `-`; refuses a workflow override for an undeclared agent and warns about one no
   chain of the workflow can reach or whose value the runner cannot carry. An agent that leaves a
   preset's effort or context unset is not warned about: the CLI's own default is what it asked for.
+- **`examples/multi-workflow/`**: four workflows sharing eight agents and one Copilot runner, shaped
+  after a team's factory — a manually triggered development workflow, a follow-up that resumes its
+  published pull requests, a review sweep that spawns one review per pull request and runs the shared
+  reviewer at a lower effort with one more deny rule, and a daily upstream watch.
+
+### Changed
+
+- **The examples use presets.** `news-digest`, `pr-review`, `build-and-review` and
+  `workitem-factory` run Copilot and Claude Code through `cli`, so their Copilot agents now also get
+  `--allow-all-paths --allow-all-urls --no-ask-user`. `planner.toml` keeps written-out `command`
+  runners for Copilot and Codex, to show that shape. The examples' Claude runners previously lacked
+  the `--verbose` Claude Code requires beside `stream-json` in print mode.
 
 ## [1.9.0] — 2026-10-07
 

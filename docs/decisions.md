@@ -900,6 +900,21 @@ not warned about, as it would be on a written-out `command`: the warning exists 
 somebody placed meaning it to be filled, and nobody placed a preset's — unset there asks for the
 CLI's own default, which is exactly what an agent that says nothing wants.
 
+**Why a workflow changes a shared agent rather than declaring its own.** A real factory's reviewer
+did the same job in two workflows at different scales — one change at a time in development, a
+dozen pull requests every two hours in a sweep — and the only way to run it more cheaply in the
+sweep was a second agent, with its own prompt file, notes and routes, or a second runner repeating
+the whole deny list. Either copy drifts from the first. `[pipelines.<name>.agents.<agent>]` changes
+the one agent in that workflow's chains: `model`, `effort` and `context` replace the agent's own,
+because a run has exactly one of each, and `args` are only added after the runner's and the
+agent's, so a workflow can tighten an agent and never loosen it. It is a table of its own beside the
+workflow's flags rather than among them (decided with Karl, 2026-10-08): a flag is a boolean a
+prompt tests and a person flips when triggering, while these are a CLI's values, and mixing the two
+would turn the flags into a permissions form. Which workflow a chain runs in is the Tower's record,
+as it is for scoped routes, so the line an agent runs with is worked out at launch from that record
+and no agent can ask for another workflow's. A change for an agent the workflow never reaches is
+warned about, because it changes nothing.
+
 **Why a chain's name and per-agent choices travel exactly as its flags do.** A name is how a person
 finds *their* run of a workflow among three going at once, so it has to stay with everything that
 run causes — a hand-off, a spawned review, a follow-up two days later, the continuation a reply

@@ -149,11 +149,17 @@ layover --version
 Layover supervises other tools; it does not replace them. Install whichever runners your factory
 names, and make sure each works on its own before pointing Layover at it:
 
-| Runner | Install | Check |
-|---|---|---|
-| Claude Code | `npm i -g @anthropic-ai/claude-code` | `claude --version` |
-| GitHub Copilot CLI | `npm i -g @github/copilot` | `copilot --version` |
-| OpenAI Codex CLI | `npm i -g @openai/codex` | `codex --version` |
+| Runner | Install | Check | In `layover.toml` |
+|---|---|---|---|
+| Claude Code | `npm i -g @anthropic-ai/claude-code` | `claude --version` | `cli = "claude"` |
+| GitHub Copilot CLI | `npm i -g @github/copilot` | `copilot --version` | `cli = "copilot"` |
+| OpenAI Codex CLI | `npm i -g @openai/codex` | `codex --version` | a `command`, written out |
+
+A [preset](./configuration.md#what-a-preset-supplies) starts the CLI by its plain name — `copilot`,
+`claude` — from the `PATH` the Tower started with. **On Windows that has to be an `.exe`**: WinGet's
+Copilot CLI and Claude Code's native installer are, but an npm install puts a `copilot.cmd` shim on
+the `PATH`, which a program started by its plain name does not find. Either install the native
+build, or write that runner's `command` out naming the shim: `command = ["copilot.cmd", …]`.
 
 Credentials reach child CLIs through the environment. **Never put an API key in `layover.toml`** —
 it is a file people commit.

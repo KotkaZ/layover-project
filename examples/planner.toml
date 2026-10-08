@@ -25,12 +25,15 @@ timeout_sec = 900
 # The composed instructions go to the process on **stdin**, never on the command line: Windows
 # caps one at 32,767 characters and real prompts run to tens of kilobytes. A `{prompt}` placeholder
 # would be a *path* to that text, for CLIs that take a file — none of these three do.
+#
+# For a CLI Layover knows, `cli` is the whole runner: Layover supplies the program, print mode, the
+# agent's model, the output a cost is read from and the MCP wiring. `args` would add the rest.
 [runners.claude]
-command = ["claude", "-p", "--model", "{model}", "--output-format", "stream-json"]
-mcp     = { flag = "--mcp-config", format = "claude_json" }
+cli = "claude"
 
-# A runner may also fix a value itself rather than carry an agent's: every agent on this one reasons
-# at `high`, whatever it declares. workitem-factory/ shows the other way, with `{effort}`.
+# A runner may also write its command out, for a CLI with no preset or to fix a value itself rather
+# than carry an agent's: every agent on this one reasons at `high`, whatever it declares.
+# multi-workflow/ shows the other way, with the agent's own `effort`.
 [runners.copilot]
 command = ["copilot", "--model", "{model}", "--reasoning-effort", "high", "--allow-all-tools",
            "--output-format", "json"]

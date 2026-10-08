@@ -49,6 +49,7 @@ fn every_example_agent_says_what_it_is_for() {
         "planner.toml",
         "workitem-factory/layover.toml",
         "build-and-review/layover.toml",
+        "multi-workflow/layover.toml",
     ] {
         let config = Config::load(examples_dir().join(example)).expect("example loads");
 
@@ -84,5 +85,57 @@ fn the_scoped_example_keeps_a_sweeps_reviewer_away_from_the_builder() {
     assert!(
         !routes.for_pipeline(None).permits(&reviewer, &builder),
         "a chain no pipeline started gets the global routes only"
+    );
+}
+
+#[test]
+fn the_multi_workflow_example_runs_one_reviewer_two_ways_on_one_runner() {
+    // What `multi-workflow/` exists to show: four workflows share their agents and one runner, and
+    // a workflow changes how a shared agent runs without a runner or an agent of its own.
+    let config =
+        Config::load(examples_dir().join("multi-workflow/layover.toml")).expect("example loads");
+    assert_eq!(validate(&config), Vec::new());
+    assert_eq!(config.pipelines.len(), 4);
+    assert_eq!(config.runners.len(), 1, "every agent shares one runner");
+
+    let reviewer = AgentName::from("reviewer");
+    let (_, runner) = config
+        .runner_of(&config.agents[&reviewer])
+        .expect("the reviewer has a runner");
+    let line = |pipeline: &str| {
+        runner.invocation(
+            None,
+            &config.selection_in(&reviewer, Some(&pipeline.into()), None),
+        )
+    };
+
+    let development = line("development");
+    let sweep = line("review-sweep");
+    for line in [&development, &sweep] {
+        assert!(
+            line.contains(&"--deny-tool=shell(gh:*)".to_owned()),
+            "{line:?}"
+        );
+        assert!(
+            line.contains(&"--deny-tool=shell(git push)".to_owned()),
+            "{line:?}"
+        );
+    }
+    assert!(development.contains(&"--reasoning-effort=xhigh".to_owned()));
+    assert!(sweep.contains(&"--reasoning-effort=high".to_owned()));
+    let checkout = "--deny-tool=shell(git checkout)".to_owned();
+    assert!(sweep.contains(&checkout) && !development.contains(&checkout));
+
+    let routes = RouteMap::from_config(&config);
+    let builder = AgentName::from("builder");
+    assert!(
+        !routes
+            .for_pipeline(Some(&"review-sweep".into()))
+            .permits(&reviewer, &builder)
+    );
+    assert!(
+        routes
+            .for_pipeline(Some(&"development".into()))
+            .permits(&reviewer, &builder)
     );
 }

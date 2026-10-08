@@ -61,7 +61,9 @@ worktree isolation for `access` and `workspace` — is design review rather than
 - **Cost incurred inside configured budgets.** Spending money is the intended behaviour. Spending
   past a rail is not — report that.
 - **Findings against a factory definition you wrote that grants an agent broad powers.** The
-  configuration is the authorisation.
+  configuration is the authorisation. That includes a `cli = "copilot"` runner, which grants every
+  tool, path and URL its `--deny-tool` and `--deny-url` rules do not take away (`docs/risks.md`,
+  risk 16).
 
 ## Known and accepted
 

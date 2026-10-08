@@ -21,9 +21,11 @@ max_concurrent_runs = 2
 fuel_usd     = 10.00
 window_hours = 24
 
+# `cli = "copilot"` has Layover supply what every unattended Copilot run needs: the agent's model,
+# effort and context, `--allow-all-tools/paths/urls`, `--no-ask-user`, `--output-format json` and
+# the MCP wiring. `args` would add what this runner's agents are denied.
 [runners.copilot]
-command = ["copilot", "--allow-all-tools", "--output-format", "json"]
-mcp     = { flag = "--additional-mcp-config", format = "claude_json", prefix = "@" }
+cli = "copilot"
 
 [agents.scout]
 description = "Reads the news and decides what is actually worth knowing"

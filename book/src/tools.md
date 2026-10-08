@@ -102,14 +102,14 @@ token itself is in the `claude_json` file, because that is where the CLI looks f
 minted for this run alone and revoked the moment the run ends. The `codex_toml` file names the
 variable it is in instead (`bearer_token_env_var`).
 
-Which file is written depends on the runner's `mcp.format`. The flag is appended to the command
-unless the command places `{mcp}` itself:
+Which file is written depends on the runner's `mcp.format`, which a [preset](./configuration.md#what-a-preset-supplies)
+supplies and a written-out `command` states. The flag is appended to the command unless the
+command places `{mcp}` itself:
 
 ```toml
 [runners.copilot]
-command = ["copilot", "--allow-all-tools", "--output-format", "json"]
-mcp     = { flag = "--additional-mcp-config", format = "claude_json", prefix = "@" }
-# runs: copilot --allow-all-tools --output-format json --additional-mcp-config @<hangar>/mcp.json
+cli = "copilot"
+# runs: copilot --model=<model> … --output-format json --additional-mcp-config @<hangar>/mcp.json
 
 [runners.codex]
 command = ["codex", "exec", "--model", "{model}", "{mcp}", "-"]
