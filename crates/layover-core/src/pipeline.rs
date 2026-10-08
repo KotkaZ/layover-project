@@ -23,6 +23,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::agent::AgentName;
 
+mod overrides;
+
+pub use overrides::AgentOverride;
+
 /// The name of a pipeline, as written in `layover.toml`.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
 #[serde(transparent)]
@@ -280,6 +284,10 @@ pub struct Pipeline {
     /// Boolean parameters this pipeline accepts, keyed by flag name.
     #[serde(default)]
     pub flags: BTreeMap<String, FlagSpec>,
+    /// How this workflow's chains run particular agents, where that differs from what each agent
+    /// declares: `[pipelines.<name>.agents.<agent>]`. See [`AgentOverride`].
+    #[serde(default)]
+    pub agents: BTreeMap<AgentName, AgentOverride>,
 }
 
 impl Pipeline {

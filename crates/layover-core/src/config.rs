@@ -268,6 +268,25 @@ impl Config {
         }
     }
 
+    /// What `name` runs with in a chain of `pipeline`: [`Self::selection`], with whatever the
+    /// pipeline's `[pipelines.<name>.agents.<agent>]` changes applied on top.
+    ///
+    /// Empty for an agent that is not declared.
+    #[must_use]
+    pub fn selection_in(&self, name: &AgentName, pipeline: Option<&PipelineName>) -> Selection {
+        let Some(agent) = self.agents.get(name) else {
+            return Selection::default();
+        };
+        let mut selection = self.selection(agent);
+        if let Some(changes) = pipeline
+            .and_then(|pipeline| self.pipelines.get(pipeline))
+            .and_then(|pipeline| pipeline.agents.get(name))
+        {
+            changes.apply_to(&mut selection);
+        }
+        selection
+    }
+
     /// The runner `agent` runs on: its own, or the factory's default.
     #[must_use]
     pub fn runner_of(&self, agent: &Agent) -> Option<(&str, &Runner)> {

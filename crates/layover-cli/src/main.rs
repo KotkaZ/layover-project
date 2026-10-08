@@ -188,7 +188,7 @@ fn main() -> ExitCode {
             flags,
         } => commands::prompt(&cli.config, &agent, pipeline.as_deref(), &flags).inspect(|_| {
             // To stderr, so what is piped or diffed is still exactly what the run is told.
-            if let Some(running_on) = commands::runs_on(&cli.config, &agent) {
+            if let Some(running_on) = commands::runs_on(&cli.config, &agent, pipeline.as_deref()) {
                 eprintln!("{running_on}");
             }
         }),

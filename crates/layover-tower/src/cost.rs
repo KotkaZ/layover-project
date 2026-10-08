@@ -36,7 +36,7 @@
 //! for a six-minute run as for a forty-seven-minute one.
 
 use layover_core::agent::AgentName;
-use layover_core::config::Config;
+use layover_core::config::{Config, Selection};
 use layover_core::cost::{CostSource, RateCard, TokenUsage, credits_to_usd};
 use layover_core::model::ModelChoice;
 use serde::Deserialize;
@@ -215,8 +215,13 @@ pub fn priced(text: &str, prices: &Prices<'_>) -> Reported {
 /// agent declares and its runner never passes is not priced; it is still what the record names,
 /// as it always was, so history reads the same as before. See [`ran_on`].
 #[must_use]
-pub fn of_run(config: &Config, agent: &AgentName, transcript: &str) -> (Reported, ModelChoice) {
-    let ran_on_line = ModelChoice::of(config, agent);
+pub fn of_run(
+    config: &Config,
+    agent: &AgentName,
+    selection: &Selection,
+    transcript: &str,
+) -> (Reported, ModelChoice) {
+    let ran_on_line = choice_of(config, agent, selection);
     let reported = priced(
         transcript,
         &Prices {
@@ -232,8 +237,18 @@ pub fn of_run(config: &Config, agent: &AgentName, transcript: &str) -> (Reported
 /// selects, and — for the model only — the declared one where the command line names none, which
 /// is what records have always said.
 #[must_use]
-pub fn ran_on(config: &Config, agent: &AgentName) -> ModelChoice {
-    named(config, agent, ModelChoice::of(config, agent))
+pub fn ran_on(config: &Config, agent: &AgentName, selection: &Selection) -> ModelChoice {
+    named(config, agent, choice_of(config, agent, selection))
+}
+
+/// What `agent`'s runner's command line selects with `selection` filled in.
+fn choice_of(config: &Config, agent: &AgentName, selection: &Selection) -> ModelChoice {
+    config
+        .agents
+        .get(agent)
+        .and_then(|definition| config.runner_of(definition))
+        .map(|(_, runner)| ModelChoice::running(runner, selection.clone()))
+        .unwrap_or_default()
 }
 
 fn named(config: &Config, agent: &AgentName, mut choice: ModelChoice) -> ModelChoice {

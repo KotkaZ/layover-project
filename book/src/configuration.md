@@ -199,7 +199,9 @@ args   = ["--deny-tool=shell(orient reviews:*)"]   # everything `analysis` denie
 ```
 
 An agent's `args` go where the runner's command has `{args}` — a preset puts it last — or at the
-end. They only ever *add*: nothing an agent writes removes what its runner says.
+end. A [workflow can add more](./pipelines.md#an-agent-in-one-workflow), and change the agent's
+model, effort or context for its own chains. They only ever *add*: nothing an agent or workflow
+writes removes what its runner says.
 
 ### The output that says what a run cost
 

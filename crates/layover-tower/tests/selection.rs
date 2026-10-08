@@ -5,6 +5,7 @@
 //! which is the only proof that matters: a value that reached the record but not `argv` would be a
 //! report of something that did not happen.
 
+use layover_core::pipeline::PipelineName;
 use layover_tower::Dispatched;
 
 mod runs;
@@ -108,5 +109,80 @@ entry = true
             Some("medium".to_owned()),
             None
         )
+    );
+}
+
+#[test]
+fn a_workflow_runs_an_agent_at_its_own_override_and_says_so_in_the_record() {
+    // The reviewer gates a feature at xhigh and sweeps pull requests at high: one agent, two
+    // workflows, no second runner and no second agent.
+    let temp = Temp::new("override");
+    let factory = factory(
+        &temp,
+        &format!(
+            r#"
+[layover]
+work_dir = "work"
+
+[defaults]
+runner = "shared"
+timeout_sec = 30
+
+[runners.shared]
+command = {}
+
+[agents.reviewer]
+prompt = "review"
+model = "claude-opus-5.5"
+effort = "xhigh"
+context = "long_context"
+args = ["--deny-tool=shell(gh)"]
+
+[pipelines.development]
+entry = "reviewer"
+
+[pipelines.sweep]
+entry = "reviewer"
+
+[pipelines.sweep.agents.reviewer]
+effort = "high"
+args = ["--deny-tool=shell(git)"]
+"#,
+            echoes()
+        ),
+    );
+
+    let through = |pipeline: &str| {
+        let mut queued = human("reviewer");
+        queued.pipeline = Some(PipelineName::new(pipeline));
+        queued
+    };
+    factory.drain(
+        vec![through("development"), through("sweep")],
+        |_| {},
+        |_, _| {},
+    );
+
+    let runs = history(&temp.0);
+    let effort_in = |pipeline: &str| {
+        runs.iter()
+            .find(|run| {
+                run.pipeline
+                    .as_ref()
+                    .is_some_and(|p| p.as_str() == pipeline)
+            })
+            .and_then(|run| run.effort.clone())
+    };
+    assert_eq!(effort_in("development").as_deref(), Some("xhigh"));
+    assert_eq!(effort_in("sweep").as_deref(), Some("high"));
+
+    let lines = transcript_of(&temp, "reviewer");
+    assert!(
+        lines.contains("--reasoning-effort=high --context long_context --allow-all-tools --deny-tool=shell(gh) --deny-tool=shell(git)"),
+        "the workflow's effort, and its args after the agent's own: {lines}"
+    );
+    assert!(
+        lines.contains("--reasoning-effort=xhigh --context long_context --allow-all-tools --deny-tool=shell(gh)"),
+        "{lines}"
     );
 }

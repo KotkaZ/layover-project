@@ -374,6 +374,12 @@ pub fn explain(path: &Path) -> Result<String, Failure> {
                  works in the same work_dir"
             );
         }
+        // How this workflow runs an agent differently from what the agent declares.
+        for agent in pipeline.agents.keys() {
+            if let Some(running_on) = running_on(&config, agent, Some(name)) {
+                let _ = writeln!(out, "      here {agent} runs on {running_on}");
+            }
+        }
     }
 
     out.push_str("\nAgents\n");
@@ -389,7 +395,7 @@ pub fn explain(path: &Path) -> Result<String, Failure> {
         );
         // Read from the command line the agent will run, so a value its runner cannot carry is
         // not reported as though it would be.
-        if let Some(running_on) = running_on(&config, name) {
+        if let Some(running_on) = running_on(&config, name, None) {
             let _ = writeln!(out, "      runs on {running_on}");
         }
     }
@@ -443,22 +449,30 @@ fn join(names: &[AgentName]) -> String {
 /// `None` when the factory does not load, the agent is unknown, or its command line names none of
 /// it — `prompt` itself reports the first two.
 #[must_use]
-pub fn runs_on(path: &Path, agent: &str) -> Option<String> {
+pub fn runs_on(path: &Path, agent: &str, pipeline: Option<&str>) -> Option<String> {
     let (config, _) = load(path).ok()?;
     let name = AgentName::from(agent);
     let (runner, _) = config.runner_of(config.agents.get(&name)?)?;
-    let running_on = running_on(&config, &name)?;
+    let pipeline = pipeline.map(PipelineName::from);
+    let running_on = running_on(&config, &name, pipeline.as_ref())?;
 
-    Some(format!(
-        "`{agent}` runs on {running_on}, through runner `{runner}`"
-    ))
+    Some(match pipeline {
+        Some(pipeline) => {
+            format!("`{agent}` runs on {running_on} in `{pipeline}`, through runner `{runner}`")
+        }
+        None => format!("`{agent}` runs on {running_on}, through runner `{runner}`"),
+    })
 }
 
 /// What an agent's command line selects, said as a person would: the model, its effort and its
 /// context — and, where the command names an effort or context but no model, that the model is
 /// the CLI's choice. `None` when the command line names none of it.
-fn running_on(config: &Config, agent: &AgentName) -> Option<String> {
-    let choice = layover_core::ModelChoice::of(config, agent);
+fn running_on(
+    config: &Config,
+    agent: &AgentName,
+    pipeline: Option<&PipelineName>,
+) -> Option<String> {
+    let choice = layover_core::ModelChoice::in_pipeline(config, agent, pipeline);
     let summary = choice.summary()?;
     Some(if choice.model.is_some() {
         summary
@@ -920,15 +934,15 @@ mod tests {
         let path = example("workitem-factory/layover.toml");
 
         assert_eq!(
-            runs_on(&path, "developer").as_deref(),
+            runs_on(&path, "developer", None).as_deref(),
             Some(
                 "`developer` runs on the CLI's default model · effort xhigh · default context, \
                  through runner `copilot`"
             )
         );
-        assert_eq!(runs_on(&path, "ghost"), None);
+        assert_eq!(runs_on(&path, "ghost", None), None);
         assert_eq!(
-            runs_on(&path, "investigator"),
+            runs_on(&path, "investigator", None),
             None,
             "its command line names nothing, and nothing is made up"
         );

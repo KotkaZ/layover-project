@@ -34,9 +34,15 @@ pub(crate) struct Words {
     pub tooltip: String,
 }
 
-/// The words for an agent.
-pub(crate) fn agent(config: &Config, name: &AgentName, agent: &Agent) -> Words {
-    let choice = ModelChoice::of(config, name);
+/// The words for an agent, as it runs in `pipeline` — with that workflow's overrides — or as it
+/// declares itself when the whole factory is drawn.
+pub(crate) fn agent(
+    config: &Config,
+    name: &AgentName,
+    agent: &Agent,
+    pipeline: Option<&PipelineName>,
+) -> Words {
+    let choice = ModelChoice::in_pipeline(config, name, pipeline);
     let effort = choice
         .reasoning_effort
         .as_ref()

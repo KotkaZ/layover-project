@@ -60,8 +60,12 @@ impl Dashboard {
             record.continues.clone_from(&queued.continues);
         }
         record.sent_by.clone_from(&live.sent_by);
+        let pipeline = live
+            .queued
+            .as_ref()
+            .and_then(|queued| queued.pipeline.as_ref());
         let ran_on = config
-            .map(|config| ModelChoice::of(config, &live.agent))
+            .map(|config| ModelChoice::in_pipeline(config, &live.agent, pipeline))
             .unwrap_or_default();
         record.model = ran_on.model;
         record.effort = ran_on.reasoning_effort;

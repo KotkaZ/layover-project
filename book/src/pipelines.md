@@ -53,6 +53,46 @@ checked over each pipeline's own routes, so a pipeline need not declare flags fo
 cannot reach. See [Configuration](./configuration.md#scoping-a-route-to-workflows) for the syntax
 and the rules two overlapping routes must follow.
 
+## An agent in one workflow
+
+An agent shared by two workflows may want running differently in each: the reviewer that gates a
+feature at `xhigh` can sweep twelve pull requests an hour at `high`. The workflow says so, and the
+agent stays one agent — one memory, one set of learnings, one box on each map:
+
+```toml
+[pipelines.review-sweep.agents.reviewer]
+effort = "high"                              # instead of the reviewer's own xhigh
+args   = ["--deny-tool=shell(git push)"]     # and, in this workflow, never push
+```
+
+| Key | Meaning |
+|---|---|
+| `model` | The model this workflow's chains run the agent on. |
+| `effort` | The reasoning effort, instead of the agent's own or `[defaults]`. |
+| `context` | The context-window tier, instead of the agent's own or `[defaults]`. |
+| `args` | Arguments **added** after the agent's own, for this workflow's chains only. |
+
+Each applies to every run of that agent in a chain belonging to the workflow — including a chain it
+spawned and a layover it resumes — and is carried by the runner's `{model}`, `{effort}`,
+`{context}` and `{args}` exactly as the agent's own values are. Who wins, for each value:
+
+1. the workflow's `[pipelines.<name>.agents.<agent>]`;
+2. the agent's own `model`, `effort`, `context`;
+3. `[defaults] effort` and `context`.
+
+`args` are not a choice in that list: the runner's, the agent's and the workflow's are all added,
+in that order. A workflow can take more away from an agent; it cannot give back what the runner
+or the agent denies.
+
+This is a different table from `[pipelines.<name>.flags]`, which are the true-or-false switches an
+agent's *prompt* is composed with. These change what its *command line* says.
+
+`layover validate` refuses an override for an agent that is not declared, and warns about one for
+an agent no chain of that workflow can reach, a value whose runner has no placeholder for it, and
+`args` that repeat what the runner's preset supplies. The workflow's map, `layover explain` and
+`layover prompt --pipeline` show each agent as that workflow runs it, and every run records the
+model, effort and context it actually ran with.
+
 ## Triggers
 
 | Form | Meaning |

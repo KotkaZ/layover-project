@@ -149,7 +149,14 @@ impl Factory {
 
         let transcript = std::fs::read_to_string(live.hangar.join(crate::spawn::TRANSCRIPT_FILE))
             .unwrap_or_default();
-        let (reported, ran_on) = crate::cost::of_run(&self.config, &live.agent, &transcript);
+        let pipeline = live
+            .queued
+            .as_ref()
+            .and_then(|queued| queued.pipeline.clone())
+            .or_else(|| self.pipeline_on_record(&live.itinerary));
+        let selection = self.config.selection_in(&live.agent, pipeline.as_ref());
+        let (reported, ran_on) =
+            crate::cost::of_run(&self.config, &live.agent, &selection, &transcript);
 
         // Charged to the chain as any run is, so a restart is admitted against what the run it
         // replaces spent and counts as one more run of the chain, not as its first.
@@ -179,11 +186,6 @@ impl Factory {
                 live.pid
             ),
         };
-        let pipeline = live
-            .queued
-            .as_ref()
-            .and_then(|queued| queued.pipeline.clone())
-            .or_else(|| self.pipeline_on_record(&live.itinerary));
         self.record(&RunRecord {
             run: live.run.clone(),
             itinerary: live.itinerary.clone(),

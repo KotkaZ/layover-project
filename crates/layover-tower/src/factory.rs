@@ -326,6 +326,8 @@ impl Factory {
         // Resolved once per run and used twice: to compose this run's prompt, and in the token's
         // session, so that whatever this run sends on carries exactly the flags it was given.
         let flags = self.flags_for(chain);
+        // Likewise what its command line is built with, which its record then names.
+        let selection = self.selection_for(chain, &authorised.name);
 
         // Minted before the plan is assembled, because the plan is where the token becomes an
         // argument and an environment variable. It is revoked on every path out of the run: a
@@ -358,7 +360,10 @@ impl Factory {
             &hangar,
             flight,
             &told,
-            &flags,
+            &MadeWith {
+                flags: &flags,
+                selection: &selection,
+            },
             token.as_deref(),
         ) {
             Ok(plan) => plan,
@@ -411,6 +416,7 @@ impl Factory {
                 started_at,
                 queued_at,
                 sent_by,
+                selection,
             },
             started,
             token,
@@ -468,7 +474,11 @@ impl Factory {
     ) -> Option<Dispatched> {
         let now = Timestamp::now();
         let why = crate::reserve::refusal(&self.config, &self.history_dir(), now)?;
-        let ran_on = crate::cost::ran_on(&self.config, &authorised.name);
+        let ran_on = crate::cost::ran_on(
+            &self.config,
+            &authorised.name,
+            &self.selection_for(itinerary.id(), &authorised.name),
+        );
 
         self.record(&RunRecord {
             run: layover_core::RunId::generate(),
@@ -513,8 +523,12 @@ impl Factory {
         charge: impl FnOnce(&crate::cost::Reported),
     ) -> Dispatched {
         let transcript = std::fs::read_to_string(&finished.transcript).unwrap_or_default();
-        let (reported, ran_on) =
-            crate::cost::of_run(&self.config, &ticket.authorised.name, &transcript);
+        let (reported, ran_on) = crate::cost::of_run(
+            &self.config,
+            &ticket.authorised.name,
+            &ticket.selection,
+            &transcript,
+        );
 
         charge(&reported);
 
@@ -603,7 +617,11 @@ impl Factory {
         started_at: Timestamp,
         why: &str,
     ) -> RunRecord {
-        let ran_on = crate::cost::ran_on(&self.config, &authorised.name);
+        let ran_on = crate::cost::ran_on(
+            &self.config,
+            &authorised.name,
+            &self.selection_for(chain, &authorised.name),
+        );
         RunRecord {
             run: run.clone(),
             itinerary: chain.clone(),
@@ -748,6 +766,17 @@ impl Factory {
         }
     }
 
+    /// What `agent`'s command line is built with in `chain`: its own model, effort, context and
+    /// arguments, with the chain's workflow's overrides applied.
+    pub(crate) fn selection_for(
+        &self,
+        chain: &ItineraryId,
+        agent: &AgentName,
+    ) -> layover_core::config::Selection {
+        self.config
+            .selection_in(agent, self.chains.pipeline_of(chain).as_ref())
+    }
+
     /// The flags to write into a run's record: those its chain was composed with, for a chain a
     /// workflow opened. A chain no workflow opened has none of its own, and writing every declared
     /// flag at its default would claim choices nobody made.
@@ -770,9 +799,10 @@ impl Factory {
         hangar: &Path,
         flight: &Flight,
         told: &Told<'_>,
-        flags: &Flags,
+        made_with: &MadeWith<'_>,
         token: Option<&str>,
     ) -> Result<Plan, String> {
+        let MadeWith { flags, selection } = made_with;
         let instructions = self.instructions_for(authorised, flags)?;
 
         let payload = compose(&Run {
@@ -818,7 +848,7 @@ impl Factory {
         Ok(Plan {
             agent: authorised.name.clone(),
             runner: runner.clone(),
-            selection: self.config.selection(authorised.agent),
+            selection: (*selection).clone(),
             payload,
             hangar: hangar.to_path_buf(),
             work_dir,
@@ -948,6 +978,13 @@ impl Factory {
     pub fn root(&self) -> &Path {
         &self.root
     }
+}
+
+/// What a run is made with: the flags its prompt is composed with, and what its command line is
+/// built with. Both are the chain's, resolved once at launch.
+struct MadeWith<'a> {
+    flags: &'a Flags,
+    selection: &'a layover_core::config::Selection,
 }
 
 /// What a run is told about where its work came from, beside the work itself.

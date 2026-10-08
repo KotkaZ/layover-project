@@ -49,6 +49,9 @@ Agents
       runs on the CLI's default model · effort xhigh · default context
 ```
 
+A workflow that [runs an agent differently](./pipelines.md#an-agent-in-one-workflow) says so under
+the pipeline: `here reviewer runs on claude-opus-5.5 · effort high · long context`.
+
 A route [scoped to workflows](./configuration.md#scoping-a-route-to-workflows) carries its scope
 on its line, and once any route is scoped each pipeline also says which agents its chains can
 reach over the routes they may use:
@@ -93,7 +96,7 @@ and conditional sections resolved against the flags. This is the only way to see
 will actually be told before it costs anything to find out.
 
 What the agent runs on is printed beside it, on **stderr**, so the prompt itself can still be piped
-or diffed:
+or diffed — with `--pipeline`, as that workflow runs it:
 
 ```text
 `eagle` runs on claude-opus-5.5 · effort xhigh · long context, through runner `copilot-analysis`

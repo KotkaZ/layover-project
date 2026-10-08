@@ -19,10 +19,16 @@ status](README.md#project-status).
 - **An agent's own `args`**, added to its runner's command for that agent alone, so an agent that
   is denied one more thing than the rest needs no runner of its own. They go where a command has
   `{args}`, or at the end.
+- **A workflow can run an agent differently.** `[pipelines.<name>.agents.<agent>]` sets the model,
+  effort or context that workflow's chains run the agent at, and `args` it adds, so an agent shared
+  by two workflows needs neither a second agent nor a second runner. It wins over the agent's own
+  values and `[defaults]`. Each workflow's map, `explain` and
+  `prompt --pipeline` show the agent as that workflow runs it, and run records name what it ran on.
 - **`layover validate`** refuses a runner with neither `cli` nor `command`, both, or `args` beside a
   `command`; and warns when a runner or agent repeats an option its preset already supplies, when
   an agent's `args` fix a value its runner carries a placeholder for, and when `args` would follow a
-  command's final `-`.
+  command's final `-`; refuses a workflow override for an undeclared agent and warns about one no
+  chain of the workflow can reach or whose value the runner cannot carry.
 
 ## [1.9.0] — 2026-10-07
 

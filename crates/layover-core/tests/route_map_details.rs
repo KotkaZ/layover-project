@@ -121,6 +121,44 @@ fn no_line_in_a_box_is_longer_than_a_box_is_wide() {
 }
 
 #[test]
+fn a_workflows_map_shows_the_effort_it_runs_an_agent_at() {
+    // The reviewer is xhigh by its own declaration and high in this workflow. The workflow's map
+    // says what its chains will actually run; the whole factory's says what the agent declares.
+    let text = FACTORY
+        .replace(
+            r#"command = ["copilot", "--allow-all-tools"]"#,
+            r#"cli = "copilot""#,
+        )
+        .replace(
+            "[agents.mailman]\nprompt = \"post\"\nrunner = \"plain\"\n",
+            "[agents.mailman]\nprompt = \"post\"\nrunner = \"plain\"\nmodel = \"claude-sonnet-5\"\neffort = \"xhigh\"\n",
+        )
+        .replace(
+            "[[routes]]",
+            "[pipelines.devforge.agents.mailman]\neffort = \"low\"\n\n[[routes]]",
+        );
+    let config = Config::from_toml(&text, "details.toml").expect("the fixture parses");
+
+    let workflow = layout(&text);
+    assert_eq!(
+        workflow
+            .node("a_mailman")
+            .and_then(|node| node.subtitle.clone())
+            .as_deref(),
+        Some("claude-sonnet-5 · effort low")
+    );
+
+    let everything = Layout::scoped(&config, &Live::default(), &Scope::Everything);
+    assert_eq!(
+        everything
+            .node("a_mailman")
+            .and_then(|node| node.subtitle.clone())
+            .as_deref(),
+        Some("claude-sonnet-5 · effort xhigh")
+    );
+}
+
+#[test]
 fn an_agent_shows_the_model_it_declares_when_its_runner_carries_it() {
     let layout = layout(FACTORY);
     let bob = layout.node("a_bob").expect("drawn");

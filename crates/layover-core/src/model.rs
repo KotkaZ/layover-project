@@ -35,6 +35,16 @@ impl ModelChoice {
     /// on its own.
     #[must_use]
     pub fn of(config: &Config, agent: &AgentName) -> Self {
+        Self::in_pipeline(config, agent, None)
+    }
+
+    /// What `agent` runs on in a chain of `pipeline`, with that workflow's overrides applied.
+    #[must_use]
+    pub fn in_pipeline(
+        config: &Config,
+        agent: &AgentName,
+        pipeline: Option<&crate::pipeline::PipelineName>,
+    ) -> Self {
         let Some(definition) = config.agents.get(agent) else {
             return Self::default();
         };
@@ -42,7 +52,12 @@ impl ModelChoice {
             return Self::default();
         };
 
-        let selection = config.selection(definition);
+        Self::running(runner, config.selection_in(agent, pipeline))
+    }
+
+    /// What `runner`'s command line selects with `selection` filled in.
+    #[must_use]
+    pub fn running(runner: &crate::config::Runner, selection: crate::config::Selection) -> Self {
         let mut choice = Self::read(&runner.invocation(None, &selection));
         // A placeholder that stands alone, or sits in a flag this does not know — Codex's
         // `-c model_reasoning_effort={effort}` — still carries the value to the CLI.

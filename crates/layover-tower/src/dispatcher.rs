@@ -66,6 +66,8 @@ pub(crate) struct Ticket<'a> {
     pub started_at: Timestamp,
     pub queued_at: Option<Timestamp>,
     pub sent_by: Option<Vec<AgentName>>,
+    /// What the run's command line was built with, so its record says what it ran on.
+    pub selection: layover_core::config::Selection,
 }
 
 /// A run whose process is alive.
