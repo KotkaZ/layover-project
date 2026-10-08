@@ -852,7 +852,7 @@ impl Factory {
         env.insert(TOKEN_VAR.to_owned(), token.to_owned());
         env.insert(ENDPOINT_VAR.to_owned(), endpoint.clone());
 
-        let Some(wiring) = runner.mcp.as_ref() else {
+        let Some(wiring) = runner.wiring() else {
             return Ok(None);
         };
 

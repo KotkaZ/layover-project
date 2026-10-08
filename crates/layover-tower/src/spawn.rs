@@ -282,7 +282,7 @@ fn environment(declared: &BTreeMap<String, String>) -> BTreeMap<String, String> 
 /// Returns [`SpawnError`] when a declared variable is unset, the command is empty, or the process
 /// cannot be started.
 pub fn start(plan: &Plan) -> Result<Started, SpawnError> {
-    if plan.runner.command.is_empty() {
+    if plan.runner.template().is_empty() {
         return Err(SpawnError::EmptyCommand);
     }
 

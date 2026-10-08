@@ -1,11 +1,16 @@
 //! How a runner invokes an agent CLI: its command, the placeholders substituted into it, and how
 //! it is told where Layover's MCP server is.
 
+mod preset;
+
 use serde::Deserialize;
 
-/// The values an agent's runner fills its `{model}`, `{effort}` and `{context}` placeholders with.
+pub use preset::Cli;
+
+/// What fills a runner's placeholders for one run: `{model}`, `{effort}`, `{context}` and
+/// `{name}`, and the arguments that take the place of `{args}`.
 ///
-/// Each is passed through exactly as written. Layover keeps no catalog of models, or of the
+/// Each value is passed through exactly as written. Layover keeps no catalog of models, or of the
 /// efforts and context tiers each one accepts: the CLI does, and refuses a value it does not
 /// support with a message that names it. A value that is empty or only whitespace counts as
 /// unset.
@@ -17,6 +22,10 @@ pub struct Selection {
     pub effort: Option<String>,
     /// The context-window tier, such as `long_context`.
     pub context: Option<String>,
+    /// What the run's session is called, from the name its chain was given.
+    pub name: Option<String>,
+    /// The agent's own arguments, and any its workflow adds, in that order.
+    pub args: Vec<String>,
 }
 
 impl Selection {
@@ -35,6 +44,7 @@ impl Selection {
             Runner::MODEL => &self.model,
             Runner::EFFORT => &self.effort,
             Runner::CONTEXT => &self.context,
+            Runner::NAME => &self.name,
             _ => return None,
         };
         value.as_deref().filter(|value| !value.trim().is_empty())
@@ -42,7 +52,7 @@ impl Selection {
 }
 
 /// How Layover passes its MCP endpoint to a runner.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct McpWiring {
     /// Command-line flag carrying the MCP configuration.
@@ -70,14 +80,19 @@ impl McpWiring {
 
 /// How to invoke a particular headless agent CLI.
 ///
+/// Written one of two ways. `cli = "copilot"` (or `"claude"`) has Layover supply everything an
+/// unattended run of that CLI needs — see [`Cli`] — and the runner's `args` add what is particular
+/// to it, which is usually what it denies. `command` spells out the whole invocation, for a CLI
+/// Layover has no preset for or a runner that wants none of a preset's defaults.
+///
 /// # A value that is not set
 ///
-/// `{model}`, `{effort}` and `{context}` are optional: an agent that sets none of them runs on
-/// whatever its CLI defaults to. So a placeholder with nothing to fill it must disappear cleanly,
-/// and "cleanly" is the hard part. An argument that carries an unset placeholder is left out
-/// whole — `--reasoning-effort={effort}` goes entirely, never as `--reasoning-effort=` or as the
-/// literal text — and when that argument is the *value* of the option before it, the option goes
-/// too: `"--reasoning-effort", "{effort}"` and `"-c", "model_reasoning_effort={effort}"` both
+/// `{model}`, `{effort}`, `{context}` and `{name}` are optional: an agent that sets none of them
+/// runs on whatever its CLI defaults to. So a placeholder with nothing to fill it must disappear
+/// cleanly, and "cleanly" is the hard part. An argument that carries an unset placeholder is left
+/// out whole — `--reasoning-effort={effort}` goes entirely, never as `--reasoning-effort=` or as
+/// the literal text — and when that argument is the *value* of the option before it, the option
+/// goes too: `"--reasoning-effort", "{effort}"` and `"-c", "model_reasoning_effort={effort}"` both
 /// disappear as a pair. Every CLI that takes a value refuses a flag without one, so the
 /// alternative is a run that dies at spawn — or, worse, one that reads the next flag as the
 /// value.
@@ -89,7 +104,12 @@ impl McpWiring {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Runner {
-    /// Command and arguments.
+    /// A CLI Layover knows, whose unattended invocation it supplies.
+    ///
+    /// Exactly one of this and [`Self::command`] is given; validation refuses neither and both.
+    #[serde(default)]
+    pub cli: Option<Cli>,
+    /// The whole command and its arguments, for a runner with no [`Self::cli`].
     ///
     /// `{prompt}` substitutes the **path** to the agent's composed instructions, which the Tower
     /// writes into the run's Hangar before spawning. It is not the instructions themselves.
@@ -102,8 +122,14 @@ pub struct Runner {
     ///
     /// So most runners need no placeholder at all. It exists for CLIs that accept a file of
     /// instructions as a flag; those that do not get the instructions prepended to stdin.
+    #[serde(default)]
     pub command: Vec<String>,
-    /// How this runner is told where Layover's MCP server is.
+    /// Arguments added after what a [`Self::cli`] preset supplies: the runner's permission set,
+    /// shared by every agent on it. Only with `cli`; a `command` says everything itself.
+    #[serde(default)]
+    pub args: Vec<String>,
+    /// How this runner is told where Layover's MCP server is. A preset supplies it; given here,
+    /// it replaces the preset's.
     #[serde(default)]
     pub mcp: Option<McpWiring>,
 }
@@ -130,8 +156,18 @@ impl Runner {
     /// `--context long_context`.
     pub const CONTEXT: &'static str = "{context}";
 
-    /// The placeholders an agent's [`Selection`] fills.
-    const CHOSEN: [&'static str; 3] = [Self::MODEL, Self::EFFORT, Self::CONTEXT];
+    /// The placeholder substituted with what the run's session is called: the name its chain was
+    /// given and the agent, as in Copilot CLI's `--name`. Unset for a chain nobody named.
+    pub const NAME: &'static str = "{name}";
+
+    /// The placeholder an agent's own `args` take the place of — none, one or several arguments.
+    ///
+    /// Optional. Without it they are appended at the end, which is right for every CLI that does
+    /// not end in a positional argument. A preset puts it last.
+    pub const ARGS: &'static str = "{args}";
+
+    /// The placeholders a [`Selection`] fills with a single value.
+    const VALUES: [&'static str; 4] = [Self::MODEL, Self::EFFORT, Self::CONTEXT, Self::NAME];
 
     /// The placeholder substituted with this runner's [`McpWiring::flag`] and the path to the
     /// generated MCP configuration — two arguments, not one.
@@ -142,14 +178,49 @@ impl Runner {
     /// put a flag after the thing it has to precede.
     pub const MCP: &'static str = "{mcp}";
 
+    /// What this runner runs before any agent's own arguments: a preset's whole invocation with the
+    /// runner's `args`, or its `command` as written.
+    #[must_use]
+    pub fn template(&self) -> Vec<String> {
+        match self.cli {
+            Some(cli) => cli.template(&self.args),
+            None => self.command.clone(),
+        }
+    }
+
+    /// The template with `args` in place of `{args}`, or after everything when it has none.
+    #[must_use]
+    pub fn line_with(&self, args: &[String]) -> Vec<String> {
+        let template = self.template();
+        let mut line = Vec::with_capacity(template.len() + args.len());
+        let mut placed = false;
+
+        for arg in template {
+            if arg == Self::ARGS {
+                line.extend(args.iter().cloned());
+                placed = true;
+            } else {
+                line.push(arg);
+            }
+        }
+        if !placed {
+            line.extend(args.iter().cloned());
+        }
+        line
+    }
+
+    /// How this runner tells its CLI where Layover's MCP server is: its own `mcp`, or its preset's.
+    #[must_use]
+    pub fn wiring(&self) -> Option<McpWiring> {
+        self.mcp.clone().or_else(|| self.cli.map(Cli::wiring))
+    }
+
     /// Returns `true` when this runner wants the instructions as a file it is handed.
     ///
     /// When `false`, the Tower prepends them to the stdin payload instead.
     #[must_use]
     pub fn takes_prompt_path(&self) -> bool {
-        self.command
-            .iter()
-            .any(|arg| arg.contains(Self::PROMPT_PATH))
+        self.takes(Self::PROMPT_PATH)
     }
 
     /// Returns `true` when this runner can carry an agent's `model`.
@@ -179,36 +250,14 @@ impl Runner {
     /// Returns `true` when some argument holds `placeholder`.
     #[must_use]
     pub fn takes(&self, placeholder: &str) -> bool {
-        self.command.iter().any(|arg| arg.contains(placeholder))
+        self.template().iter().any(|arg| arg.contains(placeholder))
     }
 
-    /// A value this command fixes for the same option `placeholder` fills, if it fixes one.
-    ///
-    /// `--reasoning-effort high` beside `--reasoning-effort {effort}` hands the CLI two efforts,
-    /// and which one wins depends on the CLI's last-wins rule and the order they happen to be
-    /// written in — a runner that reads as configurable and is not. Recognises the three shapes a
-    /// placeholder takes: standing alone after its option, joined to it with `=`, and as a
-    /// `key=` value after an option such as Codex's `-c`.
+    /// A value this runner fixes for the same option `placeholder` fills, if it fixes one. See
+    /// [`fixes_beside`].
     #[must_use]
     pub fn fixes_beside(&self, placeholder: &str) -> Option<String> {
-        let args = &self.command;
-
-        args.iter().enumerate().find_map(|(at, arg)| {
-            let start = arg.find(placeholder)?;
-            let before = &arg[..start];
-            let previous = at
-                .checked_sub(1)
-                .map(|index| args[index].as_str())
-                .filter(|previous| is_bare_option(previous));
-
-            if arg == placeholder {
-                fixed_value(args, previous?, "")
-            } else if let Some(option) = before.strip_suffix('=').filter(|o| is_option(o)) {
-                fixed_value(args, option, "")
-            } else {
-                fixed_value(args, previous?, before)
-            }
-        })
+        fixes_beside(&self.template(), placeholder)
     }
 
     /// Builds the command line for one run.
@@ -216,8 +265,8 @@ impl Runner {
     /// Substitution is textual and deliberately so: a placeholder sits inside an argument like
     /// `--model={model}` as readily as it stands alone, and the operator writes whichever their
     /// CLI expects. A placeholder with nothing to fill it is left out with the option it is the
-    /// value of — see [`Runner`] — so no empty argument and no flag
-    /// without its value reaches the CLI.
+    /// value of — see [`Runner`] — so no empty argument and no flag without its value reaches the
+    /// CLI.
     #[must_use]
     pub fn invocation(&self, prompt_path: Option<&str>, selection: &Selection) -> Vec<String> {
         self.invocation_with_mcp(prompt_path, selection, None)
@@ -235,13 +284,15 @@ impl Runner {
         selection: &Selection,
         mcp_config: Option<&str>,
     ) -> Vec<String> {
-        let wiring = self.mcp.as_ref().zip(mcp_config);
-        let mut out = Vec::with_capacity(self.command.len() + 2);
+        let line = self.line_with(&selection.args);
+        let wiring = self.wiring();
+        let wiring = wiring.as_ref().zip(mcp_config);
+        let mut out = Vec::with_capacity(line.len() + 2);
         // Whether the last argument kept is a bare option — `--model`, `-c` — whose value the next
         // argument may be.
         let mut after_option = false;
 
-        for arg in &self.command {
+        for arg in &line {
             if arg == Self::MCP {
                 if let Some((mcp, path)) = wiring {
                     out.push(mcp.flag.clone());
@@ -253,7 +304,7 @@ impl Runner {
                 continue;
             }
 
-            let unset = Self::CHOSEN.iter().any(|placeholder| {
+            let unset = Self::VALUES.iter().any(|placeholder| {
                 arg.contains(placeholder) && selection.value_for(placeholder).is_none()
             });
             if unset {
@@ -268,7 +319,7 @@ impl Runner {
             if let Some(path) = prompt_path {
                 rendered = rendered.replace(Self::PROMPT_PATH, path);
             }
-            for placeholder in Self::CHOSEN {
+            for placeholder in Self::VALUES {
                 if let Some(value) = selection.value_for(placeholder) {
                     rendered = rendered.replace(placeholder, value);
                 }
@@ -279,7 +330,7 @@ impl Runner {
         }
 
         if let Some((mcp, path)) = wiring
-            && !self.command.iter().any(|arg| arg == Self::MCP)
+            && !line.iter().any(|arg| arg == Self::MCP)
         {
             out.push(mcp.flag.clone());
             out.push(mcp.argument(path));
@@ -287,6 +338,33 @@ impl Runner {
 
         out
     }
+}
+
+/// A value `line` fixes for the same option `placeholder` fills, if it fixes one.
+///
+/// `--reasoning-effort high` beside `--reasoning-effort {effort}` hands the CLI two efforts, and
+/// which one wins depends on the CLI's last-wins rule and the order they happen to be written in —
+/// a runner that reads as configurable and is not. Recognises the three shapes a placeholder takes:
+/// standing alone after its option, joined to it with `=`, and as a `key=` value after an option
+/// such as Codex's `-c`.
+#[must_use]
+pub fn fixes_beside(line: &[String], placeholder: &str) -> Option<String> {
+    line.iter().enumerate().find_map(|(at, arg)| {
+        let start = arg.find(placeholder)?;
+        let before = &arg[..start];
+        let previous = at
+            .checked_sub(1)
+            .map(|index| line[index].as_str())
+            .filter(|previous| is_bare_option(previous));
+
+        if arg == placeholder {
+            fixed_value(line, previous?, "")
+        } else if let Some(option) = before.strip_suffix('=').filter(|o| is_option(o)) {
+            fixed_value(line, option, "")
+        } else {
+            fixed_value(line, previous?, before)
+        }
+    })
 }
 
 /// Whether `arg` is an option rather than a value: `--model`, `-c`, `--model=x` — but not `-`, which
@@ -319,427 +397,4 @@ fn fixed_value(args: &[String], option: &str, key: &str) -> Option<String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use crate::config::{Runner, Selection};
-
-    fn none() -> Selection {
-        Selection::default()
-    }
-
-    fn runner(args: &[&str]) -> Runner {
-        toml::from_str(&format!(
-            "command = [{}]",
-            args.iter()
-                .map(|a| format!("\"{a}\""))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ))
-        .expect("parses")
-    }
-
-    #[test]
-    fn a_model_placeholder_is_substituted_wherever_it_sits() {
-        // Some CLIs take `--model x`, some take `--model=x`. The operator writes whichever theirs
-        // wants, so substitution has to be textual rather than positional.
-        let separate = runner(&["claude", "-p", "--model", "{model}"]);
-        assert_eq!(
-            separate.invocation(None, &Selection::model("claude-opus-5")),
-            ["claude", "-p", "--model", "claude-opus-5"]
-        );
-
-        let joined = runner(&["codex", "exec", "--model={model}"]);
-        assert_eq!(
-            joined.invocation(None, &Selection::model("gpt-5.4")),
-            ["codex", "exec", "--model=gpt-5.4"]
-        );
-    }
-
-    #[test]
-    fn a_placeholder_with_no_option_before_it_disappears_alone() {
-        // An empty string in argv is not nothing; several CLIs read it as a positional argument.
-        let r = runner(&["agent", "{model}", "--verbose"]);
-        assert_eq!(r.invocation(None, &none()), ["agent", "--verbose"]);
-    }
-
-    #[test]
-    fn an_unset_model_takes_its_option_with_it() {
-        // It used to leave `--model` in front of the next flag, which Copilot CLI refuses outright
-        // and Claude Code reads as the model's name.
-        let r = runner(&[
-            "claude",
-            "-p",
-            "--model",
-            "{model}",
-            "--output-format",
-            "json",
-        ]);
-        assert_eq!(
-            r.invocation(None, &none()),
-            ["claude", "-p", "--output-format", "json"]
-        );
-
-        let joined = runner(&["codex", "exec", "--model={model}", "-"]);
-        assert_eq!(
-            joined.invocation(None, &none()),
-            ["codex", "exec", "-"],
-            "never the literal `--model={{model}}`"
-        );
-    }
-
-    fn copilot() -> Runner {
-        toml::from_str(
-            r#"command = ["copilot", "--model", "{model}", "--reasoning-effort", "{effort}", "--context={context}", "{mcp}", "--allow-all-tools"]
-mcp = { flag = "--additional-mcp-config", format = "claude_json", prefix = "@" }"#,
-        )
-        .expect("parses")
-    }
-
-    fn chose(model: Option<&str>, effort: Option<&str>, context: Option<&str>) -> Selection {
-        Selection {
-            model: model.map(ToOwned::to_owned),
-            effort: effort.map(ToOwned::to_owned),
-            context: context.map(ToOwned::to_owned),
-        }
-    }
-
-    #[test]
-    fn effort_and_context_are_substituted_alone_and_inside_an_argument() {
-        let all = chose(Some("claude-opus-5.5"), Some("xhigh"), Some("long_context"));
-
-        assert_eq!(
-            copilot().invocation_with_mcp(None, &all, Some("/h/mcp.json")),
-            [
-                "copilot",
-                "--model",
-                "claude-opus-5.5",
-                "--reasoning-effort",
-                "xhigh",
-                "--context=long_context",
-                "--additional-mcp-config",
-                "@/h/mcp.json",
-                "--allow-all-tools",
-            ]
-        );
-    }
-
-    #[test]
-    fn codexs_config_key_carries_an_effort_and_leaves_with_its_option() {
-        let codex = runner(&[
-            "codex",
-            "exec",
-            "--model",
-            "{model}",
-            "-c",
-            "model_reasoning_effort={effort}",
-            "-",
-        ]);
-
-        assert_eq!(
-            codex.invocation(None, &chose(Some("gpt-5.4"), Some("high"), None)),
-            [
-                "codex",
-                "exec",
-                "--model",
-                "gpt-5.4",
-                "-c",
-                "model_reasoning_effort=high",
-                "-"
-            ]
-        );
-        assert_eq!(
-            codex.invocation(None, &chose(Some("gpt-5.4"), None, None)),
-            ["codex", "exec", "--model", "gpt-5.4", "-"],
-            "a bare `-c` would swallow the `-` that reads the prompt"
-        );
-    }
-
-    #[test]
-    fn an_unset_effort_or_context_leaves_no_trace_in_either_form() {
-        assert_eq!(
-            copilot().invocation_with_mcp(
-                None,
-                &chose(Some("claude-opus-5.5"), None, None),
-                Some("/h/mcp.json")
-            ),
-            [
-                "copilot",
-                "--model",
-                "claude-opus-5.5",
-                "--additional-mcp-config",
-                "@/h/mcp.json",
-                "--allow-all-tools",
-            ]
-        );
-    }
-
-    #[test]
-    fn an_empty_value_counts_as_unset_rather_than_becoming_an_empty_argument() {
-        assert_eq!(
-            copilot().invocation(None, &chose(Some("m"), Some(""), Some("  "))),
-            ["copilot", "--model", "m", "--allow-all-tools"]
-        );
-    }
-
-    #[test]
-    fn no_combination_hands_the_cli_an_empty_argument_or_a_flag_without_its_value() {
-        let valued = ["--model", "--reasoning-effort", "-c"];
-        let r = runner(&[
-            "agent",
-            "--model",
-            "{model}",
-            "--reasoning-effort",
-            "{effort}",
-            "--context={context}",
-            "-c",
-            "model_reasoning_effort={effort}",
-            "-",
-        ]);
-
-        for bits in 0..8_u8 {
-            let pick = |bit: u8, value: &'static str| (bits & bit != 0).then_some(value);
-            let selection = chose(pick(1, "m"), pick(2, "high"), pick(4, "long_context"));
-            let argv = r.invocation(None, &selection);
-
-            assert!(
-                argv.iter()
-                    .all(|arg| !arg.trim().is_empty() && !arg.contains('{')),
-                "{selection:?}: {argv:?}"
-            );
-            for (at, arg) in argv.iter().enumerate() {
-                if valued.contains(&arg.as_str()) {
-                    let value = argv.get(at + 1).map_or("-", String::as_str);
-                    assert!(
-                        !value.starts_with('-'),
-                        "{selection:?}: `{arg}` has no value in {argv:?}"
-                    );
-                }
-            }
-            assert_eq!(argv.last().map(String::as_str), Some("-"), "{argv:?}");
-        }
-    }
-
-    #[test]
-    fn a_runner_says_which_values_it_can_carry() {
-        assert!(copilot().takes_model());
-        assert!(copilot().takes_effort());
-        assert!(copilot().takes_context());
-
-        let fixed = runner(&["copilot", "--reasoning-effort", "high"]);
-        assert!(!fixed.takes_effort());
-        assert!(!fixed.takes_context());
-    }
-
-    #[test]
-    fn a_value_fixed_beside_its_placeholder_is_found_in_every_shape() {
-        let separated = runner(&[
-            "copilot",
-            "--reasoning-effort",
-            "high",
-            "--reasoning-effort",
-            "{effort}",
-        ]);
-        assert_eq!(
-            separated.fixes_beside(Runner::EFFORT).as_deref(),
-            Some("high")
-        );
-
-        let joined = runner(&["copilot", "--context=default", "--context={context}"]);
-        assert_eq!(
-            joined.fixes_beside(Runner::CONTEXT).as_deref(),
-            Some("default")
-        );
-
-        let mixed = runner(&["copilot", "--context", "default", "--context={context}"]);
-        assert_eq!(
-            mixed.fixes_beside(Runner::CONTEXT).as_deref(),
-            Some("default")
-        );
-
-        let codex = runner(&[
-            "codex",
-            "-c",
-            "model_reasoning_effort=low",
-            "-c",
-            "model_reasoning_effort={effort}",
-            "-c",
-            "sandbox=read-only",
-        ]);
-        assert_eq!(codex.fixes_beside(Runner::EFFORT).as_deref(), Some("low"));
-    }
-
-    #[test]
-    fn a_placeholder_alone_in_its_option_fixes_nothing() {
-        assert_eq!(copilot().fixes_beside(Runner::EFFORT), None);
-        assert_eq!(copilot().fixes_beside(Runner::CONTEXT), None);
-        assert_eq!(copilot().fixes_beside(Runner::MODEL), None);
-
-        // A different `-c` key is a different setting, not a second effort.
-        let codex = runner(&[
-            "codex",
-            "-c",
-            "sandbox=read-only",
-            "-c",
-            "model_reasoning_effort={effort}",
-        ]);
-        assert_eq!(codex.fixes_beside(Runner::EFFORT), None);
-    }
-
-    fn mcp_runner(args: &[&str], flag: &str) -> Runner {
-        toml::from_str(&format!(
-            "command = [{}]\nmcp = {{ flag = \"{flag}\", format = \"claude_json\" }}",
-            args.iter()
-                .map(|a| format!("\"{a}\""))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ))
-        .expect("parses")
-    }
-
-    #[test]
-    fn mcp_wiring_is_appended_when_the_command_does_not_place_it() {
-        // What `claude` and `copilot` want, and what every existing factory file relies on.
-        let r = mcp_runner(&["copilot", "--allow-all-tools"], "--mcp-config");
-        assert_eq!(
-            r.invocation_with_mcp(None, &none(), Some("/h/mcp.json")),
-            [
-                "copilot",
-                "--allow-all-tools",
-                "--mcp-config",
-                "/h/mcp.json"
-            ]
-        );
-    }
-
-    #[test]
-    fn a_prefix_is_prepended_to_the_path_rather_than_passed_separately() {
-        // Copilot CLI's `--additional-mcp-config` takes either a JSON string or a file path and
-        // tells them apart by a leading `@`. Passed as its own argument the `@` would be a second
-        // value the flag never sees; without it the path is parsed as JSON and the run dies
-        // complaining about the factory's own configuration.
-        let runner: Runner = toml::from_str(
-            r#"command = ["copilot", "--allow-all-tools"]
-mcp = { flag = "--additional-mcp-config", format = "claude_json", prefix = "@" }"#,
-        )
-        .expect("parses");
-
-        assert_eq!(
-            runner.invocation_with_mcp(None, &none(), Some("/h/mcp.json")),
-            [
-                "copilot",
-                "--allow-all-tools",
-                "--additional-mcp-config",
-                "@/h/mcp.json"
-            ]
-        );
-    }
-
-    #[test]
-    fn a_prefix_applies_where_the_command_places_the_wiring_too() {
-        // Both branches render the argument, and only one of them having the prefix would be a
-        // factory that works until somebody adds `{mcp}` to keep a positional argument last.
-        let runner: Runner = toml::from_str(
-            r#"command = ["agent", "{mcp}", "-"]
-mcp = { flag = "--cfg", format = "claude_json", prefix = "@" }"#,
-        )
-        .expect("parses");
-
-        assert_eq!(
-            runner.invocation_with_mcp(None, &none(), Some("/h/mcp.json")),
-            ["agent", "--cfg", "@/h/mcp.json", "-"]
-        );
-    }
-
-    #[test]
-    fn a_runner_without_a_prefix_still_gets_a_bare_path() {
-        let runner = mcp_runner(&["claude", "-p"], "--mcp-config");
-
-        assert_eq!(
-            runner.invocation_with_mcp(None, &none(), Some("/h/mcp.json")),
-            ["claude", "-p", "--mcp-config", "/h/mcp.json"]
-        );
-    }
-
-    #[test]
-    fn mcp_wiring_goes_where_the_command_puts_it_when_it_says() {
-        // `codex exec … -` reads the prompt from stdin and the `-` has to stay last, so appending
-        // would put the flag after the argument it must precede.
-        let r = mcp_runner(&["codex", "exec", "{mcp}", "-"], "-c");
-        assert_eq!(
-            r.invocation_with_mcp(None, &none(), Some("/h/mcp.toml")),
-            ["codex", "exec", "-c", "/h/mcp.toml", "-"]
-        );
-    }
-
-    #[test]
-    fn an_mcp_placeholder_disappears_when_there_is_nothing_to_wire() {
-        // An unresolved placeholder reaching a CLI becomes an argument it does not understand.
-        let r = mcp_runner(&["codex", "exec", "{mcp}", "-"], "-c");
-        assert_eq!(
-            r.invocation_with_mcp(None, &none(), None),
-            ["codex", "exec", "-"]
-        );
-    }
-
-    #[test]
-    fn a_runner_with_no_mcp_block_is_wired_to_nothing_even_if_a_path_exists() {
-        // The factory always has a config file to offer; only the runner knows whether its CLI
-        // can be told about one.
-        let r = runner(&["echo", "hello"]);
-        assert_eq!(
-            r.invocation_with_mcp(None, &none(), Some("/h/mcp.json")),
-            ["echo", "hello"]
-        );
-    }
-
-    #[test]
-    fn the_prompt_path_is_substituted_independently_of_the_model() {
-        let r = runner(&["agent", "--file", "{prompt}", "--model", "{model}"]);
-        assert_eq!(
-            r.invocation(Some("/run/prompt.md"), &Selection::model("m1")),
-            ["agent", "--file", "/run/prompt.md", "--model", "m1"]
-        );
-    }
-
-    #[test]
-    fn a_runner_without_placeholders_is_passed_through_untouched() {
-        let r = runner(&["copilot", "--allow-all-tools"]);
-        assert_eq!(
-            r.invocation(Some("/x"), &Selection::model("m")),
-            ["copilot", "--allow-all-tools"]
-        );
-        assert!(!r.takes_model());
-        assert!(!r.takes_prompt_path());
-    }
-
-    #[test]
-    fn declaring_a_model_a_runner_cannot_carry_is_a_warning() {
-        let config: crate::config::Config = toml::from_str(
-            r#"
-[layover]
-work_dir = "work"
-
-[defaults]
-runner = "claude"
-
-[runners.claude]
-command = ["claude", "-p"]
-
-[agents.analyst]
-prompt = "analyse"
-model = "claude-opus-5"
-entry = true
-"#,
-        )
-        .expect("parses");
-
-        let said: Vec<_> = crate::validate::validate(&config)
-            .iter()
-            .map(|d| d.message.clone())
-            .collect();
-
-        assert!(
-            said.iter().any(|m| m.contains("no `{model}` placeholder")),
-            "{said:?}"
-        );
-    }
-}
+mod tests;

@@ -93,7 +93,7 @@ fn why(config: &Config, runner: Option<&str>, group: &Silent<'_>) -> String {
         return format!("{who}: no longer in this factory, so what they ran on cannot be read.");
     };
 
-    match Reporting::of(&definition.command) {
+    match Reporting::of(&definition.template()) {
         Reporting::Nothing {
             cli: Cli::Codex,
             add,

@@ -154,7 +154,9 @@ pub(super) fn check_runners_do_not_fix_what_they_carry(
     config: &Config,
     found: &mut Vec<Diagnostic>,
 ) {
-    for (name, runner) in &config.runners {
+    // A preset fixes none of these itself; a runner on one that repeats an option is reported as
+    // repeating it, which says the same thing more usefully.
+    for (name, runner) in config.runners.iter().filter(|(_, r)| r.cli.is_none()) {
         for placeholder in [Runner::MODEL, Runner::EFFORT, Runner::CONTEXT] {
             if let Some(fixed) = runner.fixes_beside(placeholder) {
                 found.push(Diagnostic::warning(format!(

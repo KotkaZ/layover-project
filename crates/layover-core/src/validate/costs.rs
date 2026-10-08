@@ -33,7 +33,7 @@ pub(super) fn check_runners_report_cost(config: &Config, found: &mut Vec<Diagnos
             continue;
         };
 
-        match Reporting::of(&runner.command) {
+        match Reporting::of(&runner.template()) {
             Reporting::Nothing {
                 cli: Cli::Codex,
                 add,

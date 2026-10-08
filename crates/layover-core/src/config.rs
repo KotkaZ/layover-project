@@ -18,7 +18,7 @@ mod copilot;
 mod runner;
 
 pub use copilot::CopilotConfig;
-pub use runner::{McpWiring, Runner, Selection};
+pub use runner::{Cli, McpWiring, Runner, Selection, fixes_beside};
 
 /// Filesystem and network locations used by the Tower.
 #[derive(Debug, Clone, Deserialize)]
@@ -249,7 +249,7 @@ impl Config {
     }
 
     /// What `agent` asks its runner for: its own `model`, `effort` and `context`, with
-    /// `[defaults]` filling in an effort or context it does not set.
+    /// `[defaults]` filling in an effort or context it does not set, and its own `args`.
     ///
     /// An empty value counts as unset, here and when the runner's command is built, so an agent
     /// cannot hand its CLI an empty argument by writing `effort = ""`.
@@ -263,6 +263,8 @@ impl Config {
             model: set(agent.model.as_ref()),
             effort: set(agent.effort.as_ref()).or_else(|| set(self.defaults.effort.as_ref())),
             context: set(agent.context.as_ref()).or_else(|| set(self.defaults.context.as_ref())),
+            name: None,
+            args: agent.args.clone(),
         }
     }
 

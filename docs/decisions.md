@@ -879,6 +879,24 @@ leaves an agent's effort or context unset is warned about, and a missing model i
 factories have long relied on a joined `--model={model}` dropping out and a new warning would fail
 their `validate --strict`.
 
+**Why Layover supplies a known CLI's invocation, and only the half that grants.** With effort and
+context on the agent, a real factory's five Copilot runners were still eleven identical arguments
+and a list of denials each — `--no-ask-user`, `--output-format json`, the three placeholders, the
+three `--allow-all-*` — and the identical half was where copy-and-edit had already dropped rules.
+Those eleven are not choices: an unattended run cannot answer a question or a permission prompt, a
+cost is read from one output only, and the MCP flag is Layover's own wiring. So `cli = "copilot"`
+supplies them and `args` carry what is a choice, which for that factory is everything it *denies*.
+Granting the `--allow-all-*` by default was decided deliberately (Karl, 2026-10-08): an unattended
+Copilot run without them stops at the first tool it needs, Copilot's deny rules take precedence
+over them, and a runner that wants a narrow allow-list instead writes its `command` out. Nothing a
+preset supplies ever takes something away, because restrictions are what has to be written where it
+can be reviewed. Claude Code's preset supplies the plumbing and no permission mode: what
+`bypassPermissions` grants alongside `--disallowedTools` has not been confirmed against a real
+Claude Code, and a preset that guessed wrong would grant more than anybody wrote. Codex has no
+preset, because a preset has to wire MCP and how Codex is handed MCP servers is still open (below).
+Agents differ from their runner by `args` that are only ever *added*, so a runner stays the
+permission floor for every agent on it.
+
 **Why a route each way is drawn as one line.** Most routes in a real factory come in reciprocal
 pairs, and the layered layout drew every reverse direction as a return path: a loop under the
 whole diagram in a lane of its own. A twenty-route workflow became eleven loops stacked four

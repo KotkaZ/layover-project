@@ -8,6 +8,22 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+### Added
+
+- **Runner presets.** `cli = "copilot"` or `cli = "claude"` has Layover supply everything an
+  unattended run of that CLI needs — the program, the agent's model, effort and context, Copilot's
+  `--no-ask-user` and `--name`, the JSON output a cost is read from, and the MCP wiring — and, for
+  Copilot, `--allow-all-tools --allow-all-paths --allow-all-urls`, since nobody is there to answer a
+  permission prompt. A runner's `args` then say only what it takes away. `command` still works, for
+  Codex, a script, or a runner that wants none of a preset's defaults.
+- **An agent's own `args`**, added to its runner's command for that agent alone, so an agent that
+  is denied one more thing than the rest needs no runner of its own. They go where a command has
+  `{args}`, or at the end.
+- **`layover validate`** refuses a runner with neither `cli` nor `command`, both, or `args` beside a
+  `command`; and warns when a runner or agent repeats an option its preset already supplies, when
+  an agent's `args` fix a value its runner carries a placeholder for, and when `args` would follow a
+  command's final `-`.
+
 ## [1.9.0] — 2026-10-07
 
 An agent declares its own reasoning effort and context tier beside its model, so one runner serves

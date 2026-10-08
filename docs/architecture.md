@@ -147,21 +147,19 @@ timeout_sec = 900
 max_concurrent_runs = 4   # runs alive at once, factory-wide; the rest wait in the queue
 
 # ── How to invoke each supported CLI ───────────────────────────────
-# The prompt goes to stdin, so none of these name it: `-p` and its kin take the prompt *text*,
-# and `{prompt}` is a path. A CLI handed the path would be told to do whatever that string says.
-# `{model}`, `{effort}` and `{context}` carry each agent's own values; one left unset is left out,
-# with the flag it is the value of.
+# A runner is a CLI and a permission set. `cli` has Layover supply what an unattended run of a CLI
+# it knows needs — model, effort and context, no questions, the JSON a cost is read from, MCP — so
+# `args` say only what this runner takes away. A CLI with no preset is written out in `command`.
+# The prompt goes to stdin, never onto the command line, so none of these name it.
 [runners.claude]
-command = ["claude", "-p", "--model", "{model}", "--output-format", "stream-json"]
-mcp     = { flag = "--mcp-config", format = "claude_json" }
+cli = "claude"
 
 [runners.copilot]
-command = ["copilot", "--model", "{model}", "--reasoning-effort={effort}", "--context={context}",
-           "--allow-all-tools", "--output-format", "json"]
-mcp     = { flag = "--additional-mcp-config", format = "claude_json", prefix = "@" }
+cli  = "copilot"
+args = ["--deny-tool=shell(git push)"]
 
 [runners.codex]
-command = ["codex", "exec", "-c", "model_reasoning_effort={effort}", "{mcp}", "-"]
+command = ["codex", "exec", "--json", "-c", "model_reasoning_effort={effort}", "{args}", "{mcp}", "-"]
 mcp     = { flag = "-c", format = "codex_toml" }
 
 # ── What the whole factory may spend, and how Copilot is priced ────
@@ -188,6 +186,7 @@ runner  = "copilot"
 model   = "claude-opus-5.5"
 effort  = "xhigh"        # the agent's own: another agent on this runner can run at another
 context = "long_context"
+args    = ["--deny-url=api.github.com"]   # added to its runner's, for this agent alone
 prompt  = "You implement the task described in the incoming flight."
 max_concurrent = 1       # two coders in one working tree would overwrite each other
 

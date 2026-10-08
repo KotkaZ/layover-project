@@ -125,21 +125,81 @@ The whole table is optional. See [Cost](./cost.md#copilot-cli-is-priced-from-its
 
 ## `[runners.*]` — how to invoke a CLI
 
-```toml
-[runners.claude]
-command = ["claude", "-p", "--output-format", "stream-json"]
-mcp     = { flag = "--mcp-config", format = "claude_json" }
+A runner is **a CLI and a permission set**, shared by every agent with those permissions. For a CLI
+Layover knows, name it with `cli`, and say only what this runner takes away:
 
-[runners.copilot]
-command = ["copilot", "--allow-all-tools", "--output-format", "json"]
-mcp     = { flag = "--additional-mcp-config", format = "claude_json", prefix = "@" }
+```toml
+[runners.analysis]
+cli  = "copilot"
+args = ["--disable-builtin-mcps", "--deny-tool=shell(git push)", "--deny-tool=shell(gh:*)",
+        "--deny-url=api.github.com"]
+
+[runners.claude]
+cli = "claude"
+```
+
+| Key | Meaning |
+|---|---|
+| `cli` | `copilot` or `claude`. Layover supplies the program and everything an unattended run of it needs; see below. |
+| `args` | Arguments after what the preset supplies: the runner's own permission set. Only with `cli`. |
+| `command` | The whole command, written out, instead of `cli`. For a CLI with no preset (Codex, a script), or a runner that wants none of a preset's defaults. |
+| `mcp` | How the CLI is told where Layover's MCP server is. A preset supplies it; given here, it replaces the preset's. |
+
+Exactly one of `cli` and `command` is given; `validate` refuses neither and both.
+
+### What a preset supplies
+
+| `cli` | Layover runs |
+|---|---|
+| `copilot` | `copilot --model={model} --reasoning-effort={effort} --context={context} --name={name} --allow-all-tools --allow-all-paths --allow-all-urls --no-ask-user --output-format json` then the runner's `args`, the agent's `args`, and `--additional-mcp-config @<hangar>/mcp.json` |
+| `claude` | `claude -p --model={model} --output-format stream-json --verbose` then the runner's `args`, the agent's `args`, and `--mcp-config <hangar>/mcp.json` |
+
+That is what an unattended run *requires*: the agent's model, effort and context; nobody to answer
+a question (`--no-ask-user`); the one output a cost is read from (`json`, `stream-json` — Claude Code
+refuses `stream-json` in print mode without `--verbose`); and Layover's MCP wiring. For Copilot it
+also grants what an unattended run could never be asked for — its tools, paths and URLs — so a
+runner lists only what it **denies**. Copilot CLI's `--deny-tool` and `--deny-url` rules take
+precedence over the `--allow-all-*` flags. A runner that wants a narrower allow-list instead writes
+its `command` out.
+
+Nothing a preset supplies takes anything away: every restriction an agent runs under is written in
+`layover.toml`, where it can be reviewed. Claude Code's permission mode is left to the runner's
+`args` — `--permission-mode`, `--allowedTools`, `--disallowedTools` — because what a bypass grants
+has not been confirmed against a real Claude Code here.
+
+Repeating something the preset already supplies — a runner migrated from a `command` that kept its
+`--no-ask-user` — is warned about, because the CLI would receive it twice; `--model` and its kin in
+an agent's `args` are warned about with the key to set instead.
+
+### `command`, written out
+
+```toml
+[runners.codex]
+command = ["codex", "exec", "--json", "--model", "{model}", "-c", "model_reasoning_effort={effort}",
+           "{args}", "{mcp}", "-"]
+mcp     = { flag = "-c", format = "codex_toml" }
 ```
 
 `mcp` says how this CLI is told where Layover's endpoint is: `flag` is the option, `format` the
 dialect of the file written into the run's Hangar, and `prefix` anything that must precede the
 path. Copilot CLI needs `prefix = "@"` because `--additional-mcp-config` accepts a JSON string
 *or* a path and distinguishes them by that character; most CLIs take a plain path and want no
-prefix. See [Agent tools](./tools.md).
+prefix. See [Agent tools](./tools.md). Codex is not given MCP servers yet; see
+[decisions](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md#still-open).
+
+### An agent's own arguments
+
+An agent that differs from the rest of its runner by a rule or two says so itself, rather than
+needing a runner of its own:
+
+```toml
+[agents.builder]
+runner = "analysis"
+args   = ["--deny-tool=shell(orient reviews:*)"]   # everything `analysis` denies, and this
+```
+
+An agent's `args` go where the runner's command has `{args}` — a preset puts it last — or at the
+end. They only ever *add*: nothing an agent writes removes what its runner says.
 
 ### The output that says what a run cost
 
@@ -155,8 +215,9 @@ its spend reads **not reported**, and Fuel and the Reserve never bind it.
 
 `layover validate` warns about a runner an agent uses that runs Copilot CLI or Claude Code without
 it, and about a Codex runner without `--json` when a rate card has a row for one of its agents'
-models — the cases a change to the command would fix. The CLI is recognised by name anywhere in
-the command, so `cmd /c copilot` counts; a command that names none of them is not judged.
+models — the cases a change to the command would fix. A `cli` preset supplies it. The CLI is
+recognised by name anywhere in a written-out command, so `cmd /c copilot` counts; a command that
+names none of them is not judged.
 
 ### Credentials for the CLI itself
 
@@ -203,17 +264,20 @@ A runner's command may name these, and each is filled in per run:
 | `{model}` | The agent's `model`. |
 | `{effort}` | The agent's `effort`, or `[defaults] effort`. |
 | `{context}` | The agent's `context`, or `[defaults] context`. |
+| `{name}` | What the run's session is called: the name its chain was given when it was triggered, and the agent. A preset passes it as Copilot CLI's `--name`; left out for a chain nobody named. |
+| `{args}` | The agent's own `args`, and any its workflow adds — none, one or several arguments. Optional: without it they are appended at the end. |
 | `{prompt}` | The **path** to the composed instructions, for a CLI that takes a file. |
 | `{mcp}` | The `mcp` flag and the path to the run's MCP configuration — two arguments. Optional: without it they are appended at the end, which is what `claude` and `copilot` want; `codex exec … -` needs them before its final `-`. |
 
 `{model}`, `{effort}` and `{context}` exist so that **a runner describes a CLI and a permission
-set, and nothing about how hard an agent thinks or how much it can read**. Every CLI spells these
-flags differently, so the spelling stays in the command and the value comes from the agent:
+set, and nothing about how hard an agent thinks or how much it can read**. A preset carries all
+three; a written-out `command` places them where its CLI wants them, since every CLI spells these
+flags differently. Either way the value comes from the agent:
 
 ```toml
 [runners.copilot-analysis]
-command = ["copilot", "--model", "{model}", "--reasoning-effort={effort}", "--context={context}",
-           "--allow-all-tools", "--deny-tool=shell(git push)", "--output-format", "json"]
+cli  = "copilot"
+args = ["--deny-tool=shell(git push)"]
 
 [agents.eagle]
 runner  = "copilot-analysis"
@@ -308,6 +372,7 @@ prompt_file = "tester.md"
 | `model` | optional | Model identifier, passed to the runner's `{model}`. |
 | `effort` | optional | Reasoning effort, passed to the runner's `{effort}`: `high`, `xhigh`, whatever the CLI accepts for the model. Falls back to `[defaults] effort`. |
 | `context` | optional | Context-window tier, passed to the runner's `{context}`: Copilot CLI's `default` or `long_context`. Falls back to `[defaults] context`. |
+| `args` | — | Arguments added to its runner's command for this agent alone. See [an agent's own arguments](#an-agents-own-arguments). |
 | `prompt` | one of | Instructions, written inline. |
 | `prompt_file` | one of | Instructions from a file, which may [compose others](./prompts.md). |
 | `access` | `read-write` | `read-only` is meant to give the agent a git worktree snapshot. **Declared, not yet enforced** — see below. |

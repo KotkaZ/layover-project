@@ -14,6 +14,7 @@ mod pipelines;
 mod prompts;
 mod reach;
 mod routes;
+mod runners;
 mod scopes;
 mod selection;
 mod wiring;
@@ -80,6 +81,8 @@ pub fn validate(config: &Config) -> Vec<Diagnostic> {
 
     routes::check_routes_name_known_agents(config, &mut found);
     agents::check_runners_exist(config, &mut found);
+    runners::check_runner_shapes(config, &mut found);
+    runners::check_agent_args(config, &mut found);
     agents::check_prompts_are_unambiguous(config, &mut found);
     agents::check_agents_are_described(config, &mut found);
     agents::check_fuel_is_usable(config, &mut found);

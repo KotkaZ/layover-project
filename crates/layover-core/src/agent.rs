@@ -110,6 +110,14 @@ pub struct Agent {
     /// [`crate::config::Defaults::context`].
     #[serde(default)]
     pub context: Option<String>,
+    /// Arguments added to its runner's command for this agent alone: what it is denied beyond what
+    /// every agent on that runner is, say.
+    ///
+    /// A runner is a permission set shared by every agent with those permissions; this is how one
+    /// agent differs from the rest without a runner of its own. Placed where the runner's command
+    /// has `{args}` — a preset puts it last — or appended at the end.
+    #[serde(default)]
+    pub args: Vec<String>,
     /// The agent's standing instructions, written inline.
     ///
     /// Mutually exclusive with [`Agent::prompt_file`]; use [`Agent::prompt_spec`] rather than
