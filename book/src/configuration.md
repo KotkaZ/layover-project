@@ -162,6 +162,10 @@ runner lists only what it **denies**. Copilot CLI's `--deny-tool` and `--deny-ur
 precedence over the `--allow-all-*` flags. A runner that wants a narrower allow-list instead writes
 its `command` out.
 
+A model, effort, context or name that is not set is left out whole, so the CLI uses its own
+default; on a preset that is not warned about, because nobody wrote those placeholders to be
+filled. A run triggered without a name has no `--name`.
+
 Nothing a preset supplies takes anything away: every restriction an agent runs under is written in
 `layover.toml`, where it can be reviewed. Claude Code's permission mode is left to the runner's
 `args` — `--permission-mode`, `--allowedTools`, `--disallowedTools` — because what a bypass grants
@@ -326,7 +330,7 @@ that literal text; both now disappear. A factory where every agent sets a model 
 | Warning | Because |
 |---|---|
 | An agent sets `effort` or `context` and its runner has no placeholder for it | The value never reaches the CLI. Also said for `model`. |
-| A runner has `{effort}` or `{context}` and an agent on it sets none, with no default | The flag is left out, and the CLI's default applies — say so if you mean it. |
+| A runner whose `command` you wrote has `{effort}` or `{context}` and an agent on it sets none, with no default | The flag is left out, and the CLI's default applies — say so if you mean it. A [preset](#what-a-preset-supplies)'s placeholders are Layover's, there so an agent *may* set a value, so leaving one unset is not warned about. |
 | A runner fixes a value beside its placeholder (`--reasoning-effort high` and `{effort}`) | The CLI gets two, and keeps whichever comes last. |
 | A `[defaults]` effort or context reaches no runner | Every agent relying on it runs on a runner without the placeholder. |
 | An `effort` or `context` is empty | It counts as unset. |

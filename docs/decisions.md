@@ -874,8 +874,8 @@ rejected: it would force every agent on a shared runner to set every value, and 
 Codex's `-c model_reasoning_effort={effort}`, where the joined form does not exist. The one shape
 the pairing can misread — a positional placeholder right after a boolean flag — is not one any
 supported CLI uses, and the documentation says to put such a placeholder first. Every factory this
-changes was handing its CLI a flag without a value; none of them worked before. A runner that
-leaves an agent's effort or context unset is warned about, and a missing model is not, because
+changes was handing its CLI a flag without a value; none of them worked before. A written-out
+runner that leaves an agent's effort or context unset is warned about, and a missing model is not, because
 factories have long relied on a joined `--model={model}` dropping out and a new warning would fail
 their `validate --strict`.
 
@@ -895,7 +895,10 @@ can be reviewed. Claude Code's preset supplies the plumbing and no permission mo
 Claude Code, and a preset that guessed wrong would grant more than anybody wrote. Codex has no
 preset, because a preset has to wire MCP and how Codex is handed MCP servers is still open (below).
 Agents differ from their runner by `args` that are only ever *added*, so a runner stays the
-permission floor for every agent on it.
+permission floor for every agent on it. An agent that leaves a preset's effort or context unset is
+not warned about, as it would be on a written-out `command`: the warning exists for a placeholder
+somebody placed meaning it to be filled, and nobody placed a preset's — unset there asks for the
+CLI's own default, which is exactly what an agent that says nothing wants.
 
 **Why a chain's name and per-agent choices travel exactly as its flags do.** A name is how a person
 finds *their* run of a workflow among three going at once, so it has to stay with everything that

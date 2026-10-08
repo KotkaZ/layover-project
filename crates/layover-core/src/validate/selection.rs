@@ -1,10 +1,10 @@
 //! Checks that what an agent asks its CLI for — model, effort, context — actually reaches it.
 //!
 //! Each is carried by a placeholder in the runner's command. A value with no placeholder to carry
-//! it is silently ignored, a placeholder with no value is silently left out, and a runner that
-//! fixes a value beside its placeholder hands the CLI two. None of the three stops a run, and all
-//! of them mean an agent runs on something other than what `layover.toml` appears to say — the
-//! shape of mistake that costs money quietly and is found by accident.
+//! it is silently ignored, a placeholder somebody wrote with no value is silently left out, and a
+//! runner that fixes a value beside its placeholder hands the CLI two. None of the three stops a
+//! run, and all of them mean an agent runs on something other than what `layover.toml` appears to
+//! say — the shape of mistake that costs money quietly and is found by accident.
 
 use crate::agent::Agent;
 use crate::config::{Config, Defaults, Runner};
@@ -99,7 +99,13 @@ pub(super) fn check_effort_and_context_reach_their_runner(
                     key = setting.key,
                     placeholder = setting.placeholder,
                 ))),
-                None if carried && default.is_none_or(|value| value.trim().is_empty()) => {
+                // Only a placeholder somebody wrote says they meant it to be filled. A preset's are
+                // Layover's, there so an agent *may* set a value, and leaving one unset asks for
+                // the CLI's own default.
+                None if carried
+                    && runner.cli.is_none()
+                    && default.is_none_or(|value| value.trim().is_empty()) =>
+                {
                     found.push(Diagnostic::warning(format!(
                         "agent `{name}` sets no `{key}`, and `[defaults]` has none, so runner \
                          `{runner_name}` leaves out its `{placeholder}` argument and the option \

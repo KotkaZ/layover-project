@@ -37,7 +37,8 @@ status](README.md#project-status).
   `command`; and warns when a runner or agent repeats an option its preset already supplies, when
   an agent's `args` fix a value its runner carries a placeholder for, and when `args` would follow a
   command's final `-`; refuses a workflow override for an undeclared agent and warns about one no
-  chain of the workflow can reach or whose value the runner cannot carry.
+  chain of the workflow can reach or whose value the runner cannot carry. An agent that leaves a
+  preset's effort or context unset is not warned about: the CLI's own default is what it asked for.
 
 ## [1.9.0] — 2026-10-07
 

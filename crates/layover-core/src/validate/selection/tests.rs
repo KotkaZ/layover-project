@@ -149,6 +149,19 @@ fn a_placeholder_an_agent_leaves_unset_is_a_warning() {
 }
 
 #[test]
+fn a_preset_runner_leaves_effort_and_context_to_the_cli_without_a_warning() {
+    // Nobody wrote a preset's `{effort}` or `{context}`: Layover supplies them so an agent *may*
+    // set one, and an agent that does not gets the CLI's own default — which is what it asked for.
+    let config = factory(
+        "[runners.shared]\ncli = \"copilot\"\n",
+        &agents("effort = \"xhigh\"", ""),
+        "",
+    );
+
+    assert_eq!(warnings(&config), Vec::<String>::new());
+}
+
+#[test]
 fn an_empty_value_is_a_warning_rather_than_an_empty_argument() {
     let config = factory(SHARED, &agents("effort = \"\"", ""), "context = \" \"");
 
