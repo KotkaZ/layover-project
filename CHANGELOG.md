@@ -8,6 +8,15 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+## [1.11.0] — 2026-10-12
+
+Any workflow can be switched off — its schedule included — while the rest of the factory runs.
+
+**Compatibility.** Additive. Factories load, validate and run unchanged, and nothing is switched off
+until somebody switches it off. `GET /pipelines` gains `switched_off` and `switched_off_since`,
+`GET /flights` gains `held`, and `GET /upcoming` gains `switched_off`. An older release ignores
+`.layover/journal/switched-off.jsonl`, so under it every workflow runs as though switched on.
+
 ### Added
 
 - **Every workflow can be switched off**, scheduled or manual, from a switch beside its name on the
@@ -1483,7 +1492,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.10.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.11.0...HEAD
+[1.11.0]: https://github.com/KotkaZ/layover-project/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/KotkaZ/layover-project/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/KotkaZ/layover-project/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/KotkaZ/layover-project/compare/v1.7.1...v1.8.0
