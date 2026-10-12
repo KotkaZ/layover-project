@@ -8,6 +8,25 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+## [1.12.0] — 2026-10-12
+
+`layover.toml` says more with less: flags and a follow-up's routes are declared once, lengths of
+time read as durations, a workflow sizes its own chains, and the numbers learnings live by are the
+factory's — with lapsed learnings deleted rather than kept for ever.
+
+**Compatibility.** Additive for the file format: every factory that loaded under 1.11 loads and
+runs, and new keys are optional. What an existing factory will notice:
+- **Lapsed learnings are deleted** after `keep_lapsed_days`, fourteen by default, counted from when
+  each lapsed — or, for one that lapsed before this release, from when it was last proposed. The
+  first `layover serve` deletes any already past that. Set `[learnings] keep_lapsed_days` higher
+  first to keep more.
+- **An agent's `fuel_usd` is applied** to chains starting at it, as documented; see Fixed.
+- **`layover serve` binds `[layover] http_addr`** when `--addr` is not given. A factory that set it
+  to something other than the default, believing it ignored, now listens there.
+- **`validate --strict` fails on `[layover] state_dir`**, which is warned about now.
+- **The HTTP API**: `Pipeline.entry` may be `null`, for a resuming pipeline that names none — only
+  for factories that use that; `Learning` gains `lapsed_at` and `deleted_after`.
+
 ### Added
 
 - **`layover serve` binds `[layover] http_addr`**, which was accepted and ignored. `--addr` still
@@ -29,7 +48,6 @@ status](README.md#project-status).
   after it starts a new learning. Deletion happens after every run and when `layover serve` starts.
   Each learning now records when it lapsed, and `GET /learnings` gives a lapsed one's `lapsed_at` and
   `deleted_after`, which the dashboard shows beside it. Rejected learnings are kept, as before.
-
 - **Flags can be declared once, for every workflow**, in a top-level `[flags]` table. Every
   workflow accepts them as though it had declared them, and a workflow may still declare its own.
   The trigger window and `layover explain` offer each workflow only its own flags and the shared ones
@@ -1544,7 +1562,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.11.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.12.0...HEAD
+[1.12.0]: https://github.com/KotkaZ/layover-project/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/KotkaZ/layover-project/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/KotkaZ/layover-project/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/KotkaZ/layover-project/compare/v1.8.0...v1.9.0
