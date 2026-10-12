@@ -459,7 +459,7 @@ impl Api for Dashboard {
             Origin::Human,
             to.clone(),
             body.body.clone(),
-            config.defaults.max_hops,
+            config.rails_for(pipeline.as_ref(), Some(&to)).max_hops,
         );
         let flight_id = flight.id.as_str().to_owned();
 

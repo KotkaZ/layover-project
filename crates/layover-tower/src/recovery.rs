@@ -167,12 +167,13 @@ impl Factory {
 
         // Charged to the chain as any run is, so a restart is admitted against what the run it
         // replaces spent and counts as one more run of the chain, not as its first.
-        let _ = self
-            .chains
-            .with(&live.itinerary, &self.config.defaults, |chain| {
-                let _ = chain.record_run_started();
-                crate::dispatcher::charge(chain, &reported);
-            });
+        // On its workflow's rails, as the chain would have been had this Tower started it. Which
+        // agent the chain began at is not on record here, so an agent's own Fuel does not apply.
+        let rails = self.config.rails_for(pipeline.as_ref(), None);
+        let _ = self.chains.with(&live.itinerary, &rails, |chain| {
+            let _ = chain.record_run_started();
+            crate::dispatcher::charge(chain, &reported);
+        });
 
         let detail = match (&live.queued, &restart) {
             // Said plainly: a person reading the Runs list should know this is not a run of the

@@ -392,3 +392,34 @@ static check can know how many times a loop will turn.
 
 Getting it wrong is not a clean failure. Hops running out mid-repair leaves half-finished work in
 the shared workspace and no run alive to clean it up.
+
+### A workflow's own rails
+
+`[defaults]` sizes every chain alike, and one size rarely fits a factory of several workflows: a
+development chain that loops through review for an afternoon needs room a review spawned per pull
+request does not, and sizing the factory for the first leaves the second nearly unbounded. A
+workflow may set its own:
+
+```toml
+[pipelines.review-sweep]
+entry     = "publisher"
+trigger   = { cron = "0 */2 * * *" }
+max_hops  = 12        # each spawned review, and the sweep that spawned it
+fuel_usd  = 8.00
+max_runs  = 16
+timeout   = "30m"
+```
+
+| Key | Instead of |
+|---|---|
+| `max_hops` | `[defaults] max_hops` |
+| `fuel_usd` | the Fuel of the agent the chain starts at, or `[defaults] fuel_usd` |
+| `max_runs` | `[defaults] max_runs` |
+| `timeout` (`timeout_sec`) | `[defaults] timeout`, for each run of the workflow's chains |
+
+They apply to every chain of the workflow — the one a trigger or a tick opens, each one it spawns,
+and each follow-up a resuming workflow opens, which runs on the *resuming* workflow's rails. A
+chain keeps the rails it started with. `validate` measures each workflow's reach against its own
+`max_hops`, its schedule against its own `timeout` and its Fuel against the Reserve, and refuses a
+rail of zero. The Reserve is not a workflow's to set: it bounds the whole factory, whatever its
+workflows say.

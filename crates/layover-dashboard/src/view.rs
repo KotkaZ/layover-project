@@ -83,15 +83,11 @@ pub fn pipelines(
                 description: pipeline.description.clone(),
                 entry: pipeline.entry.as_ref().map(ToString::to_string),
                 trigger: trigger(&pipeline.trigger),
-                max_hops: i32::try_from(config.defaults.max_hops).unwrap_or(i32::MAX),
-                // The entry agent's own budget wins where it sets one, because Fuel belongs to
-                // the itinerary and an itinerary starting here starts at that agent.
-                fuel_usd: pipeline
-                    .entry
-                    .as_ref()
-                    .and_then(|entry| config.agents.get(entry))
-                    .and_then(|agent| agent.fuel_usd)
-                    .unwrap_or(config.defaults.fuel_usd),
+                // What a chain of it starts with: the workflow's own rails, then — for Fuel — the
+                // entry agent's, then the factory's.
+                max_hops: i32::try_from(config.rails_of_pipeline(name).max_hops)
+                    .unwrap_or(i32::MAX),
+                fuel_usd: config.rails_of_pipeline(name).fuel_usd,
                 workspace: match pipeline.workspace {
                     layover_core::pipeline::Workspace::Shared => Workspace::Shared,
                     layover_core::pipeline::Workspace::PerItinerary => Workspace::PerItinerary,

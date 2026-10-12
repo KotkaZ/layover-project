@@ -66,25 +66,21 @@ impl Chains {
         Self::default()
     }
 
-    /// Runs `act` against the itinerary for `id`, creating it on first sight.
+    /// Runs `act` against the itinerary for `id`, creating it on first sight with `rails`.
     ///
     /// Creating on first sight rather than requiring registration means a queued flight from a
     /// previous process still lands in a chain with the configured rails, instead of being
-    /// refused for belonging to an itinerary this process has never heard of.
+    /// refused for belonging to an itinerary this process has never heard of. `rails` are only
+    /// read then: a chain keeps the budget it started with.
     pub fn with<T>(
         &self,
         id: &ItineraryId,
-        defaults: &layover_core::config::Defaults,
+        rails: &layover_core::config::Rails,
         act: impl FnOnce(&mut Itinerary) -> T,
     ) -> Option<T> {
         let mut live = self.live.lock().ok()?;
         let chain = live.entry(id.as_str().to_owned()).or_insert_with(|| {
-            Itinerary::new(
-                id.clone(),
-                defaults.max_hops,
-                defaults.fuel_usd,
-                defaults.max_runs,
-            )
+            Itinerary::new(id.clone(), rails.max_hops, rails.fuel_usd, rails.max_runs)
         });
 
         Some(act(chain))
@@ -340,8 +336,15 @@ impl Runtime for FactoryRuntime {
         // The reverse mistake is subtler and is why `mode` is declared rather than inferred: a
         // fan-out of twenty pull-request reviews sharing one chain would have the twenty-first
         // review refused for a budget the first twenty spent.
+        // A spawned chain belongs to the spawning chain's workflow, so it starts on that
+        // workflow's rails — and on the Fuel of the agent it starts at, where that agent sets one.
         let (itinerary, hops) = if spawns {
-            (ItineraryId::generate(), self.config.defaults.max_hops)
+            (
+                ItineraryId::generate(),
+                self.config
+                    .rails_for(session.pipeline.as_ref(), Some(to))
+                    .max_hops,
+            )
         } else {
             (session.itinerary.clone(), session.hops_remaining)
         };
@@ -1478,10 +1481,14 @@ mode = "spawn"
         let id = ItineraryId::generate();
 
         chains
-            .with(&id, &fixture.defaults, |chain| chain.debit_fuel(1.0))
+            .with(&id, &(&fixture.defaults).into(), |chain| {
+                chain.debit_fuel(1.0);
+            })
             .expect("locks");
         let remaining = chains
-            .with(&id, &fixture.defaults, |chain| chain.fuel_remaining_usd())
+            .with(&id, &(&fixture.defaults).into(), |chain| {
+                chain.fuel_remaining_usd()
+            })
             .expect("locks");
 
         assert!(

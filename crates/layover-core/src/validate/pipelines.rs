@@ -8,6 +8,7 @@ use super::Diagnostic;
 
 pub(super) fn check_pipelines(config: &Config, found: &mut Vec<Diagnostic>) {
     check_entries_exist(config, found);
+    check_rails_are_usable(config, found);
     check_flag_names_are_usable(config, found);
     check_flag_declarations_agree(config, found);
     check_flags_are_not_repeated(config, found);
@@ -40,17 +41,40 @@ fn check_schedules_fit_the_reserve(config: &Config, found: &mut Vec<Diagnostic>)
         return;
     }
 
-    for (name, pipeline) in scheduled {
-        let per_itinerary = pipeline
-            .entry
-            .as_ref()
-            .map_or(config.defaults.fuel_usd, |entry| config.fuel_for(entry));
+    for (name, _) in scheduled {
+        let per_itinerary = config.rails_of_pipeline(name).fuel_usd;
         if per_itinerary > config.reserve.fuel_usd {
             found.push(Diagnostic::warning(format!(
                 "pipeline `{name}` may spend ${per_itinerary:.2} on one itinerary but `[reserve] \
                  fuel_usd` is ${:.2}; it could never run to completion",
                 config.reserve.fuel_usd
             )));
+        }
+    }
+}
+
+/// A workflow's own rails must be usable, for the reasons `[defaults]`' must be: a Fuel of zero
+/// is spent before the first run and a run cap of zero starts nothing, and neither says why.
+fn check_rails_are_usable(config: &Config, found: &mut Vec<Diagnostic>) {
+    for (name, pipeline) in &config.pipelines {
+        if let Some(fuel) = pipeline.fuel_usd
+            && (fuel <= 0.0 || fuel.is_nan())
+        {
+            found.push(Diagnostic::error(format!(
+                "pipeline `{name}` sets `fuel_usd = {fuel}`, so every chain of it is out of Fuel \
+                 before its first run"
+            )));
+        }
+        for (key, value) in [
+            ("max_hops", pipeline.max_hops.map(u64::from)),
+            ("max_runs", pipeline.max_runs.map(u64::from)),
+            ("timeout", pipeline.timeout_sec),
+        ] {
+            if value == Some(0) {
+                found.push(Diagnostic::error(format!(
+                    "pipeline `{name}` sets `{key}` to 0, so no chain of it can do anything"
+                )));
+            }
         }
     }
 }
@@ -134,9 +158,8 @@ fn check_flag_declarations_agree(config: &Config, found: &mut Vec<Diagnostic>) {
 /// schedule that will mostly not run, which looks from the outside exactly like one that is
 /// working. Under `overlap = "allow"` it *is* a runaway, and the wording says which.
 fn check_schedules_are_survivable(config: &Config, found: &mut Vec<Diagnostic>) {
-    let timeout = config.defaults.timeout_sec;
-
     for (name, pipeline) in config.scheduled_pipelines() {
+        let timeout = config.rails_of_pipeline(name).timeout_sec;
         let Some(schedule) = pipeline.trigger.schedule() else {
             continue;
         };

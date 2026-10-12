@@ -39,6 +39,10 @@ status](README.md#project-status).
   routes_from = "development"` scopes every route scoped to `development` to the follow-up too, so
   those routes no longer each name both. It carries through chains of them; naming itself or an
   unknown pipeline is an error. The multi-workflow example's follow-up uses it.
+- **A workflow can set its own rails**: `max_hops`, `fuel_usd`, `max_runs` and `timeout` on
+  `[pipelines.<name>]`, for every chain it opens, spawns or resumes, instead of `[defaults]`. A chain
+  keeps the rails it started with. `validate` measures each workflow's reach, schedule and Reserve
+  fit against its own rails, and refuses one of zero. The Reserve stays factory-wide.
 - **A pipeline that `resumes` may leave out `entry`.** Its work goes back to whoever set it down,
   so the entry was required and unused. Without one it cannot be triggered by hand, and its map
   draws no arrow from it. `GET /pipelines` gives such a pipeline `entry: null`.
@@ -48,6 +52,13 @@ status](README.md#project-status).
 - **`[layover] state_dir` is warned about** by `validate`. It has never been honoured — everything
   Layover keeps is in `.layover/` beside the factory definition — and a key that is silently ignored
   reads as though it works. A factory that sets it still loads; `validate --strict` now fails on it.
+
+### Fixed
+
+- **An agent's `fuel_usd` now applies** to a chain that starts at it, as it was documented to. It
+  was validated and shown as a workflow's Fuel on the dashboard, and every chain ran on
+  `[defaults] fuel_usd` regardless. A factory that sets one now runs those chains on it — a tighter
+  or looser budget than before, as the agent's value says.
 
 ## [1.11.0] — 2026-10-12
 

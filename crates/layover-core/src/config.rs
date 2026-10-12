@@ -17,11 +17,13 @@ use crate::route::Route;
 mod copilot;
 mod learnings;
 mod offered;
+mod rails;
 mod runner;
 mod written;
 
 pub use copilot::CopilotConfig;
 pub use learnings::LearningsConfig;
+pub use rails::Rails;
 pub use runner::{Cli, McpWiring, Runner, Selection, fixes_beside};
 
 /// Filesystem and network locations used by the Tower.

@@ -326,9 +326,9 @@ fn trigger(config: &Config, journal: &Journal, name: &PipelineName) -> Result<St
         ItineraryId::generate(),
         // A clock is not a person, and the run it wakes is told so: nobody is watching.
         Origin::Schedule(name.clone()),
-        entry,
+        entry.clone(),
         String::new(),
-        config.defaults.max_hops,
+        config.rails_for(Some(name), Some(&entry)).max_hops,
     );
     let id = flight.id.as_str().to_owned();
 

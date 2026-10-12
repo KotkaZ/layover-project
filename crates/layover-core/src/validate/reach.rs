@@ -39,19 +39,23 @@ pub(super) fn check_entry_points(config: &Config, found: &mut Vec<Diagnostic>) {
 ///
 /// A chain can use only its own pipeline's routes, so each way in is walked over its own scoped
 /// graph: a pipeline from its entry, and a chain no pipeline opened from each `entry = true`
-/// agent over the global routes. An agent is out of reach when no way in reaches it, and its hop
-/// depth is the shortest any way in manages — the same best case the check has always taken. For
-/// a factory that scopes nothing every graph is the same graph, so the findings are exactly what
-/// they were before routes had scopes.
+/// agent over the global routes. An agent is out of reach when no way in reaches it. Its hop depth
+/// is judged against the way in with the most to spare — the same best case the check has always
+/// taken, now measured against each way in's own `max_hops`, since a workflow may set its own.
+/// For a factory that scopes nothing and sets no workflow's hops, the findings are exactly what
+/// they were before either existed.
 pub(super) fn check_every_agent_is_within_reach(config: &Config, found: &mut Vec<Diagnostic>) {
     let routes = RouteMap::from_config(config);
 
-    let mut nearest: BTreeMap<AgentName, u32> = BTreeMap::new();
-    let mut barriers: BTreeMap<AgentName, BTreeMap<AgentName, u32>> = BTreeMap::new();
+    let mut nearest: BTreeMap<AgentName, Depth> = BTreeMap::new();
+    let mut barriers: BTreeMap<AgentName, BTreeMap<AgentName, Depth>> = BTreeMap::new();
     let mut seeded = false;
 
     for (pipeline, starts) in ways_in(config) {
         let graph = routes.for_pipeline(pipeline);
+        let max_hops = pipeline.map_or(config.defaults.max_hops, |name| {
+            config.rails_of_pipeline(name).max_hops
+        });
 
         // Spawn targets count as entry points here. Each begins a fresh itinerary with a full hop
         // budget, so measuring its depth from the trigger that eventually caused it would warn
@@ -68,20 +72,17 @@ pub(super) fn check_every_agent_is_within_reach(config: &Config, found: &mut Vec
 
         let distances = graph.distances_from(entries);
         for (agent, &distance) in &distances {
-            let best = nearest.entry(agent.clone()).or_insert(distance);
-            *best = (*best).min(distance);
+            Depth { distance, max_hops }.keep_best(nearest.entry(agent.clone()));
         }
-        record_barrier_upstreams(config, graph, &distances, &mut barriers);
+        record_barrier_upstreams(config, graph, &distances, max_hops, &mut barriers);
     }
 
     if !seeded {
         return;
     }
 
-    let max_hops = config.defaults.max_hops;
-
     for name in config.agents.keys() {
-        let Some(&distance) = nearest.get(name) else {
+        let Some(&Depth { distance, max_hops }) = nearest.get(name) else {
             found.push(Diagnostic::warning(format!(
                 "agent `{name}` cannot be reached from any entry point"
             )));
@@ -99,7 +100,29 @@ pub(super) fn check_every_agent_is_within_reach(config: &Config, found: &mut Vec
         }
     }
 
-    check_joins_can_be_satisfied(&barriers, max_hops, found);
+    check_joins_can_be_satisfied(&barriers, found);
+}
+
+/// How far into a chain an agent is, and how far that chain may go.
+#[derive(Debug, Clone, Copy)]
+struct Depth {
+    distance: u32,
+    max_hops: u32,
+}
+
+impl Depth {
+    /// Hops to spare after arriving, which may be negative.
+    fn spare(self) -> i64 {
+        i64::from(self.max_hops) - i64::from(self.distance)
+    }
+
+    /// Keeps whichever of this and what is already there has more to spare.
+    fn keep_best(self, slot: std::collections::btree_map::Entry<'_, AgentName, Depth>) {
+        let best = slot.or_insert(self);
+        if self.spare() > best.spare() {
+            *best = self;
+        }
+    }
 }
 
 /// Every way work enters the mesh, as the scope its chains run in and the agents they start at.
@@ -131,7 +154,8 @@ fn record_barrier_upstreams(
     config: &Config,
     graph: &RouteGraph,
     distances: &BTreeMap<AgentName, u32>,
-    barriers: &mut BTreeMap<AgentName, BTreeMap<AgentName, u32>>,
+    max_hops: u32,
+    barriers: &mut BTreeMap<AgentName, BTreeMap<AgentName, Depth>>,
 ) {
     for target in config.agents.keys() {
         let Some(spec) = graph.join_for(target) else {
@@ -145,12 +169,12 @@ fn record_barrier_upstreams(
             let Some(&distance) = distances.get(upstream) else {
                 continue;
             };
-            let best = barriers
-                .entry(target.clone())
-                .or_default()
-                .entry(upstream.clone())
-                .or_insert(distance);
-            *best = (*best).min(distance);
+            Depth { distance, max_hops }.keep_best(
+                barriers
+                    .entry(target.clone())
+                    .or_default()
+                    .entry(upstream.clone()),
+            );
         }
     }
 }
@@ -167,12 +191,11 @@ fn record_barrier_upstreams(
 /// best case. It will not catch every under-sized budget — nothing static can, once loops are
 /// involved — but what it does report is always real.
 fn check_joins_can_be_satisfied(
-    barriers: &BTreeMap<AgentName, BTreeMap<AgentName, u32>>,
-    max_hops: u32,
+    barriers: &BTreeMap<AgentName, BTreeMap<AgentName, Depth>>,
     found: &mut Vec<Diagnostic>,
 ) {
     for (target, upstreams) in barriers {
-        for (upstream, &distance) in upstreams {
+        for (upstream, &Depth { distance, max_hops }) in upstreams {
             let delivery = distance + 2;
             if delivery > max_hops {
                 found.push(Diagnostic::warning(format!(

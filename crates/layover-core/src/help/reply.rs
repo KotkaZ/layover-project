@@ -120,7 +120,9 @@ pub fn continuation(
         Origin::Human,
         first.agent.clone(),
         body(asked, text),
-        config.defaults.max_hops,
+        config
+            .rails_for(pipeline.as_ref(), Some(&first.agent))
+            .max_hops,
     );
 
     // The continuation is the same piece of work, so it keeps its name and runs its agents as the

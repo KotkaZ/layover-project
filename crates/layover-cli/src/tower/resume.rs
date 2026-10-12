@@ -74,7 +74,7 @@ pub(super) fn resume_due(
             Origin::Resumed(layover.id.clone()),
             layover.agent.clone(),
             body,
-            config.defaults.max_hops,
+            config.rails_for(Some(name), Some(&layover.agent)).max_hops,
         );
 
         // The booking chain's values, within what this pipeline declares. The operator's choices

@@ -294,6 +294,24 @@ pub struct Pipeline {
     /// this pipeline to each of those routes' `pipelines`.
     #[serde(default)]
     pub routes_from: Option<PipelineName>,
+    /// Flights a chain of this workflow may make, instead of `[defaults] max_hops`.
+    #[serde(default)]
+    pub max_hops: Option<u32>,
+    /// Dollars a chain of this workflow may spend, instead of the agent it starts at's own or
+    /// `[defaults] fuel_usd`.
+    #[serde(default)]
+    pub fuel_usd: Option<f64>,
+    /// Runs a chain of this workflow may start, instead of `[defaults] max_runs`.
+    #[serde(default)]
+    pub max_runs: Option<u32>,
+    /// How long one run of a chain of this workflow may take, instead of `[defaults] timeout`.
+    /// Written `timeout = "2h"` or `timeout_sec = 7200`.
+    #[serde(
+        default,
+        alias = "timeout",
+        deserialize_with = "crate::duration::optional_seconds"
+    )]
+    pub timeout_sec: Option<u64>,
     /// How this workflow's chains run particular agents, where that differs from what each agent
     /// declares: `[pipelines.<name>.agents.<agent>]`. See [`AgentOverride`].
     #[serde(default)]

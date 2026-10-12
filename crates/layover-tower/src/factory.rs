@@ -247,6 +247,17 @@ impl Factory {
         self.root.join(".layover").join("ground-stop")
     }
 
+    /// The rails chain `chain` runs under: its workflow's, then — for Fuel — those of the agent it
+    /// starts at, then the factory's. See [`layover_core::config::Rails`].
+    pub(crate) fn rails_of(
+        &self,
+        chain: &ItineraryId,
+        starts_at: Option<&AgentName>,
+    ) -> layover_core::config::Rails {
+        self.config
+            .rails_for(self.chains.pipeline_of(chain).as_ref(), starts_at)
+    }
+
     /// The workflows a person has switched off, read from disk on every call like the Ground Stop.
     ///
     /// Their ways in are held — a schedule's tick, a trigger, a resumed layover — and every chain
@@ -455,7 +466,10 @@ impl Factory {
             token,
         } = launched;
 
-        let timeout = Some(Duration::from_secs(self.config.defaults.timeout_sec));
+        // The chain's workflow may give its runs longer, or less long, than the factory default.
+        let timeout = Some(Duration::from_secs(
+            self.rails_of(&ticket.chain, None).timeout_sec,
+        ));
         let (finished, ended) = match wait_for(started, timeout, || self.ground_stop_engaged()) {
             Ok(result) => result,
             Err(error) => {
@@ -1703,7 +1717,9 @@ entry = "worker"
 
         let started = factory
             .chains
-            .with(&chain, &factory.config.defaults, |c| c.runs_started())
+            .with(&chain, &(&factory.config.defaults).into(), |c| {
+                c.runs_started()
+            })
             .expect("the chain exists");
 
         assert_eq!(started, 2, "both runs counted against one itinerary");

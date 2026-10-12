@@ -165,6 +165,12 @@ routes_from = "development"
 description = "Every two hours, review every open pull request the team is asked to review"
 entry       = "publisher"
 trigger     = { cron = "0 */2 * * *" }
+# Each review is its own spawned chain, and a review is a few flights, not a development loop:
+# the defaults sized for development would leave one review that loses its way nearly unbounded.
+max_hops    = 12
+max_runs    = 12
+fuel_usd    = 8.00
+timeout     = "30m"
 
 # The same reviewer runs here as in development, more cheaply: a dozen pull requests every two
 # hours, where development's gate reviews one change at a time. And in a sweep it reviews the

@@ -126,7 +126,21 @@ review-sweep: copilot --model=claude-opus-5.5 --reasoning-effort=high --context=
               --deny-tool=shell(git checkout) --additional-mcp-config @…
 ```
 
-`upstream-watch` does the same for the messenger, at `effort = "medium"`. `layover explain` prints
+`upstream-watch` does the same for the messenger, at `effort = "medium"`.
+
+A workflow can size its own chains, too. `[defaults]` is sized for development — a loop through
+review that can run for an afternoon — and would leave one review the sweep spawns nearly
+unbounded, so the sweep sets its own:
+
+```toml
+[pipelines.review-sweep]
+max_hops = 12
+max_runs = 12
+fuel_usd = 8.00
+timeout  = "30m"
+```
+
+Every review the sweep spawns runs on those. The `[reserve]` still bounds the whole factory. `layover explain` prints
 `here reviewer runs on claude-opus-5.5 · effort high · long context` under the sweep, and
 `layover prompt reviewer --pipeline review-sweep` says the same.
 

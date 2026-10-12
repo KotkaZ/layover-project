@@ -116,7 +116,7 @@ sequenceDiagram
     participant Next as Next run
 
     Human->>Tower: POST /flights
-    Note over Tower: mint itinerary { hops, fuel }<br/>check the Reserve<br/>route check: is from→to permitted?
+    Note over Tower: mint itinerary { hops, fuel, runs } — the workflow's rails, else the defaults<br/>check the Reserve<br/>route check: is from→to permitted?
     Tower->>CLI: spawn with prompt + flight<br/>--mcp-config (tower url + run token)
     CLI-->>Tower: stdout, stderr → transcript.log
     CLI->>Tower: layover_send(to, body)
@@ -200,7 +200,7 @@ max_concurrent = 1       # two coders in one working tree would overwrite each o
 [agents.reviewer]
 runner   = "codex"
 prompt   = "You review work and either approve it or return concrete defects."
-fuel_usd = 1.00          # per-agent override
+fuel_usd = 1.00          # the Fuel of a chain that starts here, unless its workflow sets one
 
 # ── The route map: directed edges ──────────────────────────────────
 [[routes]]
@@ -239,6 +239,10 @@ the resuming pipeline but is held to what its booking chain could reach, and a f
 straight to an `entry = true` agent belongs to none and uses global routes only. The Tower records
 which pipeline a chain belongs to; no agent can name one. See
 [`routing.md`](routing.md#8-scoping-routes-to-workflows).
+
+A pipeline may set its own rails — `max_hops`, `fuel_usd`, `max_runs`, `timeout` — for every
+chain it opens or spawns, instead of `[defaults]`; the Reserve stays the factory's alone. See
+[a workflow's own rails](https://kotkaz.github.io/layover-project/pipelines.html#a-workflows-own-rails).
 
 A pipeline may also change how a shared agent runs in its own chains, without a second agent or a
 second runner:

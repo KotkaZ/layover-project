@@ -1064,6 +1064,22 @@ dashboard draws — still says on every route who may use it, and nothing that r
 It widens nothing a resumed chain can do beyond what the booking chain could: that narrowing still
 applies on top.
 
+**Why a workflow sets its own rails, and an agent's Fuel finally applies.** One set of rails had to
+fit every workflow, so a factory sized for a development chain that loops through review for an
+afternoon — Karl's ran on `max_hops = 256`, `max_runs = 400`, `fuel_usd = 5000` — left a review
+spawned per pull request practically unbounded (Karl approved per-workflow rails, 2026-10-12, as a
+change to how rails are set). A workflow may now set `max_hops`, `fuel_usd`, `max_runs` and
+`timeout` for its chains; nothing it sets reaches the Reserve, which bounds the factory. Who wins
+follows the per-agent precedence elsewhere: the workflow, then — for Fuel — the agent the chain
+starts at, then `[defaults]`. Tracing where a chain's budget is minted showed the agent's own
+`fuel_usd`, documented since 0.x as the Fuel of a chain starting there and shown on the dashboard,
+was never applied: every chain was minted from `[defaults]`. It is applied now, as documented,
+rather than the documentation being corrected to match — a per-agent Fuel nobody can set would be
+the rail that looks configured and is not. A chain keeps the rails it was minted with, so editing
+`layover.toml` never changes the budget of work already under way. A restarted run's chain is
+re-minted from its workflow's rails without the agent's Fuel, because which agent it began at is
+not on record.
+
 ---
 
 ## Still open

@@ -110,6 +110,10 @@ too small to fund one run of it. A refused run is recorded as `halted` with the 
 Until the Copilot credit change the Reserve was configured, validated and drawn on the dashboard
 but never checked by the Tower, so this mitigation was claimed and did not exist.
 
+A workflow may set its own `fuel_usd`, `max_runs` and `max_hops` (1.12.0). That makes the arithmetic
+above per workflow — an hourly sweep at its own `fuel_usd = 8` permits $192 a day whatever
+`[defaults]` says — and it is no route around the Reserve, which no workflow can set.
+
 *Residual:* the Reserve is only as good as the cost figures feeding it, so risk 4 applies here
 too — an unreporting runner spends against a Reserve that never decrements. It cannot see runs in
 flight (risk 15). And it fails open when history cannot be read, trading a rail that holds through

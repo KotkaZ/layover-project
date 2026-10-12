@@ -126,6 +126,14 @@ fn the_multi_workflow_example_runs_one_reviewer_two_ways_on_one_runner() {
     let checkout = "--deny-tool=shell(git checkout)".to_owned();
     assert!(sweep.contains(&checkout) && !development.contains(&checkout));
 
+    let sweep_rails = config.rails_of_pipeline(&"review-sweep".into());
+    assert_eq!((sweep_rails.max_hops, sweep_rails.max_runs), (12, 12));
+    assert_eq!(
+        config.rails_of_pipeline(&"development".into()).max_hops,
+        48,
+        "development runs on the defaults"
+    );
+
     let routes = RouteMap::from_config(&config);
     let builder = AgentName::from("builder");
     assert!(

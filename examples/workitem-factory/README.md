@@ -158,6 +158,11 @@ flights = lead_in                 (4 manual, 5 scheduled)
 rejection would exhaust the chain. That is the failure this example exists to avoid, and
 `the_default_hop_budget_leaves_no_room_to_fix_anything` pins it down.
 
+Sizing for the longer path gives the manual one a flight it does not need. Both paths here are
+the same loop, so that is the right trade; a factory whose workflows differ in shape gives each its
+own `max_hops` in `[pipelines.<name>]` instead, and is sized per workflow
+([a workflow's own rails](https://kotkaz.github.io/layover-project/pipelines.html#a-workflows-own-rails)).
+
 Runs behave similarly. At N cycles the factory starts `3N + 7` runs — 31 at N = 8 — so `max_runs`
 is set to 40 rather than left at the default. The run cap matters more than it looks: it is the
 deterministic backstop that holds when a runner does not report its cost, and Fuel is the only

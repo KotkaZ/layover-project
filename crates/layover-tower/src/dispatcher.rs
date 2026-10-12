@@ -418,11 +418,13 @@ impl Factory {
                     scope.spawn(move || {
                         let chain = launched.ticket.chain.clone();
                         let result = self.finish(launched, |reported| {
-                            let _ = self
-                                .chains
-                                .with(&chain, &self.config.defaults, |itinerary| {
+                            let _ = self.chains.with(
+                                &chain,
+                                &self.rails_of(&chain, None),
+                                |itinerary| {
                                     charge(itinerary, reported);
-                                });
+                                },
+                            );
                         });
                         let _ = tx.send(Landed {
                             queued: queued.flight,
@@ -483,9 +485,12 @@ impl Factory {
         // accounted against the same Hops, Fuel and run cap, and runs of it that are alive at once
         // must each see what the last one admitted left.
         let sender = flight.from.agent().cloned();
+        // A chain seen for the first time starts on its workflow's rails, and on the Fuel of the
+        // agent it starts at.
+        let rails = self.rails_of(&flight.itinerary, Some(&flight.to));
         let admitted = self
             .chains
-            .with(&flight.itinerary, &self.config.defaults, |chain| {
+            .with(&flight.itinerary, &rails, |chain| {
                 self.admit(chain, sender.as_ref(), &flight)
             })
             .unwrap_or_else(|| {

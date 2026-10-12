@@ -80,6 +80,10 @@ does not report its cost.
 
 Nor does Fuel bound the *factory* — it resets with every new itinerary. See `[reserve]` below.
 
+These are the factory's. A workflow may give its own chains different `max_hops`, `fuel_usd`,
+`max_runs` and `timeout` in `[pipelines.<name>]`, and an agent's own `fuel_usd` is the Fuel of a
+chain that starts at it — see [a workflow's own rails](./pipelines.md#a-workflows-own-rails).
+
 ## `[reserve]` — what the whole factory may spend
 
 ```toml
@@ -437,7 +441,7 @@ prompt_file = "tester.md"
 | `access` | `read-write` | `read-only` is meant to give the agent a git worktree snapshot. **Declared, not yet enforced** — see below. |
 | `entry` | `false` | Whether a human may send flights straight here. |
 | `resident` | `false` | Pin the agent resident rather than transient. Not built. |
-| `fuel_usd` | — | Fuel override for itineraries that *start* at this agent. |
+| `fuel_usd` | — | Fuel for itineraries that *start* at this agent: a trigger or tick entering here, or a chain spawned here. A workflow's own `fuel_usd` wins over it. |
 | `work_dir` | — | Work somewhere other than the shared `work_dir`. Relative to this file; an absolute path is used as written. |
 | `recovery` | `automatic` | `manual` if repeating this agent's work would do damage. See [Recovery](./recovery.md). |
 | `max_concurrent` | — | At most this many runs of this agent alive at once, within `max_concurrent_runs`. `1` for an agent that must never overlap itself. |
