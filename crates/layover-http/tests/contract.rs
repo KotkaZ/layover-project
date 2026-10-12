@@ -254,6 +254,8 @@ impl Api for Stub {
     async fn list_learnings(&self, _: ListLearningsQuery) -> Result<LearningList, Problem> {
         Ok(LearningList {
             learnings: vec![Learning {
+                lapsed_at: None,
+                deleted_after: None,
                 id: "lrn_1".to_owned(),
                 agent: "publisher".to_owned(),
                 text: "the ADO token expires every thirty days".to_owned(),

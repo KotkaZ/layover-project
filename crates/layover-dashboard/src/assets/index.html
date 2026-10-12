@@ -280,7 +280,8 @@
     <p class="hint">
       Applied as soon as they are proposed, and they lapse unless later runs arrive at them
       independently. Three independent rediscoveries make one permanent — repeating advice an
-      agent was just shown does not count.
+      agent was just shown does not count. A lapsed learning nobody rediscovers is deleted after
+      <code>[learnings] keep_lapsed_days</code>, two weeks unless the factory says otherwise.
     </p>
     <p id="learn-scope" class="hint" hidden>
       A learning belongs to an <em>agent</em>, not a workflow — the same agent can appear in
@@ -290,7 +291,7 @@
       <thead>
         <tr>
           <th>Agent</th><th>Learning</th><th>Standing</th>
-          <th class="num">Found</th><th class="num">Runs left</th><th></th>
+          <th class="num">Found</th><th class="num">Runs left</th><th>Deleted</th><th></th>
         </tr>
       </thead>
       <tbody></tbody>

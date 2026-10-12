@@ -41,6 +41,7 @@ use ulid::Ulid;
 
 use crate::agent::AgentName;
 
+mod forget;
 mod ledger;
 pub mod screen;
 
@@ -189,8 +190,9 @@ pub enum State {
     Provisional,
     /// Rediscovered enough times to be treated as real. Applies indefinitely.
     Confirmed,
-    /// Ran out of runs without being rediscovered. Not applied, but remembered, so that a later
-    /// rediscovery can be recognised as one.
+    /// Ran out of runs without being rediscovered. Not applied, but remembered for
+    /// `[learnings] keep_lapsed_days`, so that a rediscovery within them is recognised as one;
+    /// then deleted.
     Lapsed,
     /// A human said no. Never applied and never counted again.
     Rejected,
@@ -256,6 +258,12 @@ pub struct Learning {
     pub first_at: Timestamp,
     /// When it was most recently proposed.
     pub last_at: Timestamp,
+    /// When it lapsed, while it is [`State::Lapsed`]: what its time to be deleted counts from.
+    ///
+    /// Absent from a learning that lapsed before Layover recorded when, which counts from
+    /// `last_at` instead — earlier than it lapsed, so it goes no later than it would have.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lapsed_at: Option<Timestamp>,
 }
 
 impl Learning {
@@ -272,6 +280,7 @@ impl Learning {
             runs_left: PROVISIONAL_RUNS,
             first_at: proposal.at,
             last_at: proposal.at,
+            lapsed_at: None,
         }
     }
 

@@ -45,7 +45,7 @@ Point any OpenAPI tool at the file to get a client, a mock server or rendered do
 | `GET` | `/help` | `agent`, `pipeline`, `blocker`, `open`, `window` | Help requests agents have raised. |
 | `POST` | `/help/resolve` | | Mark help requests as dealt with. |
 | `POST` | `/help/reply` | | Answer a run's help requests and continue the work. See below. |
-| `GET` | `/learnings` | `agent`, `state` | Learnings agents have proposed. |
+| `GET` | `/learnings` | `agent`, `state` | Learnings agents have proposed. A lapsed one carries `lapsed_at` and `deleted_after`, when it is deleted unless rediscovered first. |
 | `PATCH` | `/learnings/{learning_id}` | | Keep a learning for good, or stop using it. |
 | `POST` | `/ground-stop` | | Halt everything. Engaging twice is a success, not a conflict. |
 | `DELETE` | `/ground-stop` | | Resume. |

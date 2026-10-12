@@ -8,6 +8,15 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+### Added
+
+- **Lapsed learnings are deleted** once `[learnings] keep_lapsed_days` have passed since they
+  lapsed without an agent rediscovering them — fourteen by default, `0` to delete each as soon as it
+  lapses. A rediscovery within the period still counts towards making a learning permanent; one
+  after it starts a new learning. Deletion happens after every run and when `layover serve` starts.
+  Each learning now records when it lapsed, and `GET /learnings` gives a lapsed one's `lapsed_at` and
+  `deleted_after`, which the dashboard shows beside it. Rejected learnings are kept, as before.
+
 ## [1.11.0] — 2026-10-12
 
 Any workflow can be switched off — its schedule included — while the rest of the factory runs.

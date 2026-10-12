@@ -41,6 +41,11 @@ max_spawn_generations = 1
 fuel_usd     = 400.00
 window_hours = 24
 
+# A sweep's reviewer proposes a learning or two per pull request, and most lapse unrediscovered.
+# A week is long enough for a true one to come up again, and keeps the list readable.
+[learnings]
+keep_lapsed_days = 7
+
 # ── One runner ─────────────────────────────────────────────────────
 # A runner is a CLI and a permission set. `cli = "copilot"` has Layover supply everything an
 # unattended Copilot run needs: the agent's --model, --reasoning-effort and --context, the session's

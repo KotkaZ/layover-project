@@ -50,7 +50,7 @@ pub enum Uptake {
 /// Every learning the factory holds, across all agents.
 #[derive(Debug, Clone, Default)]
 pub struct Learnings {
-    entries: Vec<Learning>,
+    pub(super) entries: Vec<Learning>,
 }
 
 impl Learnings {
@@ -146,6 +146,7 @@ impl Learnings {
             State::Lapsed => {
                 learning.proposals = learning.proposals.saturating_add(1);
                 learning.last_at = proposal.at;
+                learning.lapsed_at = None;
                 // The rediscovery may be better worded, or rated differently now that the agent
                 // has hit it twice. Take the newer text on the grounds that it was written with
                 // more experience of the problem.
@@ -168,11 +169,11 @@ impl Learnings {
         }
     }
 
-    /// Charges one run against `agent`'s provisional learnings, lapsing any that run out.
+    /// Charges one run against `agent`'s provisional learnings, lapsing any that run out `at`.
     ///
     /// Returns the learnings that lapsed, so the caller can say so rather than have advice
     /// disappear silently.
-    pub fn charge_run(&mut self, agent: &AgentName) -> Vec<LearningId> {
+    pub fn charge_run(&mut self, agent: &AgentName, at: Timestamp) -> Vec<LearningId> {
         let mut lapsed = Vec::new();
 
         for learning in &mut self.entries {
@@ -183,6 +184,7 @@ impl Learnings {
             learning.runs_left = learning.runs_left.saturating_sub(1);
             if learning.runs_left == 0 {
                 learning.state = State::Lapsed;
+                learning.lapsed_at = Some(at);
                 lapsed.push(learning.id.clone());
             }
         }
@@ -200,6 +202,7 @@ impl Learnings {
             learning.state = State::Confirmed;
             learning.runs_left = 0;
             learning.last_at = at;
+            learning.lapsed_at = None;
         })
     }
 
@@ -212,6 +215,7 @@ impl Learnings {
             learning.state = State::Rejected;
             learning.runs_left = 0;
             learning.last_at = at;
+            learning.lapsed_at = None;
         })
     }
 
@@ -251,7 +255,7 @@ mod tests {
     /// Runs an agent enough times to lapse everything provisional.
     fn lapse(learnings: &mut Learnings) {
         for _ in 0..PROVISIONAL_RUNS {
-            learnings.charge_run(&reviewer());
+            learnings.charge_run(&reviewer(), at("2026-09-17T10:00:00Z"));
         }
     }
 
@@ -291,9 +295,13 @@ mod tests {
         learnings.propose(&proposal("use ripgrep here"));
 
         for _ in 0..PROVISIONAL_RUNS - 1 {
-            assert!(learnings.charge_run(&reviewer()).is_empty());
+            assert!(
+                learnings
+                    .charge_run(&reviewer(), at("2026-09-17T10:00:00Z"))
+                    .is_empty()
+            );
         }
-        let lapsed = learnings.charge_run(&reviewer());
+        let lapsed = learnings.charge_run(&reviewer(), at("2026-09-17T10:00:00Z"));
 
         assert_eq!(lapsed.len(), 1, "the last run should retire it");
         assert!(learnings.active_for(&reviewer()).is_empty());
@@ -365,7 +373,7 @@ mod tests {
         learnings.propose(&proposal("the token expires every thirty days"));
 
         for _ in 0..PROVISIONAL_RUNS * 3 {
-            learnings.charge_run(&reviewer());
+            learnings.charge_run(&reviewer(), at("2026-09-17T10:00:00Z"));
         }
 
         assert_eq!(learnings.active_for(&reviewer()).len(), 1);
@@ -424,7 +432,7 @@ mod tests {
         learnings.propose(&proposal("use ripgrep here"));
 
         for _ in 0..PROVISIONAL_RUNS * 2 {
-            learnings.charge_run(&"developer".into());
+            learnings.charge_run(&"developer".into(), at("2026-09-17T10:00:00Z"));
         }
 
         assert_eq!(

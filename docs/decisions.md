@@ -982,6 +982,23 @@ running fine, while a switched-off workflow says it is off wherever it is shown.
 for no confirmation, unlike releasing a Ground Stop, because it starts nothing at once beyond the
 triggers it held.
 
+**Why a lapsed learning is deleted after a grace period the factory sets.** Lapsed learnings were
+kept for ever, because a proposal matching one is a rediscovery and three of those confirm it. A
+real factory lapsed 108 in twelve days — 86 of them from one sweep — and rediscovered one, twice,
+so the Learnings tab became a list of what no longer applied (Karl, 2026-10-12, asked for them
+deleted). That one rediscovery is the case for not deleting at once.
+Deleting one the moment it lapses would remove the only path to confirmation that needs no person,
+so it is kept for `[learnings] keep_lapsed_days` and then deleted. The period is the factory's to
+set, also Karl's choice: how often a true insight comes round again depends on how often its agent
+runs, which only the factory knows, and `0` gives the immediate deletion first asked for to a factory
+that would rather rely on **Keep**. Fourteen days is the default — two weeks for a daily agent to
+arrive at something true again, about 125 lapsed learnings kept at the rate above. The clock counts
+from when the learning lapsed, now recorded; one that lapsed before that counts from when it was
+last proposed, which is earlier, so it never stays longer than the period says. Rejected learnings
+are not deleted: they are what stops an agent re-proposing what a person refused. Deletion happens
+after every run and when the Tower starts — not from a dashboard that is only watching, which would
+rewrite a file the Tower in another process is writing.
+
 ---
 
 ## Still open

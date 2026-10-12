@@ -1547,8 +1547,9 @@ components:
       description: |
         Where a learning is in its life. `provisional` applies now and will lapse unless
         rediscovered; `confirmed` has been rediscovered enough times to be treated as real;
-        `lapsed` is remembered only so a later rediscovery can be recognised as one; `rejected`
-        was refused by a human and never counts again.
+        `lapsed` is remembered only so a later rediscovery can be recognised as one, and is
+        deleted `[learnings] keep_lapsed_days` after it lapsed; `rejected` was refused by a human
+        and never counts again.
       enum: [provisional, confirmed, lapsed, rejected]
 
     Learning:
@@ -1589,6 +1590,20 @@ components:
           type: string
           format: date-time
           description: When it was most recently proposed.
+        lapsed_at:
+          type: [string, "null"]
+          format: date-time
+          description: |
+            When it lapsed, while it is `lapsed`. Null otherwise, and for a learning that lapsed
+            before Layover recorded when.
+        deleted_after:
+          type: [string, "null"]
+          format: date-time
+          description: |
+            While it is `lapsed`: when it will be deleted unless an agent rediscovers it first —
+            `keep_lapsed_days` after it lapsed, or after it was last proposed when when it lapsed
+            is not known. It goes at the first run after that, or when the Tower next starts. Null
+            for a learning in any other state.
 
     LearningList:
       type: object

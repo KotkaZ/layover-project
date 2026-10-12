@@ -307,9 +307,21 @@ pub fn blocker_from(blocker: Blocker) -> layover_core::help::Blocker {
     }
 }
 
-/// Describes one learning.
-pub fn learning(learning: &layover_core::learning::Learning) -> Learning {
+/// Describes one learning, and for a lapsed one when `keep` deletes it.
+pub fn learning(
+    learning: &layover_core::learning::Learning,
+    keep: layover_core::config::LearningsConfig,
+) -> Learning {
+    let lapsed = learning.state == layover_core::learning::State::Lapsed;
     Learning {
+        lapsed_at: learning
+            .lapsed_at
+            .filter(|_| lapsed)
+            .map(|at| at.to_string()),
+        deleted_after: lapsed.then(|| {
+            keep.deleted_after(learning.lapsed_at.unwrap_or(learning.last_at))
+                .to_string()
+        }),
         id: learning.id.to_string(),
         agent: learning.agent.to_string(),
         text: learning.text.clone(),

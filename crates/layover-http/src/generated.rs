@@ -550,12 +550,22 @@ pub enum Judgement {
 pub struct Learning {
     /// The agent this applies to. Learnings do not cross agents.
     pub agent: String,
+    /// While it is `lapsed`: when it will be deleted unless an agent rediscovers it first —
+    /// `keep_lapsed_days` after it lapsed, or after it was last proposed when when it lapsed
+    /// is not known. It goes at the first run after that, or when the Tower next starts. Null
+    /// for a learning in any other state.
+    #[serde(default)]
+    pub deleted_after: Option<String>,
     /// When it was first proposed.
     pub first_at: String,
     /// Identifier.
     pub id: String,
     /// The agent's own rating, for triage.
     pub impact: Impact,
+    /// When it lapsed, while it is `lapsed`. Null otherwise, and for a learning that lapsed
+    /// before Layover recorded when.
+    #[serde(default)]
+    pub lapsed_at: Option<String>,
     /// When it was most recently proposed.
     pub last_at: String,
     /// How many times it has been independently rediscovered, including the first proposal.
@@ -580,8 +590,9 @@ pub struct LearningList {
 
 /// Where a learning is in its life. `provisional` applies now and will lapse unless
 /// rediscovered; `confirmed` has been rediscovered enough times to be treated as real;
-/// `lapsed` is remembered only so a later rediscovery can be recognised as one; `rejected`
-/// was refused by a human and never counts again.
+/// `lapsed` is remembered only so a later rediscovery can be recognised as one, and is
+/// deleted `[learnings] keep_lapsed_days` after it lapsed; `rejected` was refused by a human
+/// and never counts again.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LearningState {
     /// `provisional`

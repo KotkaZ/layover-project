@@ -165,6 +165,43 @@ pub fn graph(path: &Path, svg: bool, pipeline: Option<&str>) -> Result<String, F
     })
 }
 
+/// Enforces retention on the way up.
+///
+/// `prune` and `sweep` existed and were called only from tests, so the documented ninety days was
+/// a promise nothing kept: history grew forever while the book said it did not. Doing it at
+/// startup rather than on a timer is enough for a process meant to run continuously and be
+/// restarted when it is not.
+fn retain(
+    store: &History,
+    journal: &Journal,
+    state: &Path,
+    config: &Config,
+    watch_only: bool,
+) -> Result<(), String> {
+    let horizon = Timestamp::now()
+        .checked_sub((RETENTION_DAYS * 24).hours())
+        .unwrap_or(Timestamp::MIN);
+    store.prune(horizon).map_err(|error| error.to_string())?;
+    journal.prune(horizon).map_err(|error| error.to_string())?;
+    journal.sweep(horizon).map_err(|error| error.to_string())?;
+
+    // Lapsed learnings have a horizon of their own. Every run deletes those past it too; this is
+    // for a factory that has been idle since they passed it. Not from a dashboard that is only
+    // watching: the Tower running the factory rewrites the same file, from another process.
+    if !watch_only {
+        journal
+            .forget_lapsed(config.learnings.forget_lapsed_before(Timestamp::now()))
+            .map_err(|error| error.to_string())?;
+    }
+
+    // Hangars were the one thing retention did not reach, which a 48-hour soak made visible: 1,501
+    // runs left 3,050 files behind and nothing removed them. Worse than the size is what it meant
+    // after ninety days — run records deleted while their transcripts remained, evidence attached
+    // to runs nobody could look up any more.
+    hangar::prune(&state.join("hangars"), horizon).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 /// Serves the monitoring dashboard, and runs the factory behind it, until interrupted.
 ///
 /// Binds before printing the address, so the line it prints is a fact rather than a hope. The
@@ -220,23 +257,13 @@ pub fn serve(
         Err(incompatible) => return Err(incompatible.to_string()),
     }
 
-    // Enforce retention on the way up. `prune` and `sweep` existed and were called only from
-    // tests, so the documented ninety days was a promise nothing kept: history grew forever while
-    // the book said it did not. Doing it at startup rather than on a timer is enough for a
-    // process meant to run continuously and be restarted when it is not.
-    let horizon = Timestamp::now()
-        .checked_sub((RETENTION_DAYS * 24).hours())
-        .unwrap_or(Timestamp::MIN);
-    store.prune(horizon).map_err(|error| error.to_string())?;
-    journal.prune(horizon).map_err(|error| error.to_string())?;
-    journal.sweep(horizon).map_err(|error| error.to_string())?;
-
-    // Hangars were the one thing retention did not reach, which a 48-hour soak made visible: 1,501
-    // runs left 3,050 files behind and nothing removed them. Worse than the size is what it meant
-    // after ninety days — run records deleted while their transcripts remained, evidence attached
-    // to runs nobody could look up any more.
-    hangar::prune(&state_dir(path, history).join("hangars"), horizon)
-        .map_err(|error| error.to_string())?;
+    retain(
+        &store,
+        &journal,
+        &state_dir(path, history),
+        &config,
+        watch_only,
+    )?;
 
     // Held for the lifetime of the command. Dropping either stops it: the endpoint frees its port,
     // and the Tower finishes whatever run it is watching before the thread joins.

@@ -170,6 +170,9 @@ window_hours = 24         # in any rolling 24 hours
 [copilot]
 usd_per_credit = 0.01     # Copilot reports AI credits, not dollars; this prices them
 
+[learnings]
+keep_lapsed_days = 14     # a lapsed learning nobody rediscovers is deleted after this; 0 at once
+
 # ── Agents ─────────────────────────────────────────────────────────
 [agents.planner]
 runner   = "claude"
@@ -294,7 +297,8 @@ Everything a factory accumulates lives in `.layover/`, beside its `layover.toml`
 workspace/                       # the shared work_dir — not yet isolated per agent
 ```
 
-Day-segmented files and run directories are pruned after 90 days; `memory.md`, `learnings.jsonl`
+Day-segmented files and run directories are pruned after 90 days; a lapsed learning after
+`[learnings] keep_lapsed_days`; `memory.md`, the rest of `learnings.jsonl`
 and the queue are not.
 
 Ground Stop is a file rather than in-memory state so that it survives a Tower crash and can be

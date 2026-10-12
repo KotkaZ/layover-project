@@ -224,7 +224,9 @@ is no next run: resolving one restarts nothing, its button says so, and Reply is
 Learnings sit below them, with `Keep` and `Drop`. **Neither is an approval step.** A learning
 applies from the moment an agent proposes it; these say "this is real, stop it lapsing" and "this
 is wrong, stop giving it to runs". Dropping asks for confirmation because it takes something out
-of every future run; keeping does not, because it only preserves what is already happening.
+of every future run; keeping does not, because it only preserves what is already happening. A
+lapsed learning shows when it will be **deleted** — `[learnings] keep_lapsed_days` after it lapsed —
+unless an agent rediscovers it first.
 
 ## Chains
 
@@ -556,7 +558,7 @@ back than 90 days reports a lower bound and says so.
 | `.layover/journal/skips-*.jsonl` | Scheduled ticks that were skipped | Yes, whole files |
 | `.layover/hangars/<agent>/run_*/` | A run's prompt and transcript | Yes, whole directories |
 | `.layover/hangars/<agent>/memory.md` | What the agent wrote for itself | **No** |
-| `.layover/journal/learnings.jsonl` | Confirmed learnings | **No** |
+| `.layover/journal/learnings.jsonl` | Every learning | **No** — but a lapsed one is deleted after `[learnings] keep_lapsed_days` |
 
 Hangars are pruned by the age encoded in the run's own identifier rather than by the file's
 modification time. A run id is a ULID, so it carries the millisecond it was minted; asking the

@@ -15,9 +15,11 @@ use crate::pipeline::{Pipeline, PipelineName};
 use crate::route::Route;
 
 mod copilot;
+mod learnings;
 mod runner;
 
 pub use copilot::CopilotConfig;
+pub use learnings::LearningsConfig;
 pub use runner::{Cli, McpWiring, Runner, Selection, fixes_beside};
 
 /// Filesystem and network locations used by the Tower.
@@ -205,6 +207,9 @@ pub struct Config {
     /// What a Copilot AI credit costs, for pricing Copilot CLI runs.
     #[serde(default)]
     pub copilot: CopilotConfig,
+    /// How long a learning that lapsed is kept before it is deleted.
+    #[serde(default)]
+    pub learnings: LearningsConfig,
     /// Available runners, keyed by name.
     #[serde(default)]
     pub runners: BTreeMap<String, Runner>,

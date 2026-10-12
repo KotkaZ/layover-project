@@ -156,6 +156,14 @@ impl Dashboard {
         }
     }
 
+    /// How long the factory keeps lapsed learnings, by its definition as it is on disk now; the
+    /// default when that cannot be read, since it is only used to say when one will go.
+    fn keeps_lapsed(&self) -> layover_core::config::LearningsConfig {
+        self.config()
+            .map(|config| config.learnings)
+            .unwrap_or_default()
+    }
+
     /// Loads the factory definition as it is on disk right now.
     pub(crate) fn config(&self) -> Result<Config, Problem> {
         Config::load(&self.0.config_path).map_err(|error| {
@@ -414,7 +422,10 @@ impl Api for Dashboard {
         Ok(LearningList {
             active: i32::try_from(matching.iter().filter(|l| l.is_active()).count())
                 .unwrap_or(i32::MAX),
-            learnings: matching.into_iter().map(view::learning).collect(),
+            learnings: matching
+                .into_iter()
+                .map(|learning| view::learning(learning, self.keeps_lapsed()))
+                .collect(),
         })
     }
 
@@ -684,7 +695,7 @@ impl Api for Dashboard {
         learnings
             .all()
             .find(|learning| learning.id == id)
-            .map(view::learning)
+            .map(|learning| view::learning(learning, self.keeps_lapsed()))
             .ok_or_else(|| {
                 Problem::new(StatusCode::INTERNAL_SERVER_ERROR, "the learning vanished")
                     .with_detail("it was written and could not be read back")

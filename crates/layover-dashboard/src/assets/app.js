@@ -784,8 +784,9 @@ async function loadJournal() {  const helpBody = document.querySelector("#help-t
     const { learnings } = await get("/learnings");
     learnBody.replaceChildren();
 
-    // Active first, then by how well established. A lapsed learning is still worth seeing: it is
-    // what a rediscovery would revive, so it explains why a repeat proposal counted.
+    // Active first, then by how well established. A lapsed learning is still worth seeing until
+    // it is deleted: it is what a rediscovery would revive, so it explains why a repeat proposal
+    // counted.
     const order = { confirmed: 0, provisional: 1, lapsed: 2, rejected: 3 };
     learnings.sort((a, b) => order[a.state] - order[b.state] || b.proposals - a.proposals);
 
@@ -793,9 +794,14 @@ async function loadJournal() {  const helpBody = document.querySelector("#help-t
       const row = el("tr");
       row.append(el("td", "", learning.agent), el("td", "wide", learning.text));
       row.append(el("td", `standing ${learning.state}`, learning.state));
+      const deleted = el("td", "when", learning.deleted_after ? clockTime(learning.deleted_after) : "");
+      if (learning.deleted_after) {
+        deleted.title = `Deleted after ${new Date(learning.deleted_after).toLocaleString()} unless an agent rediscovers it first.`;
+      }
       row.append(
         el("td", "num", `${learning.proposals}\u00d7`),
         el("td", "num", learning.state === "provisional" ? `${learning.runs_left}` : "\u2014"),
+        deleted,
       );
 
       // Not an approval queue: this learning is already being given to runs. These say "keep it

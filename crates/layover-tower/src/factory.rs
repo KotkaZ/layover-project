@@ -695,11 +695,13 @@ impl Factory {
         layover_core::brief::brief(agent, &learnings, true)
     }
 
-    /// Charges a finished run against the agent's provisional learnings.
+    /// Charges a finished run against the agent's provisional learnings, and deletes every
+    /// learning — any agent's — that lapsed more than `[learnings] keep_lapsed_days` ago.
     ///
     /// This is what makes a learning lapse. Without it, "applies now and expires unless later runs
     /// arrive at it independently" is only the first half — everything proposed once would apply
-    /// forever, which is the approval queue's failure arrived at from the other direction.
+    /// forever, which is the approval queue's failure arrived at from the other direction. Deleting
+    /// here, after every run, keeps what lapsed from piling up for as long as the factory works.
     pub(crate) fn age_learnings(&self, agent: &AgentName) {
         // `charge_run` returns the learnings that *lapsed*, not the ones it touched — so an empty
         // result means "nothing expired this time", not "nothing changed". Saving only when
@@ -707,12 +709,16 @@ impl Factory {
         // reach zero because it never got past its first step.
         //
         // The lapsed list is not reported here because saving already reports it: a lapsed
-        // learning shows as `lapsed` in the dashboard, which is where somebody would look.
+        // learning shows as `lapsed` in the dashboard, which is where somebody would look, with
+        // when it will be deleted.
         //
         // One locked step, because runs of other agents propose learnings while this one ages
         // them, and a separate read and write would erase whatever they proposed in between.
+        let now = Timestamp::now();
+        let before = self.config.learnings.forget_lapsed_before(now);
         let _ = self.journal.update_learnings(|learnings| {
-            drop(learnings.charge_run(agent));
+            drop(learnings.charge_run(agent, now));
+            drop(learnings.forget_lapsed(before));
             true
         });
     }

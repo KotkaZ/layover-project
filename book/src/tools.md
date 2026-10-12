@@ -66,11 +66,13 @@ file stays one tool call away.
 
 ### How a learning lives and dies
 
-```text
-proposed ──> provisional ──(20 runs, unrediscovered)──> lapsed
-                 │                                        │
-                 │  rediscovered independently            │
-                 └────────────> confirmed <───────────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> provisional: proposed
+    provisional --> lapsed: 20 runs, not rediscovered
+    lapsed --> provisional: rediscovered independently
+    lapsed --> confirmed: rediscovered a 3rd time
+    lapsed --> [*]: deleted after keep_lapsed_days
 ```
 
 A learning **applies from the moment it is proposed**. There is no approval queue: a sibling
@@ -80,7 +82,9 @@ reached a run.
 Every run of an agent spends one of its provisional learnings' remaining runs, whatever the
 outcome — a learning that only decayed on success would be kept alive by the failures it was meant
 to prevent. Run out, and it lapses. Rediscovered independently by a later run, and it counts:
-enough times and it becomes permanent.
+enough times and it becomes permanent. Not rediscovered within the factory's
+[`keep_lapsed_days`](./configuration.md#learnings--how-long-a-lapsed-learning-is-kept), and it is
+deleted.
 
 Repeating advice you were **just given** is an echo, not evidence, and is not counted. Otherwise a
 single fluke could confirm itself in three runs.

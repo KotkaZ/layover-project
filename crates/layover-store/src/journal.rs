@@ -11,7 +11,8 @@
 //! live in a single document, rewritten whole, which is affordable because there are hundreds of
 //! them rather than millions — and is why they are *not* subject to the retention horizon. A
 //! confirmed learning that expired because it was ninety days old would be the one thing in the
-//! system that got worse the longer it was right.
+//! system that got worse the longer it was right. A *lapsed* one has a horizon of its own,
+//! `[learnings] keep_lapsed_days`, after which nothing would count it and it is deleted.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -243,6 +244,22 @@ impl Journal {
     /// Where the learnings live.
     fn learnings_path(&self) -> PathBuf {
         self.root.join("learnings.jsonl")
+    }
+
+    /// Deletes every learning that lapsed at or before `before`, and says how many went.
+    ///
+    /// Writes nothing when none did, so calling it after every run costs a read.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Io`] if the file cannot be read or written.
+    pub fn forget_lapsed(&self, before: Timestamp) -> Result<usize, StoreError> {
+        let mut forgotten = 0;
+        self.update_learnings(|learnings| {
+            forgotten = learnings.forget_lapsed(before).len();
+            forgotten > 0
+        })?;
+        Ok(forgotten)
     }
 
     /// The help segment a request raised at `at` belongs in.

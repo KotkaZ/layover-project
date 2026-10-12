@@ -89,6 +89,7 @@ stateDiagram-v2
     provisional --> lapsed: 20 runs pass
     lapsed --> provisional: rediscovered
     lapsed --> confirmed: rediscovered a 3rd time
+    lapsed --> [*]: keep_lapsed_days pass, deleted
     provisional --> confirmed: a human confirms
     provisional --> rejected: a human rejects
     confirmed --> rejected: a human rejects
@@ -96,6 +97,12 @@ stateDiagram-v2
 
 A learning **applies immediately** and **expires after 20 of its agent's runs**. Runs rather than
 days, because an hourly pipeline and a manual one should not share a clock.
+
+A lapsed learning is no longer given to runs but is **kept for `keep_lapsed_days`** — fourteen
+unless [`[learnings]`](./configuration.md#learnings--how-long-a-lapsed-learning-is-kept) says
+otherwise — so that a rediscovery within them counts. Then it is **deleted**: a factory that lapsed
+over a hundred learnings in twelve days, and rediscovered one, needs its list to show what is in use
+rather than everything that ever was. The dashboard says when each lapsed learning goes.
 
 A wrong learning therefore decays instead of compounding, and you review by exception rather than
 by queue. That is only defensible because [run history](./dashboard.md) records what was live
@@ -119,7 +126,8 @@ load-bearing. Impact is shown for triage and decides nothing.
 The subtlety that makes it work: **an echo is not a rediscovery.** A learning being *shown* to an
 agent contaminates the signal, because repeating advice you were just given proves nothing. So
 duplicates are ignored while a learning is active, and only a proposal arriving while it is
-**lapsed** counts. A single fluke therefore cannot confirm itself.
+**lapsed** counts. A single fluke therefore cannot confirm itself. A proposal arriving after a
+lapsed learning was deleted is a new learning, and its count starts again.
 
 ### Deciding whether two learnings are the same
 

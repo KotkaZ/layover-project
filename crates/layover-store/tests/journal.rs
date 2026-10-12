@@ -434,7 +434,7 @@ fn the_whole_life_of_a_learning_persists() {
 
     learnings.propose(&proposal);
     for _ in 0..layover_core::learning::PROVISIONAL_RUNS {
-        learnings.charge_run(&agent);
+        learnings.charge_run(&agent, jiff::Timestamp::now());
     }
     learnings.propose(&proposal);
 

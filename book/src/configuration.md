@@ -123,6 +123,28 @@ Copilot CLI reports the AI credits a run used rather than dollars. Layover price
 factory. The default is GitHub's published price; set it only if you are billed at a different one.
 The whole table is optional. See [Cost](./cost.md#copilot-cli-is-priced-from-its-ai-credits).
 
+## `[learnings]` — how long a lapsed learning is kept
+
+```toml
+[learnings]
+keep_lapsed_days = 14
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `keep_lapsed_days` | `14` | Days a [learning](./learning.md) that lapsed is kept before it is deleted. `0` deletes it as soon as it lapses. |
+
+A learning lapses after twenty of its agent's runs unless it is rediscovered. Kept, a lapsed one is
+what lets a later proposal of the same insight count as a rediscovery — three of those make it
+permanent. Deleted, that proposal starts a new learning. So a longer period gives a true insight more
+chance to be confirmed, and a shorter one keeps the list to what is in use: a factory lapsing nine a
+day keeps about 125 at fourteen days and none at zero.
+
+A lapsed learning goes at the first run of any agent after its days are up, or when `layover serve`
+next starts. Confirmed and provisional learnings are in use and never deleted; a rejected one is
+kept, because it is what stops an agent proposing again what a person refused. The whole table is
+optional.
+
 ## `[runners.*]` — how to invoke a CLI
 
 A runner is **a CLI and a permission set**, shared by every agent with those permissions. For a CLI
