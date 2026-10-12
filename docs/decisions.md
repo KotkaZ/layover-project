@@ -1021,6 +1021,17 @@ both is the duplicate-key error TOML would give for any other key, rather than o
 winning. A key that counts hours or days refuses a duration that is not a whole number of them,
 because rounding `"90m"` to one or two hours would change what somebody wrote on purpose.
 
+**Why `http_addr` is honoured and `state_dir` is only warned about.** Both were accepted and did
+nothing, and the configuration page said so — a key that is silently ignored is the failure this
+project keeps finding, documented or not. `http_addr` had an obvious meaning and nowhere better to
+live: the address a factory is served on belongs with the factory, and `autostart` registers `serve`
+with no flags, so it was the one way a factory started with the computer could be served anywhere
+but 7878. `--addr` still wins, for one start. `state_dir` has no such meaning to give it: moving the
+state directory would move history, the queue, Hangars and live-run records together, and a Tower
+that read it while an older one did not would split one factory's state in two. So it stays
+unhonoured, and `validate` warns where it is set rather than refusing — refusing would stop a
+factory that has always loaded.
+
 ---
 
 ## Still open

@@ -90,9 +90,10 @@ enum Command {
     /// want when looking at a factory another process is already running. Two Towers over one
     /// factory directory would race for its queue.
     Serve {
-        /// Address to listen on.
-        #[arg(long, default_value = "127.0.0.1:7878")]
-        addr: String,
+        /// Address to listen on. Defaults to `[layover] http_addr`, which is 127.0.0.1:7878 unless
+        /// the factory says otherwise.
+        #[arg(long)]
+        addr: Option<String>,
 
         /// Where run history lives. Defaults to `.layover/history` beside the configuration.
         #[arg(long, value_name = "DIR")]
@@ -200,7 +201,13 @@ fn main() -> ExitCode {
             history,
             watch_only,
             no_auth,
-        } => commands::serve(&cli.config, &addr, history.as_deref(), watch_only, no_auth),
+        } => commands::serve(
+            &cli.config,
+            addr.as_deref(),
+            history.as_deref(),
+            watch_only,
+            no_auth,
+        ),
         Command::Run { dry_run } => commands::run(&cli.config, dry_run),
         Command::Doctor { .. } => unreachable!("handled above"),
     };

@@ -217,9 +217,12 @@ fn retain(
 ///
 /// Returns [`Failure`] if the configuration is invalid, the history directory cannot be opened,
 /// or the address is already in use.
+///
+/// `addr` is `--addr`; without it, the factory's `[layover] http_addr` — so the address a factory
+/// is served on is written down with the factory, and `autostart` needs no flag to keep it.
 pub fn serve(
     path: &Path,
-    addr: &str,
+    addr: Option<&str>,
     history: Option<&Path>,
     watch_only: bool,
     no_auth: bool,
@@ -232,6 +235,8 @@ pub fn serve(
     // Load once up front purely to fail early. A dashboard whose route map cannot be drawn is a
     // confusing way to discover the factory definition is broken.
     let (config, _) = load(path)?;
+    let addr = addr.unwrap_or(&config.layover.http_addr).to_owned();
+    let addr = addr.as_str();
 
     let history_dir = history.map_or_else(
         || {

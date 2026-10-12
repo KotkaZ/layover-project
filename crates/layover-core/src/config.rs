@@ -26,9 +26,10 @@ pub use runner::{Cli, McpWiring, Runner, Selection, fixes_beside};
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Paths {
-    /// Root directory holding one hangar per agent.
-    #[serde(default = "default_state_dir")]
-    pub state_dir: PathBuf,
+    /// Accepted and not honoured: everything Layover keeps is in `.layover/` beside the factory
+    /// definition. `Some` only when a factory writes it, so validation can say so.
+    #[serde(default)]
+    pub state_dir: Option<PathBuf>,
     /// The shared working directory agents operate in.
     #[serde(default = "default_work_dir")]
     pub work_dir: PathBuf,
@@ -38,7 +39,7 @@ pub struct Paths {
     /// Directory that `prompt_file` paths are resolved against.
     #[serde(default = "default_prompt_dir")]
     pub prompt_dir: PathBuf,
-    /// Address the HTTP API binds to.
+    /// Address `layover serve` binds the dashboard and API to, unless `--addr` says otherwise.
     #[serde(default = "default_http_addr")]
     pub http_addr: String,
 }
@@ -46,7 +47,7 @@ pub struct Paths {
 impl Default for Paths {
     fn default() -> Self {
         Self {
-            state_dir: default_state_dir(),
+            state_dir: None,
             work_dir: default_work_dir(),
             logbook: default_logbook(),
             prompt_dir: default_prompt_dir(),
@@ -406,10 +407,6 @@ pub enum ConfigError {
     },
 }
 
-fn default_state_dir() -> PathBuf {
-    PathBuf::from(".layover/state")
-}
-
 fn default_work_dir() -> PathBuf {
     PathBuf::from("workspace")
 }
@@ -476,7 +473,7 @@ mod tests {
         assert_eq!(config.defaults.max_hops, 8);
         assert_eq!(config.defaults.max_runs, 64);
         assert_eq!(config.layover.http_addr, "127.0.0.1:7878");
-        assert_eq!(config.layover.state_dir, PathBuf::from(".layover/state"));
+        assert_eq!(config.layover.state_dir, None);
         assert_eq!(config.layover.prompt_dir, PathBuf::from("prompts"));
         assert!(config.pipelines.is_empty());
     }

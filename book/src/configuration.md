@@ -20,11 +20,11 @@ rather than rounded.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `state_dir` | `.layover/state` | **Not honoured.** Everything Layover keeps — history, the journal, Hangars, live-run records — is in `.layover/` beside this file, wherever this says. |
+| `state_dir` | — | **Not honoured**, and `validate` warns when it is set. Everything Layover keeps — history, the journal, Hangars, live-run records — is in `.layover/` beside this file. |
 | `work_dir` | `workspace` | The shared working directory agents operate in, relative to this file. |
 | `logbook` | `.layover/logbook.md` | Shared memory. All writes serialised by the Tower. |
 | `prompt_dir` | `prompts` | What `prompt_file` paths resolve against, relative to this file. |
-| `http_addr` | `127.0.0.1:7878` | Where the API binds. Loopback by default, deliberately. **Not yet honoured** — `layover serve --addr` sets the bind address today. |
+| `http_addr` | `127.0.0.1:7878` | Where `layover serve` binds the dashboard and API. Loopback by default, deliberately. `serve --addr` overrides it for one start, and [`autostart`](./cli.md#autostart) registers `serve` without one, so this is the address a factory started with the computer uses. |
 
 ### The state directory is versioned
 

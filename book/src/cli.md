@@ -105,8 +105,8 @@ or diffed — with `--pipeline`, as that workflow runs it:
 ## `serve`
 
 ```sh
-layover serve                          # http://127.0.0.1:7878
-layover serve --addr 127.0.0.1:8080
+layover serve                          # [layover] http_addr, http://127.0.0.1:7878 by default
+layover serve --addr 127.0.0.1:8080    # somewhere else, this once
 layover serve --history .layover/history
 layover serve --watch-only             # dashboard only, start nothing
 layover serve --no-auth                # open to anything that can reach the port

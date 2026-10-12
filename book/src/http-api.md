@@ -289,5 +289,5 @@ response, but it can POST one — which here means queueing work a real agent CL
 `--no-auth` turns it off, for a machine only you can reach. Binding off loopback *and* passing
 `--no-auth` prints a warning, because that combination is an open control plane on a network.
 
-`layover serve --addr` sets the bind address. `[layover] http_addr` is parsed but not yet
-honoured.
+`layover serve` binds `[layover] http_addr`, `127.0.0.1:7878` unless the factory says otherwise;
+`--addr` overrides it for one start.

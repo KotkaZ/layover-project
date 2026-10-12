@@ -10,12 +10,14 @@ status](README.md#project-status).
 
 ### Added
 
+- **`layover serve` binds `[layover] http_addr`**, which was accepted and ignored. `--addr` still
+  wins, and without either it is `127.0.0.1:7878` as before. A factory started by `autostart` now
+  serves where its `layover.toml` says.
 - **Lengths of time can be written as durations**: `[defaults] timeout = "2h"`,
   `[reserve] window = "24h"`, `[learnings] keep_lapsed = "14d"` and a route's `timeout = "30m"`,
   beside `timeout_sec`, `window_hours`, `keep_lapsed_days` and the route's `timeout_sec`, which keep
   working and also take a duration. Naming both is an error, and a duration that is not a whole
   number of hours or days, where the key counts in them, is refused rather than rounded.
-
 - **The numbers a learning lives by are the factory's**, in a new `[learnings]` table:
   `provisional_runs` (20) runs it applies for, `confirm_after` (3) rediscoveries to make it
   permanent, `max_chars` (400) the longest an agent may propose, and `max_per_run` (25) the most one
@@ -27,6 +29,12 @@ status](README.md#project-status).
   after it starts a new learning. Deletion happens after every run and when `layover serve` starts.
   Each learning now records when it lapsed, and `GET /learnings` gives a lapsed one's `lapsed_at` and
   `deleted_after`, which the dashboard shows beside it. Rejected learnings are kept, as before.
+
+### Changed
+
+- **`[layover] state_dir` is warned about** by `validate`. It has never been honoured — everything
+  Layover keeps is in `.layover/` beside the factory definition — and a key that is silently ignored
+  reads as though it works. A factory that sets it still loads; `validate --strict` now fails on it.
 
 ## [1.11.0] — 2026-10-12
 
