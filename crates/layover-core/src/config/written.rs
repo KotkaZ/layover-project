@@ -1,7 +1,8 @@
 //! `layover.toml` as written, and the factory it describes.
 //!
 //! A few keys are shorthand for something every part of Layover would otherwise have to work out
-//! for itself: `[flags]` declares a flag for every workflow at once. They are resolved here, once,
+//! for itself: `[flags]` declares a flag for every workflow at once, and a pipeline's
+//! `routes_from` lets its chains use another's scoped routes. They are resolved here, once,
 //! as the file is read, so the rest of Layover sees each pipeline exactly as if it had declared
 //! everything itself — and nothing downstream can forget to apply them.
 
@@ -49,6 +50,8 @@ impl From<Written> for Config {
         for pipeline in pipelines.values_mut() {
             inherit_flags(pipeline, &written.flags);
         }
+        let mut routes = written.routes;
+        inherit_routes(&pipelines, &mut routes);
 
         Self {
             layover: written.layover,
@@ -61,7 +64,38 @@ impl From<Written> for Config {
             runners: written.runners,
             agents: written.agents,
             pipelines,
-            routes: written.routes,
+            routes,
+        }
+    }
+}
+
+/// Adds each pipeline with `routes_from` to every route scoped to the pipeline it names.
+///
+/// Repeated until nothing changes, so a pipeline taking routes from one that takes them from a
+/// third gets all three's. One naming itself or a pipeline that does not exist is skipped here and
+/// refused by validation.
+fn inherit_routes(pipelines: &BTreeMap<PipelineName, Pipeline>, routes: &mut [Route]) {
+    loop {
+        let mut changed = false;
+        for (name, pipeline) in pipelines {
+            let Some(from) = &pipeline.routes_from else {
+                continue;
+            };
+            if from == name || !pipelines.contains_key(from) {
+                continue;
+            }
+            for route in routes.iter_mut() {
+                if let Some(scope) = &mut route.pipelines
+                    && scope.contains(from)
+                    && !scope.contains(name)
+                {
+                    scope.push(name.clone());
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
         }
     }
 }

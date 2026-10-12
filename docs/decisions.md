@@ -1054,6 +1054,16 @@ exactly is warned about rather than refused; one that gives it a different defau
 disagreement validation already warns about. The merge happens as the file is read, so nothing
 downstream can forget to apply it.
 
+**Why a follow-up names where its routes come from, rather than routes naming it.** Five of Karl's
+routes carried `pipelines = ["devforge", "devforge-follow-up"]`, and a route added for DevForge that
+forgot the second name would quietly leave the follow-up unable to finish work it resumed. The
+follow-up's relationship is to a workflow, not to each route, so it is said once on the pipeline:
+`routes_from = "devforge"`. It is resolved as the file is read, by adding the follow-up to each of
+those routes' scopes, so the route map — what `explain` prints, what the Tower checks, what the
+dashboard draws — still says on every route who may use it, and nothing that reads routes changed.
+It widens nothing a resumed chain can do beyond what the booking chain could: that narrowing still
+applies on top.
+
 ---
 
 ## Still open

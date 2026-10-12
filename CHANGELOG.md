@@ -35,6 +35,10 @@ status](README.md#project-status).
   The trigger window and `layover explain` offer each workflow only its own flags and the shared ones
   a prompt its agents read tests. `validate` warns about a workflow repeating a flag exactly as
   `[flags]` declares it. The workitem-factory and multi-workflow examples now declare theirs once.
+- **`routes_from` lets a workflow use another's scoped routes**: `[pipelines.follow-up]
+  routes_from = "development"` scopes every route scoped to `development` to the follow-up too, so
+  those routes no longer each name both. It carries through chains of them; naming itself or an
+  unknown pipeline is an error. The multi-workflow example's follow-up uses it.
 - **A pipeline that `resumes` may leave out `entry`.** Its work goes back to whoever set it down,
   so the entry was required and unused. Without one it cannot be triggered by hand, and its map
   draws no arrow from it. `GET /pipelines` gives such a pipeline `entry: null`.

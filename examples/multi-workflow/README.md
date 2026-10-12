@@ -37,7 +37,8 @@ flowchart LR
   publisher --> messenger
 ```
 
-`development-follow-up` uses the same routes. What it wakes is whoever set the work down — in
+`development-follow-up` uses the same routes, by saying `routes_from = "development"` rather than
+every route naming both. What it wakes is whoever set the work down — in
 practice the publisher, after it published a pull request — so the follow-up can send the builder
 review comments to fix, and they go back through the tester and the reviewer like any other change.
 

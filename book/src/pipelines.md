@@ -40,6 +40,23 @@ A pipeline still says nothing about *order*; a scoped route is a permission with
 a step in one. The scope lives on the route rather than on the pipeline so that the route map
 stays the one place that says who may reach whom.
 
+A follow-up usually needs exactly the routes of the workflow whose work it resumes. Rather than
+every one of those routes naming both, the follow-up says where its routes come from:
+
+```toml
+[pipelines.development-follow-up]
+trigger     = { every = "30m" }
+resumes     = true
+routes_from = "development"   # every route scoped to development is scoped to this too
+```
+
+`routes_from` names one pipeline; its chains may then use every route scoped to that pipeline, as
+well as the global routes and any scoped to it by name. It carries through — a pipeline taking
+routes from one that takes them from a third gets all three's — and `layover explain` lists each
+route with every pipeline that may use it. Naming itself, or a pipeline that does not exist, is an
+error. It widens what a resumed chain's own pipeline permits; a resumed chain is still held to what
+the chain that set its work down could reach.
+
 | Work | Belongs to |
 |---|---|
 | A trigger from the dashboard, `POST /flights` or a schedule | The pipeline triggered |

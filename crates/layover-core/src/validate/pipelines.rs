@@ -11,6 +11,7 @@ pub(super) fn check_pipelines(config: &Config, found: &mut Vec<Diagnostic>) {
     check_flag_names_are_usable(config, found);
     check_flag_declarations_agree(config, found);
     check_flags_are_not_repeated(config, found);
+    check_routes_from(config, found);
     check_schedules_are_survivable(config, found);
     check_schedules_fit_the_reserve(config, found);
 }
@@ -153,6 +154,25 @@ fn check_schedules_are_survivable(config: &Config, found: &mut Vec<Diagnostic>) 
             found.push(Diagnostic::warning(format!(
                 "pipeline `{name}` fires at least every {gap}s but a single run may take \
                  {timeout}s, {consequence}"
+            )));
+        }
+    }
+}
+
+/// `routes_from` must name another pipeline, or it gives its chains nothing.
+fn check_routes_from(config: &Config, found: &mut Vec<Diagnostic>) {
+    for (name, pipeline) in &config.pipelines {
+        let Some(from) = &pipeline.routes_from else {
+            continue;
+        };
+        if from == name {
+            found.push(Diagnostic::error(format!(
+                "pipeline `{name}` takes its routes from itself; `routes_from` names another \
+                 pipeline whose scoped routes its chains may use"
+            )));
+        } else if !config.pipelines.contains_key(from) {
+            found.push(Diagnostic::error(format!(
+                "pipeline `{name}` takes its routes from `{from}`, which is not a pipeline"
             )));
         }
     }

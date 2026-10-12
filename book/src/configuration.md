@@ -636,6 +636,9 @@ pipelines = "eagle-eye"
 - **Scoped**, only chains belonging to one of the named pipelines may use it. A chain started by
   `eagle-eye` that asks to send `eagle -> bob` is refused like any edge the map does not draw, and
   `layover_peers` does not list it.
+- A pipeline with **`routes_from = "devforge"`** may use every route scoped to `devforge` too, so
+  a follow-up need not be named on each of them: `pipelines = "devforge"` above would then serve
+  `devforge-follow-up` as well. See [Pipelines](./pipelines.md#which-routes-a-pipelines-chains-may-use).
 - The same pair may appear in several routes; the union applies. Two routes one chain could use
   together must agree about `mode` and `join` for any pair they share, and `validate` says so when
   they do not.

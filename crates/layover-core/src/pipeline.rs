@@ -289,6 +289,11 @@ pub struct Pipeline {
     /// Boolean parameters this pipeline accepts, keyed by flag name.
     #[serde(default)]
     pub flags: BTreeMap<String, FlagSpec>,
+    /// Another pipeline whose scoped routes this one's chains may use too — a follow-up taking
+    /// the routes of the workflow whose work it resumes. Applied as the file is read, by adding
+    /// this pipeline to each of those routes' `pipelines`.
+    #[serde(default)]
+    pub routes_from: Option<PipelineName>,
     /// How this workflow's chains run particular agents, where that differs from what each agent
     /// declares: `[pipelines.<name>.agents.<agent>]`. See [`AgentOverride`].
     #[serde(default)]

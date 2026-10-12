@@ -153,11 +153,13 @@ entry       = "analyst"
 trigger     = "manual"
 
 # Collects the work the publisher sets down after publishing, so a pull request can be followed
-# for days without anything running in between. Resumed work goes back to whoever set it down.
+# for days without anything running in between. Resumed work goes back to whoever set it down, so
+# it needs no entry; its chains use development's routes, without each of them having to say so.
 [pipelines.development-follow-up]
 description = "Pick up published pull requests the publisher set down, to answer their review comments"
 trigger     = { cron = "0,30 * * * *" }
 resumes     = true
+routes_from = "development"
 
 [pipelines.review-sweep]
 description = "Every two hours, review every open pull request the team is asked to review"
@@ -184,39 +186,39 @@ effort = "medium"
 # Who may send to whom; nothing else is permitted. Every route is scoped to the workflows whose
 # chains may use it, so an agent shared by two workflows has only that workflow's edges in each:
 # a sweep's reviewer reads pull request text written by anyone, and cannot hand the builder work
-# whatever that text says. A follow-up is held to what the development chain that set it down
-# could reach.
+# whatever that text says. A follow-up takes development's routes (`routes_from`), and is held to
+# what the development chain that set it down could reach.
 
-# ── development, and its follow-up ──
+# ── development, and through `routes_from` its follow-up ──
 [[routes]]
 from      = "analyst"
 to        = ["investigator", "reviewer", "builder"]
-pipelines = ["development", "development-follow-up"]
+pipelines = "development"
 
 [[routes]]
 from      = "investigator"
 to        = "analyst"
-pipelines = ["development", "development-follow-up"]
+pipelines = "development"
 
 [[routes]]
 from      = "builder"
 to        = ["analyst", "tester", "reviewer", "publisher"]
-pipelines = ["development", "development-follow-up"]
+pipelines = "development"
 
 [[routes]]
 from      = "tester"
 to        = "builder"
-pipelines = ["development", "development-follow-up"]
+pipelines = "development"
 
 [[routes]]
 from      = "reviewer"
 to        = ["analyst", "builder"]
-pipelines = ["development", "development-follow-up"]
+pipelines = "development"
 
 [[routes]]
 from      = "publisher"
 to        = ["builder", "messenger"]
-pipelines = ["development", "development-follow-up"]
+pipelines = "development"
 
 # ── review-sweep ──
 # One fresh itinerary per pull request, so a dozen pull requests never compete for one budget.
