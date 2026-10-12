@@ -139,6 +139,23 @@ impl Queued {
         self.within = within;
         self
     }
+
+    /// The workflow this flight is a way into, when it is one: the first flight of a chain that a
+    /// person, a schedule or a resuming pipeline asked a workflow for.
+    ///
+    /// What a switched-off workflow holds back. Every other flight belongs to a chain already
+    /// under way — a hand-off or a spawn an agent sent, a restart of an interrupted run, a join
+    /// that released, the continuation a reply to a help request starts — and a chain under way
+    /// finishes whatever its workflow's switch says. `pipeline` alone cannot tell them apart:
+    /// every flight of a chain carries it.
+    #[must_use]
+    pub fn way_in(&self) -> Option<&PipelineName> {
+        let opens = self.flight.from.agent().is_none()
+            && self.recovering.is_none()
+            && self.continues.is_none()
+            && !self.released;
+        if opens { self.pipeline.as_ref() } else { None }
+    }
 }
 
 #[cfg(test)]
@@ -208,6 +225,44 @@ mod tests {
         assert_eq!(read, queued);
         assert_eq!(read.attempt(), 2);
         assert!(read.released);
+    }
+
+    #[test]
+    fn only_the_first_flight_a_workflow_was_asked_for_is_a_way_into_it() {
+        let development = || Some(PipelineName::new("development"));
+        let opening = |from: Origin| {
+            let mut flight = flight();
+            flight.from = from;
+            Queued::new(flight, development(), BTreeMap::new())
+        };
+
+        for from in [
+            Origin::Human,
+            Origin::Schedule(PipelineName::new("development")),
+            Origin::Resumed(crate::layover::LayoverId::generate()),
+        ] {
+            assert_eq!(
+                opening(from.clone()).way_in(),
+                development().as_ref(),
+                "{from:?}"
+            );
+        }
+
+        let under_way = [
+            opening(Origin::Agent(AgentName::new("analyst"))),
+            opening(Origin::Human).restarting(crate::handover::Recovery {
+                previous: crate::flight::RunId::generate(),
+                interruption: crate::handover::Interruption::TowerRestart,
+                attempt: 2,
+            }),
+            opening(Origin::Human).already_released(),
+            opening(Origin::Human).continuing(ItineraryId::generate()),
+        ];
+        for queued in under_way {
+            assert_eq!(queued.way_in(), None, "{queued:?}");
+        }
+
+        assert_eq!(Queued::new(flight(), None, BTreeMap::new()).way_in(), None);
     }
 
     #[test]

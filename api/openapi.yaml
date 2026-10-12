@@ -82,6 +82,66 @@ paths:
               schema:
                 $ref: "#/components/schemas/PipelineList"
 
+  /pipelines/{pipeline_name}/switch-off:
+    post:
+      operationId: switchOffPipeline
+      summary: Switch a workflow off.
+      description: |
+        Closes the workflow's ways in until it is switched back on: its schedule does not fire, a
+        trigger is refused, a resuming workflow collects nothing, and a trigger already queued
+        waits. Every chain of it already under way finishes. Kept in the state directory, so it
+        survives a restart, and read by the Tower on every pass. Switching off a workflow that is
+        already off changes nothing.
+      tags: [control]
+      parameters:
+        - name: pipeline_name
+          in: path
+          required: true
+          description: The pipeline to switch off.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: It is off.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PipelineSwitch"
+        "404":
+          description: No pipeline by that name is declared.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    delete:
+      operationId: switchOnPipeline
+      summary: Switch a workflow back on.
+      description: |
+        Its schedule fires at its next tick — ticks that passed while it was off are not made up —
+        and any trigger it held starts as soon as a slot is free. Switching on a workflow that is
+        on changes nothing.
+      tags: [control]
+      parameters:
+        - name: pipeline_name
+          in: path
+          required: true
+          description: The pipeline to switch on.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: It is on.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PipelineSwitch"
+        "404":
+          description: No pipeline by that name is declared.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
   /flights:
     get:
       operationId: listPending
@@ -130,7 +190,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
         "409":
-          description: A Ground Stop is engaged, so no new work may start.
+          description: |
+            A Ground Stop is engaged, so no new work may start; or the pipeline is switched off.
           content:
             application/json:
               schema:
@@ -951,11 +1012,22 @@ components:
     Pipeline:
       type: object
       description: A named entry point into the mesh.
-      required: [name, entry, trigger, flags, max_hops, fuel_usd, workspace, resumes, agents]
+      required:
+        [name, entry, trigger, flags, max_hops, fuel_usd, workspace, resumes, agents, switched_off]
       properties:
         name:
           type: string
           description: The key the pipeline is declared under.
+        switched_off:
+          type: boolean
+          description: |
+            A person switched it off: its schedule does not fire, a trigger is refused and a
+            resuming pipeline collects nothing until it is switched back on. Chains of it already
+            under way carry on.
+        switched_off_since:
+          type: [string, "null"]
+          format: date-time
+          description: When it was switched off. Null when it is on, or was switched off by hand.
         description:
           type: [string, "null"]
           description: One line saying what this pipeline is for.
@@ -1583,11 +1655,16 @@ components:
     PendingFlight:
       type: object
       description: A flight that has been asked for and not yet dispatched.
-      required: [flight_id, itinerary_id, to, body, queued_at]
+      required: [flight_id, itinerary_id, to, body, queued_at, held]
       properties:
         flight_id:
           type: string
           description: Identifier of the queued flight.
+        held:
+          type: boolean
+          description: |
+            It opens a chain of a workflow that is switched off, so it waits, and starts once the
+            workflow is switched back on. A flight of a chain already under way is never held.
         itinerary_id:
           type: string
           description: The chain it will begin.
@@ -1674,6 +1751,9 @@ components:
         `awaiting_human` looks finished and is not: the chain's last run stopped to ask a person
         something — a fatal help request, still open — and nothing will run until somebody
         answers. Resolving the request without replying makes it `finished`.
+
+        `halted` is a chain a Ground Stop stopped or holds, or one that has not started because its
+        workflow is switched off.
       enum: [working, finished, stalled, halted, awaiting_human]
 
     HelpAsk:
@@ -1862,14 +1942,17 @@ components:
       properties:
         pipeline:
           type: string
-          description: The pipeline.
+          description: |
+            The pipeline. One named in the response's `switched_off` lets its ticks pass: `fires`
+            lists none of them and `fires_in_window` is 0.
         next_at:
           type: [string, "null"]
           format: date-time
           description: |
             When its next tick is due, by the Tower's clock. Null when no clock is known in this
             process, or for a cron expression that never matches. A time already past is a tick
-            held back — by a Ground Stop, usually — that fires as soon as it can.
+            held back — by a Ground Stop, usually — that fires as soon as it can. For a workflow
+            switched off, the tick it would fire at if switched back on now.
         resumes:
           type: boolean
           description: True when its ticks collect due layovers rather than starting fresh work.
@@ -1959,8 +2042,10 @@ components:
           format: date-time
           description: |
             The first tick of a resuming pipeline at or after `due_at`, which is when it will be
-            picked up unless that tick is skipped. Null when no clock is known in this process, or
-            when no scheduled pipeline `resumes` — then nothing will ever pick it up.
+            picked up unless that tick is skipped. A resuming pipeline that is switched off is
+            passed over. Null when no clock is known in this process, when no scheduled pipeline
+            `resumes` — then nothing will ever pick it up — or when every one that does is switched
+            off, until one is switched back on.
         collected_by:
           type: [string, "null"]
           description: The resuming pipeline whose tick that is.
@@ -1984,7 +2069,7 @@ components:
     Upcoming:
       type: object
       description: What will start on its own within a window, and the ticks that recently did not.
-      required: [now, until, clock, ground_stop, workflows, fires, layovers, skips]
+      required: [now, until, clock, ground_stop, switched_off, workflows, fires, layovers, skips]
       properties:
         now:
           type: string
@@ -2002,6 +2087,14 @@ components:
         ground_stop:
           type: boolean
           description: A Ground Stop is engaged, so nothing here fires until it is released.
+        switched_off:
+          type: array
+          description: |
+            The scheduled pipelines a person has switched off. Their ticks pass without firing or
+            counting as skipped, and a resuming one collects no layovers, until switched back on.
+          items:
+            type: string
+            description: A pipeline's name.
         workflows:
           type: array
           description: Every pipeline with a schedule, by name.
@@ -2163,6 +2256,22 @@ components:
           type: [string, "null"]
           format: date-time
           description: When the Ground Stop was engaged.
+
+    PipelineSwitch:
+      type: object
+      description: Whether one workflow is switched off.
+      required: [pipeline, switched_off]
+      properties:
+        pipeline:
+          type: string
+          description: The pipeline.
+        switched_off:
+          type: boolean
+          description: True when its ways in are closed.
+        since:
+          type: [string, "null"]
+          format: date-time
+          description: When it was switched off. Null when it is on, or was switched off by hand.
 
     Problem:
       type: object

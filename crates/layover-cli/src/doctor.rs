@@ -28,6 +28,7 @@ use layover_store::{HelpFilter, History, Journal, RunFilter};
 
 mod costs;
 mod money;
+mod switches;
 mod waits;
 
 /// How serious a finding is.
@@ -153,16 +154,22 @@ pub fn check(config: &Config, root: &Path, window: Window) -> Result<Report, Str
         findings: Vec::new(),
     };
 
+    let off = switches::switched_off(config, &journal, &mut report);
     stalled_chains(&journal, &span, &mut report);
     costs::unreported(config, &runs, &mut report);
     money::reserve(config, root, &runs, &mut report);
-    waits::waits(
-        config,
-        root,
-        &runs,
-        &journal.pending().unwrap_or_default(),
-        &mut report,
-    );
+    // A trigger a switched-off workflow holds is waiting on purpose, not for want of a Tower.
+    let pending: Vec<_> = journal
+        .pending()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|queued| {
+            queued
+                .way_in()
+                .is_none_or(|pipeline| !off.contains(pipeline))
+        })
+        .collect();
+    waits::waits(config, root, &runs, &pending, &mut report);
     interrupted_runs(&runs, &mut report);
     open_help(&journal, &span, &mut report);
     stranded_layovers(&journal, config, &mut report);
@@ -181,7 +188,7 @@ pub fn check(config: &Config, root: &Path, window: Window) -> Result<Report, Str
                 .to_owned(),
         });
     } else {
-        idle_schedules(config, &runs, &mut report);
+        idle_schedules(config, &runs, &off, &mut report);
     }
 
     report
@@ -330,8 +337,18 @@ fn ground_stop(root: &Path, report: &mut Report) {
 }
 
 /// Scheduled pipelines that have never actually run.
-fn idle_schedules(config: &Config, runs: &[layover_core::run::RunRecord], report: &mut Report) {
+///
+/// One switched off is left out: it is not running because somebody said so, and has its own note.
+fn idle_schedules(
+    config: &Config,
+    runs: &[layover_core::run::RunRecord],
+    off: &std::collections::BTreeSet<layover_core::pipeline::PipelineName>,
+    report: &mut Report,
+) {
     for (name, _) in config.scheduled_pipelines() {
+        if off.contains(name) {
+            continue;
+        }
         let ran = runs
             .iter()
             .any(|record| record.pipeline.as_ref() == Some(name));

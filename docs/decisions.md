@@ -959,6 +959,29 @@ seconds, and four answers read at four moments can disagree about whether a run 
 barrier flights are not drawn: they live only in the Tower's memory, and a dashboard that guessed
 at them would misreport the one wait somebody is most likely to be watching.
 
+**Why a workflow's switch closes its ways in and nothing else.** Asked for as an on-off switch for
+every workflow, scheduled ones included, and the only stop there was halted the whole factory and
+killed what was running. Two choices were Karl's (2026-10-12). Chains of a workflow already under
+way **finish**: holding their hand-offs would strand a chain half done, with Fuel spent and
+barriers waiting, and ending their runs is what the Ground Stop already does for anybody who wants
+that. And the switch is **runtime state, not configuration**: it is flipped while the factory runs
+and has to survive the restart that reloads `layover.toml`, and a key in the file beside it would
+be a second answer to "is this on?" that the two could disagree about. So it is a line in the
+journal, read by the Tower on every pass like the Ground Stop's file, and settable by hand.
+What "a way in" is had to be stated rather than read off a flight: every flight of a chain carries
+its pipeline, so the Tower holds only a chain's *first* flight — from a person, a schedule or a
+resumed layover — and never a hand-off, a spawn, a restart, a released join or the continuation a
+reply starts, all of which belong to work already under way. A trigger is refused rather than
+queued to wait, because a person told "queued" walks away believing their run is coming; one
+queued before the switch was flipped waits rather than being cancelled, because cancelling is a
+decision the dashboard already offers and taking it silently would lose work somebody asked for.
+Ticks that pass while a workflow is off are neither fired later nor recorded as skips. Catching up
+on switching back on would start work at a moment nobody chose, which is what the switch was
+flipped to prevent; and a skip is recorded because a skipping schedule looks from outside like one
+running fine, while a switched-off workflow says it is off wherever it is shown. Switching on asks
+for no confirmation, unlike releasing a Ground Stop, because it starts nothing at once beyond the
+triggers it held.
+
 ---
 
 ## Still open

@@ -128,7 +128,7 @@ things in one process:
 
 | | |
 |---|---|
-| Fires schedules | A pipeline with a `trigger` starts on its own, on time even while other runs are going, and skips a tick whose previous wave is still queued or running |
+| Fires schedules | A pipeline with a `trigger` starts on its own, on time even while other runs are going, and skips a tick whose previous wave is still queued or running. One [switched off](./dashboard.md#switching-a-workflow-off) lets its ticks pass |
 | Runs the queue | Whatever is waiting — from a schedule, from `POST /flights`, or sent by another agent — up to `max_concurrent_runs` at once, the next starting as a slot frees |
 | Hosts MCP | Every run gets the endpoint and a token, so `layover_send` reaches a real queue |
 | Serves the dashboard | The [route map per workflow](./dashboard.md), run history, cost and the Reserve, help requests, learnings, and each agent's report |
@@ -203,12 +203,12 @@ The failures it looks for are the quiet ones — the ones that look like nothing
 |---|---|
 | A **stalled chain** | Every run in it reports success. A stall and a finished chain look identical on a list |
 | Runs reporting no cost | The total reads *not reported* or carries a `+`, which says *that* it is unknown and not *why*. The finding names each runner the silent runs ran on and what to change: the output flag its CLI needs, a rate card row for a Codex model, or — when the command is already right — that the runs ended before printing a cost or predate Layover reading one |
-| A schedule that never fired | A schedule that is not firing looks exactly like one with nothing to do |
+| A schedule that never fired | A schedule that is not firing looks exactly like one with nothing to do. One a person [switched off](./dashboard.md#switching-a-workflow-off) is left out, and named in a note of its own instead |
 | Open help requests | The channel that reaches a person is the one nobody is there to read |
 | Layovers nothing will collect | Work an agent set down to come back to, in a factory where no pipeline `resumes` |
 | A Ground Stop left engaged | The factory is up, the dashboard is green, and nothing is running |
 | The Reserve refusing work | A factory that may not spend any more looks exactly like one with nothing to do |
-| Work that waited with a slot free | Queued longer than `timeout_sec` while fewer than `max_concurrent_runs` runs were alive, it looks like a busy factory. It is one where nothing was starting the work |
+| Work that waited with a slot free | Queued longer than `timeout_sec` while fewer than `max_concurrent_runs` runs were alive, it looks like a busy factory. It is one where nothing was starting the work. A trigger a switched-off workflow holds is waiting on purpose and is not counted |
 
 Findings come in three weights. A **fault** means work was lost or money cannot be accounted for; a
 **warning** means something is wrong and a person should look; a **note** is worth knowing and does

@@ -107,6 +107,11 @@ that runs the development workflow's reviewer at a lower effort with one more de
 | `trigger = { every = "1h" }` | Fires on a fixed interval: `s`, `m`, `h`, `d`. |
 | `trigger = { cron = "0 9 * * 1-5" }` | Fires on a five-field cron expression, in local time. |
 
+Any workflow, scheduled or manual, can be **switched off** from the dashboard while the factory
+runs: its schedule stops firing, it cannot be triggered, and a resuming one collects nothing, while
+chains of it already under way finish. The switch is not part of `layover.toml`, so a restart keeps
+it as it was left. See [switching a workflow off](./dashboard.md#switching-a-workflow-off).
+
 ## Resuming booked work
 
 ```toml
@@ -141,7 +146,9 @@ declare every flag the resumed agents' prompts test. The **values** come from th
 the layover — see [a flag holds for the whole chain](#a-flag-holds-for-the-whole-chain).
 
 **Only a resuming pipeline collects them.** An ordinary schedule never picks up booked work, so a
-factory's hourly sweep cannot quietly start following up somebody else's.
+factory's hourly sweep cannot quietly start following up somebody else's. One that is switched off
+collects nothing either: its layovers wait, and the first of its ticks after it is switched back on
+picks them up.
 
 **A resumed chain is held to what its booking chain could reach.** It belongs to the resuming
 pipeline — its flags, its joins, its place on the dashboard — but may use a route only when the
@@ -246,7 +253,9 @@ were, restarting would be expensive enough to avoid.
 
 Next firings are computed from the clock, not from when the last run finished — otherwise the
 period drifts by however long the work took, and an hourly job slowly becomes a ninety-minute one.
-A Tower that was asleep for six hours fires **once** on waking rather than six times in a row.
+A Tower that was asleep for six hours fires **once** on waking rather than six times in a row. A
+workflow switched off for six hours fires not at all on being switched back on, but at its next
+tick: the Tower kept its clock running and let those ticks pass.
 
 An `every` schedule counts from when the Tower started, so a restart moves it: an hourly sweep
 started at 09:20 fires at 10:20, 11:20 and so on. When each schedule next fires, by the clock the

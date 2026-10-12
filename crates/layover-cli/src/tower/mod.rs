@@ -32,6 +32,8 @@
 //! of a Ground Stop, a restart and a dashboard in another task.
 
 mod resume;
+#[cfg(test)]
+mod switched;
 mod timetable;
 
 use std::collections::BTreeSet;
@@ -180,8 +182,16 @@ fn fire_due(
     // while this looks, because the same thread does both.
     let busy = factory.busy_pipelines();
     let pending = journal.pending().unwrap_or_default();
+    // A workflow switched off lets its ticks pass: none fires, none is a skip, and switched back
+    // on it fires at its next tick rather than making up the ones it missed.
+    let off = factory.switched_off();
 
-    let due = clock.tick(config, now, |pipeline| working(&pending, &busy, pipeline));
+    let due = clock.tick_except(
+        config,
+        now,
+        |pipeline| working(&pending, &busy, pipeline),
+        |pipeline| off.contains(pipeline),
+    );
 
     for name in due.fire {
         // A resuming pipeline does not open fresh work on its tick; it goes looking for work

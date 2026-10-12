@@ -39,10 +39,11 @@ supply the mapping. Where retention has taken the run but not the request, the w
 
 ## Triggering a workflow
 
-**Trigger a workflow** opens a window with the pipeline, a prompt box, and a switch for every flag
+**Trigger a workflow** opens a window with the pipeline, a prompt box, and a toggle for every flag
 that pipeline declares — each starting from its declared default, so the window shows what would
 happen if you changed nothing. A flag the pipeline does not declare is refused rather than ignored:
-silently dropping it would let a typo change nothing while appearing to work.
+silently dropping it would let a typo change nothing while appearing to work. A workflow
+[switched off](#switching-a-workflow-off) cannot be triggered until it is switched back on.
 
 **Name** it, optionally — `Login page: retry banner` — and that is what the run is called wherever
 it appears: the Chains list, the chain's own page, Sessions, Upcoming and Runs. Three DevForge runs
@@ -136,6 +137,34 @@ Reports are capped and trimmed rather than refused — a report is the only acco
 already cost money — and a trimmed one says so, so you know to look further rather than assuming
 the agent stopped there. The caps are a 160-character headline, a 12,000-character body and 32
 artifacts; a learning is capped at 400 characters, and at most 25 are injected into any one run.
+
+## Switching a workflow off
+
+Every workflow has an **On / Off** switch beside its name on the route map, scheduled or not. Off
+closes its ways in:
+
+| | While it is off |
+|---|---|
+| Its schedule | Ticks pass without firing. They are not recorded as skipped: the workflow says it is off wherever it is shown, which is the thing a skip record exists to make visible. |
+| Triggering it | Refused, from the trigger window and from `POST /flights`. The window says so as soon as the workflow is picked, before anybody writes a prompt. |
+| A resuming workflow | Collects nothing. Its layovers wait, and **Upcoming** says they are picked up once it is switched back on. |
+| A trigger already queued | Waits in the queue, marked *held*. Its chain reads **halted** with the reason. Cancel it from **Upcoming** if it should not run at all. |
+| Chains already under way | **Finish.** Their hand-offs, spawned chains, restarts after a crash and the work a reply to their help requests continues are never held. |
+
+Switched back on, a trigger it held starts as soon as a slot is free, and its schedule fires at its
+**next** tick: the ones that passed while it was off are not made up, because work starting at a
+moment nobody chose is the thing the switch was flipped to prevent. **Upcoming** shows when that
+next tick is while the workflow is still off.
+
+Neither direction asks for confirmation. Off starts nothing, and on starts nothing at once except
+what it held — unlike releasing a Ground Stop, which restarts everything. To stop work that is
+already running, that is still what the Ground Stop is for.
+
+The switch is kept in `.layover/journal/switched-off.jsonl`, one line per workflow that is off, so
+it survives a restart and the Tower reads it on every pass. When nothing is answering, add
+`{"pipeline":"review-sweep"}` to that file by hand, or delete the line to switch it back on. A
+flight sent straight to an `entry = true` agent belongs to no workflow, so no switch holds it.
+[`layover doctor`](./cli.md#doctor) names every workflow that is off.
 
 ## Stopping it
 

@@ -122,7 +122,8 @@ flowchart LR
 - **The route map is a directed graph.** No edge means the flight is refused.
 - **Work enters through pipelines.** Named, triggerable entry points — manual, or on a clock.
   Workflows share agents, and each may use only its own routes and run a shared agent at its own
-  model, effort or context. A person triggering one can name the run and choose those for it.
+  model, effort or context. A person triggering one can name the run and choose those for it, and
+  can switch any workflow off — its schedule included — while the rest of the factory runs.
 - **A runner is a CLI and a permission set.** For Copilot CLI and Claude Code, Layover supplies
   everything an unattended run needs; a runner lists what its agents are denied, and an agent or a
   workflow adds its own — never removes.

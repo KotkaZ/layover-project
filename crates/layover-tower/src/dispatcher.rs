@@ -303,8 +303,11 @@ impl Factory {
                 let stopping = grounded || stop();
 
                 if !stopping {
-                    let started =
-                        self.start_what_fits(scope, &tx, &mut queue, &mut done, unqueue, report);
+                    // Read every pass, like the Ground Stop, so a workflow switched off a moment
+                    // ago holds a trigger that has not started yet.
+                    let off = self.switched_off();
+                    let started = self
+                        .start_what_fits(scope, &tx, &mut queue, &mut done, unqueue, report, &off);
                     flying += started;
                     if started > 0 {
                         dry = false;
@@ -370,6 +373,10 @@ impl Factory {
     }
 
     /// Starts every waiting flight that fits, in order, and says how many runs it started.
+    ///
+    /// A way into a workflow in `off` waits where it is, as a flight for a full agent does: it is
+    /// still asked for, and starts once the workflow is switched back on.
+    #[allow(clippy::too_many_arguments)]
     fn start_what_fits<'scope, 'env>(
         &'env self,
         scope: &'scope Scope<'scope, 'env>,
@@ -378,13 +385,19 @@ impl Factory {
         done: &mut Vec<Flight>,
         unqueue: &mut dyn FnMut(&Flight) -> bool,
         report: &mut dyn FnMut(&Flight, &Dispatched),
+        off: &BTreeSet<PipelineName>,
     ) -> usize {
         let limit = self.config.defaults.max_concurrent_runs.max(1);
         let mut started = 0;
         let mut index = 0;
 
         while index < queue.waiting.len() && self.alive_runs() < limit {
-            if self.agent_is_full(&queue.waiting[index].flight.to) {
+            let waiting = &queue.waiting[index];
+            if self.agent_is_full(&waiting.flight.to)
+                || waiting
+                    .way_in()
+                    .is_some_and(|pipeline| off.contains(pipeline))
+            {
                 index += 1;
                 continue;
             }

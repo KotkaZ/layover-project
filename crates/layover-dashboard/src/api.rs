@@ -25,9 +25,9 @@ use layover_http::{
     GetUpcomingQuery, GroundStop, Health, HelpList, HelpReplied, HelpReplyRequest, HelpResolved,
     ItineraryDetail, ItineraryList, ItineraryState, JudgeLearningPath, JudgeLearningRequest,
     Judgement, Learning, LearningList, ListHelpQuery, ListItinerariesQuery, ListLearningsQuery,
-    ListRunsQuery, PendingList, PipelineList, Problem, Report, ReserveState, ResolveHelpRequest,
-    RouteMap, Run, RunList, RunStatus, SendFlightRequest, Status, StreamRunPath, StreamRunQuery,
-    Upcoming,
+    ListRunsQuery, PendingList, PipelineList, PipelineSwitch, Problem, Report, ReserveState,
+    ResolveHelpRequest, RouteMap, Run, RunList, RunStatus, SendFlightRequest, Status,
+    StreamRunPath, StreamRunQuery, SwitchOffPipelinePath, SwitchOnPipelinePath, Upcoming,
 };
 use layover_store::{HelpFilter, History, Journal, RunFilter};
 
@@ -219,7 +219,7 @@ impl Api for Dashboard {
     }
 
     async fn list_pipelines(&self) -> Result<PipelineList, Problem> {
-        Ok(view::pipelines(&self.config()?))
+        Ok(view::pipelines(&self.config()?, &self.switched_off()))
     }
 
     async fn get_graph(&self, query: GetGraphQuery) -> Result<RouteMap, Problem> {
@@ -429,6 +429,7 @@ impl Api for Dashboard {
         }
 
         let (to, pipeline) = resolve_target(&config, &body)?;
+        self.refuse_if_off(pipeline.as_ref())?;
         let flags = resolve_flags(&config, pipeline.as_ref(), &body)?;
         let chosen = resolve_chosen(&config, pipeline.as_ref(), &body)?;
 
@@ -471,8 +472,12 @@ impl Api for Dashboard {
             |config| config.defaults.max_concurrent_runs.max(1),
         );
 
+        let off = self.switched_off();
         Ok(PendingList {
-            pending: pending.iter().map(view::pending).collect(),
+            pending: pending
+                .iter()
+                .map(|queued| view::pending(queued, &off))
+                .collect(),
             // Null unless a Tower in this process runs the queue. Showing a queue that looks like
             // it is moving when nothing will move it is the failure this surface exists to avoid.
             dispatched_by: self.1.as_deref().map(str::to_owned),
@@ -574,6 +579,7 @@ impl Api for Dashboard {
             .help(&span, &HelpFilter::default())
             .unwrap_or_default();
 
+        let off: Vec<PipelineName> = self.switched_off().into_keys().collect();
         let mut chains = crate::itinerary::itineraries(
             &records,
             crate::itinerary::Context {
@@ -581,6 +587,7 @@ impl Api for Dashboard {
                 pending: &pending,
                 help: &help,
                 ground_stop: self.ground_stop_engaged(),
+                switched_off: &off,
             },
         );
 
@@ -739,6 +746,20 @@ impl Api for Dashboard {
 
     async fn get_upcoming(&self, query: GetUpcomingQuery) -> Result<Upcoming, Problem> {
         self.upcoming(&query)
+    }
+
+    async fn switch_off_pipeline(
+        &self,
+        path: SwitchOffPipelinePath,
+    ) -> Result<PipelineSwitch, Problem> {
+        self.switch(&path.pipeline_name, true)
+    }
+
+    async fn switch_on_pipeline(
+        &self,
+        path: SwitchOnPipelinePath,
+    ) -> Result<PipelineSwitch, Problem> {
+        self.switch(&path.pipeline_name, false)
     }
 }
 

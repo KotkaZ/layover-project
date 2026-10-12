@@ -311,6 +311,18 @@ h2.spaced { margin-top: 30px; }
 .rail.fuel { border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
 .rail.next { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .rail.next.risk { border-color: var(--warn); color: var(--warn); }
+.rail.off { border-color: var(--warn); color: var(--warn); }
+/* A workflow's switch: a pill that reads On or Off, the checkbox inside it drawn as a slider. */
+.switch { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ok); cursor: pointer; user-select: none; align-self: center; }
+.switch input { appearance: none; width: 28px; height: 16px; margin: 0; border-radius: 999px; background: var(--ok); position: relative; cursor: pointer; transition: background 0.15s; }
+.switch input::after { content: ""; position: absolute; top: 2px; left: 14px; width: 12px; height: 12px; border-radius: 50%; background: var(--panel); transition: left 0.15s; }
+.switch input:not(:checked) { background: var(--line); }
+.switch input:not(:checked)::after { left: 2px; }
+.switch input:disabled { opacity: 0.5; cursor: progress; }
+.switch input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.switch.off { color: var(--muted); }
+/* Off, a workflow's map is still there to read, and plainly not running. */
+.workflow.off .canvas, .workflow.off .summary { opacity: 0.55; }
 
 /* Upcoming. Times line up, and a day starts with its name. */
 td.when { white-space: nowrap; font-variant-numeric: tabular-nums; }

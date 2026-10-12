@@ -120,11 +120,16 @@ function showQueue(queue) {
     actions.append(cancel);
     const chain = el("td");
     chain.append(chainLink(flight.itinerary_id, flight.name));
+    const workflow = el("td", flight.held ? "warn" : "", flight.pipeline ?? "—");
+    if (flight.held) {
+      workflow.textContent = `${flight.pipeline} · held`;
+      workflow.title = `${flight.pipeline} is switched off, so this waits, and starts once it is switched back on`;
+    }
     row.append(
       el("td", "num", `${all.indexOf(flight) + 1}`),
       el("td", "when", when(flight.queued_at)),
       el("td", "", flight.to),
-      el("td", "", flight.pipeline ?? "—"),
+      workflow,
       chain,
       prompt,
       actions,
@@ -140,8 +145,10 @@ function showQueue(queue) {
     ? `Queued work starts first in, first out, as slots free, by ${queue.dispatched_by}.`
     : "Nothing in this process starts queued work — it is watching only — so it waits for a Tower (`layover serve`) or `layover run`.";
   const hidden = all.length - mine.length;
+  const held = mine.filter((flight) => flight.held).length;
   $("#queue-note").textContent =
     `${running} ${starter}` +
+    (held > 0 ? ` ${held} held: their workflow is switched off, so they start once it is switched back on.` : "") +
     (hidden > 0 ? ` ${hidden} more queued for other workflows, or for chains already under way.` : "");
 
   $("#queue-table").hidden = mine.length === 0;
@@ -265,6 +272,12 @@ function showFires(upcoming, now, hours) {
     .map((w) => [w, fires.filter((fire) => fire.pipeline === w.pipeline).length])
     .filter(([w, listed]) => w.fires_in_window > listed)
     .map(([w, listed]) => `${w.pipeline} fires ${w.fires_in_window.toLocaleString()} times in this window; the first ${listed} are listed.`);
+  // Said, rather than left to be noticed missing: a schedule that is off has no rows at all.
+  more.push(
+    ...workflows
+      .filter((w) => upcoming.switched_off.includes(w.pipeline))
+      .map((w) => `${w.pipeline} is switched off: none of its ticks fire until it is switched back on${w.next_at ? `, and then the next is ${clockTime(w.next_at)}` : ""}.`),
+  );
   const note = $("#fires-more");
   note.hidden = more.length === 0;
   note.textContent = more.join(" ");
@@ -278,6 +291,10 @@ function pickedUp(layover, upcoming, now) {
   }
   if (!upcoming.workflows.some((w) => w.resumes)) {
     return ["bad", "never: no scheduled workflow sets resumes = true"];
+  }
+  const resuming = upcoming.workflows.filter((w) => w.resumes);
+  if (resuming.every((w) => upcoming.switched_off.includes(w.pipeline))) {
+    return ["warn", `once ${resuming.map((w) => w.pipeline).join(" or ")} is switched back on`];
   }
   return ["", "at the first tick of a resuming workflow after it is due"];
 }

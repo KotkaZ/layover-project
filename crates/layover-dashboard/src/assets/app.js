@@ -245,12 +245,14 @@ async function loadMap() {
     for (const pipeline of showing) {
       const section = el("section", "workflow");
       const header = el("header");
-      header.append(el("h2", "", pipeline.name));
+      header.append(el("h2", "", pipeline.name), workflowSwitch(pipeline));
       if (pipeline.description) header.append(el("span", "what", pipeline.description));
+      section.classList.toggle("off", pipeline.switched_off);
 
       const rails = el("div", "rails");
       rails.append(rail("trigger", "", describeTrigger(pipeline.trigger)));
-      const next = nextRail(scheduled.get(pipeline.name), now);
+      // Off, a schedule's next tick does not fire, so it is not offered as when it will.
+      const next = pipeline.switched_off ? offRail(pipeline) : nextRail(scheduled.get(pipeline.name), now);
       if (next) rails.append(next);
       rails.append(
         // The two rails that bound a chain, and they bound different things: Hops is depth,

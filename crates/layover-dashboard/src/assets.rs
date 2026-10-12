@@ -32,6 +32,8 @@ const CHAIN: &str = include_str!("assets/chain.js");
 const UPCOMING: &str = include_str!("assets/upcoming.js");
 /// Triggering a workflow: its flags, its name, and agents to run differently.
 const TRIGGER: &str = include_str!("assets/trigger.js");
+/// The switch that turns a workflow off and on.
+const SWITCH: &str = include_str!("assets/switch.js");
 
 /// Builds the complete server: the JSON API, plus the dashboard on top of it.
 ///
@@ -75,6 +77,10 @@ pub fn router(dashboard: Dashboard, guard: Guard) -> Router {
         .route(
             "/trigger.js",
             get(|| async { asset("text/javascript", TRIGGER) }),
+        )
+        .route(
+            "/switch.js",
+            get(|| async { asset("text/javascript", SWITCH) }),
         )
         .merge(api)
         .layer(axum::middleware::from_fn_with_state(

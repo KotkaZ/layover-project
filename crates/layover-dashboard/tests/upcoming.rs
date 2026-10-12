@@ -321,6 +321,51 @@ async fn a_layover_is_shown_with_the_resuming_tick_that_will_pick_it_up() {
 }
 
 #[tokio::test]
+async fn a_switched_off_workflow_lists_no_ticks_and_its_layovers_wait_for_it() {
+    let base = Timestamp::now();
+    let factory = Factory::new("switched-off", FACTORY);
+    factory.set_down(after(base, 60), Some("development"));
+    for name in ["sweep", "follow_up"] {
+        factory
+            .journal
+            .switch_off(&PipelineName::new(name), base)
+            .expect("switches off");
+    }
+    let clock = Fixed {
+        next: vec![
+            ("sweep", after(base, 10)),
+            ("poll", after(base, 1)),
+            ("follow_up", after(base, 5)),
+        ],
+        working: Vec::new(),
+    };
+
+    let upcoming = upcoming(factory.clocked(clock), "").await;
+
+    assert_eq!(
+        upcoming["switched_off"],
+        serde_json::json!(["follow_up", "sweep"]),
+        "{upcoming}"
+    );
+    let sweep = workflow(&upcoming, "sweep");
+    assert_eq!(sweep["fires_in_window"], 0);
+    assert_eq!(
+        stamp(&sweep["next_at"]),
+        after(base, 10),
+        "when it would fire, switched back on now"
+    );
+    assert!(fires_of(&upcoming, "sweep").is_empty(), "{upcoming}");
+    assert!(fires_of(&upcoming, "follow_up").is_empty(), "{upcoming}");
+    assert!(!fires_of(&upcoming, "poll").is_empty());
+
+    let layover = &upcoming["layovers"][0];
+    assert!(
+        layover["collected_at"].is_null(),
+        "nothing collects it until the follow-up is back on: {layover}"
+    );
+}
+
+#[tokio::test]
 async fn a_layover_no_schedule_resumes_has_no_time_to_be_picked_up() {
     let base = Timestamp::now();
     let factory = Factory::new("uncollected", &FACTORY.replace("resumes = true\n", ""));

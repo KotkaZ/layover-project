@@ -73,6 +73,8 @@ impl Dashboard {
         let help = journal
             .help(&span, &HelpFilter::default())
             .unwrap_or_default();
+        let switched_off = self.switched_off();
+        let off: Vec<PipelineName> = switched_off.keys().cloned().collect();
         let itinerary = itineraries(
             &records,
             Context {
@@ -80,6 +82,7 @@ impl Dashboard {
                 pending: &pending,
                 help: &help,
                 ground_stop: self.ground_stop_engaged(),
+                switched_off: &off,
             },
         )
         .into_iter()
@@ -112,7 +115,10 @@ impl Dashboard {
         Ok(ItineraryDetail {
             itinerary,
             runs,
-            pending: pending.iter().map(crate::view::pending).collect(),
+            pending: pending
+                .iter()
+                .map(|queued| crate::view::pending(queued, &switched_off))
+                .collect(),
             map: RouteMap {
                 mermaid: render_svg(&Layout::scoped(&config, &drawn, &scope)),
                 generated_at: Timestamp::now().to_string(),

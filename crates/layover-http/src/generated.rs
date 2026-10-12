@@ -490,6 +490,9 @@ pub struct ItineraryList {
 /// `awaiting_human` looks finished and is not: the chain's last run stopped to ask a person
 /// something — a fatal help request, still open — and nothing will run until somebody
 /// answers. Resolving the request without replying makes it `finished`.
+///
+/// `halted` is a chain a Ground Stop stopped or holds, or one that has not started because its
+/// workflow is switched off.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ItineraryState {
     /// `working`
@@ -605,6 +608,9 @@ pub struct PendingFlight {
     pub flags: Option<Vec<FlagValue>>,
     /// Identifier of the queued flight.
     pub flight_id: String,
+    /// It opens a chain of a workflow that is switched off, so it waits, and starts once the
+    /// workflow is switched back on. A flight of a chain already under way is never held.
+    pub held: bool,
     /// The chain it will begin.
     pub itinerary_id: String,
     /// What its chain is called, when the person who triggered it named it.
@@ -666,6 +672,13 @@ pub struct Pipeline {
     /// True when this pipeline picks up booked layovers rather than starting fresh work. A
     /// tick that finds nothing due costs nothing.
     pub resumes: bool,
+    /// A person switched it off: its schedule does not fire, a trigger is refused and a
+    /// resuming pipeline collects nothing until it is switched back on. Chains of it already
+    /// under way carry on.
+    pub switched_off: bool,
+    /// When it was switched off. Null when it is on, or was switched off by hand.
+    #[serde(default)]
+    pub switched_off_since: Option<String>,
     /// What starts it.
     pub trigger: Trigger,
     /// Whether instances of this pipeline share a working directory or get one each. A
@@ -701,6 +714,18 @@ pub struct PipelineAgent {
 pub struct PipelineList {
     /// The pipelines.
     pub pipelines: Vec<Pipeline>,
+}
+
+/// Whether one workflow is switched off.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PipelineSwitch {
+    /// The pipeline.
+    pub pipeline: String,
+    /// When it was switched off. Null when it is on, or was switched off by hand.
+    #[serde(default)]
+    pub since: Option<String>,
+    /// True when its ways in are closed.
+    pub switched_off: bool,
 }
 
 /// An error, shaped after RFC 9457.
@@ -952,12 +977,14 @@ pub struct ScheduledWorkflow {
     pub last_skipped_at: Option<String>,
     /// When its next tick is due, by the Tower's clock. Null when no clock is known in this
     /// process, or for a cron expression that never matches. A time already past is a tick
-    /// held back — by a Ground Stop, usually — that fires as soon as it can.
+    /// held back — by a Ground Stop, usually — that fires as soon as it can. For a workflow
+    /// switched off, the tick it would fire at if switched back on now.
     #[serde(default)]
     pub next_at: Option<String>,
     /// True when it sets `overlap = "allow"`, so a tick starts whatever is running.
     pub overlaps: bool,
-    /// The pipeline.
+    /// The pipeline. One named in the response's `switched_off` lets its ticks pass: `fires`
+    /// lists none of them and `fires_in_window` is 0.
     pub pipeline: String,
     /// True when its ticks collect due layovers rather than starting fresh work.
     pub resumes: bool,
@@ -1085,6 +1112,9 @@ pub struct Upcoming {
     pub now: String,
     /// Ticks skipped in the last seven days, most recent first, at most 100.
     pub skips: Vec<SkippedTick>,
+    /// The scheduled pipelines a person has switched off. Their ticks pass without firing or
+    /// counting as skipped, and a resuming one collects no layovers, until switched back on.
+    pub switched_off: Vec<String>,
     /// The end of the window.
     pub until: String,
     /// Every pipeline with a schedule, by name.
@@ -1101,8 +1131,10 @@ pub struct WaitingLayover {
     /// The chain that set it down.
     pub booked_by: String,
     /// The first tick of a resuming pipeline at or after `due_at`, which is when it will be
-    /// picked up unless that tick is skipped. Null when no clock is known in this process, or
-    /// when no scheduled pipeline `resumes` — then nothing will ever pick it up.
+    /// picked up unless that tick is skipped. A resuming pipeline that is switched off is
+    /// passed over. Null when no clock is known in this process, when no scheduled pipeline
+    /// `resumes` — then nothing will ever pick it up — or when every one that does is switched
+    /// off, until one is switched back on.
     #[serde(default)]
     pub collected_at: Option<String>,
     /// The resuming pipeline whose tick that is.
@@ -1249,6 +1281,20 @@ pub struct ListLearningsQuery {
 pub struct JudgeLearningPath {
     /// Identifier of the learning.
     pub learning_id: String,
+}
+
+/// path parameters for `switchOffPipeline`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SwitchOffPipelinePath {
+    /// The pipeline to switch off.
+    pub pipeline_name: String,
+}
+
+/// path parameters for `switchOnPipeline`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SwitchOnPipelinePath {
+    /// The pipeline to switch on.
+    pub pipeline_name: String,
 }
 
 /// query parameters for `listRuns`.
@@ -1535,6 +1581,30 @@ pub trait Api: Send + Sync + 'static {
     fn list_pipelines(
         &self,
     ) -> impl core::future::Future<Output = Result<PipelineList, Problem>> + Send;
+    /// Switch a workflow off.
+    ///
+    /// Closes the workflow's ways in until it is switched back on: its schedule does not fire, a
+    /// trigger is refused, a resuming workflow collects nothing, and a trigger already queued
+    /// waits. Every chain of it already under way finishes. Kept in the state directory, so it
+    /// survives a restart, and read by the Tower on every pass. Switching off a workflow that is
+    /// already off changes nothing.
+    ///
+    /// `POST /pipelines/{pipeline_name}/switch-off`
+    fn switch_off_pipeline(
+        &self,
+        path: SwitchOffPipelinePath,
+    ) -> impl core::future::Future<Output = Result<PipelineSwitch, Problem>> + Send;
+    /// Switch a workflow back on.
+    ///
+    /// Its schedule fires at its next tick — ticks that passed while it was off are not made up —
+    /// and any trigger it held starts as soon as a slot is free. Switching on a workflow that is
+    /// on changes nothing.
+    ///
+    /// `DELETE /pipelines/{pipeline_name}/switch-off`
+    fn switch_on_pipeline(
+        &self,
+        path: SwitchOnPipelinePath,
+    ) -> impl core::future::Future<Output = Result<PipelineSwitch, Problem>> + Send;
     /// Runs, live and historical.
     ///
     /// Runs alive now come first, as `running`, from the live records the Tower keeps while a run
@@ -1657,6 +1727,11 @@ pub fn router<A: Api>(api: std::sync::Arc<A>) -> axum::Router {
             axum::routing::patch(handle_judge_learning::<A>),
         )
         .route("/pipelines", axum::routing::get(handle_list_pipelines::<A>))
+        .route(
+            "/pipelines/{pipeline_name}/switch-off",
+            axum::routing::post(handle_switch_off_pipeline::<A>)
+                .delete(handle_switch_on_pipeline::<A>),
+        )
         .route("/runs", axum::routing::get(handle_list_runs::<A>))
         .route("/runs/{run_id}", axum::routing::get(handle_get_run::<A>))
         .route(
@@ -1836,6 +1911,26 @@ async fn handle_list_pipelines<A: Api>(
     }
 }
 
+async fn handle_switch_off_pipeline<A: Api>(
+    axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
+    axum::extract::Path(path): axum::extract::Path<SwitchOffPipelinePath>,
+) -> axum::response::Response {
+    match api.switch_off_pipeline(path).await {
+        Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
+        Err(problem) => problem.into_response(),
+    }
+}
+
+async fn handle_switch_on_pipeline<A: Api>(
+    axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
+    axum::extract::Path(path): axum::extract::Path<SwitchOnPipelinePath>,
+) -> axum::response::Response {
+    match api.switch_on_pipeline(path).await {
+        Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
+        Err(problem) => problem.into_response(),
+    }
+}
+
 async fn handle_list_runs<A: Api>(
     axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
     axum::extract::Query(query): axum::extract::Query<ListRunsQuery>,
@@ -1890,7 +1985,7 @@ async fn handle_get_upcoming<A: Api>(
 /// Every operation the specification declares, as (method, path, operationId).
 ///
 /// Exposed so tests can assert the router and the specification agree.
-pub const OPERATIONS: [(&str, &str, &str); 22] = [
+pub const OPERATIONS: [(&str, &str, &str); 24] = [
     ("GET", "/agents", "listAgents"),
     ("GET", "/costs", "getCosts"),
     ("GET", "/flights", "listPending"),
@@ -1908,6 +2003,16 @@ pub const OPERATIONS: [(&str, &str, &str); 22] = [
     ("GET", "/learnings", "listLearnings"),
     ("PATCH", "/learnings/{learning_id}", "judgeLearning"),
     ("GET", "/pipelines", "listPipelines"),
+    (
+        "POST",
+        "/pipelines/{pipeline_name}/switch-off",
+        "switchOffPipeline",
+    ),
+    (
+        "DELETE",
+        "/pipelines/{pipeline_name}/switch-off",
+        "switchOnPipeline",
+    ),
     ("GET", "/runs", "listRuns"),
     ("GET", "/runs/{run_id}", "getRun"),
     ("GET", "/runs/{run_id}/report", "getReport"),

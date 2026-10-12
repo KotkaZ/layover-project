@@ -8,6 +8,18 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+### Added
+
+- **Every workflow can be switched off**, scheduled or manual, from a switch beside its name on the
+  dashboard's route map or with `POST /pipelines/{name}/switch-off` (and `DELETE` to switch it back
+  on). Off, its schedule's ticks pass without firing or counting as skipped, a trigger is refused
+  with a `409`, a resuming workflow collects nothing, and a trigger already queued is held — marked
+  `held` in `GET /flights` and `halted` on its chain. Chains of it already under way finish. Back on,
+  held triggers start and the schedule fires at its next tick, without making up the ones it missed.
+  The switch survives restarts in `.layover/journal/switched-off.jsonl`, which can be edited by hand.
+  `GET /pipelines` and `GET /upcoming` say which workflows are off, and `layover doctor` names them
+  and no longer warns that a switched-off schedule never fired.
+
 ## [1.10.0] — 2026-10-08
 
 A runner says only what its agents are denied: for Copilot CLI and Claude Code, Layover supplies

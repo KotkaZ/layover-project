@@ -36,6 +36,7 @@ mod live;
 mod map;
 mod reply;
 mod stream;
+mod switch;
 pub mod transcript;
 mod upcoming;
 mod view;

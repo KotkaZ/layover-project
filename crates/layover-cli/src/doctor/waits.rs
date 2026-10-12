@@ -46,8 +46,8 @@ pub(super) fn waits(
             advice: format!(
                 "`{}` ({}) waited {} with fewer than `max_concurrent_runs` = {} runs alive. \
                  Nothing was stopping it but the thing meant to start it: the Tower was not \
-                 running, a Ground Stop was engaged, or the factory was run by a release that \
-                 started one agent at a time.",
+                 running, a Ground Stop was engaged, its workflow was switched off, or the \
+                 factory was run by a release that started one agent at a time.",
                 worst.agent,
                 worst.run,
                 hours(*free),

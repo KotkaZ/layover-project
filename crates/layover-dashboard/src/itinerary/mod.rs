@@ -31,6 +31,7 @@ use std::collections::BTreeMap;
 
 use layover_core::agent::AgentName;
 use layover_core::help::HelpRequest;
+use layover_core::pipeline::PipelineName;
 use layover_core::queue::Queued;
 use layover_core::run::{Outcome, RunRecord};
 use layover_core::stall::Stall;
@@ -48,6 +49,8 @@ pub struct Context<'a> {
     pub help: &'a [HelpRequest],
     /// Whether a Ground Stop is engaged.
     pub ground_stop: bool,
+    /// Workflows a person has switched off: a chain of one that has not started is held.
+    pub switched_off: &'a [PipelineName],
 }
 
 /// Groups runs into chains and works out what became of each.
@@ -84,7 +87,7 @@ pub fn itineraries(records: &[RunRecord], context: Context<'_>) -> Vec<Itinerary
     built.extend(
         unstarted
             .into_iter()
-            .map(|(id, queued)| not_started(id, &queued, context.ground_stop)),
+            .map(|(id, queued)| not_started(id, &queued, context)),
     );
 
     // Most recently started first: a dashboard is read from the top, and the thing somebody wants
@@ -93,10 +96,27 @@ pub fn itineraries(records: &[RunRecord], context: Context<'_>) -> Vec<Itinerary
     built
 }
 
-/// A chain with flights queued and nothing run yet: `working`, unless a Ground Stop means none of
-/// it is about to start.
-fn not_started(id: &str, queued: &[&Queued], ground_stop: bool) -> Itinerary {
-    let state = state_of(false, Activity::Waiting, None, false, ground_stop);
+/// A chain with flights queued and nothing run yet: `working`, unless none of it is about to
+/// start — a Ground Stop is engaged, or the workflow it opens is switched off.
+fn not_started(id: &str, queued: &[&Queued], context: Context<'_>) -> Itinerary {
+    let held = queued.iter().find_map(|queued| {
+        queued
+            .way_in()
+            .filter(|pipeline| context.switched_off.contains(pipeline))
+    });
+    let state = state_of(
+        false,
+        Activity::Waiting,
+        None,
+        false,
+        context.ground_stop || held.is_some(),
+    );
+    let detail = match held {
+        Some(pipeline) if !context.ground_stop => Some(format!(
+            "`{pipeline}` is switched off; this starts once it is switched back on"
+        )),
+        _ => detail_for(state, None, None, &[]),
+    };
     let opened = queued
         .iter()
         .map(|queued| queued.flight.sent_at)
@@ -116,7 +136,7 @@ fn not_started(id: &str, queued: &[&Queued], ground_stop: bool) -> Itinerary {
         measured: Some(true),
         started_at: opened.to_string(),
         finished_at: None,
-        detail: detail_for(state, None, None, &[]),
+        detail,
         waiting_for: None,
         flags: queued
             .iter()
@@ -168,6 +188,7 @@ fn build(
         pending,
         help,
         ground_stop,
+        switched_off: _,
     } = context;
     let stall = stalls.iter().find(|stall| stall.itinerary.as_str() == id);
 

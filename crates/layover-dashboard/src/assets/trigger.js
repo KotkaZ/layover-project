@@ -7,8 +7,8 @@
 // runs, for this run only. Both stay with everything the run causes.
 //
 // Separate from app.js, which is already long; it uses that file's helpers (`get`, `send`, `el`,
-// `$`, `pipelinesByName`, `openChain`, `loadQueued`), all of which exist by the time anything here
-// is called.
+// `$`, `pipelinesByName`, `openChain`, `loadQueued`) and switch.js's `showSwitch`, all of which
+// exist by the time anything here is called.
 
 function showFlags(name) {
   const box = $("#trigger-flags");
@@ -102,7 +102,7 @@ async function openTrigger(preset) {
   const select = $("#trigger-pipeline");
   select.replaceChildren(
     ...[...pipelinesByName.values()].map((pipeline) => {
-      const option = el("option", "", pipeline.name);
+      const option = el("option", "", pipeline.switched_off ? `${pipeline.name} (switched off)` : pipeline.name);
       option.value = pipeline.name;
       return option;
     }),
@@ -114,6 +114,7 @@ async function openTrigger(preset) {
   const origin = $("#trigger-origin");
   origin.hidden = true;
   if (preset?.pipeline && pipelinesByName.has(preset.pipeline)) select.value = preset.pipeline;
+  showSwitch(select.value);
   showFlags(select.value);
   showChoices(select.value);
   suggestions();
@@ -195,6 +196,7 @@ function startTrigger() {
   $("#trigger-pipeline").addEventListener("change", (e) => {
     // Another workflow is not the chain being continued, so its flags say nothing about it.
     $("#trigger-origin").hidden = true;
+    showSwitch(e.target.value);
     showFlags(e.target.value);
     showChoices(e.target.value);
   });

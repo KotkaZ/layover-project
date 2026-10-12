@@ -273,6 +273,7 @@ Everything a factory accumulates lives in `.layover/`, beside its `layover.toml`
 │   └── runs-2026-09-23.jsonl    # one record per run, segmented by UTC day
 ├── journal/
 │   ├── pending.jsonl            # the queue
+│   ├── switched-off.jsonl       # workflows a person switched off; absent when none is
 │   ├── layovers.jsonl           # work set down to be resumed later
 │   ├── learnings.jsonl          # what agents proposed, and what became of it
 │   ├── help-2026-09-23.jsonl    # help requests, segmented by day
@@ -297,7 +298,8 @@ Day-segmented files and run directories are pruned after 90 days; `memory.md`, `
 and the queue are not.
 
 Ground Stop is a file rather than in-memory state so that it survives a Tower crash and can be
-set by hand when nothing else is responding.
+set by hand when nothing else is responding. A workflow's switch is kept the same way, one line
+per workflow that is off, and the Tower reads both on every pass.
 
 ## 8. The Flight envelope
 
@@ -360,6 +362,7 @@ exists in the specification but is not implemented is a compile error.
 |---|---|---|
 | `GET` | `/health` | Liveness, version, and whether a Ground Stop is engaged |
 | `GET` | `/agents` · `/pipelines` · `/graph` | What the factory is made of, and its route map drawn |
+| `POST` · `DELETE` | `/pipelines/:name/switch-off` | Switch one workflow off — its ways in close, its chains under way finish — or back on |
 | `POST` · `GET` · `DELETE` | `/flights` · `/flights/:id` | Queue work, see what is waiting, cancel what has not started |
 | `GET` | `/upcoming` | What starts on its own: scheduled ticks by the Tower's clock, layovers and when each is picked up, skipped ticks |
 | `GET` | `/itineraries` · `/itineraries/:id` | Chains, and one chain whole with its runs and its map |

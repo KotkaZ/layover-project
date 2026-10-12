@@ -22,10 +22,11 @@ use layover_http::{
     HelpReplied, HelpReplyRequest, HelpRequest, HelpResolved, Impact, Itinerary, ItineraryDetail,
     ItineraryList, ItineraryState, JudgeLearningPath, JudgeLearningRequest, Learning, LearningList,
     LearningState, ListHelpQuery, ListItinerariesQuery, ListLearningsQuery, ListRunsQuery,
-    OPERATIONS, PendingFlight, PendingList, Pipeline, PipelineList, Problem, Report, ReserveState,
-    ResolveHelpRequest, RouteMap, Run, RunList, RunStatus, ScheduledFire, ScheduledWorkflow,
-    SendFlightRequest, SkipReason, SkippedTick, Status, StreamRunPath, StreamRunQuery, TokenUsage,
-    Trigger, TriggerKind, Upcoming, WaitingLayover, WindowSpan, Workspace, router,
+    OPERATIONS, PendingFlight, PendingList, Pipeline, PipelineList, PipelineSwitch, Problem,
+    Report, ReserveState, ResolveHelpRequest, RouteMap, Run, RunList, RunStatus, ScheduledFire,
+    ScheduledWorkflow, SendFlightRequest, SkipReason, SkippedTick, Status, StreamRunPath,
+    StreamRunQuery, SwitchOffPipelinePath, SwitchOnPipelinePath, TokenUsage, Trigger, TriggerKind,
+    Upcoming, WaitingLayover, WindowSpan, Workspace, router,
 };
 use tower::ServiceExt as _;
 
@@ -107,6 +108,8 @@ impl Api for Stub {
         Ok(PipelineList {
             pipelines: vec![Pipeline {
                 name: "review-bot".to_owned(),
+                switched_off: true,
+                switched_off_since: Some("2026-10-12T07:00:00Z".to_owned()),
                 description: None,
                 entry: "pr_scanner".to_owned(),
                 trigger: Trigger {
@@ -349,6 +352,7 @@ impl Api for Stub {
         Ok(PendingList {
             pending: vec![PendingFlight {
                 flight_id: "flt_1".to_owned(),
+                held: false,
                 itinerary_id: "itn_1".to_owned(),
                 to: "analyst".to_owned(),
                 pipeline: Some("development".to_owned()),
@@ -405,6 +409,7 @@ impl Api for Stub {
             ),
             clock: Some("the Tower in `layover serve` (process 7)".to_owned()),
             ground_stop: false,
+            switched_off: vec!["review-bot".to_owned()],
             workflows: vec![ScheduledWorkflow {
                 pipeline: "follow_up".to_owned(),
                 next_at: Some("2026-10-07T09:20:00Z".to_owned()),
@@ -439,6 +444,28 @@ impl Api for Stub {
                 at: "2026-10-06T18:05:00Z".to_owned(),
                 reason: SkipReason::StillWorking,
             }],
+        })
+    }
+
+    async fn switch_off_pipeline(
+        &self,
+        path: SwitchOffPipelinePath,
+    ) -> Result<PipelineSwitch, Problem> {
+        Ok(PipelineSwitch {
+            pipeline: path.pipeline_name,
+            switched_off: true,
+            since: Some("2026-10-12T07:00:00Z".to_owned()),
+        })
+    }
+
+    async fn switch_on_pipeline(
+        &self,
+        path: SwitchOnPipelinePath,
+    ) -> Result<PipelineSwitch, Problem> {
+        Ok(PipelineSwitch {
+            pipeline: path.pipeline_name,
+            switched_off: false,
+            since: None,
         })
     }
 }
@@ -482,7 +509,7 @@ fn json(body: &str) -> serde_json::Value {
 
 #[test]
 fn every_specified_operation_is_routed() {
-    assert_eq!(OPERATIONS.len(), 22);
+    assert_eq!(OPERATIONS.len(), 24);
 
     for (method, path, operation) in OPERATIONS {
         assert!(path.starts_with('/'), "`{operation}` has an odd path");
@@ -629,6 +656,18 @@ async fn both_methods_on_ground_stop_are_reachable() {
     let (status, _, released) = call("DELETE", "/ground-stop", None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json(&released)["engaged"], false);
+}
+
+#[tokio::test]
+async fn a_workflow_is_switched_off_and_on_at_its_own_path() {
+    let (status, _, off) = call("POST", "/pipelines/review-bot/switch-off", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json(&off)["pipeline"], "review-bot");
+    assert_eq!(json(&off)["switched_off"], true);
+
+    let (status, _, on) = call("DELETE", "/pipelines/review-bot/switch-off", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json(&on)["switched_off"], false);
 }
 
 #[tokio::test]

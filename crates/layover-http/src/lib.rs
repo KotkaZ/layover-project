@@ -42,6 +42,8 @@
 //!     # async fn engage_ground_stop(&self) -> Result<layover_http::GroundStop, Problem> { todo!() }
 //!     # async fn release_ground_stop(&self) -> Result<layover_http::GroundStop, Problem> { todo!() }
 //!     # async fn get_upcoming(&self, _: layover_http::GetUpcomingQuery) -> Result<layover_http::Upcoming, Problem> { todo!() }
+//!     # async fn switch_off_pipeline(&self, _: layover_http::SwitchOffPipelinePath) -> Result<layover_http::PipelineSwitch, Problem> { todo!() }
+//!     # async fn switch_on_pipeline(&self, _: layover_http::SwitchOnPipelinePath) -> Result<layover_http::PipelineSwitch, Problem> { todo!() }
 //! }
 //!
 //! let app = router(Arc::new(Stub));

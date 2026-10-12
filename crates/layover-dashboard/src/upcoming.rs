@@ -77,7 +77,8 @@ impl Dashboard {
             .unwrap_or(Timestamp::MAX);
 
         let clock = self.clock();
-        let schedules = Schedules::of(&config, clock.map(|c| &*c.timetable), now);
+        let off = self.switched_off();
+        let schedules = Schedules::of(&config, clock.map(|c| &*c.timetable), now, &off);
 
         let journal = &self.state().journal;
         let week = self.state().history.resolve(Window::Last7Days);
@@ -101,6 +102,12 @@ impl Dashboard {
             until: until.to_string(),
             clock: clock.map(|c| c.keeper.to_string()),
             ground_stop: self.ground_stop_engaged(),
+            switched_off: schedules
+                .each
+                .iter()
+                .filter(|scheduled| scheduled.off)
+                .map(|scheduled| scheduled.name.to_string())
+                .collect(),
             workflows,
             fires,
             layovers,
@@ -131,10 +138,17 @@ struct Scheduled<'a> {
     pipeline: &'a Pipeline,
     schedule: &'a Schedule,
     next: Option<Timestamp>,
+    /// Switched off by a person: its ticks pass without firing.
+    off: bool,
 }
 
 impl<'a> Schedules<'a> {
-    fn of(config: &'a Config, timetable: Option<&dyn Timetable>, now: Timestamp) -> Self {
+    fn of(
+        config: &'a Config,
+        timetable: Option<&dyn Timetable>,
+        now: Timestamp,
+        off: &crate::switch::Off,
+    ) -> Self {
         let each = config
             .pipelines
             .iter()
@@ -145,6 +159,7 @@ impl<'a> Schedules<'a> {
                     pipeline,
                     schedule,
                     next: timetable.and_then(|clock| clock.next_due(name)),
+                    off: off.contains_key(name),
                 })
             })
             .collect();
@@ -162,7 +177,7 @@ impl<'a> Schedules<'a> {
         let (collected_at, collected_by) = self
             .each
             .iter()
-            .filter(|scheduled| scheduled.pipeline.resumes)
+            .filter(|scheduled| scheduled.pipeline.resumes && !scheduled.off)
             .filter_map(|scheduled| {
                 let at = collecting_tick(
                     scheduled.schedule,
@@ -212,9 +227,10 @@ impl<'a> Schedules<'a> {
         for scheduled in &self.each {
             let working = self.working.contains(scheduled.name);
             let overlaps = scheduled.pipeline.allows_overlap();
+            // A workflow switched off has no ticks that will fire, so none is listed or counted.
             let ticks = Ticks {
                 schedule: scheduled.schedule,
-                next: scheduled.next,
+                next: scheduled.next.filter(|_| !scheduled.off),
                 now: self.now,
             }
             .take_while(|at| *at <= until)

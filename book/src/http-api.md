@@ -28,10 +28,12 @@ Point any OpenAPI tool at the file to get a client, a mock server or rendered do
 |---|---|---|---|
 | `GET` | `/health` | | Liveness, version, and whether a Ground Stop is engaged. |
 | `GET` | `/agents` | | Every agent and the route map between them. Each agent's `model`, `reasoning_effort` and `context` are read from the command line Layover will run for it — with its own `model`, `effort` and `context` filled into its runner's placeholders — and are `null` where it sets none. A route's `pipelines` lists the workflows whose chains may use it, and is `null` for a global route. |
-| `GET` | `/pipelines` | | Declared pipelines, their triggers and their flags, and `agents`: every agent each one's chains reach, entry first, with the `model`, `reasoning_effort` and `context` it runs at in that workflow and whether its runner can carry each (`takes_model`, `takes_effort`, `takes_context`) — what a trigger may choose differently. Empty for a pipeline that `resumes`. |
+| `GET` | `/pipelines` | | Declared pipelines, their triggers and their flags, and `agents`: every agent each one's chains reach, entry first, with the `model`, `reasoning_effort` and `context` it runs at in that workflow and whether its runner can carry each (`takes_model`, `takes_effort`, `takes_context`) — what a trigger may choose differently. Empty for a pipeline that `resumes`. Each says whether a person has `switched_off` it, and since when. |
+| `POST` | `/pipelines/{pipeline_name}/switch-off` | | Switch a workflow off: its schedule stops firing, a trigger is refused, a resuming workflow collects nothing, and a trigger already queued is held. Chains of it already under way finish. Switching off twice is a success. See [switching a workflow off](./dashboard.md#switching-a-workflow-off). |
+| `DELETE` | `/pipelines/{pipeline_name}/switch-off` | | Switch it back on. Its schedule fires at its next tick, and a trigger it held starts. |
 | `GET` | `/graph` | `pipeline` | The route map as a rendered diagram, optionally for one workflow — drawn over the routes that workflow's chains may use. An agent with several runs alive at once — the workflow triggered twice — carries a count such as `×2`. |
-| `POST` | `/flights` | | **Queue** work. The Tower starts it within seconds. Answers with the new chain's `itinerary_id`. |
-| `GET` | `/flights` | | What is queued and waiting, each with its chain's `name`. |
+| `POST` | `/flights` | | **Queue** work. The Tower starts it within seconds. Answers with the new chain's `itinerary_id`. A `409` while a Ground Stop is engaged, or when the pipeline is switched off. |
+| `GET` | `/flights` | | What is queued and waiting, each with its chain's `name`, and `held` when it opens a chain of a switched-off workflow. |
 | `DELETE` | `/flights/{flight_id}` | | Cancel queued work. Only what has not started. |
 | `GET` | `/upcoming` | `hours` | What will start on its own. See below. |
 | `GET` | `/itineraries` | `window`, `state` | Chains of work, and whether each finished, stalled or is waiting for a person (`awaiting_human`). Each carries its `name`, its `flags`, `waiting_for` when it waits, the chains it `continues` or is `continued_by`, and where a working chain is: the agents `running` in it and those it has work `queued` for. A chain is listed from the moment its first flight is queued, with no runs yet. |
@@ -146,8 +148,29 @@ workflow runs or its runner has no placeholder to carry the value — a choice t
 is refused rather than accepted and ignored. A choice can never add arguments: what an agent is
 denied is decided in `layover.toml`, not at trigger time.
 
-A `409` means a Ground Stop is engaged. A kill switch that halted running work while still
-accepting more would not be a kill switch.
+A `409` means a Ground Stop is engaged, or the pipeline is switched off. A kill switch that
+halted running work while still accepting more would not be a kill switch, and a workflow
+switched off that queued a trigger to wait would leave somebody believing their run was on its
+way. A bare `to` names no workflow, so no workflow's switch stands in its way.
+
+## Switching a workflow off
+
+```sh
+curl -X POST   localhost:7878/pipelines/review-sweep/switch-off   # off
+curl -X DELETE localhost:7878/pipelines/review-sweep/switch-off   # back on
+```
+
+```json
+{ "pipeline": "review-sweep", "switched_off": true, "since": "2026-10-12T07:11:03Z" }
+```
+
+Off closes the workflow's ways in, and nothing else: its schedule's ticks pass without firing or
+counting as skipped, `POST /flights` for it is a `409`, a resuming workflow collects no layovers,
+and a trigger queued before it was switched off waits — `GET /flights` marks it `held`, and its
+chain reads `halted` until the workflow is back on. Every chain of it already under way carries on:
+its hand-offs, spawns, restarts and the work a reply to its help requests continues are never held.
+Back on, its schedule fires at its next tick rather than making up the ones it missed. Either call
+is a success when the workflow is already that way; an undeclared pipeline is a `404`.
 
 ## What starts on its own
 
@@ -155,13 +178,15 @@ accepting more would not be a kill switch.
 
 - `workflows` — every scheduled pipeline: `next_at`, whether it is `working` (its last wave still
   queued or running, so its next tick is skipped), `fires_in_window`, and `skipped_7d` with
-  `last_skipped_at`.
+  `last_skipped_at`. One named in `switched_off` has no `fires` and a `fires_in_window` of 0; its
+  `next_at` is when it would fire if switched back on now.
+- `switched_off` — the scheduled pipelines a person has switched off.
 - `fires` — each tick in the window, soonest first and at most 24 per pipeline. `overdue` marks a
   tick held back, by a Ground Stop usually, that fires as soon as it can; `may_skip` marks the next
   tick of a pipeline still working; `collects` says how many layovers a resuming tick picks up.
 - `layovers` — every layover waiting, soonest due first, with `collected_at` and `collected_by`:
   the first tick of a resuming pipeline at or after `due_at`, which is later than `due_at` by up to
-  one interval.
+  one interval. A resuming pipeline that is switched off collects nothing, so it is passed over.
 - `skips` — ticks skipped in the last seven days, most recent first, with a `reason`.
 
 ```json
@@ -170,6 +195,7 @@ accepting more would not be a kill switch.
   "until": "2026-10-08T09:54:42Z",
   "clock": "the Tower in `layover serve` (process 9376)",
   "ground_stop": false,
+  "switched_off": [],
   "workflows": [
     { "pipeline": "follow_up", "next_at": "2026-10-07T10:39:20Z", "resumes": true,
       "overlaps": false, "working": false, "fires_in_window": 32, "skipped_7d": 0 }

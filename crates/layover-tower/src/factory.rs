@@ -22,7 +22,7 @@
 //! or not this process survives to write it down, which is why the live mark goes first and comes
 //! off last.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -39,7 +39,7 @@ use layover_core::graph::RouteGraph;
 use layover_core::handover::Handover;
 use layover_core::itinerary::{Denial, Itinerary};
 use layover_core::payload::{Run, compose};
-use layover_core::pipeline::Flags;
+use layover_core::pipeline::{Flags, PipelineName};
 use layover_core::prompt::{PromptDir, resolve};
 use layover_core::queue::Queued;
 use layover_core::run::{Outcome, RunRecord};
@@ -245,6 +245,21 @@ impl Factory {
 
     fn ground_stop_path(&self) -> PathBuf {
         self.root.join(".layover").join("ground-stop")
+    }
+
+    /// The workflows a person has switched off, read from disk on every call like the Ground Stop.
+    ///
+    /// Their ways in are held — a schedule's tick, a trigger, a resumed layover — and every chain
+    /// already under way carries on. An unreadable file switches nothing off, as an unreadable
+    /// queue starts nothing: either way the Tower says no more than it can read.
+    #[must_use]
+    pub fn switched_off(&self) -> BTreeSet<PipelineName> {
+        self.journal
+            .switched_off()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|off| off.pipeline)
+            .collect()
     }
 
     /// The name this Tower's live records carry, claimed on first use.

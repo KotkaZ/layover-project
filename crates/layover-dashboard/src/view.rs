@@ -63,14 +63,16 @@ pub fn agents(config: &Config) -> AgentList {
     }
 }
 
-/// Describes the ways into the factory.
-pub fn pipelines(config: &Config) -> PipelineList {
+/// Describes the ways into the factory, and which of them a person has switched off.
+pub fn pipelines(config: &Config, off: &crate::switch::Off) -> PipelineList {
     PipelineList {
         pipelines: config
             .pipelines
             .iter()
             .map(|(name, pipeline)| Pipeline {
                 name: name.to_string(),
+                switched_off: off.contains_key(name),
+                switched_off_since: off.get(name).copied().flatten().map(|at| at.to_string()),
                 description: pipeline.description.clone(),
                 entry: pipeline.entry.to_string(),
                 trigger: trigger(&pipeline.trigger),
@@ -346,11 +348,14 @@ pub fn learning_state_from(state: LearningState) -> layover_core::learning::Stat
     }
 }
 
-/// Describes a queued flight.
-pub fn pending(queued: &layover_core::queue::Queued) -> PendingFlight {
+/// Describes a queued flight, held when it opens a chain of a workflow that is switched off.
+pub fn pending(queued: &layover_core::queue::Queued, off: &crate::switch::Off) -> PendingFlight {
     let flight = &queued.flight;
 
     PendingFlight {
+        held: queued
+            .way_in()
+            .is_some_and(|pipeline| off.contains_key(pipeline)),
         flight_id: flight.id.as_str().to_owned(),
         itinerary_id: flight.itinerary.as_str().to_owned(),
         to: flight.to.to_string(),

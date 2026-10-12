@@ -113,7 +113,8 @@ before it starts anything:
 3. **It restarts the work** where the agent's `recovery` policy and `max_recovery_attempts` allow and
    no Ground Stop is engaged: the same flight, in the same chain, told the handover above. The
    interrupted run's spend is charged to the chain first, so being interrupted cannot buy a chain a
-   fresh budget.
+   fresh budget. A workflow [switched off](./dashboard.md#switching-a-workflow-off) does not hold
+   the restart: the chain was already under way, and those finish.
 
 ```text
 `eagle` (run_01M3…) was interrupted by a restart: it was still running, cut off from Layover, and

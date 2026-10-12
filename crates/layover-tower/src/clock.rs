@@ -111,6 +111,24 @@ impl Clock {
         now: Timestamp,
         working: impl Fn(&PipelineName) -> bool,
     ) -> Due {
+        self.tick_except(config, now, working, |_| false)
+    }
+
+    /// Like [`Self::tick`], except that a pipeline `switched_off` names neither fires nor counts
+    /// as skipped.
+    ///
+    /// Its clock still advances past the tick. A tick that passes while a workflow is off is one
+    /// somebody decided against; firing it the moment the workflow is switched back on would
+    /// start work at a time nobody chose, so it next fires at its next tick. Nor is it recorded as
+    /// skipped: a skip is reported because it looks from outside like a schedule running fine,
+    /// and a switched-off workflow says it is off wherever it is shown.
+    pub fn tick_except(
+        &self,
+        config: &Config,
+        now: Timestamp,
+        working: impl Fn(&PipelineName) -> bool,
+        switched_off: impl Fn(&PipelineName) -> bool,
+    ) -> Due {
         let Ok(mut next) = self.next.lock() else {
             return Due::default();
         };
@@ -132,6 +150,10 @@ impl Clock {
                 && let Some(following) = next_after(schedule, now)
             {
                 *at = following;
+            }
+
+            if switched_off(name) {
+                continue;
             }
 
             let overlaps = config
@@ -351,6 +373,37 @@ trigger = { every = "1h" }
             "the same tick must not fire twice: {:?}",
             again.fire
         );
+    }
+
+    #[test]
+    fn a_switched_off_pipeline_lets_its_tick_pass_and_fires_at_the_next_one_when_back_on() {
+        let config = factory(
+            r#"
+[pipelines.sweep]
+entry = "worker"
+trigger = { every = "1h" }
+"#,
+        );
+
+        let now = Timestamp::now();
+        let clock = Clock::new(&config, now);
+        let later = now.checked_add(61_i32.minutes()).expect("in range");
+
+        // Off, and still working: neither fired nor skipped.
+        let off = clock.tick_except(&config, later, |_| true, |_| true);
+        assert_eq!(off, Due::default());
+
+        // Switched back on a moment later: the tick that passed while it was off is not made up.
+        let on = clock.tick_except(&config, later, never_working, |_| false);
+        assert!(on.fire.is_empty(), "{:?}", on.fire);
+        assert!(
+            clock.next_due(&name("sweep")).expect("scheduled") > later,
+            "the clock moved on while it was off"
+        );
+
+        let next = now.checked_add(121_i32.minutes()).expect("in range");
+        let fired = clock.tick_except(&config, next, never_working, |_| false);
+        assert_eq!(fired.fire, [name("sweep")]);
     }
 
     #[test]

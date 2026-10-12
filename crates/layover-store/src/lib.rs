@@ -35,8 +35,10 @@ pub mod live;
 pub mod lock;
 mod segment;
 mod skips;
+mod switches;
 
 pub use answer::Answered;
 pub use history::{History, RunFilter, StoreError};
 pub use journal::{HelpFilter, Journal};
 pub use layout::{Incompatible, Opened};
+pub use switches::SwitchedOff;
