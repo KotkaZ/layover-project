@@ -277,6 +277,22 @@ run_e2e = { default = false, description = "Also run the remote end-to-end suite
 layover prompt tester --pipeline development --flag run_e2e=true
 ```
 
+A factory whose workflows share agents usually shares their flags too — every workflow that reaches
+the tester has to declare `run_e2e`. Declare those **once, for every workflow**:
+
+```toml
+[flags]
+run_e2e    = { default = false, description = "Also run the remote end-to-end suite" }
+publish_pr = { default = false, description = "Publish the pull request once it is approved" }
+```
+
+Every workflow then accepts each of them, as though it had declared it itself, and a workflow may
+still declare flags of its own. What a workflow **offers** whoever triggers it — the dashboard's
+trigger window, `layover explain` — is narrower: its own flags, and the shared ones some prompt of
+an agent its chains reach actually tests. A morning digest that never reaches the publisher is not
+offered `publish_pr`, though it would accept it. A workflow repeating a flag exactly as `[flags]`
+declares it is warned about, as one more copy to keep in step.
+
 Rules worth knowing:
 
 - **A flag name must be an identifier.** It has to survive being written inside `@include(...)`.
@@ -300,7 +316,7 @@ not only the first:
 | A chain opened over a `mode = "spawn"` edge | The same flags, **and** the same pipeline, as the chain that spawned it |
 | A resumed [layover](#resuming-booked-work) | The booking chain's values, for every flag the resuming pipeline declares; its defaults for the rest |
 | A scheduled tick | The pipeline's defaults — a clock chooses nothing |
-| A flight to a bare `entry = true` agent | Every flag any pipeline declares, at the default of the first pipeline to declare it |
+| A flight to a bare `entry = true` agent | Every flag `[flags]` or any pipeline declares, at the default `[flags]` gives it or else the first pipeline to declare it |
 
 The flags travel **with the queued work** rather than living only in the Tower's memory, so a chain
 waiting in the queue when the Tower restarts keeps them. An agent never supplies its own: they come

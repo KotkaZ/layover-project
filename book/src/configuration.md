@@ -570,6 +570,17 @@ one level up.
 
 See [Pipelines and triggers](./pipelines.md).
 
+## `[flags]` — flags every workflow accepts
+
+```toml
+[flags]
+run_e2e = { default = false, description = "Also run the remote end-to-end suite" }
+```
+
+The same shape as a pipeline's `[pipelines.<name>.flags]`, declared once for every workflow and for
+a flight sent straight to an `entry = true` agent. Optional. See
+[Flags](./pipelines.md#flags).
+
 ## `[[routes]]` — who may talk to whom
 
 ```toml

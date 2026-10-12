@@ -64,7 +64,14 @@ pub fn agents(config: &Config) -> AgentList {
 }
 
 /// Describes the ways into the factory, and which of them a person has switched off.
-pub fn pipelines(config: &Config, off: &crate::switch::Off) -> PipelineList {
+///
+/// Each lists the flags it offers whoever triggers it — its own, and the shared ones its prompts
+/// test — read from `prompts`; it accepts the rest too.
+pub fn pipelines(
+    config: &Config,
+    off: &crate::switch::Off,
+    prompts: &dyn layover_core::prompt::PromptSource,
+) -> PipelineList {
     PipelineList {
         pipelines: config
             .pipelines
@@ -91,8 +98,8 @@ pub fn pipelines(config: &Config, off: &crate::switch::Off) -> PipelineList {
                 },
                 resumes: pipeline.resumes,
                 agents: pipeline_agents(config, name, pipeline),
-                flags: pipeline
-                    .flags
+                flags: config
+                    .flags_offered(name, prompts)
                     .iter()
                     .map(|(name, spec)| Flag {
                         name: name.clone(),

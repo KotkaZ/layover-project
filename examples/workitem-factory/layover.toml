@@ -229,6 +229,13 @@ effort      = "low"
 
 # ── Pipelines: how work enters the mesh ────────────────────────────
 
+# Flags are chosen when a person triggers work, and every way in reaches the agents whose prompts
+# test them, so they are declared once for every workflow rather than once in each.
+[flags]
+deep_analysis = { default = false, description = "Widen the investigation beyond the reported symptom" }
+run_e2e       = { default = false, description = "Also run the remote end-to-end suite before approving" }
+draft_pr      = { default = true, description = "Open the pull request as a draft for a human to promote" }
+
 # Feature work. A human starts it, because deciding that something should be built is not a
 # decision a clock should make.
 [pipelines.development]
@@ -242,11 +249,6 @@ trigger     = "manual"
 # explain` says so -- so for now run one development instance at a time.
 workspace   = "per-itinerary"
 
-[pipelines.development.flags]
-deep_analysis = { default = false, description = "Widen the investigation beyond the reported symptom" }
-run_e2e       = { default = false, description = "Also run the remote end-to-end suite before approving" }
-draft_pr      = { default = true, description = "Open the pull request as a draft for a human to promote" }
-
 # Review work. Nobody has to remember to start it, which is the whole point.
 [pipelines.review-bot]
 description = "Review my open Azure DevOps pull requests once an hour"
@@ -257,11 +259,6 @@ trigger     = { every = "1h" }
 # needs isolation even more than the manual pipeline does. Not enforced yet; the default
 # `overlap = "skip"` is what actually keeps two instances apart today.
 workspace   = "per-itinerary"
-
-[pipelines.review-bot.flags]
-deep_analysis = { default = false, description = "Widen the investigation beyond the reported symptom" }
-run_e2e       = { default = false, description = "Also run the remote end-to-end suite before approving" }
-draft_pr      = { default = true, description = "Open the pull request as a draft for a human to promote" }
 
 # ── The route map: directed edges ──────────────────────────────────
 #
@@ -345,15 +342,10 @@ access      = "read-only"
 from = "publisher"
 to   = "follower"
 
-# A resumed chain can reach the same agents the original did, so it has to offer the same flags or
-# their prompts cannot be composed. Validation checks this per entry point rather than against the
-# union of all pipelines, which is why it catches it here and not on `development`. The *values* a
-# resumed run sees are the ones the booking chain was triggered with; these defaults fill in only
-# a flag that chain never had.
-[pipelines.follow_up.flags]
-deep_analysis = { default = false, description = "Widen the investigation beyond the reported symptom" }
-run_e2e       = { default = false, description = "Also run the remote end-to-end suite before approving" }
-draft_pr      = { default = true, description = "Open the pull request as a draft for a human to promote" }
+# A resumed chain can reach the same agents the original did, so it has to accept the same flags
+# or their prompts cannot be composed — which `[flags]` above gives every way in. The *values* a
+# resumed run sees are the ones the booking chain was triggered with; the defaults fill in only a
+# flag that chain never had.
 
 [[routes]]
 from = "follower"

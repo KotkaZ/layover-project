@@ -154,8 +154,9 @@ fn entry_points(config: &Config) -> Vec<Entry<'_>> {
         })
         .collect();
 
-    // A bare `entry = true` agent is triggered without a pipeline, so no flags are declared and
-    // none can be supplied. Any conditional prompt downstream of it is unreachable in practice.
+    // A bare `entry = true` agent is triggered without a pipeline, so none can be supplied: it
+    // runs with `[flags]` at their defaults, and any other flag a prompt downstream tests is
+    // undeclared there.
     entries.extend(
         config
             .agents
@@ -164,7 +165,7 @@ fn entry_points(config: &Config) -> Vec<Entry<'_>> {
             .map(|(name, _)| Entry {
                 agent: Some(name.clone()),
                 pipeline: None,
-                available: BTreeSet::new(),
+                available: config.flags.keys().map(String::as_str).collect(),
                 label: format!("`entry = true` on agent `{name}`"),
             }),
     );

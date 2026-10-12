@@ -170,6 +170,9 @@ window       = "24h"       # in any rolling 24 hours
 [copilot]
 usd_per_credit = 0.01     # Copilot reports AI credits, not dollars; this prices them
 
+[flags]                   # accepted by every workflow; each offers the ones its prompts test
+run_e2e = { default = false, description = "Also run the remote end-to-end suite" }
+
 [learnings]
 provisional_runs = 20     # runs a new learning applies for before it lapses
 keep_lapsed      = "14d"  # a lapsed learning nobody rediscovers is deleted after this; 0 at once

@@ -139,19 +139,18 @@ args        = ["--deny-tool=shell(git commit)", "--deny-tool=shell(git push)"]
 
 # ── Workflows ──────────────────────────────────────────────────────
 # FLAGS are chosen per run when a person triggers `development` from the dashboard, and kept by
-# everything that run causes. A schedule always runs with the defaults. Every workflow that can
-# reach an agent whose prompt tests a flag must declare it: the publisher's and the tester's
-# prompts test them, and three workflows reach those two, so each declares the same set.
+# everything that run causes. A schedule always runs with the defaults. The publisher's and the
+# tester's prompts test them, and three workflows reach those two, so they are declared once for
+# every workflow. Each workflow's trigger window offers only the ones its own agents test.
+[flags]
+publish_pr  = { default = false, description = "The publisher opens and publishes the pull request once tester and reviewer approve" }
+announce_pr = { default = false, description = "The messenger announces the published pull request in the team chat" }
+run_e2e     = { default = false, description = "The tester also runs the end-to-end suite" }
 
 [pipelines.development]
 description = "Take a task through spec, build, test and review, and as far as a published pull request as the flags allow"
 entry       = "analyst"
 trigger     = "manual"
-
-[pipelines.development.flags]
-publish_pr  = { default = false, description = "The publisher opens and publishes the pull request once tester and reviewer approve" }
-announce_pr = { default = false, description = "The messenger announces the published pull request in the team chat" }
-run_e2e     = { default = false, description = "The tester also runs the end-to-end suite" }
 
 # Collects the work the publisher sets down after publishing, so a pull request can be followed
 # for days without anything running in between. Resumed work goes back to whoever set it down.
@@ -160,20 +159,10 @@ description = "Pick up published pull requests the publisher set down, to answer
 trigger     = { cron = "0,30 * * * *" }
 resumes     = true
 
-[pipelines.development-follow-up.flags]
-publish_pr  = { default = false, description = "The publisher opens and publishes the pull request once tester and reviewer approve" }
-announce_pr = { default = false, description = "The messenger announces the published pull request in the team chat" }
-run_e2e     = { default = false, description = "The tester also runs the end-to-end suite" }
-
 [pipelines.review-sweep]
 description = "Every two hours, review every open pull request the team is asked to review"
 entry       = "publisher"
 trigger     = { cron = "0 */2 * * *" }
-
-[pipelines.review-sweep.flags]
-publish_pr  = { default = false, description = "The publisher opens and publishes the pull request once tester and reviewer approve" }
-announce_pr = { default = false, description = "The messenger announces the published pull request in the team chat" }
-run_e2e     = { default = false, description = "The tester also runs the end-to-end suite" }
 
 # The same reviewer runs here as in development, more cheaply: a dozen pull requests every two
 # hours, where development's gate reviews one change at a time. And in a sweep it reviews the

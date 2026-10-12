@@ -366,7 +366,7 @@ pub fn serve(
 }
 
 pub fn explain(path: &Path) -> Result<String, Failure> {
-    let (config, _) = load(path)?;
+    let (config, prompts) = load(path)?;
     let mut out = String::new();
 
     out.push_str("Pipelines\n");
@@ -398,7 +398,9 @@ pub fn explain(path: &Path) -> Result<String, Failure> {
                 .collect::<Vec<_>>();
             let _ = writeln!(out, "      reaches: {}", join(&reaches));
         }
-        for (flag, spec) in &pipeline.flags {
+        // What a trigger is offered: its own flags and the shared ones its prompts test. It
+        // accepts the other shared ones too, which change nothing in it.
+        for (flag, spec) in &config.flags_offered(name, &prompts) {
             let _ = writeln!(
                 out,
                 "      --flag {flag}={} {}",

@@ -16,7 +16,9 @@ use crate::route::Route;
 
 mod copilot;
 mod learnings;
+mod offered;
 mod runner;
+mod written;
 
 pub use copilot::CopilotConfig;
 pub use learnings::LearningsConfig;
@@ -200,38 +202,34 @@ impl Default for ReserveConfig {
 }
 
 /// A whole factory definition.
+///
+/// Read through the file as written, resolving its shorthand — factory-wide `[flags]` — into each
+/// pipeline, so a pipeline here is the pipeline as the factory runs it.
 #[derive(Debug, Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(from = "written::Written")]
 pub struct Config {
     /// Filesystem and network locations.
-    #[serde(default)]
     pub layover: Paths,
     /// Factory-wide defaults.
-    #[serde(default)]
     pub defaults: Defaults,
     /// The factory-wide spend ceiling.
-    #[serde(default)]
     pub reserve: ReserveConfig,
     /// Published model prices, used only when a runner reports tokens but no cost.
-    #[serde(default)]
     pub rates: RateCard,
     /// What a Copilot AI credit costs, for pricing Copilot CLI runs.
-    #[serde(default)]
     pub copilot: CopilotConfig,
-    /// How long a learning that lapsed is kept before it is deleted.
-    #[serde(default)]
+    /// The numbers learnings live by.
     pub learnings: LearningsConfig,
+    /// Flags declared for every workflow at once, `[flags]`. Already merged into each pipeline's
+    /// own `flags`; kept here so validation can tell what a pipeline repeats.
+    pub flags: BTreeMap<String, crate::pipeline::FlagSpec>,
     /// Available runners, keyed by name.
-    #[serde(default)]
     pub runners: BTreeMap<String, Runner>,
     /// Configured agents, keyed by name.
-    #[serde(default)]
     pub agents: BTreeMap<AgentName, Agent>,
     /// Named, triggerable entry points, keyed by name.
-    #[serde(default)]
     pub pipelines: BTreeMap<PipelineName, Pipeline>,
     /// The route map.
-    #[serde(default)]
     pub routes: Vec<Route>,
 }
 
@@ -355,22 +353,29 @@ impl Config {
             .unwrap_or(self.defaults.fuel_usd)
     }
 
-    /// Returns every flag name declared by any pipeline.
+    /// Returns every flag name declared by `[flags]` or any pipeline.
     pub fn declared_flags(&self) -> impl Iterator<Item = &str> {
-        self.pipelines
-            .values()
-            .flat_map(|pipeline| pipeline.flags.keys().map(String::as_str))
+        self.flags.keys().map(String::as_str).chain(
+            self.pipelines
+                .values()
+                .flat_map(|pipeline| pipeline.flags.keys().map(String::as_str)),
+        )
     }
 
-    /// The flags a chain that no pipeline opened is composed with: every flag any pipeline
-    /// declares, at its default.
+    /// The flags a chain that no pipeline opened is composed with: every flag `[flags]` or any
+    /// pipeline declares, at its default.
     ///
-    /// Where two pipelines disagree about a default, the first declaration wins. `validate` warns
+    /// `[flags]` comes first. Where two pipelines disagree about a default, the first declaration
+    /// wins. `validate` warns
     /// about the disagreement; what matters here is that `layover prompt` without `--pipeline` and
     /// a real run make the same choice, so the preview shows what the run will receive.
     #[must_use]
     pub fn flags_without_pipeline(&self) -> crate::pipeline::Flags {
-        let mut values: BTreeMap<String, bool> = BTreeMap::new();
+        let mut values: BTreeMap<String, bool> = self
+            .flags
+            .iter()
+            .map(|(flag, spec)| (flag.clone(), spec.default))
+            .collect();
         for pipeline in self.pipelines.values() {
             for (flag, spec) in &pipeline.flags {
                 values.entry(flag.clone()).or_insert(spec.default);

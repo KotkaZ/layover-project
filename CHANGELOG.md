@@ -30,6 +30,11 @@ status](README.md#project-status).
   Each learning now records when it lapsed, and `GET /learnings` gives a lapsed one's `lapsed_at` and
   `deleted_after`, which the dashboard shows beside it. Rejected learnings are kept, as before.
 
+- **Flags can be declared once, for every workflow**, in a top-level `[flags]` table. Every
+  workflow accepts them as though it had declared them, and a workflow may still declare its own.
+  The trigger window and `layover explain` offer each workflow only its own flags and the shared ones
+  a prompt its agents read tests. `validate` warns about a workflow repeating a flag exactly as
+  `[flags]` declares it. The workitem-factory and multi-workflow examples now declare theirs once.
 - **A pipeline that `resumes` may leave out `entry`.** Its work goes back to whoever set it down,
   so the entry was required and unused. Without one it cannot be triggered by hand, and its map
   draws no arrow from it. `GET /pipelines` gives such a pipeline `entry: null`.

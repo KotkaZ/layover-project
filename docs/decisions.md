@@ -1041,6 +1041,19 @@ an empty agent name is a value a client would try to use. Validation, the route 
 measure an entry-less pipeline from every agent that sends on its routes, since any of them may
 have set the work down.
 
+**Why `[flags]` is accepted everywhere but offered narrowly.** Every workflow that reaches a prompt
+testing a flag must accept it, so a factory whose workflows share agents declared the same flags in
+each — thirty declarations for ten flags in Karl's factory, one more copy to drift each time. A
+factory-wide table had two possible meanings: the flag applies where some reachable prompt tests it,
+or everywhere. Only "everywhere" can be decided from `layover.toml` alone, which is all the parser
+has, so every workflow accepts every shared flag and a run is never composed short of one. But a
+trigger window listing switches that change nothing in that workflow teaches people to ignore
+switches, so what is *offered* — the window, `explain` — is narrowed by reading the prompts: a
+workflow's own flags, and the shared ones its agents test. A workflow that repeats a shared flag
+exactly is warned about rather than refused; one that gives it a different default is the
+disagreement validation already warns about. The merge happens as the file is read, so nothing
+downstream can forget to apply it.
+
 ---
 
 ## Still open

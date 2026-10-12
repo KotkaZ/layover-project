@@ -186,7 +186,7 @@ impl Trigger {
 /// Flags are how one factory definition serves several situations without duplicating prompts:
 /// a tester that also runs a remote end-to-end suite is the same agent with one extra paragraph
 /// of instructions. See [`crate::prompt`].
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FlagSpec {
     /// Value used when the trigger does not set the flag.
@@ -293,6 +293,10 @@ pub struct Pipeline {
     /// declares: `[pipelines.<name>.agents.<agent>]`. See [`AgentOverride`].
     #[serde(default)]
     pub agents: BTreeMap<AgentName, AgentOverride>,
+    /// Which of `flags` came from the factory-wide `[flags]` rather than this pipeline's own
+    /// declarations. Never written; worked out as the file is read.
+    #[serde(skip)]
+    pub inherited_flags: std::collections::BTreeSet<String>,
 }
 
 impl Pipeline {

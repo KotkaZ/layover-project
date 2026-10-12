@@ -10,6 +10,7 @@ pub(super) fn check_pipelines(config: &Config, found: &mut Vec<Diagnostic>) {
     check_entries_exist(config, found);
     check_flag_names_are_usable(config, found);
     check_flag_declarations_agree(config, found);
+    check_flags_are_not_repeated(config, found);
     check_schedules_are_survivable(config, found);
     check_schedules_fit_the_reserve(config, found);
 }
@@ -73,8 +74,21 @@ fn check_entries_exist(config: &Config, found: &mut Vec<Diagnostic>) {
 
 /// A flag name appears inside `@include(...)`, so it has to be an identifier.
 fn check_flag_names_are_usable(config: &Config, found: &mut Vec<Diagnostic>) {
+    for flag in config.flags.keys() {
+        if !is_identifier(flag) {
+            found.push(Diagnostic::error(format!(
+                "`[flags]` declares flag `{flag}`, which is not a usable name; use letters, digits \
+                 and underscores, starting with a letter or underscore"
+            )));
+        }
+    }
     for (name, pipeline) in &config.pipelines {
-        for flag in pipeline.flags.keys() {
+        // Said once, of `[flags]`, rather than once per pipeline that inherits it.
+        let own = pipeline
+            .flags
+            .keys()
+            .filter(|flag| !pipeline.inherited_flags.contains(*flag));
+        for flag in own {
             if !is_identifier(flag) {
                 found.push(Diagnostic::error(format!(
                     "pipeline `{name}` declares flag `{flag}`, which is not a usable name; use \
@@ -140,6 +154,26 @@ fn check_schedules_are_survivable(config: &Config, found: &mut Vec<Diagnostic>) 
                 "pipeline `{name}` fires at least every {gap}s but a single run may take \
                  {timeout}s, {consequence}"
             )));
+        }
+    }
+}
+
+/// A pipeline repeating a flag exactly as `[flags]` declares it is one more copy to keep in step.
+///
+/// One with a different default is not repeated, it disagrees, and
+/// [`check_flag_declarations_agree`] says so.
+fn check_flags_are_not_repeated(config: &Config, found: &mut Vec<Diagnostic>) {
+    for (name, pipeline) in &config.pipelines {
+        for (flag, spec) in &pipeline.flags {
+            if pipeline.inherited_flags.contains(flag) {
+                continue;
+            }
+            if config.flags.get(flag) == Some(spec) {
+                found.push(Diagnostic::warning(format!(
+                    "pipeline `{name}` declares flag `{flag}` exactly as `[flags]` does; every \
+                     workflow has it already, so remove it from `[pipelines.{name}.flags]`"
+                )));
+            }
         }
     }
 }

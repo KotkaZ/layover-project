@@ -227,7 +227,16 @@ impl Api for Dashboard {
     }
 
     async fn list_pipelines(&self) -> Result<PipelineList, Problem> {
-        Ok(view::pipelines(&self.config()?, &self.switched_off()))
+        let config = self.config()?;
+        // Prompts are read to tell which shared flags each workflow's agents actually test.
+        let prompts = layover_core::prompt::PromptDir::new(
+            self.0
+                .config_path
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new("."))
+                .join(&config.layover.prompt_dir),
+        );
+        Ok(view::pipelines(&config, &self.switched_off(), &prompts))
     }
 
     async fn get_graph(&self, query: GetGraphQuery) -> Result<RouteMap, Problem> {

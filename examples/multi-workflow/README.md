@@ -149,13 +149,23 @@ Two things keep their workflow:
   comes due, but a resumed chain may use a route only when the workflow that set the work down
   permits it too. A sweep that set work down could not reach the builder by waiting.
 
-## Flags, declared wherever they are reached
+## Flags, declared once
 
 The publisher's prompt tests `publish_pr` and `announce_pr`, and the tester's tests `run_e2e`.
-Three workflows reach one or both of those agents, so all three declare the same three flags.
-`layover validate` refuses a workflow that reaches a prompt testing a flag it does not declare: a
-flag nobody declared is a mistake, and reading it as false would let a typo delete a section of an
-agent's instructions without anybody noticing.
+Three workflows reach one or both of those agents, and every workflow that reaches a prompt testing
+a flag has to accept it — `layover validate` refuses one that does not, because reading an
+undeclared flag as false would let a typo delete a section of an agent's instructions without
+anybody noticing. So the three are declared once, for every workflow:
+
+```toml
+[flags]
+publish_pr  = { default = false, description = "The publisher opens and publishes the pull request once tester and reviewer approve" }
+announce_pr = { default = false, description = "The messenger announces the published pull request in the team chat" }
+run_e2e     = { default = false, description = "The tester also runs the end-to-end suite" }
+```
+
+Each workflow's trigger window offers only the ones its own agents test: `upstream-watch` reaches
+neither the publisher nor the tester, so it offers none.
 
 A flag is chosen when a person triggers `development`, and holds for everything that run causes —
 the follow-up included, days later, which takes its values from the chain that set the work down
