@@ -3,6 +3,19 @@
 One file, `layover.toml`. Unknown fields are **rejected**, not ignored: a typo should fail while
 a human is still watching.
 
+**Lengths of time** are written the way a schedule is: a number and a unit — `30s`, `15m`, `4h`,
+`2d`. Every key that holds one also answers to an older name that carries its unit, and takes a
+bare number in it: `timeout = "4h"` and `timeout_sec = 14400` are the same setting, and naming both
+is an error. A key in hours or days takes only a whole number of them — `window = "90m"` is refused
+rather than rounded.
+
+| Write | Or, as before |
+|---|---|
+| `[defaults] timeout = "2h"` | `timeout_sec = 7200` |
+| `[reserve] window = "24h"` | `window_hours = 24` |
+| `[learnings] keep_lapsed = "14d"` | `keep_lapsed_days = 14` |
+| `[[routes]] timeout = "30m"` | `timeout_sec = 1800` |
+
 ## `[layover]` — where things live
 
 | Key | Default | Meaning |
@@ -54,7 +67,7 @@ layout must be interchangeable, or the layout number means nothing.
 | `max_hops` | `8` | Maximum flights in one chain. Bounds **depth**. |
 | `fuel_usd` | `5.00` | Shared cost budget for an itinerary. Bounds **breadth**. |
 | `max_runs` | `64` | Deterministic run cap; holds when a runner reports no cost. |
-| `timeout_sec` | `900` | Wall-clock limit for one run. |
+| `timeout` (`timeout_sec`) | `"15m"` (`900`) | Wall-clock limit for one run. |
 | `max_recovery_attempts` | `2` | How many times interrupted work may be [restarted](./recovery.md). |
 | `max_concurrent_runs` | `4` | How many agent runs may be alive **at once**, factory-wide. Queued work waits for a slot and starts, oldest first, the moment one frees. `1` runs one at a time. |
 | `max_spawn_generations` | `1` | How many `mode = "spawn"` hops separate a chain from the trigger that began it. |
@@ -78,7 +91,7 @@ window_hours = 24       # ...in any rolling 24 hours
 | Key | Default | Meaning |
 |---|---|---|
 | `fuel_usd` | `100.00` | Ceiling for the window. `0` means unlimited; anything else must be a positive number, and a negative or `nan` value is refused rather than quietly disabling the cap. |
-| `window_hours` | `24` | How far back the rolling window reaches. |
+| `window` (`window_hours`) | `"24h"` (`24`) | How far back the rolling window reaches, in whole hours. |
 
 A scheduled pipeline mints a fresh itinerary — and a fresh Fuel budget — on every tick, so an
 hourly pipeline at `fuel_usd = 20` permits `24 × 20 = $480` a day with every chain inside its rail.
@@ -140,7 +153,7 @@ keep_lapsed_days = 14   # how long a lapsed one is kept before it is deleted
 | `confirm_after` | `3` | Rediscoveries — proposals of a learning while it is lapsed — that make it permanent. An echo of one still being given to runs never counts. |
 | `max_chars` | `400` | The longest a learning may be, in characters. A longer proposal is refused, and the agent told the limit. Every learning is in every run of its agent, so this is a recurring cost. |
 | `max_per_run` | `25` | The most learnings one run is given: confirmed first, then the oldest. The rest still apply, to the runs after one lapses. |
-| `keep_lapsed_days` | `14` | Days a lapsed learning is kept before it is deleted. `0` deletes it as soon as it lapses. |
+| `keep_lapsed` (`keep_lapsed_days`) | `"14d"` (`14`) | How long a lapsed learning is kept before it is deleted, in whole days. `0` deletes it as soon as it lapses. |
 
 Each is a trade-off. A longer `provisional_runs` lets a learning help for longer, and lets a wrong
 one do damage for longer; a lower `confirm_after` makes true insights permanent sooner, and wrong
@@ -577,7 +590,7 @@ timeout_sec = 3600
 | `to` | Receiving agents. A bare string or a list. |
 | `mode` | `async` (default) or `spawn`, which opens a fresh itinerary per flight. `request_response` was superseded by joins. |
 | `join` | `all` or `any`. Parks flights until the condition is met. |
-| `timeout_sec` | Backstop for a barrier that never completes. |
+| `timeout` (`timeout_sec`) | Backstop for a barrier that never completes: `"1h"`, or seconds. |
 | `pipelines` | The pipelines whose chains may use the route. A bare string or a list. Absent means every chain may — see below. |
 
 Direction is explicit. An edge absent from `[[routes]]` means the flight is refused.

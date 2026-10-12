@@ -10,6 +10,12 @@ status](README.md#project-status).
 
 ### Added
 
+- **Lengths of time can be written as durations**: `[defaults] timeout = "2h"`,
+  `[reserve] window = "24h"`, `[learnings] keep_lapsed = "14d"` and a route's `timeout = "30m"`,
+  beside `timeout_sec`, `window_hours`, `keep_lapsed_days` and the route's `timeout_sec`, which keep
+  working and also take a duration. Naming both is an error, and a duration that is not a whole
+  number of hours or days, where the key counts in them, is refused rather than rounded.
+
 - **The numbers a learning lives by are the factory's**, in a new `[learnings]` table:
   `provisional_runs` (20) runs it applies for, `confirm_after` (3) rediscoveries to make it
   permanent, `max_chars` (400) the longest an agent may propose, and `max_per_run` (25) the most one

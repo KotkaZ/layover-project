@@ -29,6 +29,7 @@ pub mod chosen;
 pub mod config;
 pub mod cost;
 pub mod diagram;
+pub mod duration;
 pub mod flight;
 pub mod graph;
 pub mod handover;

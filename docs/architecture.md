@@ -143,7 +143,7 @@ effort      = "medium"    # for agents that set none, where their runner has `{e
 max_hops    = 8
 fuel_usd    = 5.00
 max_runs    = 64
-timeout_sec = 900
+timeout     = "15m"       # one run's wall-clock limit; durations read "30s", "15m", "4h", "2d"
 max_concurrent_runs = 4   # runs alive at once, factory-wide; the rest wait in the queue
 
 # ── How to invoke each supported CLI ───────────────────────────────
@@ -165,14 +165,14 @@ mcp     = { flag = "-c", format = "codex_toml" }
 # ── What the whole factory may spend, and how Copilot is priced ────
 [reserve]
 fuel_usd     = 100.00     # checked before every run; 0 means unlimited
-window_hours = 24         # in any rolling 24 hours
+window       = "24h"       # in any rolling 24 hours
 
 [copilot]
 usd_per_credit = 0.01     # Copilot reports AI credits, not dollars; this prices them
 
 [learnings]
 provisional_runs = 20     # runs a new learning applies for before it lapses
-keep_lapsed_days = 14     # a lapsed learning nobody rediscovers is deleted after this; 0 at once
+keep_lapsed      = "14d"  # a lapsed learning nobody rediscovers is deleted after this; 0 at once
 
 # ── Agents ─────────────────────────────────────────────────────────
 [agents.planner]

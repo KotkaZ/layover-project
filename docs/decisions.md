@@ -1012,6 +1012,15 @@ wrong confirms nothing or merges two insights into one, and nobody would see eit
 learning may not say is a screen against injected instructions: a knob on it is a knob an attacker
 would want turned.
 
+**Why a length of time has two names rather than a new one.** Schedules were written `"45m"` while
+every other length of time was a bare number in a unit its key's name carried, so a four-hour
+timeout read `14400` and a reader did the arithmetic (raised by Karl, 2026-10-12). Renaming the keys
+would break every factory, so each gained a name without its unit — `timeout`, `window`,
+`keep_lapsed` — and both names take both forms, a number being read in the original unit. Naming
+both is the duplicate-key error TOML would give for any other key, rather than one silently
+winning. A key that counts hours or days refuses a duration that is not a whole number of them,
+because rounding `"90m"` to one or two hours would change what somebody wrote on purpose.
+
 ---
 
 ## Still open

@@ -72,8 +72,13 @@ pub struct Route {
     /// Rendezvous condition. When set, flights are parked until it is met.
     #[serde(default)]
     pub join: Option<Join>,
-    /// Backstop for an unreachable barrier.
-    #[serde(default)]
+    /// Backstop for an unreachable barrier, in seconds. Written `timeout = "30m"` or
+    /// `timeout_sec = 1800`.
+    #[serde(
+        default,
+        alias = "timeout",
+        deserialize_with = "crate::duration::optional_seconds"
+    )]
     pub timeout_sec: Option<u64>,
     /// The pipelines whose chains may use this route. Accepts a bare string or a list.
     ///

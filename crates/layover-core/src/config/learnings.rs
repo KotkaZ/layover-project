@@ -30,7 +30,12 @@ pub struct LearningsConfig {
     /// rediscovery; deleted, that proposal starts a new learning. Longer gives a learning more
     /// chance to be rediscovered three times and confirmed; shorter keeps the list to what is in
     /// use.
-    #[serde(default = "default_keep_lapsed_days")]
+    /// Written `keep_lapsed = "14d"` or `keep_lapsed_days = 14`.
+    #[serde(
+        default = "default_keep_lapsed_days",
+        alias = "keep_lapsed",
+        deserialize_with = "crate::duration::days"
+    )]
     pub keep_lapsed_days: u32,
 }
 
@@ -161,6 +166,8 @@ mod tests {
 
     #[test]
     fn an_unknown_key_is_refused() {
-        assert!(Config::from_toml("[learnings]\nkeep_lapsed = 3\n", "learnings.toml").is_err());
+        assert!(
+            Config::from_toml("[learnings]\nkeep_lapsed_weeks = 3\n", "learnings.toml").is_err()
+        );
     }
 }

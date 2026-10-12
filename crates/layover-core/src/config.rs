@@ -95,8 +95,13 @@ pub struct Defaults {
     /// needs no runner cooperation and is therefore always enforced.
     #[serde(default = "default_max_runs")]
     pub max_runs: u32,
-    /// Wall-clock limit for a single run.
-    #[serde(default = "default_timeout_sec")]
+    /// Wall-clock limit for a single run, in seconds. Written `timeout = "2h"` or
+    /// `timeout_sec = 7200`.
+    #[serde(
+        default = "default_timeout_sec",
+        alias = "timeout",
+        deserialize_with = "crate::duration::seconds"
+    )]
     pub timeout_sec: u64,
     /// How many times interrupted work may be restarted automatically.
     ///
@@ -154,8 +159,13 @@ pub struct ReserveConfig {
     /// How far back the rolling window reaches.
     ///
     /// Rolling rather than per calendar day, deliberately: a daily bucket can be spent twice
-    /// across midnight, and needs a timezone to decide when midnight is.
-    #[serde(default = "default_reserve_window_hours")]
+    /// across midnight, and needs a timezone to decide when midnight is. Written `window = "24h"`
+    /// or `window_hours = 24`.
+    #[serde(
+        default = "default_reserve_window_hours",
+        alias = "window",
+        deserialize_with = "crate::duration::hours"
+    )]
     pub window_hours: u64,
 }
 

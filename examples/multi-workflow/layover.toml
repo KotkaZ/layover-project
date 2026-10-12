@@ -31,7 +31,7 @@ env_from = ["GH_TOKEN"]
 max_hops    = 48
 max_runs    = 64
 fuel_usd    = 60.00
-timeout_sec = 7200
+timeout     = "2h"
 # Four agent CLIs at once: a sweep's reviews run side by side, and the rest queue.
 max_concurrent_runs   = 4
 max_spawn_generations = 1
@@ -39,12 +39,12 @@ max_spawn_generations = 1
 # What the whole factory may spend in any rolling 24 hours, whatever its schedules do.
 [reserve]
 fuel_usd     = 400.00
-window_hours = 24
+window       = "24h"
 
 # A sweep's reviewer proposes a learning or two per pull request, and most lapse unrediscovered.
 # A week is long enough for a true one to come up again, and keeps the list readable.
 [learnings]
-keep_lapsed_days = 7
+keep_lapsed = "7d"
 
 # ── One runner ─────────────────────────────────────────────────────
 # A runner is a CLI and a permission set. `cli = "copilot"` has Layover supply everything an

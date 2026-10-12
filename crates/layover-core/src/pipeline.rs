@@ -459,31 +459,9 @@ const fn manual_trigger() -> Trigger {
 
 /// Parses a duration such as `30s`, `15m`, `1h` or `2d`.
 fn parse_duration(text: &str) -> Result<Duration, TriggerError> {
-    let trimmed = text.trim();
-    let bad = || TriggerError::BadDuration {
+    crate::duration::parse(text).map_err(|_| TriggerError::BadDuration {
         found: text.to_owned(),
-    };
-
-    // Split on the last *character* rather than the last byte, so a stray multi-byte character
-    // produces an error instead of a panic.
-    let (digits, unit) = match trimmed.char_indices().next_back() {
-        Some((index, unit)) => (&trimmed[..index], unit),
-        None => return Err(bad()),
-    };
-
-    let multiplier = match unit {
-        's' => 1_u64,
-        'm' => 60,
-        'h' => 60 * 60,
-        'd' => 24 * 60 * 60,
-        _ => return Err(bad()),
-    };
-
-    let amount: u64 = digits.parse().map_err(|_| bad())?;
-    amount
-        .checked_mul(multiplier)
-        .map(Duration::from_secs)
-        .ok_or_else(bad)
+    })
 }
 
 /// Validates a cron expression, rejecting anything finer than a minute.
