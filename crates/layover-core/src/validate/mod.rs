@@ -10,6 +10,7 @@
 
 mod agents;
 mod costs;
+mod learnings;
 mod overrides;
 mod pipelines;
 mod prompts;
@@ -91,6 +92,7 @@ pub fn validate(config: &Config) -> Vec<Diagnostic> {
     agents::check_reserve_window_is_usable(config, &mut found);
     agents::check_reserve_cap_is_deliberate(config, &mut found);
     agents::check_copilot_price_is_usable(config, &mut found);
+    learnings::check_learning_rules(config, &mut found);
     costs::check_runners_report_cost(config, &mut found);
     agents::check_concurrency_is_usable(config, &mut found);
     selection::check_model_reaches_its_runner(config, &mut found);

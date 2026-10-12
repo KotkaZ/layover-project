@@ -171,6 +171,7 @@ window_hours = 24         # in any rolling 24 hours
 usd_per_credit = 0.01     # Copilot reports AI credits, not dollars; this prices them
 
 [learnings]
+provisional_runs = 20     # runs a new learning applies for before it lapses
 keep_lapsed_days = 14     # a lapsed learning nobody rediscovers is deleted after this; 0 at once
 
 # ── Agents ─────────────────────────────────────────────────────────

@@ -530,9 +530,12 @@ impl Runtime for FactoryRuntime {
             jiff::Timestamp::now(),
         );
 
+        // The factory's own numbers: how long a learning applies, how often it must be
+        // rediscovered, and how long it may be.
+        let rules = self.config.learnings.rules();
         let mut outcome = None;
         (self.update_learnings)(&mut |learnings| {
-            let uptake = learnings.propose(&proposal);
+            let uptake = learnings.propose_under(&proposal, &rules);
             // Malformed and Refused change nothing, so writing would be a needless rewrite of the
             // whole file — and `Refused` writing anything at all would let repetition look like it
             // had an effect.
@@ -575,9 +578,11 @@ impl Runtime for FactoryRuntime {
             }
             Uptake::Malformed => {
                 return Err(ToolError::BadArguments {
-                    detail: "a learning is one or two sentences. Empty text, or more than will \
-                             fit in a prompt alongside everything else, is not one."
-                        .to_owned(),
+                    detail: format!(
+                        "a learning is one or two sentences, at most {} characters. Empty text, \
+                         or more than will fit in a prompt alongside everything else, is not one.",
+                        rules.max_chars
+                    ),
                 });
             }
             Uptake::Unacceptable(reason) => {

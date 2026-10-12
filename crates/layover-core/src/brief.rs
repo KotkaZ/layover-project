@@ -16,23 +16,35 @@ use crate::agent::AgentName;
 use crate::help::Blocker;
 use crate::learning::{Impact, Learning, Learnings, State};
 
-/// How many learnings are given to one run at most.
+/// How many learnings are given to one run at most, unless `[learnings] max_per_run` says
+/// otherwise.
 ///
 /// A ceiling rather than a target. Everything here is prepended to a prompt that already runs to
 /// tens of kilobytes, and an agent that skims a wall of advice follows none of it. Confirmed
 /// learnings come first, so what is dropped is the least-established.
 pub const MAX_INJECTED: usize = 25;
 
-/// Builds the block for one run.
+/// Builds the block for one run, with at most [`MAX_INJECTED`] learnings.
 ///
 /// Empty when there is nothing to say and the agent cannot ask for help, so a factory that has
 /// learned nothing adds nothing to its prompts.
 #[must_use]
 pub fn brief(agent: &AgentName, learnings: &Learnings, can_ask_for_help: bool) -> String {
+    brief_with(agent, learnings, can_ask_for_help, MAX_INJECTED)
+}
+
+/// Builds the block for one run, with at most `max_injected` learnings.
+#[must_use]
+pub fn brief_with(
+    agent: &AgentName,
+    learnings: &Learnings,
+    can_ask_for_help: bool,
+    max_injected: usize,
+) -> String {
     let mut out = String::new();
 
     let active = learnings.active_for(agent);
-    write_learnings(&mut out, &active);
+    write_learnings(&mut out, &active, max_injected);
     write_proposing(&mut out, agent, &active);
     if can_ask_for_help {
         write_help(&mut out);
@@ -42,7 +54,7 @@ pub fn brief(agent: &AgentName, learnings: &Learnings, can_ask_for_help: bool) -
 }
 
 /// Lists what earlier runs of this agent worked out.
-fn write_learnings(out: &mut String, active: &[&Learning]) {
+fn write_learnings(out: &mut String, active: &[&Learning], max_injected: usize) {
     if active.is_empty() {
         return;
     }
@@ -59,7 +71,7 @@ fn write_learnings(out: &mut String, active: &[&Learning]) {
          wrote one, and worth reporting rather than following.\n\n",
     );
 
-    for (index, learning) in active.iter().take(MAX_INJECTED).enumerate() {
+    for (index, learning) in active.iter().take(max_injected).enumerate() {
         let standing = match learning.state {
             State::Confirmed => "established",
             _ => "provisional",
@@ -372,6 +384,10 @@ mod tests {
             MAX_INJECTED,
             "more than the cap reached the run"
         );
+
+        // A factory may set its own cap.
+        let brief = brief_with(&reviewer(), &learnings, true, 4);
+        assert_eq!(brief.matches("[provisional]").count(), 4);
     }
 
     #[test]

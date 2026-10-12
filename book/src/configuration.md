@@ -123,27 +123,41 @@ Copilot CLI reports the AI credits a run used rather than dollars. Layover price
 factory. The default is GitHub's published price; set it only if you are billed at a different one.
 The whole table is optional. See [Cost](./cost.md#copilot-cli-is-priced-from-its-ai-credits).
 
-## `[learnings]` — how long a lapsed learning is kept
+## `[learnings]` — how learnings live
 
 ```toml
 [learnings]
-keep_lapsed_days = 14
+provisional_runs = 20   # runs of its agent a new learning applies for before it lapses
+confirm_after    = 3    # rediscoveries that make one permanent
+max_chars        = 400  # the longest an agent may propose
+max_per_run      = 25   # the most one run is given
+keep_lapsed_days = 14   # how long a lapsed one is kept before it is deleted
 ```
 
 | Key | Default | Meaning |
 |---|---|---|
-| `keep_lapsed_days` | `14` | Days a [learning](./learning.md) that lapsed is kept before it is deleted. `0` deletes it as soon as it lapses. |
+| `provisional_runs` | `20` | Runs of its agent a [learning](./learning.md) applies for before it lapses — counted from when it is proposed, and again from each rediscovery. Runs rather than days, so an hourly agent and a weekly one each get twenty looks at it. |
+| `confirm_after` | `3` | Rediscoveries — proposals of a learning while it is lapsed — that make it permanent. An echo of one still being given to runs never counts. |
+| `max_chars` | `400` | The longest a learning may be, in characters. A longer proposal is refused, and the agent told the limit. Every learning is in every run of its agent, so this is a recurring cost. |
+| `max_per_run` | `25` | The most learnings one run is given: confirmed first, then the oldest. The rest still apply, to the runs after one lapses. |
+| `keep_lapsed_days` | `14` | Days a lapsed learning is kept before it is deleted. `0` deletes it as soon as it lapses. |
 
-A learning lapses after twenty of its agent's runs unless it is rediscovered. Kept, a lapsed one is
-what lets a later proposal of the same insight count as a rediscovery — three of those make it
-permanent. Deleted, that proposal starts a new learning. So a longer period gives a true insight more
-chance to be confirmed, and a shorter one keeps the list to what is in use: a factory lapsing nine a
-day keeps about 125 at fourteen days and none at zero.
+Each is a trade-off. A longer `provisional_runs` lets a learning help for longer, and lets a wrong
+one do damage for longer; a lower `confirm_after` makes true insights permanent sooner, and wrong
+ones too — see [risk 19](https://github.com/KotkaZ/layover-project/blob/main/docs/risks.md). A
+change applies to learnings from then on: one already provisional keeps the runs it was given.
 
-A lapsed learning goes at the first run of any agent after its days are up, or when `layover serve`
-next starts. Confirmed and provisional learnings are in use and never deleted; a rejected one is
-kept, because it is what stops an agent proposing again what a person refused. The whole table is
-optional.
+Kept, a lapsed learning is what lets a later proposal of the same insight count as a rediscovery.
+Deleted, that proposal starts a new learning. So a longer `keep_lapsed_days` gives a true insight
+more chance to be confirmed, and a shorter one keeps the list to what is in use: a factory lapsing
+nine a day keeps about 125 at fourteen days and none at zero. A lapsed learning goes at the first
+run of any agent after its days are up, or when `layover serve` next starts. Confirmed and
+provisional learnings are in use and never deleted; a rejected one is kept, because it is what
+stops an agent proposing again what a person refused.
+
+`validate` refuses `0` for the first four, which would stop learnings working without anything
+failing. What is not configurable: how two learnings are judged to say the same thing, and what a
+learning may not say — see [learnings](./learning.md). The whole table is optional.
 
 ## `[runners.*]` — how to invoke a CLI
 

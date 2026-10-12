@@ -11,10 +11,7 @@ use jiff::Timestamp;
 
 use crate::agent::AgentName;
 
-#[cfg(test)]
-use super::Impact;
-
-use super::{CONFIRM_AFTER, Learning, LearningId, PROVISIONAL_RUNS, Proposal, State};
+use super::{Learning, LearningId, Proposal, Rules, State};
 use crate::learning::Rejected;
 
 /// What happened to a proposal.
@@ -111,9 +108,14 @@ impl Learnings {
         active
     }
 
-    /// Takes up a proposal, or explains why it was not taken up.
+    /// Takes up a proposal under the default [`Rules`], or explains why it was not taken up.
     pub fn propose(&mut self, proposal: &Proposal) -> Uptake {
-        if !proposal.is_well_formed() {
+        self.propose_under(proposal, &Rules::default())
+    }
+
+    /// Takes up a proposal under a factory's [`Rules`], or explains why it was not taken up.
+    pub fn propose_under(&mut self, proposal: &Proposal, rules: &Rules) -> Uptake {
+        if !proposal.fits(rules.max_chars) {
             return Uptake::Malformed;
         }
 
@@ -131,7 +133,8 @@ impl Learnings {
             .find(|learning| learning.agent == proposal.agent && learning.matches(text));
 
         let Some(learning) = existing else {
-            self.entries.push(Learning::from_proposal(proposal));
+            self.entries
+                .push(Learning::lasting(proposal, rules.provisional_runs));
             return Uptake::Taken;
         };
 
@@ -154,13 +157,13 @@ impl Learnings {
                 learning.text.push_str(text);
                 learning.impact = learning.impact.max(proposal.impact);
 
-                if learning.proposals.saturating_sub(1) >= CONFIRM_AFTER {
+                if learning.proposals.saturating_sub(1) >= rules.confirm_after {
                     learning.state = State::Confirmed;
                     learning.runs_left = 0;
                     Uptake::Confirmed
                 } else {
                     learning.state = State::Provisional;
-                    learning.runs_left = PROVISIONAL_RUNS;
+                    learning.runs_left = rules.provisional_runs;
                     Uptake::Rediscovered {
                         proposals: learning.proposals,
                     }
@@ -234,6 +237,7 @@ impl Learnings {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::learning::{CONFIRM_AFTER, Impact, PROVISIONAL_RUNS};
 
     fn at(rfc3339: &str) -> Timestamp {
         rfc3339.parse().expect("valid timestamp")

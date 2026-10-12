@@ -692,7 +692,7 @@ impl Factory {
     /// dependency.
     fn brief_for(&self, agent: &AgentName) -> String {
         let learnings = self.journal.learnings().unwrap_or_default();
-        layover_core::brief::brief(agent, &learnings, true)
+        layover_core::brief::brief_with(agent, &learnings, true, self.config.learnings.per_run())
     }
 
     /// Charges a finished run against the agent's provisional learnings, and deletes every

@@ -334,7 +334,10 @@ the thing an attacker wanted in the factory's memory, waiting for the filter to 
 **What is still open.** This is a filter on obvious attempts. An attacker who phrases an
 instruction as an observation gets through, and no wordlist fixes that. The remaining mitigations
 are structural and unchanged: expiry bounds the blast radius to twenty runs, an echo cannot
-confirm a learning, it is presented as a claim, and a person can drop one in a press.
+confirm a learning, it is presented as a claim, and a person can drop one in a press. Those numbers
+are now the factory's (`[learnings]`): raising `provisional_runs` or `max_chars` widens the foothold,
+and lowering `confirm_after` shortens the way to permanence — for a wrong learning as much as a
+right one. The defaults are the ones this risk was assessed against.
 
 An approval queue is still rejected: it puts a human in a loop the factory exists to keep them out
 of, and a sibling project's queue held 88 learnings after 22 days with none ever approved.

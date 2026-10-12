@@ -136,7 +136,8 @@ conclusion also makes it decide what its conclusion was.
 Reports are capped and trimmed rather than refused — a report is the only account of a run that has
 already cost money — and a trimmed one says so, so you know to look further rather than assuming
 the agent stopped there. The caps are a 160-character headline, a 12,000-character body and 32
-artifacts; a learning is capped at 400 characters, and at most 25 are injected into any one run.
+artifacts; a learning is capped at 400 characters, and at most 25 are injected into any one run,
+unless [`[learnings]`](./configuration.md#learnings--how-learnings-live) says otherwise.
 
 ## Switching a workflow off
 

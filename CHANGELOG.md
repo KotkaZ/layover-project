@@ -10,6 +10,11 @@ status](README.md#project-status).
 
 ### Added
 
+- **The numbers a learning lives by are the factory's**, in a new `[learnings]` table:
+  `provisional_runs` (20) runs it applies for, `confirm_after` (3) rediscoveries to make it
+  permanent, `max_chars` (400) the longest an agent may propose, and `max_per_run` (25) the most one
+  run is given. `validate` refuses `0` for any of them. A changed `provisional_runs` applies to
+  learnings from then on.
 - **Lapsed learnings are deleted** once `[learnings] keep_lapsed_days` have passed since they
   lapsed without an agent rediscovering them — fourteen by default, `0` to delete each as soon as it
   lapses. A rediscovery within the period still counts towards making a learning permanent; one

@@ -999,6 +999,19 @@ are not deleted: they are what stops an agent re-proposing what a person refused
 after every run and when the Tower starts — not from a dashboard that is only watching, which would
 rewrite a file the Tower in another process is writing.
 
+**Why the numbers a learning lives by are the factory's, and two things about learnings are not.**
+Twenty runs, three rediscoveries, 400 characters and 25 a run were chosen for one factory's pace;
+asked to make them configurable with the deletion period (Karl, 2026-10-12), all four moved into
+`[learnings]` with those values as defaults. How many runs tell a fluke from a fact depends on how
+often the agent runs, which only the factory knows. Each is checked for the one value that would
+stop learnings working with nothing failing — zero — and otherwise taken as written: raising one
+widens what a wrong learning can do (risk 19 says so), but the factory that raises it is the one
+that pays for it. Two things stayed fixed. Whether two learnings say the same thing decides
+whether a rediscovery is recognised, and it fails silently in both directions — a threshold set
+wrong confirms nothing or merges two insights into one, and nobody would see either. And what a
+learning may not say is a screen against injected instructions: a knob on it is a knob an attacker
+would want turned.
+
 ---
 
 ## Still open

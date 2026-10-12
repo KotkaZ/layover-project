@@ -69,9 +69,9 @@ file stays one tool call away.
 ```mermaid
 stateDiagram-v2
     [*] --> provisional: proposed
-    provisional --> lapsed: 20 runs, not rediscovered
+    provisional --> lapsed: provisional_runs (20), not rediscovered
     lapsed --> provisional: rediscovered independently
-    lapsed --> confirmed: rediscovered a 3rd time
+    lapsed --> confirmed: rediscovered confirm_after (3) times
     lapsed --> [*]: deleted after keep_lapsed_days
 ```
 
@@ -83,7 +83,7 @@ Every run of an agent spends one of its provisional learnings' remaining runs, w
 outcome — a learning that only decayed on success would be kept alive by the failures it was meant
 to prevent. Run out, and it lapses. Rediscovered independently by a later run, and it counts:
 enough times and it becomes permanent. Not rediscovered within the factory's
-[`keep_lapsed_days`](./configuration.md#learnings--how-long-a-lapsed-learning-is-kept), and it is
+[`keep_lapsed_days`](./configuration.md#learnings--how-learnings-live), and it is
 deleted.
 
 Repeating advice you were **just given** is an echo, not evidence, and is not counted. Otherwise a

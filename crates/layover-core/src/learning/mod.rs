@@ -43,12 +43,15 @@ use crate::agent::AgentName;
 
 mod forget;
 mod ledger;
+mod rules;
 pub mod screen;
 
 pub use ledger::{Learnings, Uptake};
+pub use rules::Rules;
 pub use screen::{Rejected, screen};
 
-/// How many independent rediscoveries make a learning permanent.
+/// How many independent rediscoveries make a learning permanent, unless `[learnings]
+/// confirm_after` says otherwise.
 ///
 /// A rediscovery is an arrival *after* the learning has lapsed — the first proposal is a
 /// discovery, not a rediscovery, and does not count towards this. Reaching the bar therefore
@@ -56,14 +59,15 @@ pub use screen::{Rejected, screen};
 /// permanence is the one state nothing expires out of, so it should be expensive.
 pub const CONFIRM_AFTER: u32 = 3;
 
-/// How many of an agent's runs a provisional learning survives.
+/// How many of an agent's runs a provisional learning survives, unless `[learnings]
+/// provisional_runs` says otherwise.
 ///
 /// Counted in runs rather than days deliberately: an hourly pipeline and a manual one should not
 /// share a clock. This is also the window in which a wrong learning can do damage, which is the
 /// number to lower if that ever stops feeling acceptable.
 pub const PROVISIONAL_RUNS: u32 = 20;
 
-/// Longest a learning may be, in characters.
+/// Longest a learning may be, in characters, unless `[learnings] max_chars` says otherwise.
 ///
 /// Injected into every run of its agent, so length is a recurring cost. The limit also pushes
 /// towards one idea per learning, which is what makes them individually revocable.
@@ -171,14 +175,20 @@ impl Proposal {
         }
     }
 
-    /// Returns `true` when the text is usable.
+    /// Returns `true` when the text is usable at the default length.
     ///
     /// Only length and emptiness. Judging whether an insight is *good* is not something a
     /// validator can do, and pretending otherwise would reject useful things.
     #[must_use]
     pub fn is_well_formed(&self) -> bool {
+        self.fits(MAX_TEXT)
+    }
+
+    /// Returns `true` when the text is not empty and at most `max_chars` long.
+    #[must_use]
+    pub fn fits(&self, max_chars: usize) -> bool {
         let trimmed = self.text.trim();
-        !trimmed.is_empty() && trimmed.chars().count() <= MAX_TEXT
+        !trimmed.is_empty() && trimmed.chars().count() <= max_chars
     }
 }
 
@@ -267,9 +277,15 @@ pub struct Learning {
 }
 
 impl Learning {
-    /// Takes up a proposal for the first time.
+    /// Takes up a proposal for the first time, for the default number of runs.
     #[must_use]
     pub fn from_proposal(proposal: &Proposal) -> Self {
+        Self::lasting(proposal, PROVISIONAL_RUNS)
+    }
+
+    /// Takes up a proposal for the first time, to last `runs` of its agent's runs.
+    #[must_use]
+    pub fn lasting(proposal: &Proposal, runs: u32) -> Self {
         Self {
             id: LearningId::generate(),
             agent: proposal.agent.clone(),
@@ -277,7 +293,7 @@ impl Learning {
             impact: proposal.impact,
             state: State::Provisional,
             proposals: 1,
-            runs_left: PROVISIONAL_RUNS,
+            runs_left: runs,
             first_at: proposal.at,
             last_at: proposal.at,
             lapsed_at: None,

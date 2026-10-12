@@ -96,10 +96,12 @@ stateDiagram-v2
 ```
 
 A learning **applies immediately** and **expires after 20 of its agent's runs**. Runs rather than
-days, because an hourly pipeline and a manual one should not share a clock.
+days, because an hourly pipeline and a manual one should not share a clock. Twenty, three
+rediscoveries, 400 characters and 25 a run are defaults: a factory sets its own in
+[`[learnings]`](./configuration.md#learnings--how-learnings-live).
 
 A lapsed learning is no longer given to runs but is **kept for `keep_lapsed_days`** — fourteen
-unless [`[learnings]`](./configuration.md#learnings--how-long-a-lapsed-learning-is-kept) says
+unless [`[learnings]`](./configuration.md#learnings--how-learnings-live) says
 otherwise — so that a rediscovery within them counts. Then it is **deleted**: a factory that lapsed
 over a hundred learnings in twelve days, and rediscovered one, needs its list to show what is in use
 rather than everything that ever was. The dashboard says when each lapsed learning goes.
@@ -151,8 +153,8 @@ separate, narrower claim. Which is exactly what a refinement is.
 
 ## What a learning may not say
 
-A learning is the most durable foothold in the system. It applies to twenty runs with no human in
-the loop, sits near the top of a prompt where models weight instructions heavily, and its text came
+A learning is the most durable foothold in the system. It applies to twenty runs — or however
+many `provisional_runs` says — with no human in the loop, sits near the top of a prompt where models weight instructions heavily, and its text came
 from an agent whose own input may have been a work item, a pull request comment or a web page.
 Every other channel an attacker might reach is bounded by one run; this one outlives it.
 
