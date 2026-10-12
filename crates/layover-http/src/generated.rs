@@ -667,8 +667,10 @@ pub struct Pipeline {
     /// One line saying what this pipeline is for.
     #[serde(default)]
     pub description: Option<String>,
-    /// The agent that receives the first flight.
-    pub entry: String,
+    /// The agent that receives the first flight. Null for a pipeline that `resumes` and
+    /// declares none: it wakes whoever set its work down, and cannot be triggered by hand.
+    #[serde(default)]
+    pub entry: Option<String>,
     /// The boolean parameters this pipeline accepts.
     pub flags: Vec<Flag>,
     /// Shared budget for a chain started here, honouring the entry agent's own `fuel_usd`

@@ -38,7 +38,7 @@ fn the_documented_example_declares_a_manual_pipeline() {
         .expect("the example declares a `build` pipeline");
 
     assert_eq!(pipeline.trigger, Trigger::Manual);
-    assert_eq!(pipeline.entry.as_str(), "planner");
+    assert_eq!(pipeline.entry, Some("planner".into()));
     assert_eq!(config.scheduled_pipelines().count(), 0);
 }
 

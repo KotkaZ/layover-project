@@ -1032,6 +1032,15 @@ that read it while an older one did not would split one factory's state in two. 
 unhonoured, and `validate` warns where it is set rather than refusing — refusing would stop a
 factory that has always loaded.
 
+**Why a resuming pipeline's `entry` is optional, and `null` in the API.** A resuming pipeline wakes
+whoever set its work down, so `entry` was a required key that did nothing — except decide where a
+manual trigger of it would go, which is how a follow-up pipeline came to send a hand-triggered run
+to an agent with nothing to follow up. Left out, the pipeline cannot be triggered by hand; given,
+it keeps that one meaning. The API's `entry` became nullable rather than an empty string, because
+an empty agent name is a value a client would try to use. Validation, the route map and `explain`
+measure an entry-less pipeline from every agent that sends on its routes, since any of them may
+have set the work down.
+
 ---
 
 ## Still open

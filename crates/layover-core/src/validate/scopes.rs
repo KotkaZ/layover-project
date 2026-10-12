@@ -200,7 +200,7 @@ fn what_each_pipeline_can_wake<'a>(
             woken.extend(
                 routes
                     .for_pipeline(Some(name))
-                    .workflow_from(&pipeline.entry),
+                    .workflow_from_all(pipeline.entry.as_ref()),
             );
         }
     }
@@ -213,7 +213,7 @@ fn what_each_pipeline_can_wake<'a>(
             let starts: Vec<AgentName> = woken
                 .iter()
                 .cloned()
-                .chain(std::iter::once(pipeline.entry.clone()))
+                .chain(pipeline.entry.clone())
                 .collect();
             woken.extend(routes.for_pipeline(Some(name)).workflow_from_all(&starts));
         }
@@ -228,9 +228,9 @@ fn what_each_pipeline_can_wake<'a>(
         .map(|(name, pipeline)| {
             let graph = routes.for_pipeline(Some(name));
             let reach = if pipeline.resumes {
-                graph.workflow_from_all(woken.iter().chain(std::iter::once(&pipeline.entry)))
+                graph.workflow_from_all(woken.iter().chain(pipeline.entry.as_ref()))
             } else {
-                graph.workflow_from(&pipeline.entry)
+                graph.workflow_from_all(pipeline.entry.as_ref())
             };
             (name, reach)
         })

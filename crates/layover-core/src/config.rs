@@ -338,7 +338,10 @@ impl Config {
             .filter(|(_, agent)| agent.entry)
             .map(|(name, _)| name);
 
-        let piped = self.pipelines.values().map(|pipeline| &pipeline.entry);
+        let piped = self
+            .pipelines
+            .values()
+            .filter_map(|pipeline| pipeline.entry.as_ref());
 
         marked.chain(piped).collect::<BTreeSet<_>>().into_iter()
     }

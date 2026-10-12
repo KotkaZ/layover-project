@@ -820,7 +820,15 @@ fn resolve_target(
             Problem::new(StatusCode::BAD_REQUEST, "no such pipeline")
                 .with_detail(format!("`{name}` is not a pipeline in this factory"))
         })?;
-        return Ok((pipeline.entry.clone(), Some(key)));
+        let entry = pipeline.entry.clone().ok_or_else(|| {
+            Problem::new(StatusCode::BAD_REQUEST, "that pipeline cannot be triggered").with_detail(
+                format!(
+                    "`{name}` has no `entry`: it resumes work agents set down, and wakes whoever \
+                     set it down"
+                ),
+            )
+        })?;
+        return Ok((entry, Some(key)));
     }
 
     let Some(name) = &body.to else {

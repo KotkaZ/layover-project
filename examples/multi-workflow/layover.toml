@@ -157,7 +157,6 @@ run_e2e     = { default = false, description = "The tester also runs the end-to-
 # for days without anything running in between. Resumed work goes back to whoever set it down.
 [pipelines.development-follow-up]
 description = "Pick up published pull requests the publisher set down, to answer their review comments"
-entry       = "publisher"
 trigger     = { cron = "0,30 * * * *" }
 resumes     = true
 

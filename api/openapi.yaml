@@ -1013,7 +1013,7 @@ components:
       type: object
       description: A named entry point into the mesh.
       required:
-        [name, entry, trigger, flags, max_hops, fuel_usd, workspace, resumes, agents, switched_off]
+        [name, trigger, flags, max_hops, fuel_usd, workspace, resumes, agents, switched_off]
       properties:
         name:
           type: string
@@ -1032,8 +1032,10 @@ components:
           type: [string, "null"]
           description: One line saying what this pipeline is for.
         entry:
-          type: string
-          description: The agent that receives the first flight.
+          type: [string, "null"]
+          description: |
+            The agent that receives the first flight. Null for a pipeline that `resumes` and
+            declares none: it wakes whoever set its work down, and cannot be triggered by hand.
         trigger:
           $ref: "#/components/schemas/Trigger"
           description: What starts it.

@@ -378,7 +378,14 @@ pub fn explain(path: &Path) -> Result<String, Failure> {
             Trigger::Manual => "manual".to_owned(),
             Trigger::Scheduled(schedule) => schedule.to_string(),
         };
-        let _ = writeln!(out, "  {name} [{trigger}] -> {}", pipeline.entry);
+        match &pipeline.entry {
+            Some(entry) => {
+                let _ = writeln!(out, "  {name} [{trigger}] -> {entry}");
+            }
+            None => {
+                let _ = writeln!(out, "  {name} [{trigger}] -> whoever set the work down");
+            }
+        }
         if let Some(description) = &pipeline.description {
             let _ = writeln!(out, "      {description}");
         }
@@ -386,7 +393,7 @@ pub fn explain(path: &Path) -> Result<String, Failure> {
         // may use every route, and the map says what each reaches.
         if config.routes.iter().any(layover_core::Route::is_scoped) {
             let reaches = RouteGraph::for_pipeline(&config, Some(name))
-                .workflow_from(&pipeline.entry)
+                .workflow_of(pipeline)
                 .into_iter()
                 .collect::<Vec<_>>();
             let _ = writeln!(out, "      reaches: {}", join(&reaches));

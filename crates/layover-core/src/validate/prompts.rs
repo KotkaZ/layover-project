@@ -109,7 +109,7 @@ fn check_flags_are_available_at_every_entry(
     for entry in entry_points(config) {
         let reachable = routes
             .for_pipeline(entry.pipeline)
-            .workflow_from(&entry.agent);
+            .workflow_from_entry(entry.agent.as_ref());
 
         for (agent, flags) in referenced {
             if !reachable.contains(agent) {
@@ -133,7 +133,9 @@ fn check_flags_are_available_at_every_entry(
 
 /// One way work can enter the mesh, and the flags a run entering that way would carry.
 struct Entry<'a> {
-    agent: AgentName,
+    /// Where its chains start; none for a resuming pipeline with no entry, which starts wherever
+    /// work was set down.
+    agent: Option<AgentName>,
     /// The pipeline its chains belong to, whose routes they may use.
     pipeline: Option<&'a PipelineName>,
     available: BTreeSet<&'a str>,
@@ -160,7 +162,7 @@ fn entry_points(config: &Config) -> Vec<Entry<'_>> {
             .iter()
             .filter(|(_, agent)| agent.entry)
             .map(|(name, _)| Entry {
-                agent: name.clone(),
+                agent: Some(name.clone()),
                 pipeline: None,
                 available: BTreeSet::new(),
                 label: format!("`entry = true` on agent `{name}`"),

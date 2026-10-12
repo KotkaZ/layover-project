@@ -11,8 +11,7 @@ pub(super) fn check_pipeline_overrides(config: &Config, found: &mut Vec<Diagnost
         if pipeline.agents.is_empty() {
             continue;
         }
-        let reached =
-            RouteGraph::for_pipeline(config, Some(pipeline_name)).workflow_from(&pipeline.entry);
+        let reached = RouteGraph::for_pipeline(config, Some(pipeline_name)).workflow_of(pipeline);
 
         for (agent_name, changes) in &pipeline.agents {
             let who = format!("pipeline `{pipeline_name}`'s override for agent `{agent_name}`");

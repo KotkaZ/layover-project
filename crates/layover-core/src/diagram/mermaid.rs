@@ -50,7 +50,7 @@ pub fn route_map_for(config: &Config, live: &Live, scope: &Scope) -> String {
         config
             .pipelines
             .get(name)
-            .map(|pipeline| graph.workflow_from(&pipeline.entry))
+            .map(|pipeline| graph.workflow_of(pipeline))
     });
     let drawing = Drawing {
         config,
@@ -143,15 +143,13 @@ impl Drawing<'_> {
     /// Draws the permitted edges, annotating the ones that park flights at a barrier.
     fn edges(&self, out: &mut String) {
         for (name, pipeline) in &self.config.pipelines {
+            let Some(entry) = &pipeline.entry else {
+                continue;
+            };
             if !self.shows_pipeline(name) {
                 continue;
             }
-            let _ = writeln!(
-                out,
-                "  {} ==> {}",
-                pipeline_id(name),
-                agent_id(&pipeline.entry)
-            );
+            let _ = writeln!(out, "  {} ==> {}", pipeline_id(name), agent_id(entry));
         }
 
         let pipelines_of = match self.scope.pipeline() {

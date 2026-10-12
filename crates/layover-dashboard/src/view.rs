@@ -74,14 +74,15 @@ pub fn pipelines(config: &Config, off: &crate::switch::Off) -> PipelineList {
                 switched_off: off.contains_key(name),
                 switched_off_since: off.get(name).copied().flatten().map(|at| at.to_string()),
                 description: pipeline.description.clone(),
-                entry: pipeline.entry.to_string(),
+                entry: pipeline.entry.as_ref().map(ToString::to_string),
                 trigger: trigger(&pipeline.trigger),
                 max_hops: i32::try_from(config.defaults.max_hops).unwrap_or(i32::MAX),
                 // The entry agent's own budget wins where it sets one, because Fuel belongs to
                 // the itinerary and an itinerary starting here starts at that agent.
-                fuel_usd: config
-                    .agents
-                    .get(&pipeline.entry)
+                fuel_usd: pipeline
+                    .entry
+                    .as_ref()
+                    .and_then(|entry| config.agents.get(entry))
                     .and_then(|agent| agent.fuel_usd)
                     .unwrap_or(config.defaults.fuel_usd),
                 workspace: match pipeline.workspace {
@@ -114,10 +115,12 @@ fn pipeline_agents(
     if pipeline.resumes {
         return Vec::new();
     }
-    let reached = layover_core::graph::RouteGraph::for_pipeline(config, Some(name))
-        .workflow_from(&pipeline.entry);
-    let ordered = std::iter::once(&pipeline.entry)
-        .chain(reached.iter().filter(|agent| **agent != pipeline.entry));
+    let Some(entry) = &pipeline.entry else {
+        return Vec::new();
+    };
+    let reached =
+        layover_core::graph::RouteGraph::for_pipeline(config, Some(name)).workflow_of(pipeline);
+    let ordered = std::iter::once(entry).chain(reached.iter().filter(|agent| *agent != entry));
 
     ordered
         .filter_map(|agent| {

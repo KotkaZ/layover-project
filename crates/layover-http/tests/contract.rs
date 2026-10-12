@@ -111,7 +111,7 @@ impl Api for Stub {
                 switched_off: true,
                 switched_off_since: Some("2026-10-12T07:00:00Z".to_owned()),
                 description: None,
-                entry: "pr_scanner".to_owned(),
+                entry: Some("pr_scanner".to_owned()),
                 trigger: Trigger {
                     kind: TriggerKind::Scheduled,
                     every_seconds: Some(3_600),

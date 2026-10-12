@@ -263,7 +263,12 @@ pub struct Pipeline {
     #[serde(default)]
     pub description: Option<String>,
     /// The agent that receives the first flight.
-    pub entry: AgentName,
+    ///
+    /// Required unless the pipeline `resumes`: resumed work goes back to whoever set it down, so a
+    /// resuming pipeline needs an entry only to be triggered by hand. Validation refuses any other
+    /// pipeline without one.
+    #[serde(default)]
+    pub entry: Option<AgentName>,
     /// What starts it.
     #[serde(default = "manual_trigger")]
     pub trigger: Trigger,

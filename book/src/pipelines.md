@@ -140,9 +140,11 @@ picked up at 12:09. The dashboard's **Upcoming** tab shows both times for every 
 
 **Resumed work goes back to the agent that booked it**, not to the pipeline's `entry`. A layover
 records which agent set it down, and sending a follow-up to whatever happens to be a pipeline's
-entry point would hand the publisher's pull request to the analyst. `entry` is still required by
-the schema and is unused by a resuming pipeline; it may declare flags like any other, and it must
-declare every flag the resumed agents' prompts test. The **values** come from the chain that booked
+entry point would hand the publisher's pull request to the analyst. So a resuming pipeline may
+**leave `entry` out**; given one, it is only where the pipeline's work goes if a person triggers it
+by hand, and without one it cannot be triggered by hand at all. Every other pipeline must name an
+entry. A resuming pipeline may declare flags like any other, and it must declare every flag the
+resumed agents' prompts test. The **values** come from the chain that booked
 the layover — see [a flag holds for the whole chain](#a-flag-holds-for-the-whole-chain).
 
 **Only a resuming pipeline collects them.** An ordinary schedule never picks up booked work, so a

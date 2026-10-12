@@ -308,7 +308,8 @@ ones.
   pipeline that `resumes`, work goes back to whichever agent booked the layover rather than to
   `entry`, and any agent may book one — so any agent some chain can wake counts as a starting point
   there. The hop and reach checks above keep measuring a resuming pipeline from its `entry`, as
-  they always have.
+  they always have; one with no `entry` is measured from every agent that sends on its routes,
+  since any of them may have set the work down.
 
 For a factory that scopes nothing, every one of these graphs is the same graph, and every finding
 is exactly what it was.

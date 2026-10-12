@@ -119,7 +119,7 @@ fn ways_in(config: &Config) -> Vec<(Option<&PipelineName>, Vec<&AgentName>)> {
             config
                 .pipelines
                 .iter()
-                .map(|(name, pipeline)| (Some(name), vec![&pipeline.entry])),
+                .map(|(name, pipeline)| (Some(name), pipeline.entry.iter().collect())),
         )
         .collect()
 }

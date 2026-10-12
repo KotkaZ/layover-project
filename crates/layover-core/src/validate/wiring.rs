@@ -116,7 +116,7 @@ fn check_parallel_instances_are_isolated(config: &Config, found: &mut Vec<Diagno
         // scoped to another workflow, however many agents the two share.
         let writers: Vec<String> = routes
             .for_pipeline(Some(name))
-            .reachable_from([&pipeline.entry])
+            .reachable_from(pipeline.entry.iter())
             .into_iter()
             .filter(|agent| {
                 config

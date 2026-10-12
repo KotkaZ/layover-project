@@ -106,7 +106,7 @@ impl Chosen {
         let reached = pipeline.and_then(|pipeline_name| {
             let pipeline = config.pipelines.get(pipeline_name)?;
             (!pipeline.resumes).then(|| {
-                RouteGraph::for_pipeline(config, Some(pipeline_name)).workflow_from(&pipeline.entry)
+                RouteGraph::for_pipeline(config, Some(pipeline_name)).workflow_of(pipeline)
             })
         });
 

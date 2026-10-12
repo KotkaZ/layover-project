@@ -45,6 +45,10 @@ entry = "analyst"
 entry = "reviewer"
 trigger = { every = "2h" }
 
+[pipelines.follow-up]
+trigger = { every = "30m" }
+resumes = true
+
 [[routes]]
 from = "analyst"
 to = "reviewer"
@@ -166,6 +170,19 @@ async fn a_switched_off_workflow_refuses_a_trigger_until_it_is_switched_back_on(
 
     let (status, accepted) = factory.trigger(development()).await;
     assert_eq!(status, StatusCode::ACCEPTED, "{accepted}");
+}
+
+#[tokio::test]
+async fn a_resuming_workflow_with_no_entry_is_listed_with_none_and_cannot_be_triggered() {
+    let factory = Factory::new("entryless");
+
+    assert!(factory.pipeline("follow-up").await["entry"].is_null());
+
+    let (status, problem) = factory
+        .trigger(json!({ "pipeline": "follow-up", "body": "pick it up" }))
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{problem}");
+    assert_eq!(problem["title"], "that pipeline cannot be triggered");
 }
 
 #[tokio::test]

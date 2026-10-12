@@ -31,7 +31,7 @@ fn feature_work_is_manual_and_review_work_is_scheduled() {
         Trigger::Scheduled(Schedule::Every(std::time::Duration::from_secs(3_600))),
         "the review bot runs hourly"
     );
-    assert_eq!(review.entry.as_str(), "pr_scanner");
+    assert_eq!(review.entry, Some("pr_scanner".into()));
 }
 
 #[test]

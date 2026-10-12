@@ -265,7 +265,7 @@ impl Layout {
             config
                 .pipelines
                 .get(name)
-                .map(|pipeline| graph.workflow_from(&pipeline.entry))
+                .map(|pipeline| graph.workflow_of(pipeline))
         });
         let layers = assign_layers(config, &graph, scope);
 
@@ -380,12 +380,17 @@ impl Layout {
         };
 
         for (name, pipeline) in &config.pipelines {
+            // A resuming pipeline with no entry wakes whoever set work down: no one agent to point
+            // at.
+            let Some(entry) = &pipeline.entry else {
+                continue;
+            };
             if self.node(&pipeline_id(name)).is_none() {
                 continue;
             }
             self.edges.push(Edge {
                 from: pipeline_id(name),
-                to: agent_id(&pipeline.entry),
+                to: agent_id(entry),
                 label: None,
                 style: EdgeStyle::Entry,
                 back: false,
@@ -747,15 +752,21 @@ pub(crate) fn edge_scopes(config: &Config) -> BTreeMap<(AgentName, AgentName), V
 /// column two with an edge sweeping back across the whole drawing.
 fn assign_layers(config: &Config, graph: &RouteGraph, scope: &Scope) -> BTreeMap<AgentName, usize> {
     let sources: Vec<AgentName> = match scope.pipeline() {
-        Some(name) => config
-            .pipelines
-            .get(name)
-            .map(|pipeline| vec![pipeline.entry.clone()])
-            .unwrap_or_default(),
+        Some(name) => match config.pipelines.get(name).map(|pipeline| &pipeline.entry) {
+            Some(Some(entry)) => vec![entry.clone()],
+            // A resuming pipeline with no entry is laid out from wherever the factory's other ways
+            // in are, so the agents it shares with them sit where they do in theirs.
+            Some(None) => config
+                .pipelines
+                .values()
+                .filter_map(|pipeline| pipeline.entry.clone())
+                .collect(),
+            None => Vec::new(),
+        },
         None => config
             .pipelines
             .values()
-            .map(|pipeline| pipeline.entry.clone())
+            .filter_map(|pipeline| pipeline.entry.clone())
             .chain(
                 config
                     .agents

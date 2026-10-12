@@ -39,7 +39,10 @@ fn check_schedules_fit_the_reserve(config: &Config, found: &mut Vec<Diagnostic>)
     }
 
     for (name, pipeline) in scheduled {
-        let per_itinerary = config.fuel_for(&pipeline.entry);
+        let per_itinerary = pipeline
+            .entry
+            .as_ref()
+            .map_or(config.defaults.fuel_usd, |entry| config.fuel_for(entry));
         if per_itinerary > config.reserve.fuel_usd {
             found.push(Diagnostic::warning(format!(
                 "pipeline `{name}` may spend ${per_itinerary:.2} on one itinerary but `[reserve] \
@@ -52,11 +55,18 @@ fn check_schedules_fit_the_reserve(config: &Config, found: &mut Vec<Diagnostic>)
 
 fn check_entries_exist(config: &Config, found: &mut Vec<Diagnostic>) {
     for (name, pipeline) in &config.pipelines {
-        if !config.agents.contains_key(&pipeline.entry) {
-            found.push(Diagnostic::error(format!(
-                "pipeline `{name}` enters at unknown agent `{}`",
-                pipeline.entry
-            )));
+        match &pipeline.entry {
+            Some(entry) if !config.agents.contains_key(entry) => {
+                found.push(Diagnostic::error(format!(
+                    "pipeline `{name}` enters at unknown agent `{entry}`"
+                )));
+            }
+            // A resuming pipeline wakes whoever set the work down, so it needs an entry only to be
+            // triggered by hand. Any other pipeline has nowhere to send its first flight.
+            None if !pipeline.resumes => found.push(Diagnostic::error(format!(
+                "pipeline `{name}` has no `entry`; only a pipeline that `resumes` may leave it out"
+            ))),
+            _ => {}
         }
     }
 }
@@ -169,6 +179,36 @@ mod tests {
         ));
 
         assert_mentions(&errors(&config), "unknown agent `ghost`");
+    }
+
+    #[test]
+    fn only_a_pipeline_that_resumes_may_leave_out_its_entry() {
+        let resuming = parse(&format!(
+            r#"
+            {AGENT}
+
+            [pipelines.follow_up]
+            trigger = {{ every = "30m" }}
+            resumes = true
+            "#
+        ));
+        assert!(
+            errors(&resuming)
+                .iter()
+                .all(|error| !error.contains("follow_up")),
+            "{:?}",
+            errors(&resuming)
+        );
+
+        let fresh = parse(&format!(
+            r#"
+            {AGENT}
+
+            [pipelines.development]
+            description = "builds"
+            "#
+        ));
+        assert_mentions(&errors(&fresh), "pipeline `development` has no `entry`");
     }
 
     #[test]

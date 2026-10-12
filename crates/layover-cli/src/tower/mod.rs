@@ -31,6 +31,8 @@
 //! alive, which is a file read; the alternative is a channel that has to be right in the presence
 //! of a Ground Stop, a restart and a dashboard in another task.
 
+#[cfg(test)]
+mod entryless;
 mod resume;
 #[cfg(test)]
 mod switched;
@@ -311,6 +313,10 @@ fn trigger(config: &Config, journal: &Journal, name: &PipelineName) -> Result<St
         .pipelines
         .get(name)
         .ok_or_else(|| format!("`{name}` is not declared"))?;
+    let entry = pipeline
+        .entry
+        .clone()
+        .ok_or_else(|| format!("`{name}` has no entry, so it can only resume set-down work"))?;
 
     let flags = pipeline
         .flags_for_run(&std::collections::BTreeMap::new())
@@ -320,7 +326,7 @@ fn trigger(config: &Config, journal: &Journal, name: &PipelineName) -> Result<St
         ItineraryId::generate(),
         // A clock is not a person, and the run it wakes is told so: nobody is watching.
         Origin::Schedule(name.clone()),
-        pipeline.entry.clone(),
+        entry,
         String::new(),
         config.defaults.max_hops,
     );

@@ -160,6 +160,23 @@ impl RouteGraph {
         self.spawns.values().flatten()
     }
 
+    /// Every agent belonging to the workflow `pipeline` starts: from its entry, or — for a
+    /// resuming pipeline with none, whose work goes back to whoever set it down — from every agent
+    /// that sends on this graph, since any of them may have.
+    #[must_use]
+    pub fn workflow_of(&self, pipeline: &crate::pipeline::Pipeline) -> BTreeSet<AgentName> {
+        self.workflow_from_entry(pipeline.entry.as_ref())
+    }
+
+    /// [`RouteGraph::workflow_of`], given only the entry, which may be absent.
+    #[must_use]
+    pub fn workflow_from_entry(&self, entry: Option<&AgentName>) -> BTreeSet<AgentName> {
+        match entry {
+            Some(entry) => self.workflow_from(entry),
+            None => self.workflow_from_all(self.edges.keys()),
+        }
+    }
+
     /// Every agent belonging to the workflow that starts at `entry`.
     ///
     /// Unlike [`RouteGraph::reachable_from`] this **does** cross spawn edges. The two questions
