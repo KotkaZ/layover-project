@@ -527,8 +527,8 @@ diagram per workflow, for the reason above.
 Cost gains a **By workflow** table for the same reason. Per-agent totals cannot answer "what does
 the nightly sweep cost me" once an agent belongs to more than one.
 
-The diagram is generated per request, so editing `layover.toml` and reloading the page is enough
-to see the change. `layover graph` prints the same graph without a server: Mermaid by default for
+The diagram is generated per request, so an edit to `layover.toml` shows on the map within fifteen
+seconds, or at once on **Refresh**. `layover graph` prints the same graph without a server: Mermaid by default for
 pasting into a README, `--svg` for the version the dashboard draws, and `--pipeline` for one
 workflow's diagram.
 

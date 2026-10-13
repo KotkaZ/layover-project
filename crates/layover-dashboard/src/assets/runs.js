@@ -17,7 +17,7 @@ function shortChain(id) {
 
 /// What a run ran on, as its command line said: the model, and its effort where one was set.
 function ranOn(run) {
-  const cell = el("td", "muted");
+  const cell = el("td", "muted ran");
   if (!run.model) {
     cell.textContent = "—";
     return cell;

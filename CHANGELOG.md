@@ -8,6 +8,49 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+A dashboard for a factory that has been running for weeks: lists that open on what needs a person
+and page through the rest, addresses for every view, pages that keep themselves current, a chain
+drawn against the clock, spend day by day, and a tab title that says when something is waiting.
+
+**Compatibility.** Additive. `GET /costs` gains `by_day` and `day_zone`; nothing is removed or
+renamed. Links to `#chain=<id>` keep working.
+
+### Added
+
+- **Every view has an address**, with its filters: `#runs?status=failed&workflow=eagle-eye`. A
+  reload, a bookmark or a link opens the page as it was; changing tab is a step in the browser's
+  history, changing a filter is not.
+- **Chains opens on what needs attention** — working, waiting for you, stalled, halted — and can be
+  searched, can hide a schedule's routine finished chains, and pages fifty at a time.
+- **Runs pages a hundred at a time**, and says which chain each run belongs to and the model and
+  effort it ran on. **Learnings** open on those in use, filtered by standing, agent and text.
+- **Trigger… beside each workflow on the route map.** The header's opens on the workflow being
+  shown, or the one last triggered from this browser; workflows started by hand come first, and the
+  window says which agent the prompt goes to.
+- **The route map, Chains and Runs keep themselves current** every fifteen seconds while showing,
+  and say when they last read the Tower. A pinned agent on the map stays lit.
+- **Workflow cards fold**: on a page of three or more workflows, one with nothing under way, failed
+  or asking starts with its drawing folded, the busiest come first, and a choice is remembered.
+- **A chain against the clock**: on a chain's page, a row per agent with each run a bar on one time
+  axis, and its flags as chips marking those set otherwise than the default.
+- **Spend day by day** on the Cost tab, with the most expensive chains and the Reserve's pace. `GET
+  /costs` returns `by_day`, every day of the window including empty ones, and `day_zone`.
+- **The tab's title counts what needs you** — `(3) Layover` — and a bell turns on browser
+  notifications for a chain waiting for you, a stalled chain or a new help request.
+- **Sessions opens the newest running session** when nothing is picked, and a terminal links to its
+  chain and report.
+
+### Changed
+
+- **The Ground Stop stays on screen** at any width: below 1180 px the tabs move to a row of their own.
+- **Diagrams are drawn at one scale**, their natural size, so a small workflow is not blown up to
+  look like a large one; a box's title too long for it is fitted rather than clipped.
+- **Times read the same way everywhere** — `3 h ago`, `2 d ago`, the exact time on hover — and a
+  running run says `running · started 4 min ago` rather than when it finished.
+- **Continue… is on a chain's own page** rather than on every row of the Chains list, and is not
+  offered for a workflow that only resumes layovers.
+- The queue line on the route map is amber only when queued work has nothing to start it.
+
 ## [1.12.0] — 2026-10-12
 
 `layover.toml` says more with less: flags and a follow-up's routes are declared once, lengths of

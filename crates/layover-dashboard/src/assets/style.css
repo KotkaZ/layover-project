@@ -448,7 +448,10 @@ tr.opens:hover td .open { color: var(--accent); }
 .btn.more[hidden] { display: none; }
 .bar input[type="search"] { min-width: 14em; }
 /* A wide table on a narrow window scrolls on its own rather than pushing the page sideways. */
-@media (max-width: 1000px) { .view > table { display: block; overflow-x: auto; } }
+@media (max-width: 1000px) {
+  .view > table { display: block; overflow-x: auto; }
+  .view > table td.num, .view > table td.when, .view > table td.ran, .view > table td .link { white-space: nowrap; }
+}
 
 /* ── Per-workflow activity ──────────────────────────────────────────────────
    A route map says what may happen. This says what did, for the same workflow,
