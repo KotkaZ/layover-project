@@ -16,9 +16,9 @@ async function openChain(id) {
   chainView.id = id;
   chainView.svg = null;
   $("#chain-canvas").replaceChildren(el("p", "empty", "drawing\u2026"));
-  showView("chain");
   // Linkable, and kept across a reload: a chain is the thing somebody wants to send a colleague.
-  history.replaceState(null, "", `#chain=${encodeURIComponent(id)}`);
+  // Showing it gives it its address, `#chain=<id>`, as router.js writes it.
+  showView("chain");
   await drawChain();
 }
 
@@ -33,9 +33,6 @@ function watchChain(visible) {
     return;
   }
   chainView.id = null;
-  if (location.hash.startsWith("#chain=")) {
-    history.replaceState(null, "", location.pathname + location.search);
-  }
 }
 
 /// Who started a run, as its record says: an agent, the way in, or nobody knows.
@@ -234,10 +231,6 @@ function startChains() {
   $("#chain-refresh").addEventListener("click", () => {
     chainView.svg = null;
     drawChain();
-  });
-  window.addEventListener("hashchange", () => {
-    const wanted = decodeURIComponent(location.hash.replace(/^#chain=/, ""));
-    if (location.hash.startsWith("#chain=") && wanted !== chainView.id) openChain(wanted);
   });
 }
 

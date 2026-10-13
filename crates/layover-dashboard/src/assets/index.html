@@ -52,9 +52,10 @@
 
   <section id="chains" class="view" hidden>
     <div class="bar">
-      <label>Window <select id="chains-window"></select></label>
+      <label>Window <select id="chains-window" data-default="last_7d"></select></label>
       <label>State
-        <select id="chains-state">
+        <select id="chains-state" data-default="attention">
+          <option value="attention" selected>needs attention</option>
           <option value="">any</option>
           <option value="working">working</option>
           <option value="finished">finished</option>
@@ -63,21 +64,26 @@
           <option value="halted">halted</option>
         </select>
       </label>
+      <label>Find <input id="chains-search" type="search" placeholder="name, workflow, agent or id"></label>
+      <label title="A schedule's chains that nobody named and that finished: the routine ticks">
+        <input id="chains-routine" type="checkbox"> Hide finished scheduled chains</label>
       <span id="chains-count" class="muted"></span>
     </div>
     <p class="note">
       A chain is everything one trigger caused, and the budget it shares. <b>Stalled</b> is the one
       worth looking for: every run in it succeeded and nothing will ever happen again, so a list of
       runs cannot show it. <b>Waiting for you</b> looks finished too: its last run stopped to ask
-      you something, and nothing will run until you <b>Reply</b>. <b>Continue…</b> triggers a
-      chain's workflow again with that chain's flags rather than the defaults.
+      you something, and nothing will run until you <b>Reply</b>. The list opens on what needs
+      attention; click a chain to see it whole, and to continue it.
     </p>
     <table id="chains-table">
       <thead>
-        <tr><th>Started</th><th>Workflow</th><th>Agents</th><th>Runs</th><th>Cost</th><th>State</th><th></th></tr>
+        <tr><th>Started</th><th>Workflow</th><th>Agents</th><th class="num">Runs</th><th class="num">Cost</th><th>State</th><th></th></tr>
       </thead>
       <tbody></tbody>
     </table>
+    <p id="chains-empty" class="empty" hidden></p>
+    <button id="chains-more" class="btn more" type="button" hidden></button>
   </section>
 
   <section id="chain" class="view" hidden>
@@ -138,7 +144,7 @@
   <section id="upcoming" class="view" hidden>
     <div class="bar">
       <label>Look ahead
-        <select id="upcoming-hours">
+        <select id="upcoming-hours" data-default="24">
           <option value="6">6 hours</option>
           <option value="24" selected>24 hours</option>
           <option value="72">3 days</option>
@@ -194,7 +200,7 @@
 
   <section id="runs" class="view" hidden>
     <div class="bar">
-      <label>Window <select id="runs-window"></select></label>
+      <label>Window <select id="runs-window" data-default="last_7d"></select></label>
       <label>Outcome
         <select id="runs-status">
           <option value="">any</option>
@@ -212,13 +218,14 @@
     <table id="runs-table">
       <thead>
         <tr>
-          <th>When</th><th>Agent</th><th>Workflow</th><th>Outcome</th>
+          <th>When</th><th>Agent</th><th>Workflow</th><th>Ran on</th><th>Outcome</th>
           <th class="num">Took</th><th class="num">Cost</th><th>Chain</th><th></th>
         </tr>
       </thead>
       <tbody></tbody>
     </table>
     <p id="runs-empty" class="empty" hidden></p>
+    <button id="runs-more" class="btn more" type="button" hidden></button>
   </section>
 
   <section id="cost" class="view" hidden>
@@ -283,6 +290,20 @@
       just shown does not count. A lapsed learning nobody rediscovers is deleted after a while. How
       many runs, rediscoveries and days are the factory's to set in <code>[learnings]</code>.
     </p>
+    <div class="bar">
+      <label>Standing
+        <select id="learn-state" data-default="use">
+          <option value="use" data-label="in use" selected>in use</option>
+          <option value="provisional" data-label="provisional">provisional</option>
+          <option value="confirmed" data-label="confirmed">confirmed</option>
+          <option value="lapsed" data-label="lapsed">lapsed</option>
+          <option value="rejected" data-label="rejected">rejected</option>
+          <option value="" data-label="any">any</option>
+        </select>
+      </label>
+      <label>Agent <select id="learn-agent"></select></label>
+      <label>Find <input id="learn-search" type="search" placeholder="words in the learning"></label>
+    </div>
     <p id="learn-scope" class="hint" hidden>
       A learning belongs to an <em>agent</em>, not a workflow — the same agent can appear in
       several — so this list is not narrowed by the workflow above.
@@ -397,6 +418,10 @@
 <script src="/upcoming.js"></script>
 <script src="/trigger.js"></script>
 <script src="/switch.js"></script>
+<script src="/router.js"></script>
+<script src="/chains.js"></script>
+<script src="/runs.js"></script>
+<script src="/journal.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

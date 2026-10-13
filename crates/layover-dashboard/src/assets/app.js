@@ -110,6 +110,7 @@ function showView(name) {
   watchSessions(name === "sessions");
   watchChain(name === "chain");
   watchUpcoming(name === "upcoming");
+  routeTo(name);
 }
 
 async function loadHealth() {
@@ -312,165 +313,15 @@ async function loadMap() {
   }
 }
 
-async function loadRuns() {
-  const body = $("#runs-table tbody");
-  const empty = $("#runs-empty");
-  const params = new URLSearchParams({ window: $("#runs-window").value, limit: "200" });
-  if ($("#runs-status").value) params.set("status", $("#runs-status").value);
-  if ($("#runs-agent").value.trim()) params.set("agent", $("#runs-agent").value.trim());
-  scoped(params);
-
-  try {
-    const { runs } = await get(`/runs?${params}`);
-    body.replaceChildren();
-
-    for (const run of runs) {
-      const row = el("tr");
-      // A run still going has not finished: say when it started, and that it is still going.
-      row.append(
-        run.status === "running"
-          ? whenCell(run.started_at, "running · started ")
-          : whenCell(run.finished_at ?? run.started_at),
-        el("td", "", run.agent),
-        workflowCell(run.pipeline, run.chain_name),
-        el("td", `outcome ${run.status}`, run.status.replace("_", " ")),
-        el("td", "num", duration(run.duration_sec)),
-        // A run still going has not been billed yet, which is not the same as reporting nothing.
-        el(
-          "td",
-          "num",
-          run.status === "running" ? "—" : run.cost_usd === null ? "not reported" : money(run.cost_usd),
-        ),
-      );
-      const chain = el("td");
-      const open = el("button", "link", "");
-      open.append(el("code", "", run.itinerary_id));
-      open.title = "See this chain whole";
-      open.addEventListener("click", (event) => {
-        event.stopPropagation();
-        openChain(run.itinerary_id);
-      });
-      chain.append(open);
-      // How it got there, as its CLI printed it: live for a run still going, a replay otherwise.
-      const watching = el("td");
-      const transcript = el("button", "link", run.status === "running" ? "Watch" : "Transcript");
-      transcript.type = "button";
-      transcript.addEventListener("click", (event) => {
-        event.stopPropagation();
-        openSession(run);
-      });
-      watching.append(transcript);
-      row.append(chain, watching);
-      if (run.detail) row.title = run.detail;
-      // Every row opens whatever the agent wrote about itself.
-      row.classList.add("readable");
-      row.addEventListener("click", () => openReport(run.run_id, run));
-      body.append(row);
-    }
-
-    empty.hidden = runs.length > 0;
-    empty.textContent = "Nothing ran in this window.";
-    $("#runs-table").hidden = runs.length === 0;
-  } catch (error) {
-    body.replaceChildren();
-    $("#runs-table").hidden = true;
-    empty.hidden = false;
-    empty.textContent = `Could not read history: ${error.message}`;
-  }
-}
-
-// A chain is what a person actually asked for; a run is one step of it. Shown separately because
-// the interesting failure — a chain that stopped with every run reporting success — is invisible
-// in a list of runs, which is where somebody would otherwise go looking for it.
 // How a chain's state reads on the page. `awaiting_human` is the one that looked finished.
 const STATES = { awaiting_human: "waiting for you" };
 
-/// A chain's state, and for one that is working, where it is.
 /// A workflow, and beneath it the name the chain was given when it was triggered, if it was.
 function workflowCell(pipeline, name) {
   const cell = el("td");
   if (name) cell.append(el("b", "", name), document.createElement("br"));
   cell.append(el("span", name ? "muted" : "", pipeline ?? "—"));
   return cell;
-}
-
-function chainState(chain) {
-  const state = STATES[chain.state] ?? chain.state;
-  if (chain.state !== "working") return state;
-  if (chain.running) return `${state} · at ${chain.running.join(", ")}`;
-  if (chain.queued) return `${state} · queued`;
-  return state;
-}
-
-async function loadChains() {
-  const body = $("#chains-table tbody");
-  const count = $("#chains-count");
-  const params = new URLSearchParams({ window: $("#chains-window").value });
-  if ($("#chains-state").value) params.set("state", $("#chains-state").value);
-
-  try {
-    const { itineraries, stalled, awaiting_human: awaiting } = await get(`/itineraries?${params}`);
-    body.replaceChildren();
-
-    for (const chain of itineraries) {
-      const row = el("tr");
-      const cost = chain.measured === false ? `${money(chain.usd)}+` : money(chain.usd);
-
-      row.append(
-        whenCell(chain.started_at),
-        workflowCell(chain.pipeline, chain.name),
-        el("td", "", (chain.agents ?? []).join(" → ") || "—"),
-        el("td", "num", String(chain.runs)),
-        el("td", "num", cost),
-        el("td", `outcome ${chain.state}`, chainState(chain)),
-      );
-
-      // What a person can do from here. A chain waiting for an answer gets the answer; any chain
-      // of a workflow can be continued with its own flags rather than the workflow's defaults.
-      const actions = el("td", "actions");
-      if (chain.waiting_for) {
-        const answer = el("button", "link", "Reply…");
-        answer.title = `${chain.waiting_for.agent} asked: ${chain.waiting_for.summary}`;
-        answer.addEventListener("click", () => openReplyFor(chain.waiting_for.run_id));
-        actions.append(answer);
-      }
-      if (chain.pipeline) {
-        const onward = el("button", "link", "Continue…");
-        onward.title = "Trigger this workflow again, with this chain's flags.";
-        onward.addEventListener("click", () =>
-          continueChain(chain.pipeline, chain.flags ?? null, chain.itinerary_id, chain.name),
-        );
-        actions.append(onward);
-      }
-      row.append(actions);
-
-      // The reason lives in a tooltip rather than a column: it is a sentence, and a column wide
-      // enough for it would squeeze out everything that is scannable.
-      if (chain.detail) row.title = chain.detail;
-      row.classList.add("readable");
-      row.addEventListener("click", (event) => {
-        if (event.target.closest("button")) return;
-        openChain(chain.itinerary_id);
-      });
-      body.append(row);
-    }
-
-    $("#chains-table").hidden = itineraries.length === 0;
-    count.textContent = itineraries.length === 0
-      ? "Nothing ran in this window."
-      : `${itineraries.length} chain(s)${stalled ? `, ${stalled} stalled` : ""}${awaiting ? `, ${awaiting} waiting for you` : ""}`;
-
-    const badge = $("#stalled-badge");
-    badge.textContent = String(stalled);
-    badge.hidden = stalled === 0;
-    const waiting = $("#awaiting-badge");
-    waiting.textContent = String(awaiting);
-    waiting.hidden = awaiting === 0;
-  } catch (error) {
-    body.replaceChildren();
-    $("#chains-table").hidden = true;
-    count.textContent = `Could not read chains: ${error.message}`;
-  }
 }
 
 // The kill switch. Confirmed on the way in but not on the way out: stopping should be easy and
@@ -738,119 +589,6 @@ async function judge(id, state, button) {
   }
 }
 
-async function loadJournal() {  const helpBody = document.querySelector("#help-table tbody");
-  const helpEmpty = $("#help-empty");
-
-  try {
-    const { requests } = await get(
-      `/help?${scoped(new URLSearchParams({ open: "true", window: "last_90d" }))}`,
-    );
-    helpBody.replaceChildren();
-
-    for (const request of requests) {
-      const row = el("tr");
-      const kind = el("td");
-      kind.append(el("span", `kind ${request.blocker}`, request.blocker));
-      row.append(
-        whenCell(request.at),
-        el("td", "", request.agent),
-        el("td", "", request.pipeline || "\u2014"),
-        kind,
-      );
-      const what = el("td", "wide", request.summary);
-      what.title = request.detail;
-      row.append(what, el("td", "", request.fatal ? "stopped the run" : "limited it"));
-
-      // Reply continues the work with the answer. Resolving says the blocker is gone, not that
-      // somebody read this — and after a request that stopped its run there is no next run to
-      // notice, so the tooltip says so rather than promising one.
-      const action = el("td", "actions");
-      const answer = el("button", "link", "Reply");
-      answer.title = request.fatal
-        ? "Answer it and continue the work: a new run of this agent, with your reply, in the same workflow with the same flags."
-        : "Answer it: a new run of this agent with your reply, in the same workflow with the same flags.";
-      answer.addEventListener("click", () => openReply(request));
-      const done = el("button", "link", "Resolved");
-      done.title = request.fatal
-        ? "Mark as dealt with. This does not restart anything: the run that asked has ended, and nothing will run until you start it. To continue the work, use Reply."
-        : "Mark as dealt with. If it is not, the next run will raise it again.";
-      done.addEventListener("click", () => resolveHelp(request.run_id, done));
-      action.append(answer, done);
-      row.append(action);
-
-      helpBody.append(row);
-    }
-
-    $("#help-table").hidden = requests.length === 0;
-    helpEmpty.hidden = requests.length > 0;
-    helpEmpty.textContent = scope()
-      ? `Nothing is stuck in ${scope()}.`
-      : "Nothing is stuck.";
-  } catch (error) {
-    $("#help-table").hidden = true;
-    helpEmpty.hidden = false;
-    helpEmpty.textContent = `Could not read help requests: ${error.message}`;
-  }
-
-  const learnBody = document.querySelector("#learn-table tbody");
-  const learnEmpty = $("#learn-empty");
-
-  try {
-    const { learnings } = await get("/learnings");
-    learnBody.replaceChildren();
-
-    // Active first, then by how well established. A lapsed learning is still worth seeing until
-    // it is deleted: it is what a rediscovery would revive, so it explains why a repeat proposal
-    // counted.
-    const order = { confirmed: 0, provisional: 1, lapsed: 2, rejected: 3 };
-    learnings.sort((a, b) => order[a.state] - order[b.state] || b.proposals - a.proposals);
-
-    for (const learning of learnings) {
-      const row = el("tr");
-      row.append(el("td", "", learning.agent), el("td", "wide", learning.text));
-      row.append(el("td", `standing ${learning.state}`, learning.state));
-      const deleted = el("td", "when", learning.deleted_after ? clockTime(learning.deleted_after) : "");
-      if (learning.deleted_after) {
-        deleted.title = `Deleted after ${new Date(learning.deleted_after).toLocaleString()} unless an agent rediscovers it first.`;
-      }
-      row.append(
-        el("td", "num", `${learning.proposals}\u00d7`),
-        el("td", "num", learning.state === "provisional" ? `${learning.runs_left}` : "\u2014"),
-        deleted,
-      );
-
-      // Not an approval queue: this learning is already being given to runs. These say "keep it
-      // for good" and "stop using it", which is a judgement about something in use rather than
-      // permission for it to start.
-      const action = el("td", "actions");
-      if (learning.state !== "confirmed") {
-        const keep = el("button", "link", "Keep");
-        keep.title = "Confirm it: apply indefinitely instead of lapsing.";
-        keep.addEventListener("click", () => judge(learning.id, "confirmed", keep));
-        action.append(keep);
-      }
-      if (learning.state !== "rejected") {
-        const drop = el("button", "link danger", "Drop");
-        drop.title = "Reject it: stop giving it to runs.";
-        drop.addEventListener("click", () => judge(learning.id, "rejected", drop));
-        action.append(drop);
-      }
-      row.append(action);
-
-      row.title = `impact: ${learning.impact}`;
-      learnBody.append(row);
-    }
-
-    $("#learn-table").hidden = learnings.length === 0;
-    learnEmpty.hidden = learnings.length > 0;
-    learnEmpty.textContent = "Nothing learned yet.";
-  } catch (error) {
-    $("#learn-table").hidden = true;
-    learnEmpty.hidden = false;
-    learnEmpty.textContent = `Could not read learnings: ${error.message}`;
-  }
-}
-
 // The count of open help requests sits on the tab, because a blocked factory is the one thing
 // worth seeing without navigating to it.
 async function loadHelpBadge() {
@@ -947,11 +685,9 @@ function start() {
   $("#refresh").addEventListener("click", loadMap);
   startTrigger();
   $("#ground-stop").addEventListener("click", toggleGroundStop);
-  ["#runs-window", "#runs-status"].forEach((id) => $(id).addEventListener("change", loadRuns));
-  ["#chains-window", "#chains-state"].forEach((id) =>
-    $(id).addEventListener("change", loadChains),
-  );
-  $("#runs-agent").addEventListener("input", loadRuns);
+  startChainsList();
+  startRuns();
+  startJournal();
   startSessions();
   startReplies();
   startChains();
@@ -961,6 +697,7 @@ function start() {
   // others showing another workflow's numbers under this workflow's name the moment you switch.
   $("#scope").addEventListener("change", () => {
     $("#learn-scope").hidden = !scope();
+    routeChanged();
     loadMap();
     loadChains();
     loadRuns();
@@ -977,12 +714,12 @@ function start() {
   loadQueued();
   // Runs start and finish on their own, so the count is kept current rather than drawn once.
   setInterval(loadQueued, 5000);
-  // The pipeline list has to exist before the first draw, or the selector is empty on load.
+  // The pipeline list has to exist before the first draw, or the selector is empty on load —
+  // and before the address is read, since it may name a workflow.
   loadPipelines().then(() => {
     loadAgentNames();
-    const linked = chainInAddress();
-    if (linked) openChain(linked);
-    else showView("map");
+    startRouter();
+    applyRoute();
   });
 }
 

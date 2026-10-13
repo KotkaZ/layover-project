@@ -280,10 +280,39 @@ async fn the_page_and_its_assets_are_served_from_the_binary() {
         ("/chain.js", "async function openChain"),
         ("/upcoming.js", "async function loadUpcoming"),
         ("/trigger.js", "async function openTrigger"),
+        ("/router.js", "function applyRoute"),
+        ("/chains.js", "async function loadChains"),
+        ("/runs.js", "async function loadRuns"),
+        ("/journal.js", "async function loadJournal"),
     ] {
         let (status, body) = call(factory.router(), path).await;
         assert_eq!(status, StatusCode::OK, "{path}");
         assert!(body.contains(needle), "{path} is missing {needle}");
+    }
+}
+
+#[tokio::test]
+async fn every_script_the_page_loads_is_served() {
+    // The page is split across files that share globals, so one the page names but the binary
+    // does not serve breaks everything after it, with nothing on screen to say why.
+    let factory = Factory::new("scripts");
+    let (_, page) = call(factory.router(), "/").await;
+
+    let scripts: Vec<&str> = page
+        .split(r#"<script src=""#)
+        .skip(1)
+        .filter_map(|rest| rest.split('"').next())
+        .collect();
+    assert!(scripts.len() > 5, "{scripts:?}");
+    assert_eq!(
+        scripts.last(),
+        Some(&"/app.js"),
+        "app.js starts the page, so loads last"
+    );
+    for path in scripts {
+        let (status, body) = call(factory.router(), path).await;
+        assert_eq!(status, StatusCode::OK, "{path}");
+        assert!(!body.is_empty(), "{path}");
     }
 }
 

@@ -32,6 +32,22 @@ Two things deliberately do not narrow:
 | **The Reserve** | It caps the factory. Charging one workflow's spend against a ceiling that covers all of them would report a rail that does not exist. |
 | **Learnings** | A learning belongs to an *agent*, and an agent can appear in several workflows. Filtering them by workflow would invent an attribution the model does not have. |
 
+### Every view has an address
+
+The page keeps what you are looking at in its address — the tab, the workflow and that tab's
+filters — so a reload, a bookmark or a link sent to a colleague opens it as you left it:
+
+```text
+http://127.0.0.1:7878/#runs?status=failed&workflow=eagle-eye
+http://127.0.0.1:7878/#chains?state=stalled&window=last_30d
+http://127.0.0.1:7878/#journal?agent=wolf&q=kusto
+```
+
+Changing tab is a step in the browser's history, so **Back** returns to the last tab; changing a
+filter is not, so Back is not buried under every keystroke. A chain keeps its own address,
+`#chain=itn_…`. A filter left at its default is left out of the address, and an address naming a
+workflow or a filter value the factory no longer has falls back to the default.
+
 Help requests carry a workflow even though they do not store one: a request records the itinerary
 that raised it, an itinerary belongs to exactly one pipeline, and the runs already in the window
 supply the mapping. Where retention has taken the run but not the request, the workflow reads as
@@ -230,6 +246,10 @@ of every future run; keeping does not, because it only preserves what is already
 lapsed learning shows when it will be **deleted** — `[learnings] keep_lapsed_days` after it lapsed —
 unless an agent rediscovers it first.
 
+The list opens on the learnings **in use** — provisional and confirmed — since those are the ones
+runs are being given. **Standing** shows the others, with how many of each there are; **Agent** and
+**Find** narrow it to one agent, or to the learnings that mention something.
+
 ## Chains
 
 A run is one agent doing one thing. A **chain** is everything one trigger caused, and the budget
@@ -247,10 +267,11 @@ it is listed by its name, above its workflow.
 
 **`waiting for you` looks finished too.** Every run in it ended cleanly and nothing is queued —
 because its last run filed a fatal help request and stopped. It has a **Reply…** beside it and an
-amber count on the tab. Resolving the request without replying makes it `finished`; replying makes
+amber count on the tab — the only button a row in the list carries, because it is the only thing
+there that needs a person. Resolving the request without replying makes it `finished`; replying makes
 it `finished`, continued by the chain the reply started.
 
-**Continue…**, on any chain of a workflow and in a run's report, opens the trigger window with that
+**Continue…**, on a chain's own page and in a run's report, opens the trigger window with that
 workflow chosen and its flags set as that chain had them, saying where they came from. Change them
 if you need to. A chain from before runs recorded their flags opens with the workflow's defaults,
 and a warning that they are only that.
@@ -272,7 +293,25 @@ so the real total is at least that much.
 
 A chain is listed from the moment its first flight is queued. Trigger a workflow while every slot
 is taken and it reads `working · queued`, with no runs yet, rather than not appearing until a slot
-frees; one that is going says where it is — `working · at coder`. Click a chain to see it whole.
+frees; one that is going says where it is — `working · at coder`. Click a chain — anywhere on its
+row; the `›` at its end says so — to see it whole.
+
+### Finding a chain
+
+A factory with a few schedules starts hundreds of chains a week, almost all of them routine work
+that finished. So the list **opens on what needs attention** — `working`, `waiting for you`,
+`stalled` and `halted` — and says how many it is not showing: `864 chain(s) · 3 need attention`.
+When nothing does, it says so, with a link to show every chain.
+
+| Filter | Narrows to |
+|---|---|
+| **Window** | Chains started in it |
+| **State** | *needs attention* (the default), *any*, or one state |
+| **Find** | Chains whose name, workflow, agents or identifier contain the words |
+| **Hide finished scheduled chains** | Leaves out a schedule's chains that nobody named and that finished: the routine ticks |
+
+The list is drawn fifty at a time, with **Show more** below it; a refresh keeps however many pages
+were open.
 
 ## One chain, whole
 
@@ -450,7 +489,11 @@ workflow's diagram.
 
 ## Runs
 
-Every supervised execution, newest first, filterable by window, outcome and agent.
+Every supervised execution, newest first, filterable by window, outcome and agent, a hundred at a
+time with **Show 100 more** below. A running run says `running · started 4 min ago` rather than
+when it finished. Each says which **chain** it belongs to — the end of its identifier, where
+identifiers differ, with the chain's name in the tooltip — and clicking that opens the chain.
+**Ran on** is the model and effort the run's command line gave it; hover it for the context too.
 
 Each run keeps the **model, effort and context** its command line gave it, so history answers
 "which effort did that run use?" without opening a transcript; a session's header shows them, and

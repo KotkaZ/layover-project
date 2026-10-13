@@ -18,22 +18,34 @@ use crate::auth::Guard;
 const INDEX: &str = include_str!("assets/index.html");
 /// Its styles.
 const STYLE: &str = include_str!("assets/style.css");
-/// Its behaviour.
-const SCRIPT: &str = include_str!("assets/app.js");
-/// Tracing one agent's routes on the route map.
-const ROUTEMAP: &str = include_str!("assets/routemap.js");
-/// Watching sessions: the session list and the read-only terminals.
-const SESSIONS: &str = include_str!("assets/sessions.js");
-/// Answering help requests, and continuing a chain with its own flags.
-const REPLY: &str = include_str!("assets/reply.js");
-/// One chain, whole: its map drawn for it alone, and its runs in order.
-const CHAIN: &str = include_str!("assets/chain.js");
-/// What starts next: the queue, scheduled ticks, layovers and skipped ticks.
-const UPCOMING: &str = include_str!("assets/upcoming.js");
-/// Triggering a workflow: its flags, its name, and agents to run differently.
-const TRIGGER: &str = include_str!("assets/trigger.js");
-/// The switch that turns a workflow off and on.
-const SWITCH: &str = include_str!("assets/switch.js");
+/// Its behaviour, one file per part of the page, each served at its own name. The page loads
+/// them in order and `app.js` last, since it starts everything the others define.
+const SCRIPTS: &[(&str, &str)] = &[
+    // Tracing one agent's routes on the route map.
+    ("/routemap.js", include_str!("assets/routemap.js")),
+    // Watching sessions: the session list and the read-only terminals.
+    ("/sessions.js", include_str!("assets/sessions.js")),
+    // Answering help requests, and continuing a chain with its own flags.
+    ("/reply.js", include_str!("assets/reply.js")),
+    // One chain, whole: its map drawn for it alone, and its runs in order.
+    ("/chain.js", include_str!("assets/chain.js")),
+    // What starts next: the queue, scheduled ticks, layovers and skipped ticks.
+    ("/upcoming.js", include_str!("assets/upcoming.js")),
+    // Triggering a workflow: its flags, its name, and agents to run differently.
+    ("/trigger.js", include_str!("assets/trigger.js")),
+    // The switch that turns a workflow off and on.
+    ("/switch.js", include_str!("assets/switch.js")),
+    // Addresses for every view and its filters.
+    ("/router.js", include_str!("assets/router.js")),
+    // The list of chains: filtered, searched and paged.
+    ("/chains.js", include_str!("assets/chains.js")),
+    // The list of runs, paged.
+    ("/runs.js", include_str!("assets/runs.js")),
+    // Help requests and learnings.
+    ("/journal.js", include_str!("assets/journal.js")),
+    // The shared helpers, the route map and cost, and starting everything.
+    ("/app.js", include_str!("assets/app.js")),
+];
 
 /// Builds the complete server: the JSON API, plus the dashboard on top of it.
 ///
@@ -47,41 +59,17 @@ const SWITCH: &str = include_str!("assets/switch.js");
 pub fn router(dashboard: Dashboard, guard: Guard) -> Router {
     let api = layover_http::router(Arc::new(dashboard));
 
-    Router::new()
+    let page = Router::new()
         .route("/", get(|| async { html(INDEX) }))
-        .route("/style.css", get(|| async { asset("text/css", STYLE) }))
-        .route(
-            "/app.js",
-            get(|| async { asset("text/javascript", SCRIPT) }),
-        )
-        .route(
-            "/routemap.js",
-            get(|| async { asset("text/javascript", ROUTEMAP) }),
-        )
-        .route(
-            "/sessions.js",
-            get(|| async { asset("text/javascript", SESSIONS) }),
-        )
-        .route(
-            "/reply.js",
-            get(|| async { asset("text/javascript", REPLY) }),
-        )
-        .route(
-            "/chain.js",
-            get(|| async { asset("text/javascript", CHAIN) }),
-        )
-        .route(
-            "/upcoming.js",
-            get(|| async { asset("text/javascript", UPCOMING) }),
-        )
-        .route(
-            "/trigger.js",
-            get(|| async { asset("text/javascript", TRIGGER) }),
-        )
-        .route(
-            "/switch.js",
-            get(|| async { asset("text/javascript", SWITCH) }),
-        )
+        .route("/style.css", get(|| async { asset("text/css", STYLE) }));
+    SCRIPTS
+        .iter()
+        .fold(page, |page, &(path, body)| {
+            page.route(
+                path,
+                get(move || async move { asset("text/javascript", body) }),
+            )
+        })
         .merge(api)
         .layer(axum::middleware::from_fn_with_state(
             guard,

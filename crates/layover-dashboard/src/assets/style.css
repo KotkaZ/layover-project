@@ -387,6 +387,14 @@ dialog button.primary { background: var(--accent); border-color: var(--accent); 
 #report-artifacts code { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; }
 tr.readable { cursor: pointer; }
 tr.readable:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+/* A row that opens a page of its own says so at its end, and brightens the arrow on hover. */
+td .open { color: var(--muted); font-size: 18px; line-height: 1; margin-left: 10px; }
+tr.opens:hover td .open { color: var(--accent); }
+.btn.more { display: block; margin: 12px auto 0; }
+.btn.more[hidden] { display: none; }
+.bar input[type="search"] { min-width: 14em; }
+/* A wide table on a narrow window scrolls on its own rather than pushing the page sideways. */
+@media (max-width: 1000px) { .view > table { display: block; overflow-x: auto; } }
 
 /* ── Per-workflow activity ──────────────────────────────────────────────────
    A route map says what may happen. This says what did, for the same workflow,
