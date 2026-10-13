@@ -42,7 +42,7 @@ body {
 header {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 14px 24px;
   padding: 14px 24px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
@@ -55,6 +55,15 @@ h1 { font-size: 17px; margin: 0; letter-spacing: -0.01em; }
 h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
 
 nav { display: flex; gap: 4px; }
+
+/* Narrower than the header's one line, the tabs move to a row of their own and scroll sideways,
+   so the Ground Stop and the trigger stay in the first row at every width. The kill switch is the
+   one control that must never be off the edge of the screen. */
+@media (max-width: 1180px) {
+  header { flex-wrap: wrap; }
+  header nav { order: 10; flex: 1 0 100%; overflow-x: auto; scrollbar-width: thin; }
+  header nav .tab { white-space: nowrap; }
+}
 
 .tab {
   border: 0;
@@ -89,7 +98,7 @@ main { padding: 24px; max-width: 1400px; margin: 0 auto; }
 }
 .bar label { font-size: 13px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
 
-select, input[type="search"], button#refresh {
+select, input[type="search"], .btn {
   font: inherit;
   font-size: 13px;
   padding: 5px 9px;
@@ -98,7 +107,19 @@ select, input[type="search"], button#refresh {
   background: var(--panel);
   color: var(--ink);
 }
-button#refresh { cursor: pointer; margin-left: auto; }
+
+/* One look for every button that is not a row action or a tab. */
+.btn { cursor: pointer; padding: 5px 12px; white-space: nowrap; }
+.btn:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.btn:disabled { opacity: 0.5; cursor: progress; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn.primary:hover { background: color-mix(in srgb, var(--accent) 88%, #000); }
+.btn[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 14%, var(--panel)); border-color: var(--accent); color: var(--accent); }
+.bar .btn.end { margin-left: auto; }
+
+/* A line saying how busy the factory is: news, not a warning, unless queued work has nothing to
+   start it. */
+.status { font-size: 13px; color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 9px 13px; }
 
 .hint { font-size: 13px; color: var(--muted); margin: 0; }
 code { font-family: ui-monospace, "Cascadia Code", Menlo, monospace; font-size: 12px; }
@@ -110,7 +131,10 @@ code { font-family: ui-monospace, "Cascadia Code", Menlo, monospace; font-size: 
   padding: 8px;
   overflow: auto;
 }
-.routemap { width: 100%; height: auto; display: block; }
+/* At its natural size, shrinking to fit a narrower page but never stretched to fill a wider one:
+   a small workflow drawn at three times the size of a large one reads as more important, and its
+   text as shouted. */
+.routemap { max-width: 100%; height: auto; display: block; margin: 0 auto; }
 
 /* The route map. Every node is a real element, so it can be themed and hovered without a
    graph library sitting in between. */
@@ -223,8 +247,8 @@ tr:last-child td { border-bottom: 0; }
 
 /* The kill switch sits in the header rather than behind a tab, because the moment you want it is
    the moment you do not want to go looking for it. */
+header #trigger-open { margin-left: auto; }
 .stop {
-  margin-left: auto;
   font: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -358,7 +382,6 @@ legend { font-size: 12px; color: var(--muted); text-transform: uppercase; letter
 dialog menu { display: flex; justify-content: flex-end; gap: 10px; padding: 0; margin: 18px 0 0; }
 dialog button { font: inherit; font-size: 13px; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
 dialog button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-#trigger-open { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; cursor: pointer; margin-left: auto; }
 #report-body { white-space: pre-wrap; font: inherit; font-size: 13px; line-height: 1.6; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; max-height: 48vh; overflow: auto; }
 #report-artifacts { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
 #report-artifacts code { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; }

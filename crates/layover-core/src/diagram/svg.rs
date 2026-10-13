@@ -21,17 +21,29 @@ const SHELF: f64 = 10.0;
 /// How far above the lane an edge label sits.
 const LABEL_LIFT: f64 = 6.0;
 
+/// How far a diagram may shrink to fit a narrow page before the page scrolls it instead.
+const MIN_SCALE: f64 = 0.6;
+/// Roughly how wide one character of a node's title is, at the title's size and weight.
+const TITLE_CHAR_W: f64 = 8.6;
+/// Space kept clear on each side of a node's title.
+const TITLE_PADDING: f64 = 8.0;
+
 /// Renders a layout as an SVG fragment.
 ///
 /// A fragment, not a document: it is embedded in the dashboard page, so it inherits the page's
-/// styles and font. The `viewBox` makes it scale to whatever box it is put in.
+/// styles and font. It carries its natural size, so a workflow of three agents is drawn at the
+/// same scale as one of twelve rather than blown up to fill the page: it shrinks to fit a narrower
+/// box, down to 60% of it, and below that the page scrolls it, because text too small to read
+/// is worse than a scrollbar.
 #[must_use]
 pub fn render(layout: &Layout) -> String {
     let mut out = String::new();
     let _ = writeln!(
         out,
-        r#"<svg class="routemap" viewBox="0 0 {:.0} {:.0}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Factory route map">"#,
-        layout.width, layout.height
+        r#"<svg class="routemap" viewBox="0 0 {w:.0} {h:.0}" width="{w:.0}" height="{h:.0}" style="min-width: {min:.0}px" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Factory route map">"#,
+        w = layout.width,
+        h = layout.height,
+        min = layout.width * MIN_SCALE,
     );
 
     out.push_str(ARROWHEADS);
@@ -119,9 +131,17 @@ fn render_node(out: &mut String, node: &Node) {
         (Some(_), None, None) => (cy - 4.0, cy + 13.0),
         (None, None, None) => (cy + 5.0, cy + 13.0),
     };
+    // A title wider than its box is squeezed to fit rather than spilling over the border or being
+    // cut short: the whole name stays legible, which an ellipsis would not leave it.
+    let room = node.w - 2.0 * TITLE_PADDING;
+    let fit = if estimated_width(&node.label) > room {
+        format!(r#" textLength="{room:.1}" lengthAdjust="spacingAndGlyphs""#)
+    } else {
+        String::new()
+    };
     let _ = writeln!(
         out,
-        r#"    <text class="label" x="{cx:.1}" y="{baseline:.1}" text-anchor="middle">{}</text>"#,
+        r#"    <text class="label" x="{cx:.1}" y="{baseline:.1}" text-anchor="middle"{fit}>{}</text>"#,
         escape(&node.label)
     );
     if let Some(subtitle) = &node.subtitle {
@@ -162,6 +182,11 @@ fn render_node(out: &mut String, node: &Node) {
     }
 
     out.push_str("  </g>\n");
+}
+
+/// How wide a node's title would be drawn, near enough to tell whether it fits its box.
+fn estimated_width(text: &str) -> f64 {
+    f64::from(u32::try_from(text.chars().count()).unwrap_or(u32::MAX)) * TITLE_CHAR_W
 }
 
 /// Draws one edge, as a curve from the right of its source to the left of its target.

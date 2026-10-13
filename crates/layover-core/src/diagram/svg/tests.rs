@@ -63,6 +63,55 @@ fn the_fragment_is_a_sized_svg_element() {
 }
 
 #[test]
+fn a_diagram_carries_its_natural_size_so_a_small_one_is_not_blown_up() {
+    let layout = Layout::build(&factory(), &Live::default());
+    let svg = render(&layout);
+
+    assert!(
+        svg.contains(&format!(
+            r#"width="{:.0}" height="{:.0}""#,
+            layout.width, layout.height
+        )),
+        "{svg}"
+    );
+    assert!(
+        svg.contains(&format!("min-width: {:.0}px", layout.width * MIN_SCALE)),
+        "{svg}"
+    );
+}
+
+#[test]
+fn a_title_too_long_for_its_box_is_squeezed_to_fit_and_a_short_one_is_left_alone() {
+    let config = Config::from_toml(
+        r#"
+        [agents.analyst]
+        prompt = "analyse"
+
+        [pipelines.chromium-webrtc-monitor]
+        entry = "analyst"
+        "#,
+        "svg-long.toml",
+    )
+    .expect("config parses");
+
+    let svg = render(&Layout::build(&config, &Live::default()));
+    let line = |id: &str| {
+        let at = svg.find(&format!(r#"id="{id}""#)).expect("drawn");
+        svg[at..]
+            .lines()
+            .find(|line| line.contains(r#"class="label""#))
+            .expect("titled")
+            .to_owned()
+    };
+
+    assert!(
+        line("p_chromium-webrtc-monitor").contains("textLength="),
+        "{svg}"
+    );
+    assert!(!line("a_analyst").contains("textLength="), "{svg}");
+}
+
+#[test]
 fn every_node_becomes_an_addressable_element() {
     // Each node is a DOM element with an id, which is what lets the page colour it, focus it
     // and hang a click on it without a graph library in the middle.

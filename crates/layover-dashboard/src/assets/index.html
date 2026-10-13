@@ -20,6 +20,7 @@
     <button class="tab" data-view="journal">Help &amp; learnings<span id="help-badge" class="badge" hidden></span></button>
   </nav>
   <label id="scope-label">Workflow <select id="scope"></select></label>
+  <button id="trigger-open" class="btn primary" type="button">Trigger…</button>
   <button id="ground-stop" class="stop" type="button">Ground Stop</button>
   <span id="health" class="pill"></span>
 </header>
@@ -31,10 +32,9 @@
         Generated from <code id="config-path">layover.toml</code> each time this page loads.
         Edit the file and reload.
       </p>
-      <button id="trigger-open">Trigger a workflow</button>
-      <button id="refresh">Refresh</button>
+      <button id="refresh" class="btn end" type="button">Refresh</button>
     </div>
-    <p id="queued" class="caveat" hidden></p>
+    <p id="queued" class="status" hidden></p>
     <div id="workflows"></div>
     <ul class="legend">
       <li><span class="swatch pipeline"></span>way in</li>
@@ -86,7 +86,7 @@
       <h2 id="chain-title" class="chain-title"></h2>
       <span id="chain-state" class="outcome"></span>
       <span id="chain-actions" class="actions"></span>
-      <button id="chain-refresh" type="button">Refresh</button>
+      <button id="chain-refresh" class="btn" type="button">Refresh</button>
     </div>
     <p id="chain-facts" class="hint"></p>
     <p id="chain-flags" class="hint"></p>
@@ -123,7 +123,7 @@
       </p>
       <label><input id="sessions-follow" type="checkbox" checked> Follow</label>
       <label><input id="sessions-thinking" type="checkbox" checked> Show thinking</label>
-      <button id="sessions-tile" type="button" aria-pressed="false"
+      <button id="sessions-tile" class="btn" type="button" aria-pressed="false"
         title="Show every running session side by side, up to four, and add new ones as they start">Tile running sessions</button>
     </div>
     <div class="sessions">
@@ -145,7 +145,7 @@
           <option value="168">7 days</option>
         </select>
       </label>
-      <button id="upcoming-refresh" type="button">Refresh</button>
+      <button id="upcoming-refresh" class="btn" type="button">Refresh</button>
     </div>
     <p id="upcoming-clock" class="hint"></p>
     <p id="upcoming-stop" class="caveat" hidden></p>
@@ -212,7 +212,7 @@
     <table id="runs-table">
       <thead>
         <tr>
-          <th>Finished</th><th>Agent</th><th>Pipeline</th><th>Outcome</th>
+          <th>When</th><th>Agent</th><th>Workflow</th><th>Outcome</th>
           <th class="num">Took</th><th class="num">Cost</th><th>Chain</th><th></th>
         </tr>
       </thead>

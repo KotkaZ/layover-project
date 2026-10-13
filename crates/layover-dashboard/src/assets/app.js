@@ -51,8 +51,18 @@ function when(iso) {
   const ago = (Date.now() - at.getTime()) / 1000;
   if (ago < 90) return "just now";
   if (ago < 3600) return `${Math.floor(ago / 60)} min ago`;
-  if (ago < 86400) return `${Math.floor(ago / 3600)} h ago`;
-  return at.toLocaleString();
+  if (ago < 172800) return `${Math.floor(ago / 3600)} h ago`;
+  if (ago < 30 * 86400) return `${Math.floor(ago / 86400)} d ago`;
+  return at.toLocaleDateString();
+}
+
+/// A table cell saying how long ago, with the exact moment on hover. Every list reads times the
+/// same way, so a help request from yesterday does not look like a different kind of thing from a
+/// run an hour ago.
+function whenCell(iso, prefix = "") {
+  const cell = el("td", "when", `${prefix}${when(iso)}`);
+  if (iso) cell.title = new Date(iso).toLocaleString();
+  return cell;
 }
 
 // How much of a figure is actually measured. Shown next to every total rather than tucked away,
@@ -316,8 +326,11 @@ async function loadRuns() {
 
     for (const run of runs) {
       const row = el("tr");
+      // A run still going has not finished: say when it started, and that it is still going.
       row.append(
-        el("td", "", when(run.finished_at ?? run.started_at)),
+        run.status === "running"
+          ? whenCell(run.started_at, "running · started ")
+          : whenCell(run.finished_at ?? run.started_at),
         el("td", "", run.agent),
         workflowCell(run.pipeline, run.chain_name),
         el("td", `outcome ${run.status}`, run.status.replace("_", " ")),
@@ -404,7 +417,7 @@ async function loadChains() {
       const cost = chain.measured === false ? `${money(chain.usd)}+` : money(chain.usd);
 
       row.append(
-        el("td", "", when(chain.started_at)),
+        whenCell(chain.started_at),
         workflowCell(chain.pipeline, chain.name),
         el("td", "", (chain.agents ?? []).join(" → ") || "—"),
         el("td", "num", String(chain.runs)),
@@ -639,6 +652,8 @@ async function loadQueued() {
     if (note.hidden) return;
 
     setLiveBadge(alive);
+    // Amber only when queued work has nothing to start it; a busy factory is news, not trouble.
+    note.classList.toggle("caveat", pending.length > 0 && !by);
     const running = `${alive} of ${limit} run(s) alive`;
     if (pending.length === 0) {
       note.textContent = `${running}.`;
@@ -737,7 +752,7 @@ async function loadJournal() {  const helpBody = document.querySelector("#help-t
       const kind = el("td");
       kind.append(el("span", `kind ${request.blocker}`, request.blocker));
       row.append(
-        el("td", "", when(request.at)),
+        whenCell(request.at),
         el("td", "", request.agent),
         el("td", "", request.pipeline || "\u2014"),
         kind,

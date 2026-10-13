@@ -39,7 +39,8 @@ supply the mapping. Where retention has taken the run but not the request, the w
 
 ## Triggering a workflow
 
-**Trigger a workflow** opens a window with the pipeline, a prompt box, and a toggle for every flag
+**Trigger…**, in the header beside the Ground Stop on every tab, opens a window with the
+pipeline, a prompt box, and a toggle for every flag
 that pipeline declares — each starting from its declared default, so the window shows what would
 happen if you changed nothing. A flag the pipeline does not declare is refused rather than ignored:
 silently dropping it would let a typo change nothing while appearing to work. A workflow
@@ -400,7 +401,10 @@ each.
 
 A factory usually holds several pipelines, and they are genuinely separate workflows. Drawn
 together they read as one very confused process, so each gets its own diagram, stacked down the
-page — or just the selected one, when the header narrows the page to it.
+page — or just the selected one, when the header narrows the page to it. Every diagram is drawn
+at the same scale, its natural size, so a workflow of three agents is not blown up to look more
+important than one of twelve; a diagram wider than the page shrinks to fit, and past a point the
+page scrolls it rather than shrinking its text out of reading.
 
 Above each diagram is what that workflow has actually been doing: runs and spend over the last
 seven days, failures, open help requests and, for a scheduled workflow, the ticks it skipped. The
