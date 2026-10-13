@@ -115,7 +115,10 @@ select, input[type="search"], .btn {
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 .btn.primary:hover { background: color-mix(in srgb, var(--accent) 88%, #000); }
 .btn[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 14%, var(--panel)); border-color: var(--accent); color: var(--accent); }
-.bar .btn.end { margin-left: auto; }
+.bar .btn.end, .bar .end { margin-left: auto; }
+.updated { font-size: 12px; color: var(--muted); white-space: nowrap; }
+#map-folds .link + .link { margin-left: 12px; }
+.bar .tools { display: flex; align-items: center; gap: 16px; }
 
 /* A line saying how busy the factory is: news, not a warning, unless queued work has nothing to
    start it. */
@@ -326,7 +329,7 @@ h2.spaced { margin-top: 30px; }
 .workflow { margin-bottom: 26px; }
 .workflow > header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; padding: 0 2px 8px; border: 0; background: none; position: static; }
 .workflow h2 { margin: 0; font-size: 15px; text-transform: none; letter-spacing: -0.01em; color: var(--ink); font-weight: 650; }
-.workflow .what { font-size: 13px; color: var(--muted); }
+.workflow .what { font-size: 13px; color: var(--muted); flex: 1 1 160px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rails { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
 .workflow > header .btn { align-self: center; padding: 3px 11px; }
 #trigger-entry:empty { display: none; }
@@ -349,6 +352,10 @@ h2.spaced { margin-top: 30px; }
 .switch.off { color: var(--muted); }
 /* Off, a workflow's map is still there to read, and plainly not running. */
 .workflow.off .canvas, .workflow.off .summary { opacity: 0.55; }
+/* A folded workflow keeps its card — name, rails, the week, its chains — and puts away its drawing. */
+.workflow.folded .canvas, .workflow.folded .trace { display: none; }
+.workflow .fold { border: 0; background: none; color: var(--muted); font-size: 14px; width: 18px; padding: 0; cursor: pointer; align-self: center; }
+.workflow .fold:hover { color: var(--accent); }
 
 /* Upcoming. Times line up, and a day starts with its name. */
 td.when { white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -500,6 +507,7 @@ tr.opens:hover td .open { color: var(--accent); }
 #session-list h2 { margin: 6px 0 2px; }
 .session { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; font: inherit; font-size: 13px; padding: 7px 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
 .session:hover { border-color: var(--accent); }
+.session .where { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .session.open { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
 .session .who { display: flex; gap: 7px; align-items: center; }
 .session .muted { color: var(--muted); font-size: 12px; }
@@ -515,8 +523,11 @@ tr.opens:hover td .open { color: var(--accent); }
 #terminals.tiled { grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); }
 .terminal { --term-bg: #0d1117; --term-ink: #c9d1d9; --term-dim: #7d8590; display: flex; flex-direction: column; background: var(--term-bg); color: var(--term-ink); border: 1px solid #30363d; border-radius: 10px; overflow: hidden; min-width: 0; }
 .term-head { display: flex; align-items: center; gap: 9px; padding: 7px 12px; background: #161b22; border-bottom: 1px solid #30363d; font-size: 13px; }
-.term-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.term-state { color: var(--term-dim); }
+.term-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 0 1 auto; }
+.term-state { color: var(--term-dim); white-space: nowrap; flex-shrink: 0; }
+.term-head .ro, .term-head .term-link, .term-close { white-space: nowrap; flex-shrink: 0; }
+.term-link { border: 0; background: none; color: var(--term-dim); font: inherit; font-size: 12px; cursor: pointer; padding: 0; text-decoration: underline; text-underline-offset: 2px; }
+.term-link:hover { color: var(--term-ink); }
 .term-head .ro { margin-left: auto; font-size: 11px; color: var(--term-dim); border: 1px solid #30363d; border-radius: 999px; padding: 0 8px; }
 .term-close { border: 0; background: none; color: var(--term-dim); font-size: 17px; line-height: 1; cursor: pointer; padding: 0 2px; }
 .term-close:hover { color: var(--term-ink); }

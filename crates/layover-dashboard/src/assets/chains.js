@@ -142,6 +142,7 @@ async function loadChains() {
     const pages = Math.max(1, Math.ceil(chainsView.shown / CHAINS_PAGE));
     showChains();
     for (let page = 1; page < pages; page += 1) showChains(true);
+    updated("#chains-updated");
 
     const badge = $("#stalled-badge");
     badge.textContent = String(stalled);

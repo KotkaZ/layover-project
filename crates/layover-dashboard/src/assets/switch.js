@@ -39,7 +39,7 @@ async function setWorkflow(name, on, box) {
     alert(`Could not switch ${name} ${on ? "on" : "off"}: ${error.message}`);
   }
   await loadPipelines();
-  loadMap();
+  loadMap(true);
   loadQueued();
   if (!$("#upcoming").hidden) loadUpcoming();
 }

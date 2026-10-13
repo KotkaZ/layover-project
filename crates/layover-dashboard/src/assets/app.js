@@ -93,6 +93,30 @@ function spend(summary) {
   return summary.unreported_runs > 0 ? `${money(summary.usd)}+` : money(summary.usd);
 }
 
+// What refreshes itself while it is on screen, and how. Sessions, Upcoming and a chain keep
+// their own, faster, clocks.
+const LIVE = { map: () => loadMap(true), chains: () => loadChains(), runs: () => loadRuns() };
+const LIVE_EVERY_MS = 15000;
+let liveTimer = null;
+
+function watchLive(name) {
+  clearInterval(liveTimer);
+  liveTimer = null;
+  const refresh = LIVE[name];
+  if (!refresh) return;
+  liveTimer = setInterval(() => {
+    if (!document.hidden) refresh();
+  }, LIVE_EVERY_MS);
+}
+
+/// Says when a view last read the Tower, so a page left open is known to be current.
+function updated(selector) {
+  const stamp = $(selector);
+  const now = new Date();
+  stamp.textContent = `updated ${now.toLocaleTimeString([], { hour12: false })}`;
+  stamp.title = `Read from the Tower at ${now.toLocaleString()}; kept current every ${LIVE_EVERY_MS / 1000} s while this tab is showing.`;
+}
+
 function showView(name) {
   document.querySelectorAll(".view").forEach((view) => {
     view.hidden = view.id !== name;
@@ -110,6 +134,7 @@ function showView(name) {
   watchSessions(name === "sessions");
   watchChain(name === "chain");
   watchUpcoming(name === "upcoming");
+  watchLive(name);
   routeTo(name);
 }
 
@@ -131,194 +156,6 @@ async function loadHealth() {
   } catch {
     pill.textContent = "Tower unreachable";
     pill.classList.add("down");
-  }
-}
-
-// One diagram per workflow. Drawn together they read as a single very confused process, and a
-// selector still only lets you see one at a time without being able to compare them.
-function rail(kind, label, value) {
-  const node = el("span", `rail ${kind}`);
-  node.append(document.createTextNode(`${label} `), el("b", "", value));
-  return node;
-}
-
-function describeTrigger(trigger) {
-  if (trigger.kind === "manual") return "manual";
-  if (trigger.cron) return `cron ${trigger.cron}`;
-  if (trigger.every_seconds) {
-    const s = trigger.every_seconds;
-    return s % 3600 === 0 ? `every ${s / 3600}h` : `every ${Math.round(s / 60)}m`;
-  }
-  return "scheduled";
-}
-
-/// A workflow's activity in the last seven days, so the diagram is not the only thing on the page.
-///
-/// A route map shows what *may* happen. This shows what did — and the two questions are asked at
-/// the same moment, by someone who has just opened the page wondering whether anything is wrong.
-/// `skipped` is null for a workflow with no schedule, which has no ticks to skip.
-function summaryStrip(name, stats, skipped) {
-  const strip = el("div", "summary");
-  const cell = (label, value, className) => {
-    const box = el("div", `stat ${className || ""}`);
-    box.append(el("span", "figure", value), el("span", "label", label));
-    return box;
-  };
-
-  strip.append(
-    cell("runs, 7d", `${stats.runs}`),
-    cell("spend, 7d", spend(stats), stats.unreported_runs > 0 ? "warn" : ""),
-    cell("failed", `${stats.failed}`, stats.failed > 0 ? "bad" : ""),
-    cell("open help", `${stats.help}`, stats.help > 0 ? "warn" : ""),
-  );
-  // A schedule that skips every tick has a quiet strip: few runs, nothing failed. This is the
-  // number that says why.
-  if (skipped !== null) {
-    strip.append(cell("skipped ticks, 7d", `${skipped}`, skipped > 0 ? "warn" : ""));
-  }
-  strip.dataset.workflow = name;
-  return strip;
-}
-
-/// When a scheduled workflow next fires, as a rail beside its trigger: "next 14:00 · in 23 min".
-///
-/// Only when the Tower in this process keeps the clock. A watching dashboard does not know, and
-/// says nothing rather than a time worked out from a schedule counted from somebody else's start.
-function nextRail(scheduled, now) {
-  if (!scheduled?.next_at) return null;
-  const node = rail("next", "next", `${clockTime(scheduled.next_at)} · ${fromNow(scheduled.next_at, now)}`);
-  node.title = new Date(scheduled.next_at).toLocaleString();
-  if (scheduled.working && !scheduled.overlaps) {
-    node.classList.add("risk");
-    node.title += " — its previous run is still going, so this tick is skipped unless that finishes first";
-  }
-  return node;
-}
-
-/// Counts recent activity per workflow in three requests, not three per workflow.
-async function activityByWorkflow() {
-  const stats = new Map();
-  const bump = (name, field, by = 1) => {
-    if (!name) return;
-    const row = stats.get(name) ?? { runs: 0, usd: 0, unreported_runs: 0, failed: 0, help: 0 };
-    row[field] += by;
-    stats.set(name, row);
-  };
-
-  const [costs, runs, help] = await Promise.all([
-    get("/costs?window=last_7d").catch(() => null),
-    get("/runs?window=last_7d&status=failed&limit=500").catch(() => null),
-    get("/help?open=true&window=last_90d").catch(() => null),
-  ]);
-
-  for (const bucket of costs?.by_pipeline ?? []) {
-    bump(bucket.name, "runs", bucket.summary.runs);
-    bump(bucket.name, "usd", bucket.summary.usd);
-    bump(bucket.name, "unreported_runs", bucket.summary.unreported_runs);
-  }
-  for (const run of runs?.runs ?? []) bump(run.pipeline, "failed");
-  for (const request of help?.requests ?? []) bump(request.pipeline, "help");
-
-  return stats;
-}
-
-/// Chains still going, or waiting for somebody to answer them.
-async function chainsGoing() {
-  try {
-    const { itineraries } = await get("/itineraries?window=last_7d");
-    return itineraries.filter((chain) => ["working", "awaiting_human"].includes(chain.state));
-  } catch {
-    return [];
-  }
-}
-
-async function loadMap() {
-  const host = $("#workflows");
-
-  try {
-    const { pipelines } = await get("/pipelines");
-    host.replaceChildren();
-
-    if (pipelines.length === 0) {
-      host.append(el("p", "empty", "No pipelines are declared, so nothing can be triggered."));
-      return;
-    }
-
-    const showing = scope() ? pipelines.filter((p) => p.name === scope()) : pipelines;
-    const [activity, going, upcoming] = await Promise.all([
-      activityByWorkflow(),
-      chainsGoing(),
-      get("/upcoming").catch(() => null),
-    ]);
-    const scheduled = new Map((upcoming?.workflows ?? []).map((w) => [w.pipeline, w]));
-    const now = upcoming ? new Date(upcoming.now) : new Date();
-
-    for (const pipeline of showing) {
-      const section = el("section", "workflow");
-      const header = el("header");
-      header.append(el("h2", "", pipeline.name), workflowSwitch(pipeline));
-      if (pipeline.description) header.append(el("span", "what", pipeline.description));
-      section.classList.toggle("off", pipeline.switched_off);
-
-      const rails = el("div", "rails");
-      rails.append(rail("trigger", "", describeTrigger(pipeline.trigger)));
-      // Off, a schedule's next tick does not fire, so it is not offered as when it will.
-      const next = pipeline.switched_off ? offRail(pipeline) : nextRail(scheduled.get(pipeline.name), now);
-      if (next) rails.append(next);
-      rails.append(
-        // The two rails that bound a chain, and they bound different things: Hops is depth,
-        // Fuel is breadth. Showing one without the other invites the assumption that Hops caps
-        // spending, which it does not.
-        rail("hops", "hops", `${pipeline.max_hops}`),
-        rail("fuel", "fuel", money(pipeline.fuel_usd)),
-        rail("", "workspace", pipeline.workspace),
-      );
-      if (pipeline.resumes) rails.append(rail("", "", "resumes layovers"));
-      header.append(rails);
-      // Started from where it is drawn. A workflow with no entry only resumes layovers, and has
-      // nothing a person could start.
-      if (startable(pipeline.name)) {
-        const go = el("button", "btn", "Trigger…");
-        go.type = "button";
-        go.title = `Start ${pipeline.name}: its first run is ${pipeline.entry}.`;
-        go.addEventListener("click", () => openTrigger({ pipeline: pipeline.name }));
-        header.append(go);
-      }
-      section.append(header);
-      section.append(
-        summaryStrip(
-          pipeline.name,
-          activity.get(pipeline.name) ?? { runs: 0, usd: 0, unreported_runs: 0, failed: 0, help: 0 },
-          scheduled.get(pipeline.name)?.skipped_7d ?? null,
-        ),
-      );
-      // One map per workflow, however many times it was triggered: these say which run is where.
-      const mine = going.filter((chain) => chain.pipeline === pipeline.name);
-      if (mine.length) section.append(inFlight(mine));
-
-      const canvas = el("div", "canvas");
-      canvas.append(el("p", "empty", "drawing\u2026"));
-      section.append(canvas);
-      host.append(section);
-
-      get(`/graph?pipeline=${encodeURIComponent(pipeline.name)}`)
-        .then((map) => {
-          canvas.innerHTML = map.mermaid;
-          traceable(canvas, {
-            describe: (name) => agentsByName.get(name),
-            showRuns: (name) => {
-              $("#runs-agent").value = name;
-              showView("runs");
-            },
-          });
-          if (map.config_path) $("#config-path").textContent = map.config_path;
-        })
-        .catch((error) => {
-          canvas.replaceChildren(el("p", "empty", `Could not draw it: ${error.message}`));
-        });
-    }
-  } catch (error) {
-    host.replaceChildren(el("p", "empty", `Could not read the pipelines: ${error.message}`));
   }
 }
 
@@ -691,7 +528,7 @@ function start() {
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => showView(tab.dataset.view));
   });
-  $("#refresh").addEventListener("click", loadMap);
+  startMap();
   startTrigger();
   $("#ground-stop").addEventListener("click", toggleGroundStop);
   startChainsList();
@@ -701,6 +538,11 @@ function start() {
   startReplies();
   startChains();
   startUpcoming();
+  // Back to a tab left in the background, it is brought up to date at once rather than at the
+  // next tick.
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) LIVE[currentView()]?.();
+  });
 
   // One selector, so every view has to be told. Redrawing only the visible one would leave the
   // others showing another workflow's numbers under this workflow's name the moment you switch.

@@ -4,8 +4,8 @@
 // what the agent's CLI printed, already rendered the way the CLI would draw it in a terminal —
 // there is nothing here to type into, and nothing an agent can tell from being watched.
 //
-// Loaded before app.js, so it uses the helpers there ($, el, get, when, duration, scoped) only
-// inside functions that run after both have loaded.
+// Loaded before app.js, so it uses the helpers there ($, el, get, when, duration, scoped,
+// openReport) and chain.js's openChain only inside functions that run after all have loaded.
 
 // The prefix each kind of entry is drawn with, as the CLI itself marks them.
 const MARKS = {
@@ -25,7 +25,8 @@ const KEEP_LINES = 4000;
 // More tiles than this would hold enough connections open to starve the rest of the page.
 const MAX_TILES = 4;
 
-const sessions = { terminals: new Map(), tiled: false, timer: null };
+// `chosen`: somebody picked a session or closed one, so the page stops picking for them.
+const sessions = { terminals: new Map(), tiled: false, timer: null, chosen: false };
 
 class Terminal {
   constructor(run, host, onClose) {
@@ -42,7 +43,17 @@ class Terminal {
     const close = el("button", "term-close", "×");
     close.title = "Stop watching";
     close.addEventListener("click", () => onClose(this));
-    head.append(this.dot, this.title, this.state, el("span", "ro", "read-only"), close);
+    // Where the session belongs, and what it wrote about itself once it is over.
+    const chain = el("button", "term-link", "chain");
+    chain.type = "button";
+    chain.title = `See chain ${run.itinerary_id} whole`;
+    chain.addEventListener("click", () => openChain(run.itinerary_id));
+    this.report = el("button", "term-link", "report");
+    this.report.type = "button";
+    this.report.title = "What the agent wrote about this run";
+    this.report.hidden = run.status === "running";
+    this.report.addEventListener("click", () => openReport(run.run_id, run));
+    head.append(this.dot, this.title, this.state, chain, this.report, el("span", "ro", "read-only"), close);
 
     this.body = el("div", "term-body");
     this.lines = el("div", "term-lines");
@@ -154,6 +165,7 @@ class Terminal {
 
   end(end) {
     this.ended = true;
+    this.report.hidden = false;
     this.live.replaceChildren();
     const status = end.status ?? "over";
     this.dot.className = `dot ${status}`;
@@ -171,6 +183,7 @@ class Terminal {
 }
 
 function forget(terminal) {
+  sessions.chosen = true;
   terminal.close();
   sessions.terminals.delete(terminal.run.run_id);
   markOpen();
@@ -178,6 +191,7 @@ function forget(terminal) {
 
 // Shows one session, on its own.
 function openSession(run) {
+  sessions.chosen = true;
   sessions.tiled = false;
   $("#sessions-tile").setAttribute("aria-pressed", "false");
   for (const terminal of sessions.terminals.values()) terminal.close();
@@ -221,11 +235,12 @@ function sessionItem(run) {
   item.type = "button";
   item.dataset.run = run.run_id;
   const top = el("span", "who");
-  top.append(
-    el("span", `dot ${run.status}`),
-    el("b", "", run.agent),
-    el("span", "muted", [run.chain_name, run.pipeline].filter(Boolean).join(" · ")),
-  );
+  top.append(el("span", `dot ${run.status}`), el("b", "", run.agent));
+  // The chain's name and workflow on a line of their own, cut short rather than wrapped beside
+  // the agent's name.
+  const what = [run.chain_name, run.pipeline].filter(Boolean).join(" · ");
+  const where = el("span", "where muted", what);
+  where.title = what;
   const sub = el(
     "span",
     "muted",
@@ -233,7 +248,7 @@ function sessionItem(run) {
       ? `running ${duration(run.duration_sec)}`
       : `${run.status.replace("_", " ")} ${when(run.finished_at)}`,
   );
-  item.append(top, sub);
+  item.append(top, where, sub);
   item.title = `${run.run_id}${run.detail ? `\n${run.detail}` : ""}`;
   item.addEventListener("click", () => (sessions.tiled ? watch(run) : openSession(run)));
   return item;
@@ -255,6 +270,8 @@ async function loadSessions() {
     over.forEach((run) => list.append(sessionItem(run)));
 
     if (sessions.tiled) tile(running);
+    // Opening the tab with nothing picked shows what is going on now: the newest running session.
+    else if (!sessions.chosen && sessions.terminals.size === 0 && running.length > 0) watch(running[0]);
     markOpen();
     setLiveBadge(running.length);
   } catch (error) {
@@ -279,6 +296,7 @@ function watchSessions(visible) {
 
 function startSessions() {
   $("#sessions-tile").addEventListener("click", () => {
+    sessions.chosen = true;
     sessions.tiled = !sessions.tiled;
     $("#sessions-tile").setAttribute("aria-pressed", String(sessions.tiled));
     loadSessions();

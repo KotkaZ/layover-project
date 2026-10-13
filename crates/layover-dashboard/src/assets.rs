@@ -35,6 +35,8 @@ const SCRIPTS: &[(&str, &str)] = &[
     ("/trigger.js", include_str!("assets/trigger.js")),
     // The switch that turns a workflow off and on.
     ("/switch.js", include_str!("assets/switch.js")),
+    // The route map: a card per workflow, kept current.
+    ("/map.js", include_str!("assets/map.js")),
     // Addresses for every view and its filters.
     ("/router.js", include_str!("assets/router.js")),
     // The list of chains: filtered, searched and paged.
@@ -43,7 +45,7 @@ const SCRIPTS: &[(&str, &str)] = &[
     ("/runs.js", include_str!("assets/runs.js")),
     // Help requests and learnings.
     ("/journal.js", include_str!("assets/journal.js")),
-    // The shared helpers, the route map and cost, and starting everything.
+    // The shared helpers, cost, and starting everything.
     ("/app.js", include_str!("assets/app.js")),
 ];
 

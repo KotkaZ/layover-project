@@ -43,6 +43,12 @@ http://127.0.0.1:7878/#chains?state=stalled&window=last_30d
 http://127.0.0.1:7878/#journal?agent=wolf&q=kusto
 ```
 
+The route map, Chains and Runs keep themselves current every fifteen seconds while they are on
+screen — each says when it last read the Tower, `updated 14:03:05` — and catch up at once when you
+come back to a tab left in the background. Sessions, Upcoming and an open chain keep faster clocks
+of their own. A refresh keeps your place: the pages of a list you had open, and an agent you had
+clicked on the map.
+
 Changing tab is a step in the browser's history, so **Back** returns to the last tab; changing a
 filter is not, so Back is not buried under every keystroke. A chain keeps its own address,
 `#chain=itn_…`. A filter left at its default is left out of the address, and an address naming a
@@ -100,6 +106,10 @@ tool it called with a few lines of what came back, and what it said. Text the mo
 writing appears as it arrives, and is replaced by the finished message. A session that ends says
 how — `succeeded`, `failed`, `timed out` — and a finished one replays from the start, which is how
 you see the route an agent took to its conclusion rather than only the conclusion.
+
+Opening the tab with nothing picked opens the newest running session, so what is happening now is
+on screen at once; once you pick or close one, the page stops picking for you. A terminal's header
+links to the run's **chain** and, once it is over, to its **report**.
 
 **Tile running sessions** puts every running session side by side, up to four, and adds new ones as
 they start. **Show thinking** hides the reasoning when you only want the actions; **Follow** keeps
@@ -450,6 +460,14 @@ page — or just the selected one, when the header narrows the page to it. Every
 at the same scale, its natural size, so a workflow of three agents is not blown up to look more
 important than one of twelve; a diagram wider than the page shrinks to fit, and past a point the
 page scrolls it rather than shrinking its text out of reading.
+
+The busiest workflows come first — chains under way, then runs in the last week, with the order
+of `layover.toml` breaking ties — and the order holds while the page refreshes itself, so a card
+does not move while you read it. A factory of five workflows is five drawings tall, so a drawing
+**folds away** (`▸`) to its card: the header, the week's numbers and the chains under way stay.
+On a page of three or more workflows, one starts folded when nothing in it needs looking at —
+nothing under way, nothing failed, nobody asked anything — and **Show every drawing** and **Fold
+them all** do what they say. A drawing you fold or open stays that way in this browser.
 
 Above each diagram is what that workflow has actually been doing: runs and spend over the last
 seven days, failures, open help requests and, for a scheduled workflow, the ticks it skipped. The

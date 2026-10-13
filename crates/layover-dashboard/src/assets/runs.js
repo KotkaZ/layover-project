@@ -104,6 +104,7 @@ async function loadRuns(more = false) {
     const button = $("#runs-more");
     button.hidden = !hasMore;
     button.textContent = `Show ${RUNS_PAGE} more`;
+    updated("#runs-updated");
   } catch (error) {
     body.replaceChildren();
     $("#runs-table").hidden = true;

@@ -29,10 +29,17 @@
   <section id="map" class="view">
     <div class="bar">
       <p class="hint">
-        Generated from <code id="config-path">layover.toml</code> each time this page loads.
-        Edit the file and reload.
+        Drawn from <code id="config-path">layover.toml</code> as it is on disk, and kept current
+        while this tab is showing.
       </p>
-      <button id="refresh" class="btn end" type="button">Refresh</button>
+      <span class="end tools">
+        <span id="map-folds" hidden>
+          <button id="map-unfold" class="link" type="button">Show every drawing</button>
+          <button id="map-fold" class="link" type="button">Fold them all</button>
+        </span>
+        <span id="map-updated" class="updated"></span>
+        <button id="refresh" class="btn" type="button">Refresh</button>
+      </span>
     </div>
     <p id="queued" class="status" hidden></p>
     <div id="workflows"></div>
@@ -68,6 +75,7 @@
       <label title="A schedule's chains that nobody named and that finished: the routine ticks">
         <input id="chains-routine" type="checkbox"> Hide finished scheduled chains</label>
       <span id="chains-count" class="muted"></span>
+      <span id="chains-updated" class="updated end"></span>
     </div>
     <p class="note">
       A chain is everything one trigger caused, and the budget it shares. <b>Stalled</b> is the one
@@ -214,6 +222,7 @@
       </label>
       <label>Agent <input id="runs-agent" type="search" placeholder="any" list="agent-names"></label>
       <datalist id="agent-names"></datalist>
+      <span id="runs-updated" class="updated end"></span>
     </div>
     <table id="runs-table">
       <thead>
@@ -419,6 +428,7 @@
 <script src="/upcoming.js"></script>
 <script src="/trigger.js"></script>
 <script src="/switch.js"></script>
+<script src="/map.js"></script>
 <script src="/router.js"></script>
 <script src="/chains.js"></script>
 <script src="/runs.js"></script>
