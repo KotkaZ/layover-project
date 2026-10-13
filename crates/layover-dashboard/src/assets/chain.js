@@ -65,10 +65,7 @@ function chainHeader(chain, runs) {
   if (chain.queued) facts.push(`queued for ${chain.queued.join(", ")}`);
   $("#chain-facts").textContent = facts.join(" · ");
 
-  const flags = Object.entries(chain.flags ?? {});
-  $("#chain-flags").textContent = flags.length
-    ? `Flags: ${flags.map(([name, on]) => `${name}=${on}`).join(", ")}`
-    : "";
+  chainFlags(chain);
 
   const detail = $("#chain-detail");
   detail.hidden = !chain.detail;
@@ -138,7 +135,7 @@ function chainRuns(runs, pending) {
     if (why) fromCell.title = why;
     row.append(
       el("td", "num muted", String(index + 1)),
-      el("td", "", when(run.started_at)),
+      whenCell(run.started_at),
       el("td", "", run.agent),
       fromCell,
       el("td", `outcome ${run.status}`, run.status.replace("_", " ")),
@@ -191,6 +188,7 @@ async function drawChain() {
     $("#chain-error").hidden = true;
     chainHeader(chain, runs);
     chainMap(map);
+    chainTimeline(chain, runs, pending);
     chainRuns(runs, pending);
     // Nothing more will happen to a chain that has stopped, so there is nothing to keep asking.
     if (chain.state !== "working") {

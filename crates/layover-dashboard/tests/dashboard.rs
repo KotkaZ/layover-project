@@ -281,6 +281,7 @@ async fn the_page_and_its_assets_are_served_from_the_binary() {
         ("/upcoming.js", "async function loadUpcoming"),
         ("/trigger.js", "async function openTrigger"),
         ("/map.js", "async function loadMap"),
+        ("/timeline.js", "function chainTimeline"),
         ("/router.js", "function applyRoute"),
         ("/chains.js", "async function loadChains"),
         ("/runs.js", "async function loadRuns"),

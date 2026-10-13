@@ -341,6 +341,13 @@ under its workflow's map, or straight after triggering it — shows that chain o
   in green and the rest faded. Each box says what its agent ran at *in this chain*: what its runs
   were recorded running at, or what was chosen when the chain was triggered — which can differ from
   the workflow's own map.
+- **The flags it ran with**, as chips: those on, and any off that its workflow has on by default.
+  A flag set otherwise than its workflow's default is marked `•` — that is what somebody chose
+  when they triggered it — and the rest, off as by default, are counted rather than listed.
+- **Against the clock**: a row per agent, each run a bar on one time axis from the chain's start —
+  green, red for a failure, pulsing while it runs, a dashed outline for work waiting for a slot.
+  What the list cannot show is plain here: which runs overlapped, how long work waited, and which
+  pass took three times as long as the one before. Click a bar for its report, or to watch it.
 - **Every run, in the order it happened**, with who sent it, how it ended, how long it took and
   what it cost, and **Watch** or **Transcript** and **Report** beside each.
 - **What it is waiting for**: flights it has queued, at the end of the list.

@@ -352,6 +352,35 @@ h2.spaced { margin-top: 30px; }
 .switch.off { color: var(--muted); }
 /* Off, a workflow's map is still there to read, and plainly not running. */
 .workflow.off .canvas, .workflow.off .summary { opacity: 0.55; }
+
+/* A chain against the clock: a row per agent, its runs as bars on one shared axis. */
+.timeline { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 18px 6px; }
+.tl-row { display: grid; grid-template-columns: 130px 1fr; gap: 12px; align-items: center; min-height: 24px; }
+.tl-agent { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-track { position: relative; height: 14px; border-radius: 4px; background: color-mix(in srgb, var(--line) 45%, transparent); }
+.tl-bar { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: var(--ok); cursor: pointer; }
+.tl-bar:hover { outline: 2px solid var(--ink); outline-offset: 1px; }
+.tl-bar.failed, .tl-bar.timed_out, .tl-bar.interrupted { background: var(--bad); }
+.tl-bar.halted { background: var(--warn); }
+.tl-bar.running { background: var(--accent); animation: pulse 1.6s ease-in-out infinite; }
+.tl-bar.queued { background: none; border: 1.5px dashed var(--warn); cursor: default; }
+.tl-axis .tl-agent { color: var(--muted); }
+.tl-axis .tl-track { background: none; height: 22px; }
+.tl-mark { position: absolute; top: 4px; transform: translateX(-50%); font-size: 11px; color: var(--muted); white-space: nowrap; }
+.tl-mark:first-child { transform: none; }
+.tl-mark:last-child { transform: translateX(-100%); }
+@media (prefers-reduced-motion: reduce) { .tl-bar.running { animation: none; } }
+
+/* The flags a chain ran with: on, off, and marked where somebody chose otherwise than the default. */
+.flag-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; margin: 4px 0 10px; }
+.flag-chips[hidden] { display: none; }
+.flag-chips .muted { margin-right: 4px; }
+.flag-chips .muted:last-child { margin-left: 4px; }
+.flag-chip { border: 1px solid var(--line); border-radius: 999px; padding: 1px 9px; background: var(--panel); }
+.flag-chip.on { border-color: color-mix(in srgb, var(--ok) 55%, var(--line)); color: var(--ok); }
+.flag-chip.off { color: var(--muted); text-decoration: line-through; }
+.flag-chip.chosen { font-weight: 650; box-shadow: inset 0 0 0 1px currentColor; }
+.flag-chip.chosen::after { content: " •"; }
 /* A folded workflow keeps its card — name, rails, the week, its chains — and puts away its drawing. */
 .workflow.folded .canvas, .workflow.folded .trace { display: none; }
 .workflow .fold { border: 0; background: none; color: var(--muted); font-size: 14px; width: 18px; padding: 0; cursor: pointer; align-self: center; }

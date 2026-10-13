@@ -103,7 +103,7 @@
       <button id="chain-refresh" class="btn" type="button">Refresh</button>
     </div>
     <p id="chain-facts" class="hint"></p>
-    <p id="chain-flags" class="hint"></p>
+    <div id="chain-flags" class="flag-chips" hidden></div>
     <p id="chain-detail" class="caveat" hidden></p>
     <p id="chain-error" class="caveat" hidden></p>
     <div id="chain-canvas" class="canvas"></div>
@@ -116,6 +116,8 @@
       <li><span class="tally-key">×2</span>ran more than once</li>
       <li class="tip">Only this chain: other runs of the same workflow are not on it.</li>
     </ul>
+    <h2 id="chain-timeline-head" class="spaced" hidden>Against the clock</h2>
+    <div id="chain-timeline" class="timeline" hidden></div>
     <h2 class="spaced">Runs, in the order they happened</h2>
     <table id="chain-runs">
       <thead>
@@ -425,6 +427,7 @@
 <script src="/sessions.js"></script>
 <script src="/reply.js"></script>
 <script src="/chain.js"></script>
+<script src="/timeline.js"></script>
 <script src="/upcoming.js"></script>
 <script src="/trigger.js"></script>
 <script src="/switch.js"></script>

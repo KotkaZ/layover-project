@@ -29,6 +29,8 @@ const SCRIPTS: &[(&str, &str)] = &[
     ("/reply.js", include_str!("assets/reply.js")),
     // One chain, whole: its map drawn for it alone, and its runs in order.
     ("/chain.js", include_str!("assets/chain.js")),
+    // A chain against the clock, and the flags it ran with.
+    ("/timeline.js", include_str!("assets/timeline.js")),
     // What starts next: the queue, scheduled ticks, layovers and skipped ticks.
     ("/upcoming.js", include_str!("assets/upcoming.js")),
     // Triggering a workflow: its flags, its name, and agents to run differently.
