@@ -275,6 +275,15 @@ async function loadMap() {
       );
       if (pipeline.resumes) rails.append(rail("", "", "resumes layovers"));
       header.append(rails);
+      // Started from where it is drawn. A workflow with no entry only resumes layovers, and has
+      // nothing a person could start.
+      if (startable(pipeline.name)) {
+        const go = el("button", "btn", "Trigger…");
+        go.type = "button";
+        go.title = `Start ${pipeline.name}: its first run is ${pipeline.entry}.`;
+        go.addEventListener("click", () => openTrigger({ pipeline: pipeline.name }));
+        header.append(go);
+      }
       section.append(header);
       section.append(
         summaryStrip(
@@ -532,7 +541,7 @@ async function openReport(runId, run) {
     openSession(run);
   };
   const onward = $("#report-continue");
-  onward.hidden = !run?.pipeline;
+  onward.hidden = !startable(run?.pipeline);
   onward.onclick = () => {
     $("#report").close();
     continueChain(run.pipeline, run.flags ?? null, run.itinerary_id, run.chain_name);

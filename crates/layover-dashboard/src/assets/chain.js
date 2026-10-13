@@ -82,7 +82,7 @@ function chainHeader(chain, runs) {
     answer.addEventListener("click", () => openReplyFor(chain.waiting_for.run_id));
     actions.append(answer);
   }
-  if (chain.pipeline) {
+  if (startable(chain.pipeline)) {
     const onward = el("button", "link", "Continue…");
     onward.title = "Trigger this workflow again, with this chain's flags.";
     onward.addEventListener("click", () =>

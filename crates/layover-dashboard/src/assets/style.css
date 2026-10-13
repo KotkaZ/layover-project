@@ -328,6 +328,8 @@ h2.spaced { margin-top: 30px; }
 .workflow h2 { margin: 0; font-size: 15px; text-transform: none; letter-spacing: -0.01em; color: var(--ink); font-weight: 650; }
 .workflow .what { font-size: 13px; color: var(--muted); }
 .rails { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+.workflow > header .btn { align-self: center; padding: 3px 11px; }
+#trigger-entry:empty { display: none; }
 .rail { font-size: 12px; padding: 3px 9px; border-radius: 7px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); font-variant-numeric: tabular-nums; }
 .rail b { color: var(--ink); font-weight: 650; }
 .rail.trigger { border-color: var(--accent); color: var(--accent); }

@@ -7,8 +7,76 @@
 // runs, for this run only. Both stay with everything the run causes.
 //
 // Separate from app.js, which is already long; it uses that file's helpers (`get`, `send`, `el`,
-// `$`, `pipelinesByName`, `openChain`, `loadQueued`) and switch.js's `showSwitch`, all of which
-// exist by the time anything here is called.
+// `$`, `scope`, `pipelinesByName`, `openChain`, `loadQueued`) and switch.js's `showSwitch`, all of
+// which exist by the time anything here is called.
+
+// The workflow last triggered from this browser, which is the likeliest one to be triggered next.
+const LAST_TRIGGERED = "layover.trigger.last";
+
+function remembered() {
+  try {
+    return localStorage.getItem(LAST_TRIGGERED);
+  } catch {
+    return null;
+  }
+}
+
+function remember(pipeline) {
+  try {
+    localStorage.setItem(LAST_TRIGGERED, pipeline);
+  } catch {
+    // A browser that keeps nothing still triggers; it only forgets which workflow it was.
+  }
+}
+
+/// Whether a person can start `name`: a workflow that only resumes layovers has no entry agent.
+function startable(name) {
+  return Boolean(pipelinesByName.get(name)?.entry);
+}
+
+/// The workflows a person can start, those started by hand first: a schedule's workflow can be
+/// triggered too, but is seldom what somebody opening this window has in mind. A workflow that
+/// only resumes layovers, with no entry agent, has nothing to start and is left out.
+function triggerOptions() {
+  const option = (pipeline) => {
+    const label = pipeline.switched_off ? `${pipeline.name} (switched off)` : pipeline.name;
+    const node = el("option", "", label);
+    node.value = pipeline.name;
+    return node;
+  };
+  const byHand = [];
+  const scheduled = [];
+  for (const pipeline of pipelinesByName.values()) {
+    if (!startable(pipeline.name)) continue;
+    (pipeline.trigger?.kind === "manual" ? byHand : scheduled).push(pipeline);
+  }
+  const groups = [];
+  for (const [label, list] of [["Started by hand", byHand], ["On a schedule", scheduled]]) {
+    if (list.length === 0) continue;
+    const group = document.createElement("optgroup");
+    group.label = label;
+    group.append(...list.map(option));
+    groups.push(group);
+  }
+  return groups;
+}
+
+/// Where the prompt goes: the workflow's entry agent, and what the workflow is for.
+function showEntry(name) {
+  const pipeline = pipelinesByName.get(name);
+  const line = $("#trigger-entry");
+  line.replaceChildren();
+  if (!pipeline?.entry) return;
+  line.append("Starts at ", el("b", "", pipeline.entry), ", with the prompt below.");
+  if (pipeline.description) line.append(` ${pipeline.description}`);
+}
+
+function showWorkflow(name) {
+  showSwitch(name);
+  showEntry(name);
+  showFlags(name);
+  showChoices(name);
+}
 
 function showFlags(name) {
   const box = $("#trigger-flags");
@@ -100,23 +168,23 @@ function showChoices(name) {
 // trigger means.
 async function openTrigger(preset) {
   const select = $("#trigger-pipeline");
-  select.replaceChildren(
-    ...[...pipelinesByName.values()].map((pipeline) => {
-      const option = el("option", "", pipeline.switched_off ? `${pipeline.name} (switched off)` : pipeline.name);
-      option.value = pipeline.name;
-      return option;
-    }),
-  );
+  select.replaceChildren(...triggerOptions());
+  const offered = (name) => [...select.options].some((option) => option.value === name);
 
   $("#trigger-error").hidden = true;
   $("#trigger-body").value = "";
   $("#trigger-name").value = preset?.name ?? "";
   const origin = $("#trigger-origin");
   origin.hidden = true;
-  if (preset?.pipeline && pipelinesByName.has(preset.pipeline)) select.value = preset.pipeline;
-  showSwitch(select.value);
-  showFlags(select.value);
-  showChoices(select.value);
+  // The workflow asked for; else the one the page is showing; else the last one triggered here.
+  const wanted = [preset?.pipeline, scope(), remembered()].find((name) => name && offered(name));
+  if (wanted) select.value = wanted;
+  $("#trigger-send").disabled = select.options.length === 0;
+  if (select.options.length === 0) {
+    $("#trigger-error").hidden = false;
+    $("#trigger-error").textContent = "No workflow here can be started by hand: every one only resumes layovers.";
+  }
+  showWorkflow(select.value);
   suggestions();
 
   if (preset?.from) {
@@ -182,6 +250,7 @@ async function submitTrigger(event) {
       agents: chosenAgents(),
     });
     $("#trigger").close();
+    remember(pipeline);
     loadQueued();
     // What somebody who has just triggered a workflow wants next is to watch that run of it.
     if (accepted.itinerary_id) openChain(accepted.itinerary_id);
@@ -196,9 +265,7 @@ function startTrigger() {
   $("#trigger-pipeline").addEventListener("change", (e) => {
     // Another workflow is not the chain being continued, so its flags say nothing about it.
     $("#trigger-origin").hidden = true;
-    showSwitch(e.target.value);
-    showFlags(e.target.value);
-    showChoices(e.target.value);
+    showWorkflow(e.target.value);
   });
   $("#trigger-send").addEventListener("click", submitTrigger);
 }

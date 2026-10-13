@@ -55,10 +55,16 @@ supply the mapping. Where retention has taken the run but not the request, the w
 
 ## Triggering a workflow
 
-**Trigger…**, in the header beside the Ground Stop on every tab, opens a window with the
-pipeline, a prompt box, and a toggle for every flag
-that pipeline declares — each starting from its declared default, so the window shows what would
-happen if you changed nothing. A flag the pipeline does not declare is refused rather than ignored:
+**Trigger…**, in the header beside the Ground Stop on every tab and beside each workflow on the
+route map, opens a window with the pipeline, a prompt box, and a toggle for every flag that pipeline
+declares — each starting from its declared default, so the window shows what would happen if you
+changed nothing. It says which agent the prompt goes to — `Starts at analyst` — and what the
+workflow is for.
+
+The window opens on the workflow whose button you pressed; from the header, on the workflow the
+page is showing, or failing that the one last triggered from this browser. Workflows started by
+hand are listed before those on a schedule, which can be triggered too but seldom are. One that
+only resumes layovers has no entry agent, so there is nothing to start and it is not offered. A flag the pipeline does not declare is refused rather than ignored:
 silently dropping it would let a typo change nothing while appearing to work. A workflow
 [switched off](#switching-a-workflow-off) cannot be triggered until it is switched back on.
 
