@@ -8,6 +8,8 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+## [1.13.0] — 2026-10-13
+
 A dashboard for a factory that has been running for weeks: lists that open on what needs a person
 and page through the rest, addresses for every view, pages that keep themselves current, a chain
 drawn against the clock, spend day by day, and a tab title that says when something is waiting.
@@ -1605,7 +1607,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.12.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.13.0...HEAD
+[1.13.0]: https://github.com/KotkaZ/layover-project/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/KotkaZ/layover-project/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/KotkaZ/layover-project/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/KotkaZ/layover-project/compare/v1.9.0...v1.10.0
