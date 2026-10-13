@@ -41,7 +41,7 @@ Point any OpenAPI tool at the file to get a client, a mock server or rendered do
 | `GET` | `/runs` | `status`, `itinerary_id`, `agent`, `pipeline`, `window`, `limit` | Runs, live and historical. Runs alive now come first, as `running`, read from the Tower's live records — history holds a run only once it is over. Each says the `model`, `reasoning_effort` and `context` it ran with, `null` for what its command line did not set and for runs recorded before Layover kept them, and its chain's `chain_name`. |
 | `GET` | `/runs/{run_id}` | | One run, including how it ended. |
 | `GET` | `/runs/{run_id}/report` | | What that agent wrote about its own run. |
-| `GET` | `/costs` | `window`, `pipeline` | What the factory has spent, and how much of it is measured. Each total's `confidence` is the weakest `CostSource` in it — `reported`, `copilot_credits`, `rate_card` or `unreported` — and `credit_runs` counts the runs priced from Copilot AI credits, which `measured_share` counts as measured. |
+| `GET` | `/costs` | `window`, `pipeline` | What the factory has spent, and how much of it is measured. Each total's `confidence` is the weakest `CostSource` in it — `reported`, `copilot_credits`, `rate_card` or `unreported` — and `credit_runs` counts the runs priced from Copilot AI credits, which `measured_share` counts as measured. `by_day` is the same totals per calendar day in `day_zone` (the Tower's), every day the window touches including empty ones, adding up to `total`. |
 | `GET` | `/help` | `agent`, `pipeline`, `blocker`, `open`, `window` | Help requests agents have raised. |
 | `POST` | `/help/resolve` | | Mark help requests as dealt with. |
 | `POST` | `/help/reply` | | Answer a run's help requests and continue the work. See below. |

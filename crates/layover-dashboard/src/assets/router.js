@@ -6,7 +6,8 @@
 // `#chain=<id>`, which links written before this still use.
 //
 // Uses app.js's `$`, `scope` and `showView`, and chain.js's `chainView`, `openChain` and
-// `chainInAddress`.
+// `chainInAddress`. A view that keeps state outside its controls — the Cost tab's window — adds
+// itself to `routeExtras`.
 
 /// Each view's filters: the address key, and the control it is read from and written to. A
 /// control's `data-default` is what it says when the address says nothing.

@@ -2229,7 +2229,7 @@ components:
     CostReport:
       type: object
       description: Where the factory's money went.
-      required: [span, total, by_agent, by_model, by_pipeline, reserve]
+      required: [span, total, by_agent, by_model, by_pipeline, by_day, reserve]
       properties:
         span:
           $ref: "#/components/schemas/WindowSpan"
@@ -2257,9 +2257,37 @@ components:
             cost" once an agent belongs to more than one workflow, and most of them do.
           items:
             $ref: "#/components/schemas/CostBucket"
+        by_day:
+          type: array
+          description: |
+            Spend per day, oldest first: every day the window touches, including those on which
+            nothing ran, since a chart that left the quiet days out would draw a busier factory
+            than there was. Days are reckoned in `day_zone`. The first and the last may be
+            partial — a rolling window starts and ends mid-day — and the totals over the days add
+            up to `total`.
+          items:
+            $ref: "#/components/schemas/CostDay"
+        day_zone:
+          type: [string, "null"]
+          description: |
+            The IANA zone the days of `by_day` begin and end in: the Tower's. Null when that zone
+            has no name.
         reserve:
           $ref: "#/components/schemas/ReserveState"
           description: The factory-wide ceiling and what is left of it.
+
+    CostDay:
+      type: object
+      description: One day's spend.
+      required: [day, summary]
+      properties:
+        day:
+          type: string
+          format: date
+          description: The day, as a calendar date in the report's `day_zone`.
+        summary:
+          $ref: "#/components/schemas/CostSummary"
+          description: Totals for the runs that finished on it.
 
     GroundStop:
       type: object

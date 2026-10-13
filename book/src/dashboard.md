@@ -594,7 +594,19 @@ did work is how a factory whose runner prints no cost comes to look free; `layov
 which runner it is and what to add to its command.
 
 The weakest source wins. A figure that is 90% measured is still not measured, and saying so is the
-entire point of tracking where a number came from.
+entire point of tracking where a number came from. The page says once, under the cards, what a `+`
+means whenever one is showing.
+
+Click a card to look at that window; its address keeps it, `#cost?window=last_7d`. Below the
+Reserve, for any window longer than a couple of days, **Day by day** draws a bar per day — the
+days nothing ran on included, so a gap reads as a gap — with the peak and the daily average. Days
+begin and end at midnight where the Tower is, and the page names the zone. A day with a run that
+reported nothing has a dashed top, because its bar is a floor; the first and last days of a rolling
+window are partial, and today's bar is lighter for being unfinished.
+
+Beside **By workflow**, **Most expensive chains** names the ten pieces of work that cost the most
+in the window — one level below the agent, so "the reviewer is expensive" becomes "this review of
+this PR was". Click one to open it.
 
 ### The Reserve
 
@@ -611,6 +623,11 @@ it is not narrowed.
 
 A factory whose `[reserve] fuel_usd` is `0` has no ceiling, and the meter is hidden rather than
 drawn empty. One that writes no `[reserve]` at all has the default, $100 in any rolling 24 hours.
+
+Under the meter is its **pace**: the last three hours' spend, as it would be over the Reserve's
+whole window — `At the pace of the last 3 hours — $36.41 — a full 24h would spend about $291.31,
+3% of the cap.` A factory spending faster than the cap allows is told roughly when it would run
+out. Read from every workflow's runs, as the Reserve is.
 
 The meter is the same figure the Tower checks before every run. When it is full, new runs are
 refused and their chains show as `halted`, with the reason and the time the window frees room — see

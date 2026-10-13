@@ -9,6 +9,8 @@
 //! what it is.
 
 use jiff::Timestamp;
+use jiff::civil::Date;
+use jiff::tz::TimeZone;
 use std::collections::BTreeMap;
 
 use super::{CostSource, RunCost, TokenUsage};
@@ -180,6 +182,22 @@ impl Ledger {
         grouped
     }
 
+    /// Totals per calendar day in `zone`: the day each run finished on there.
+    ///
+    /// Only days something was recorded on appear. A chart wants the empty days too, and filling
+    /// them in needs the period being charted, which a ledger does not know.
+    #[must_use]
+    pub fn by_day(&self, zone: &TimeZone) -> BTreeMap<Date, Summary> {
+        let mut grouped: BTreeMap<Date, Summary> = BTreeMap::new();
+        for cost in &self.entries {
+            grouped
+                .entry(cost.at.to_zoned(zone.clone()).date())
+                .or_default()
+                .add(cost);
+        }
+        grouped
+    }
+
     /// The agents that cost the most, most expensive first.
     #[must_use]
     pub fn top_agents(&self, limit: usize) -> Vec<(AgentName, Summary)> {
@@ -264,6 +282,28 @@ mod tests {
 
         assert!((by_model["claude-opus-5"].usd - 6.00).abs() < 1e-9);
         assert!((by_model["codex-mini"].usd - 1.50).abs() < 1e-9);
+    }
+
+    #[test]
+    fn spend_breaks_down_by_the_day_it_was_spent_on_where_the_tower_is() {
+        // Half past eleven at night in UTC is already the next day an hour east of it, and a
+        // daily chart is read by somebody whose day that is.
+        let zone = TimeZone::fixed(jiff::tz::offset(1));
+        let morning: Timestamp = "2026-03-01T08:00:00Z".parse().expect("instant");
+        let late: Timestamp = "2026-03-01T23:30:00Z".parse().expect("instant");
+        let mut ledger = Ledger::new();
+        ledger.record(reported("analyst", "claude-opus-5", 1.00).at(morning));
+        ledger.record(reported("coder", "claude-opus-5", 2.00).at(late));
+        ledger.record(reported("tester", "codex-mini", 0.50).at(late));
+
+        let days = ledger.by_day(&zone);
+
+        assert_eq!(days.len(), 2, "{days:?}");
+        let first = &days[&jiff::civil::date(2026, 3, 1)];
+        let second = &days[&jiff::civil::date(2026, 3, 2)];
+        assert_eq!((first.runs, second.runs), (1, 2));
+        assert!((first.usd - 1.00).abs() < 1e-9);
+        assert!((second.usd - 2.50).abs() < 1e-9);
     }
 
     #[test]

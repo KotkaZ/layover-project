@@ -356,7 +356,13 @@ impl Api for Dashboard {
                 .with_detail(error.to_string())
         })?;
 
-        Ok(report(&span, &ledger, &reserve_ledger, config.as_ref()))
+        Ok(report(
+            &span,
+            &ledger,
+            &reserve_ledger,
+            config.as_ref(),
+            self.0.history.zone(),
+        ))
     }
 
     async fn list_help(&self, query: ListHelpQuery) -> Result<HelpList, Problem> {
@@ -936,6 +942,7 @@ fn report(
     ledger: &Ledger,
     reserve_ledger: &Ledger,
     config: Option<&Config>,
+    zone: &jiff::tz::TimeZone,
 ) -> CostReport {
     let reserve = config.map(|config| &config.reserve);
     let reserve_spent = reserve_ledger.total().usd;
@@ -959,6 +966,8 @@ fn report(
                 .map(|(name, summary)| (name.to_string(), summary))
                 .collect(),
         ),
+        by_day: view::days(span, ledger, zone),
+        day_zone: zone.iana_name().map(ToOwned::to_owned),
         reserve: ReserveState {
             cap_usd: reserve
                 .map(|reserve| reserve.fuel_usd)

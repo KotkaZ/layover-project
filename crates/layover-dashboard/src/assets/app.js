@@ -18,9 +18,6 @@ const WINDOWS = [
   ["all_time", "All time"],
 ];
 
-// The windows worth a headline figure. Not all of them: seven numbers is a wall, and these four
-// are the ones that answer "is today unusual" and "where is the month going".
-const HEADLINES = ["today", "last_7d", "last_30d", "month_to_date"];
 
 async function get(path) {
   const response = await fetch(path, { headers: { accept: "application/json" } });
@@ -197,123 +194,6 @@ async function toggleGroundStop() {
   }
 }
 
-function costCard(window, label, report, selected) {
-  const card = el("div", `card${selected ? " selected" : ""}`);
-  const button = el("button");
-  button.append(el("span", "k", label), el("span", "v", spend(report.total)));
-
-  const [tone, note] = provenance(report.total);
-  if (note) button.append(el("span", `n ${tone}`, note));
-
-  button.addEventListener("click", () => loadCost(window));
-  card.append(button);
-  return card;
-}
-
-function costRows(table, buckets) {
-  const body = table.querySelector("tbody");
-  body.replaceChildren();
-
-  if (buckets.length === 0) {
-    const row = el("tr");
-    row.append(el("td", "empty", "Nothing recorded."));
-    body.append(row);
-    return;
-  }
-
-  for (const bucket of buckets) {
-    const row = el("tr");
-    const [tone] = provenance(bucket.summary);
-    row.append(
-      el("td", "", bucket.name),
-      el("td", "num", `${bucket.summary.runs}`),
-      el("td", `num ${tone}`, spend(bucket.summary)),
-    );
-    body.append(row);
-  }
-}
-
-/// Draws the Reserve: the factory's own spending ceiling over its own rolling window.
-///
-/// Deliberately outside the window cards and outside the workflow scope. The cards answer "what
-/// did this cost"; the Reserve answers "what may still be spent", over hours it chose rather than
-/// the period being browsed, across every workflow rather than the selected one. Drawing it
-/// alongside figures that narrow would invite reading it as though it narrowed too.
-function showReserve(reserve) {
-  const host = $("#reserve");
-  if (!reserve || reserve.cap_usd === null || reserve.cap_usd === undefined) {
-    // No cap configured means unlimited, and a meter with no ceiling is a decoration.
-    host.hidden = true;
-    return;
-  }
-
-  const spent = reserve.spent_usd;
-  const cap = reserve.cap_usd;
-  const share = cap > 0 ? Math.min(spent / cap, 1) : 0;
-
-  $("#reserve-what").textContent =
-    `the whole factory, rolling ${reserve.window_hours}h \u2014 not narrowed by workflow`;
-  const fill = $("#reserve-fill");
-  fill.style.width = `${(share * 100).toFixed(1)}%`;
-  fill.className = reserve.exhausted ? "bad" : share > 0.8 ? "warn" : "";
-
-  $("#reserve-detail").textContent = reserve.exhausted
-    ? `${money(spent)} of ${money(cap)} spent. Exhausted \u2014 new work is refused until the window rolls forward.`
-    : `${money(spent)} of ${money(cap)} spent, ${money(reserve.remaining_usd ?? 0)} left before work is refused.`;
-
-  host.hidden = false;
-}
-
-async function loadCost(selected = "last_30d") {
-  const cards = $("#cost-cards");
-  const caveat = $("#cost-caveat");
-  const note = $("#cost-scope");
-
-  try {
-    const reports = await Promise.all(
-      HEADLINES.map(async (window) => [
-        window,
-        await get(`/costs?${scoped(new URLSearchParams({ window }))}`),
-      ]),
-    );
-
-    cards.replaceChildren();
-    for (const [window, report] of reports) {
-      const label = WINDOWS.find(([slug]) => slug === window)[1];
-      cards.append(costCard(window, label, report, window === selected));
-    }
-
-    const detail = reports.find(([window]) => window === selected)?.[1]
-      ?? (await get(`/costs?${scoped(new URLSearchParams({ window: selected }))}`));
-
-    costRows($("#cost-agents"), detail.by_agent);
-    costRows($("#cost-models"), detail.by_model);
-    costRows($("#cost-pipelines"), detail.by_pipeline);
-
-    // The Reserve caps the factory, not a workflow. Narrowing the page must not quietly change
-    // what the Reserve is comparing, so it is drawn separately and says which it is showing.
-    showReserve(detail.reserve);
-    note.textContent = scope()
-      ? `Totals and breakdowns are for ${scope()}.`
-      : "";
-    note.hidden = !scope();
-
-    const notes = [];
-    if (detail.span.calendar && detail.span.zone) {
-      notes.push(`"${detail.span.label}" begins at midnight in ${detail.span.zone}.`);
-    }
-    if (detail.span.truncated) {
-      notes.push("This window reaches past the 90 days kept, so the total is a lower bound.");
-    }
-    caveat.textContent = notes.join(" ");
-    caveat.hidden = notes.length === 0;
-  } catch (error) {
-    cards.replaceChildren(el("p", "empty", `Could not read costs: ${error.message}`));
-    caveat.hidden = true;
-    note.hidden = true;
-  }
-}
-
 // ── Triggering ───────────────────────────────────────────────────────────────
 //
 // The dashboard is otherwise read-only. This one control writes, and what it writes is a *queued*
@@ -402,36 +282,6 @@ async function openReport(runId, run) {
       "An agent writes a report when it finishes. This run either has not, or predates reports.";
     $("#report-artifacts").replaceChildren();
     $("#report").showModal();
-  }
-}
-
-// Marks every open request from one run as dealt with.
-async function resolveHelp(runId, button) {
-  button.disabled = true;
-  try {
-    await send("/help/resolve", "POST", { run_id: runId, window: "last_90d" });
-    loadJournal();
-    loadHelpBadge();
-  } catch (error) {
-    button.disabled = false;
-    alert(`Could not resolve it: ${error.message}`);
-  }
-}
-
-// Settles a learning either way. Rejecting is confirmed because it takes something out of every
-// future run; keeping is not, because it only stops something already in use from lapsing.
-async function judge(id, state, button) {
-  if (state === "rejected" && !confirm("Drop this learning? Future runs will stop seeing it.")) {
-    return;
-  }
-
-  button.disabled = true;
-  try {
-    await send(`/learnings/${encodeURIComponent(id)}`, "PATCH", { state });
-    loadJournal();
-  } catch (error) {
-    button.disabled = false;
-    alert(`Could not change it: ${error.message}`);
   }
 }
 

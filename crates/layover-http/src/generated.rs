@@ -118,17 +118,36 @@ pub struct CostBucket {
     pub summary: CostSummary,
 }
 
+/// One day's spend.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CostDay {
+    /// The day, as a calendar date in the report's `day_zone`.
+    pub day: String,
+    /// Totals for the runs that finished on it.
+    pub summary: CostSummary,
+}
+
 /// Where the factory's money went.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CostReport {
     /// Spend per agent, most expensive first.
     pub by_agent: Vec<CostBucket>,
+    /// Spend per day, oldest first: every day the window touches, including those on which
+    /// nothing ran, since a chart that left the quiet days out would draw a busier factory
+    /// than there was. Days are reckoned in `day_zone`. The first and the last may be
+    /// partial — a rolling window starts and ends mid-day — and the totals over the days add
+    /// up to `total`.
+    pub by_day: Vec<CostDay>,
     /// Spend per model, most expensive first. Runs with no reported model are omitted.
     pub by_model: Vec<CostBucket>,
     /// Spend per workflow, most expensive first. The breakdown a factory with several
     /// pipelines actually needs: per-agent totals cannot answer "what does the nightly sweep
     /// cost" once an agent belongs to more than one workflow, and most of them do.
     pub by_pipeline: Vec<CostBucket>,
+    /// The IANA zone the days of `by_day` begin and end in: the Tower's. Null when that zone
+    /// has no name.
+    #[serde(default)]
+    pub day_zone: Option<String>,
     /// The factory-wide ceiling and what is left of it.
     pub reserve: ReserveState,
     /// The period these totals cover, including the zone it was reckoned in and whether it

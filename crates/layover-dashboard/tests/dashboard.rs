@@ -274,7 +274,8 @@ async fn the_page_and_its_assets_are_served_from_the_binary() {
     for (path, needle) in [
         ("/", "<title>Layover</title>"),
         ("/style.css", ".routemap"),
-        ("/app.js", "async function loadCost"),
+        ("/app.js", "function showView"),
+        ("/cost.js", "async function loadCost"),
         ("/sessions.js", "class Terminal"),
         ("/reply.js", "async function submitReply"),
         ("/chain.js", "async function openChain"),

@@ -39,6 +39,8 @@ const SCRIPTS: &[(&str, &str)] = &[
     ("/switch.js", include_str!("assets/switch.js")),
     // The route map: a card per workflow, kept current.
     ("/map.js", include_str!("assets/map.js")),
+    // Cost: the windows, day by day, the breakdowns and the Reserve.
+    ("/cost.js", include_str!("assets/cost.js")),
     // Addresses for every view and its filters.
     ("/router.js", include_str!("assets/router.js")),
     // The list of chains: filtered, searched and paged.
@@ -47,7 +49,7 @@ const SCRIPTS: &[(&str, &str)] = &[
     ("/runs.js", include_str!("assets/runs.js")),
     // Help requests and learnings.
     ("/journal.js", include_str!("assets/journal.js")),
-    // The shared helpers, cost, and starting everything.
+    // The shared helpers, and starting everything.
     ("/app.js", include_str!("assets/app.js")),
 ];
 

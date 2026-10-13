@@ -16,8 +16,8 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt as _;
 use layover_http::{
-    Access, Agent, AgentList, Api, Blocker, CancelFlightPath, CostBucket, CostReport, CostSource,
-    CostSummary, CostWindow, EventStream, FlightAccepted, GetCostsQuery, GetGraphQuery,
+    Access, Agent, AgentList, Api, Blocker, CancelFlightPath, CostBucket, CostDay, CostReport,
+    CostSource, CostSummary, CostWindow, EventStream, FlightAccepted, GetCostsQuery, GetGraphQuery,
     GetItineraryPath, GetReportPath, GetRunPath, GetUpcomingQuery, GroundStop, Health, HelpList,
     HelpReplied, HelpReplyRequest, HelpRequest, HelpResolved, Impact, Itinerary, ItineraryDetail,
     ItineraryList, ItineraryState, JudgeLearningPath, JudgeLearningRequest, Learning, LearningList,
@@ -211,8 +211,13 @@ impl Api for Stub {
             }],
             by_pipeline: vec![CostBucket {
                 name: "development".to_owned(),
+                summary: measured.clone(),
+            }],
+            by_day: vec![CostDay {
+                day: "2026-09-16".to_owned(),
                 summary: measured,
             }],
+            day_zone: Some("Europe/Tallinn".to_owned()),
             reserve: ReserveState {
                 cap_usd: Some(120.0),
                 spent_usd: 6.0,

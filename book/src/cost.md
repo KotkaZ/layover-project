@@ -135,7 +135,8 @@ smaller total. Zero credits beside premium requests is silence, not a free run.
 > and `timeout_sec` were what held. Now both bind. A Copilot factory whose `fuel_usd` was set
 > without looking will find chains cut short, and one without a `[reserve]` table gets the default
 > of $100 in any rolling 24 hours — which at Opus prices is a handful of long runs. Size both from
-> what a run actually costs; the dashboard's cost view shows it per agent and per workflow.
+> what a run actually costs; the dashboard's cost view shows it per agent, per workflow, per chain
+> and per day, and how fast the Reserve is going.
 
 `layover doctor` reports the share of runs that measured nothing — a Copilot run priced from its
 credits is not one of them — and raises it to a warning once a quarter of runs are silent. It says

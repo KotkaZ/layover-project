@@ -4,18 +4,19 @@
 //! added to the specification produces a compile error here rather than a silently absent value
 //! somewhere in a handler.
 
+use jiff::tz::TimeZone;
 use layover_core::agent::Access as CoreAccess;
 use layover_core::config::Config;
-use layover_core::cost::{CostSource as CoreSource, Span, Summary, Window};
+use layover_core::cost::{CostSource as CoreSource, Ledger, Span, Summary, Window};
 use layover_core::model::ModelChoice;
 use layover_core::pipeline::{Schedule, Trigger as CoreTrigger};
 use layover_core::route::Join as CoreJoin;
 use layover_core::run::{Outcome, RunRecord};
 use layover_http::{
-    Access, Agent, AgentList, Blocker, CostSource, CostSummary, CostWindow, Flag, FlagValue,
-    HelpRequest, Impact, Join, Learning, LearningState, PendingFlight, Pipeline, PipelineAgent,
-    PipelineList, Report, Route, Run, RunStatus, TokenUsage, Trigger, TriggerKind, WindowSpan,
-    Workspace,
+    Access, Agent, AgentList, Blocker, CostDay, CostSource, CostSummary, CostWindow, Flag,
+    FlagValue, HelpRequest, Impact, Join, Learning, LearningState, PendingFlight, Pipeline,
+    PipelineAgent, PipelineList, Report, Route, Run, RunStatus, TokenUsage, Trigger, TriggerKind,
+    WindowSpan, Workspace,
 };
 
 /// Describes the factory's agents and the edges between them.
@@ -234,6 +235,34 @@ pub fn summary(summary: &Summary) -> CostSummary {
         confidence: source(summary.confidence()),
         measured_share: summary.measured_share(),
     }
+}
+
+/// More days than retention keeps, so a chart is never cut short; a bound all the same, since an
+/// open window over a ledger with a stray ancient entry would otherwise draw years.
+const MOST_DAYS: i64 = 400;
+
+/// Spend per day over `span`, oldest first: every day it touches in `zone`, including the days
+/// nothing ran on.
+pub fn days(span: &Span, ledger: &Ledger, zone: &TimeZone) -> Vec<CostDay> {
+    let spent = ledger.by_day(zone);
+    let last = span.end.to_zoned(zone.clone()).date();
+    // An open start begins on the oldest day anything was spent, or today when nothing was.
+    let first = span.start.map_or_else(
+        || spent.keys().next().copied().unwrap_or(last),
+        |start| start.to_zoned(zone.clone()).date(),
+    );
+
+    let mut days = Vec::new();
+    let mut day = first.max(last.saturating_sub(jiff::Span::new().days(MOST_DAYS - 1)));
+    while day <= last {
+        days.push(CostDay {
+            day: day.to_string(),
+            summary: summary(&spent.get(&day).cloned().unwrap_or_default()),
+        });
+        let Ok(next) = day.tomorrow() else { break };
+        day = next;
+    }
+    days
 }
 
 /// Describes a resolved window, including how it was reckoned.
