@@ -49,6 +49,8 @@ const SCRIPTS: &[(&str, &str)] = &[
     ("/runs.js", include_str!("assets/runs.js")),
     // Help requests and learnings.
     ("/journal.js", include_str!("assets/journal.js")),
+    // What needs a person, in the title and as notifications.
+    ("/attention.js", include_str!("assets/attention.js")),
     // The shared helpers, and starting everything.
     ("/app.js", include_str!("assets/app.js")),
 ];

@@ -150,6 +150,7 @@ async function loadChains() {
     const waiting = $("#awaiting-badge");
     waiting.textContent = String(awaiting);
     waiting.hidden = awaiting === 0;
+    noteAttention({ stalled, awaiting });
   } catch (error) {
     $("#chains-table tbody").replaceChildren();
     $("#chains-table").hidden = true;

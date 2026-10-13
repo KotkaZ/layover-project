@@ -251,6 +251,10 @@ tr:last-child td { border-bottom: 0; }
 /* The kill switch sits in the header rather than behind a tab, because the moment you want it is
    the moment you do not want to go looking for it. */
 header #trigger-open { margin-left: auto; }
+/* Off until somebody asks for notifications; on, it reads as pressed. */
+header .bell { padding: 4px 8px; filter: grayscale(1); opacity: 0.6; }
+header .bell[aria-pressed="true"] { filter: none; opacity: 1; }
+header .bell[hidden] { display: none; }
 .stop {
   font: inherit;
   font-size: 13px;

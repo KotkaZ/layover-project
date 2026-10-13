@@ -287,6 +287,7 @@ async fn the_page_and_its_assets_are_served_from_the_binary() {
         ("/chains.js", "async function loadChains"),
         ("/runs.js", "async function loadRuns"),
         ("/journal.js", "async function loadJournal"),
+        ("/attention.js", "function noteAttention"),
     ] {
         let (status, body) = call(factory.router(), path).await;
         assert_eq!(status, StatusCode::OK, "{path}");

@@ -225,6 +225,20 @@ The read-only half needs no Tower at all. History outlives the process that wrot
 dashboard answers for a factory that is not currently running — which is exactly when you most
 want to know what it did. `layover serve --watch-only` serves that half alone.
 
+## Knowing when it needs you
+
+A factory runs unattended, so the page is usually in a background tab when an agent stops to ask
+something. The badges on the tabs only help somebody already looking. So the tab's **title** counts
+what needs a person — open help requests and stalled chains, `(3) Layover` — where it can be seen
+from the tab strip; a chain waiting for you is already counted, since what it waits on is an open
+help request. The counts are kept current every thirty seconds whichever tab is showing.
+
+The bell (🔔) beside the Ground Stop asks the browser to **notify** you when a chain starts waiting
+for you, a chain stalls, or an agent asks for help. It is off until you turn it on, and the browser
+asks first; turning it on is remembered in this browser. Clicking a notification opens what it is
+about. Browsers only notify from a secure page, which `http://127.0.0.1` is and a dashboard reached
+over plain HTTP from another machine is not — there the bell does not appear.
+
 ## Answering an agent
 
 An agent that cannot get past something raises a **help request** rather than guessing. Those are

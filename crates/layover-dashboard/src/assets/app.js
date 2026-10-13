@@ -295,6 +295,7 @@ async function loadHelpBadge() {
     );
     badge.textContent = `${open}`;
     badge.hidden = open === 0;
+    noteAttention({ help: open, helpScope: scope() });
   } catch {
     badge.hidden = true;
   }
@@ -388,6 +389,7 @@ function start() {
   startReplies();
   startChains();
   startUpcoming();
+  startAttention();
   // Back to a tab left in the background, it is brought up to date at once rather than at the
   // next tick.
   document.addEventListener("visibilitychange", () => {
