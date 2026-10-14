@@ -33,12 +33,12 @@ Point any OpenAPI tool at the file to get a client, a mock server or rendered do
 | `DELETE` | `/pipelines/{pipeline_name}/switch-off` | | Switch it back on. Its schedule fires at its next tick, and a trigger it held starts. |
 | `GET` | `/graph` | `pipeline` | The route map as a rendered diagram, optionally for one workflow — drawn over the routes that workflow's chains may use. An agent with several runs alive at once — the workflow triggered twice — carries a count such as `×2`. |
 | `POST` | `/flights` | | **Queue** work. The Tower starts it within seconds. Answers with the new chain's `itinerary_id`. A `409` while a Ground Stop is engaged, or when the pipeline is switched off. |
-| `GET` | `/flights` | | What is queued and waiting, each with its chain's `name`, and `held` when it opens a chain of a switched-off workflow. |
+| `GET` | `/flights` | | What is queued and waiting, each with its chain's `name`, and `held` when it opens a chain of a switched-off workflow. Each says which `attempt` at its work it is, and a restart after the model service failed carries `not_before`, when its back-off ends. |
 | `DELETE` | `/flights/{flight_id}` | | Cancel queued work. Only what has not started. |
 | `GET` | `/upcoming` | `hours` | What will start on its own. See below. |
-| `GET` | `/itineraries` | `window`, `state` | Chains of work, and whether each finished, stalled or is waiting for a person (`awaiting_human`). Each carries its `name`, its `flags`, `waiting_for` when it waits, the chains it `continues` or is `continued_by`, and where a working chain is: the agents `running` in it and those it has work `queued` for. A chain is listed from the moment its first flight is queued, with no runs yet. |
+| `GET` | `/itineraries` | `window`, `state` | Chains of work, and whether each finished, stalled, `failed` — ended on a run that failed, with nothing after it — or is waiting for a person (`awaiting_human`), with a count of each of the three. Each carries its `name`, its `flags`, `waiting_for` when it waits, the chains it `continues` or is `continued_by`, and where a working chain is: the agents `running` in it and those it has work `queued` for. A chain is listed from the moment its first flight is queued, with no runs yet. |
 | `GET` | `/itineraries/{itinerary_id}` | | One chain, whole. See below. |
-| `GET` | `/runs` | `status`, `itinerary_id`, `agent`, `pipeline`, `window`, `limit` | Runs, live and historical. Runs alive now come first, as `running`, read from the Tower's live records — history holds a run only once it is over. Each says the `model`, `reasoning_effort` and `context` it ran with, `null` for what its command line did not set and for runs recorded before Layover kept them, and its chain's `chain_name`. |
+| `GET` | `/runs` | `status`, `itinerary_id`, `agent`, `pipeline`, `window`, `limit` | Runs, live and historical. Runs alive now come first, as `running`, read from the Tower's live records — history holds a run only once it is over. Each says the `model`, `reasoning_effort` and `context` it ran with, `null` for what its command line did not set and for runs recorded before Layover kept them, and its chain's `chain_name`. A failed run the model service ended carries `cause: provider_error` and the provider's `request_id`. |
 | `GET` | `/runs/{run_id}` | | One run, including how it ended. |
 | `GET` | `/runs/{run_id}/report` | | What that agent wrote about its own run. |
 | `GET` | `/costs` | `window`, `pipeline` | What the factory has spent, and how much of it is measured. Each total's `confidence` is the weakest `CostSource` in it — `reported`, `copilot_credits`, `rate_card` or `unreported` — and `credit_runs` counts the runs priced from Copilot AI credits, which `measured_share` counts as measured. `by_day` is the same totals per calendar day in `day_zone` (the Tower's), every day the window touches including empty ones, adding up to `total`. |
@@ -237,6 +237,12 @@ ignore the colour.
 
 **`interrupted` means the run was alive when the Tower went away.** It is recoverable, and
 [recovery](./recovery.md) starts a *new* run rather than resuming this one.
+
+**A run the model service ended is `failed`, with `cause: provider_error`.** It did not succeed, and
+saying so with its own status would hide that the work is unfinished. The cause is what says the
+failure was the service's rather than the run's, and why it is
+[restarted](./recovery.md#when-the-model-service-fails) where a run that failed its own work is not.
+`cause` is absent for every other run, so a client that does not know it reads `failed` as before.
 
 There is deliberately no `stalled`. Stalling is something an **itinerary** does when it parks at a
 barrier that can no longer be satisfied; a run either finishes or does not. That state is real and

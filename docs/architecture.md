@@ -145,6 +145,7 @@ fuel_usd    = 5.00
 max_runs    = 64
 timeout     = "15m"       # one run's wall-clock limit; durations read "30s", "15m", "4h", "2d"
 max_concurrent_runs = 4   # runs alive at once, factory-wide; the rest wait in the queue
+max_recovery_attempts = 2 # restarts per piece of work: after the Tower went away, or the model service failed
 
 # ── How to invoke each supported CLI ───────────────────────────────
 # A runner is a CLI and a permission set. `cli` has Layover supply what an unattended run of a CLI
@@ -161,6 +162,9 @@ args = ["--deny-tool=shell(git push)"]
 [runners.codex]
 command = ["codex", "exec", "--json", "-c", "model_reasoning_effort={effort}", "{args}", "{mcp}", "-"]
 mcp     = { flag = "-c", format = "codex_toml" }
+# A failed run whose last model call the service rejected is restarted like an interrupted one.
+# Layover reads that from Copilot CLI's events; it has no reader for Codex's or Claude Code's yet,
+# so a runner for either may declare the events in `provider_errors` (or `read = "none"` to opt out).
 
 # ── What the whole factory may spend, and how Copilot is priced ────
 [reserve]

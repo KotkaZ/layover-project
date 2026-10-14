@@ -132,6 +132,10 @@ pub struct Runner {
     /// it replaces the preset's.
     #[serde(default)]
     pub mcp: Option<McpWiring>,
+    /// How this runner's output tells a run the model service ended from one that failed its own
+    /// work. Copilot CLI's is read without being asked for; see [`Runner::provider_reading`].
+    #[serde(default)]
+    pub provider_errors: Option<crate::provider::ProviderErrors>,
 }
 
 impl Runner {
@@ -185,6 +189,30 @@ impl Runner {
         match self.cli {
             Some(cli) => cli.template(&self.args),
             None => self.command.clone(),
+        }
+    }
+
+    /// How a failed run's output is read for a model-service failure.
+    ///
+    /// What the runner declares, when it declares anything. Otherwise Copilot CLI — the `copilot`
+    /// preset, or a command that runs it by name, as the cost reading finds it — is read with
+    /// Layover's reader for its JSON events, and anything else is not read at all: Layover has no
+    /// reader yet for Claude Code or Codex, and guessing at one would restart runs that failed for
+    /// their own reasons.
+    #[must_use]
+    pub fn provider_reading(&self) -> crate::provider::Reading<'_> {
+        use crate::provider::{Reader, Reading};
+
+        match &self.provider_errors {
+            Some(declared) => match declared.read {
+                Some(Reader::Copilot) => Reading::Copilot,
+                Some(Reader::None) => Reading::Nothing,
+                None => Reading::Declared(declared),
+            },
+            None => match crate::cost::reporting::Cli::of(&self.template()) {
+                Some(crate::cost::reporting::Cli::Copilot) => Reading::Copilot,
+                _ => Reading::Nothing,
+            },
         }
     }
 

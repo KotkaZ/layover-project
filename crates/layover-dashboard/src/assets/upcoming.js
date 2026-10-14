@@ -125,9 +125,16 @@ function showQueue(queue) {
       workflow.textContent = `${flight.pipeline} · held`;
       workflow.title = `${flight.pipeline} is switched off, so this waits, and starts once it is switched back on`;
     }
+    // A restart after the model service failed waits out its back-off, and says until when.
+    const queued = el("td", "when", when(flight.queued_at));
+    if (flight.not_before && new Date(flight.not_before) > new Date()) {
+      queued.textContent = `restarts ${clockTime(flight.not_before)}`;
+      queued.classList.add("warn");
+      queued.title = `Attempt ${flight.attempt}, after the model service failed. It waits until ${new Date(flight.not_before).toLocaleString()}, because such failures come in clusters.`;
+    }
     row.append(
       el("td", "num", `${all.indexOf(flight) + 1}`),
-      el("td", "when", when(flight.queued_at)),
+      queued,
       el("td", "", flight.to),
       workflow,
       chain,
@@ -146,9 +153,11 @@ function showQueue(queue) {
     : "Nothing in this process starts queued work — it is watching only — so it waits for a Tower (`layover serve`) or `layover run`.";
   const hidden = all.length - mine.length;
   const held = mine.filter((flight) => flight.held).length;
+  const backing = mine.filter((flight) => flight.not_before && new Date(flight.not_before) > new Date()).length;
   $("#queue-note").textContent =
     `${running} ${starter}` +
     (held > 0 ? ` ${held} held: their workflow is switched off, so they start once it is switched back on.` : "") +
+    (backing > 0 ? ` ${backing} restarting after the model service failed, each once its wait is over.` : "") +
     (hidden > 0 ? ` ${hidden} more queued for other workflows, or for chains already under way.` : "");
 
   $("#queue-table").hidden = mine.length === 0;

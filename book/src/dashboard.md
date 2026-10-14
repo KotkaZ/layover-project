@@ -134,7 +134,9 @@ happen, over the next 6 hours to 7 days:
 
 - **Waiting for a slot** — work already queued, first in first out, with its position, the agent it
   goes to, its chain and the first line of its prompt, and **Cancel** for each. Above it,
-  `2 of 4 run(s) alive` and what starts the queue.
+  `2 of 4 run(s) alive` and what starts the queue. A restart after the model service failed waits
+  out its back-off here, and says when it starts — `restarts 14:05` — rather than when it was
+  queued.
 - **Scheduled** — every tick of every workflow with a schedule, grouped by day: when, how long
   until, and what it does — `starts analyst`, or for a resuming workflow `picks up 1 layover`. A
   run of ticks of one workflow with nothing to say about them is folded into one row
@@ -229,12 +231,12 @@ want to know what it did. `layover serve --watch-only` serves that half alone.
 
 A factory runs unattended, so the page is usually in a background tab when an agent stops to ask
 something. The badges on the tabs only help somebody already looking. So the tab's **title** counts
-what needs a person — open help requests and stalled chains, `(3) Layover` — where it can be seen
-from the tab strip; a chain waiting for you is already counted, since what it waits on is an open
-help request. The counts are kept current every thirty seconds whichever tab is showing.
+what needs a person — open help requests, and stalled and failed chains, `(3) Layover` — where it
+can be seen from the tab strip; a chain waiting for you is already counted, since what it waits on
+is an open help request. The counts are kept current every thirty seconds whichever tab is showing.
 
 The bell (🔔) beside the Ground Stop asks the browser to **notify** you when a chain starts waiting
-for you, a chain stalls, or an agent asks for help. It is off until you turn it on, and the browser
+for you, a chain stalls or fails, or an agent asks for help. It is off until you turn it on, and the browser
 asks first; turning it on is remembered in this browser. Clicking a notification opens what it is
 about. Browsers only notify from a secure page, which `http://127.0.0.1` is and a dashboard reached
 over plain HTTP from another machine is not — there the bell does not appear.
@@ -293,6 +295,7 @@ it is listed by its name, above its workflow.
 | `finished` | It ran and stopped, and nothing is outstanding |
 | `stalled` | It stopped and nothing will ever happen again |
 | `waiting for you` | Its last run stopped to ask you something, and nothing will run until you answer (`awaiting_human`) |
+| `failed` | Its last run failed, timed out or was interrupted, and nothing is queued or running after it |
 | `halted` | A Ground Stop caught it, or the Reserve refused to start its run |
 
 **`waiting for you` looks finished too.** Every run in it ended cleanly and nothing is queued —
@@ -300,6 +303,22 @@ because its last run filed a fatal help request and stopped. It has a **Reply…
 amber count on the tab — the only button a row in the list carries, because it is the only thing
 there that needs a person. Resolving the request without replying makes it `finished`; replying makes
 it `finished`, continued by the chain the reply started.
+
+**`failed` is a chain that simply stopped.** The run that would have sent the work on did not
+finish — its tests failed, the model service dropped it and it was not restarted, it ran out of
+time — so nothing is queued, nothing is stalled at a barrier, and no rail refused anything. It used
+to read as `finished`, which is how three chains once sat dead overnight until somebody asked why a
+pull request never appeared. Its detail says which run ended it and why:
+
+```text
+`wolf` failed, and nothing came after it: exited with code 1: the model service failed (http_400):
+… ; not restarted: this agent's `recovery` policy is `manual`; a human decides
+```
+
+"Last" is the run that finished last, so a fan-out branch that failed while another went on to the
+end does not make the chain `failed`. A chain whose run the model service ended and whose restart
+is waiting out its back-off is `working`, and says so. A chain somebody has [continued](#chains) —
+**Continue…** on its page — has been dealt with and is `finished`.
 
 **Continue…**, on a chain's own page and in a run's report, opens the trigger window with that
 workflow chosen and its flags set as that chain had them, saying where they came from. Change them
@@ -330,7 +349,9 @@ row; the `›` at its end says so — to see it whole.
 
 A factory with a few schedules starts hundreds of chains a week, almost all of them routine work
 that finished. So the list **opens on what needs attention** — `working`, `waiting for you`,
-`stalled` and `halted` — and says how many it is not showing: `864 chain(s) · 3 need attention`.
+`stalled`, `failed` and `halted` — and says how many it is not showing: `864 chain(s) · 3 need
+attention · 1 failed`. The red count on the tab is the stalled and failed chains together: the ones
+nothing will move again by itself.
 When nothing does, it says so, with a link to show every chain.
 
 | Filter | Narrows to |
@@ -553,6 +574,17 @@ kept effort and context have neither.
 | `timed_out` | Hit `timeout_sec` and was killed |
 | `halted` | A rail refused it: Hops, Fuel, the run cap or the Reserve |
 | `interrupted` | Alive when the Tower went away — see [Recovery](./recovery.md) |
+
+A failure that was not the run's own says whose it was. A run the model service ended — its last
+call rejected or never answered, and nothing after it — is `failed` **· model service**, never
+`succeeded`; `GET /runs` gives it `cause: provider_error` and the provider's `request_id`, and its
+detail says what the service said and whether it is being
+[restarted](./recovery.md#when-the-model-service-fails):
+
+```text
+exited with code 1: the model service failed (http_400): Execution failed: 400 internal server
+error (Request ID: 00000-7a12…); restarting as attempt 2 after a 1-minute wait
+```
 
 `halted` is deliberately not coloured like a crash. A rail stopping work is the system doing its
 job, and colouring it red teaches people to ignore red.

@@ -69,6 +69,8 @@ fn sample_run() -> Run {
         cost_usd: None,
         cost_source: CostSource::Unreported,
         detail: Some("the Tower went away mid-run".to_owned()),
+        cause: None,
+        request_id: None,
         blocked_on: None,
         hops_remaining: Some(21),
         flags: None,
@@ -330,6 +332,7 @@ impl Api for Stub {
             }],
             stalled: 1,
             awaiting_human: 0,
+            failed: 0,
         })
     }
 
@@ -367,6 +370,8 @@ impl Api for Stub {
                 body: "work item 1543477".to_owned(),
                 flags: None,
                 queued_at: "2026-09-17T10:00:00Z".to_owned(),
+                not_before: Some("2026-09-17T10:01:00Z".to_owned()),
+                attempt: 2,
             }],
             dispatched_by: None,
             alive_runs: 0,

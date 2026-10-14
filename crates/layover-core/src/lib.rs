@@ -17,6 +17,7 @@
 //! - [cost] — the ledger, rate cards and the factory-wide Fuel Reserve
 //! - [itinerary] — Hops, Fuel and the deterministic run cap
 //! - [`barrier`] — rendezvous joins, including reset and reachability-based abandonment
+//! - [`provider`] — telling a run the model service ended from one that failed its own work
 //!
 //! See `docs/architecture.md` and `docs/routing.md` in the repository for the design these
 //! types implement.
@@ -42,6 +43,7 @@ pub mod model;
 pub mod payload;
 pub mod pipeline;
 pub mod prompt;
+pub mod provider;
 pub mod queue;
 pub mod report;
 pub mod route;
@@ -79,7 +81,7 @@ pub use pipeline::{
 pub use prompt::{PromptDir, PromptError, PromptMap, PromptSource};
 pub use report::Report;
 pub use route::{Join, Mode, Route};
-pub use run::{Outcome, RunRecord};
+pub use run::{FailureCause, Outcome, RunRecord};
 pub use scope::{ChainScope, RouteMap};
 pub use skip::{Skip, SkipReason};
 pub use stall::Stall;

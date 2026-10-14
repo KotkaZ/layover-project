@@ -53,6 +53,10 @@ keep_lapsed = "7d"
 # `args` say only what every agent here is *denied*. What one agent is denied beyond that is in its
 # own `args`, and what a workflow adds is in `[pipelines.<name>.agents.<agent>]`. Nothing an agent
 # or workflow adds can take away what this says.
+#
+# A run the model service ends -- its last call rejected, nothing after it -- is restarted after a
+# minute, up to `max_recovery_attempts`, where its agent's `recovery` allows it; an agent below with
+# `recovery = "manual"` -- one whose work must not happen twice -- waits for a person instead.
 [runners.copilot]
 cli  = "copilot"
 args = ["--disable-builtin-mcps", "--deny-tool=shell(gh:*)", "--deny-tool=shell(copilot:*)",

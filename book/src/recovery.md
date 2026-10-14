@@ -1,7 +1,8 @@
 # Recovery and steering
 
-A run can stop before it finishes — the machine restarts, or Layover is shut down while a child
-process is still working. And a run going the wrong way sometimes needs a human to redirect it.
+A run can stop before it finishes — the machine restarts, Layover is shut down while a child
+process is still working, or the model service rejects a call and the CLI gives up. And a run going
+the wrong way sometimes needs a human to redirect it.
 
 Both are handled the same way: **Layover starts a new run and hands it what the old one had.**
 Nothing is resumed, and no process is kept alive to be talked to.
@@ -64,11 +65,13 @@ looks like resilience.
 max_recovery_attempts = 2   # 0 disables automatic recovery entirely
 ```
 
-Restarting is refused when:
+Attempts are counted per piece of work, across every restart of it for whatever reason, and carried
+on the queued flight so a Tower that restarts in the middle cannot forget them. Restarting is
+refused when:
 
 | | |
 |---|---|
-| A **Ground Stop** caused the interruption | A factory that restarts through its own kill switch is not one anybody can stop |
+| A **Ground Stop** caused the interruption, or is engaged when it is decided | A factory that restarts through its own kill switch is not one anybody can stop |
 | The attempt limit is reached | See above |
 | The agent's policy says not to | See below |
 
@@ -97,6 +100,96 @@ agent to check before repeating a side effect**, and `recovery` lets you stop th
 for the steps where checking is not good enough.
 
 The reference factory sets `recovery = "manual"` on its publisher, and nothing else.
+
+## When the model service fails
+
+A Copilot run can finish a 35-minute verification matrix and then die on its next model call: the
+service answers `400 internal server error`, Copilot CLI does not retry a 400, and the process exits
+1. The work did not fail — it was interrupted — so Layover treats it like a run the Tower went away
+from:
+
+1. **It tells the two apart from the CLI's events.** A failed run is a *provider error* when the
+   last thing its CLI reported was a model call the service rejected or never answered, and nothing
+   after it shows the run carried on. For Copilot CLI that is a `model.call_final_result` whose
+   `result` is not `success` (`http_400`, `http_503`, `transport_error`, …), a `session.error` whose
+   `errorType` is `query`, or both — with no tool started and no call succeeding after them.
+   Bookkeeping after the error (`session.usage_checkpoint`, `assistant.idle`, a background task's
+   output) does not count as carrying on.
+2. **It records the run as `failed`**, never `succeeded`, with `cause: provider_error`, the
+   provider's request id, and a detail saying what the service said and what happens next:
+
+   ```text
+   exited with code 1: the model service failed (http_400): Execution failed: 400 internal server
+   error (Request ID: 00000-7a12…); restarting as attempt 2 after a 1-minute wait
+   ```
+
+3. **It applies the agent's `recovery` policy and `max_recovery_attempts`**, exactly as for an
+   interruption: `automatic` restarts it, `manual` records it and waits for a person, `never` leaves
+   it. A Ground Stop engaged when the run ended forbids the restart.
+4. **The restart waits**: a minute before the first, five before the second, fifteen after that. A
+   provider fault often comes in a cluster, and restarting into it would spend an attempt on
+   nothing. The wait is kept on the queued flight, so a Tower restarted meanwhile still waits, and
+   [Upcoming](./dashboard.md#what-starts-next) says when it starts. `layover run` waits for it too.
+5. **The restart is an ordinary run** on the same flight, in the same chain: Hops, Fuel, `max_runs`
+   and the Reserve all apply, and a Ground Stop holds it. It is told the model service failed, and
+   that everything the earlier run did before that may have taken effect:
+
+```text
+## You are continuing interrupted work
+
+A previous run (run_01M4X…) started this work and did not finish: the model service failed mid-run
+(request 00000-7a12…). This is attempt 2.
+
+It was not the work that failed: a call to the model service was rejected or never answered, and
+the run ended there. Everything it did before that — commands it ran, files it changed, commits,
+comments, messages it sent — may well have taken effect.
+
+You are a new process and remember none of it. Before repeating anything that changes the world
+…
+```
+
+**Only a provider error is restarted.** A run that failed its own work — a test that failed, a
+command its runner denied, an exit for any reason the CLI's events do not attribute to the service —
+would fail the same way again, so it is recorded and left; see [why](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md).
+A run that outlived `timeout_sec` is `timed_out`, never a provider error.
+
+**It is read from events, never from text.** Only the top-level fields of each JSON event the CLI
+prints are looked at. An agent quoting an error — a tool result holding a log that says
+`session.error`, a message explaining a 400 — is a string inside another event and never matches,
+which a pattern over the output would.
+
+### Which runners are read
+
+| Runner | Read for provider errors |
+|---|---|
+| `cli = "copilot"`, or a `command` that runs Copilot CLI by name with `--output-format json` | Yes, as above |
+| `cli = "claude"`, a Claude Code or Codex `command` | Not yet: Layover has no reader for their events, and guessing would restart runs that failed for their own reasons |
+| Anything else | Only if the runner declares how |
+
+A runner says otherwise with `provider_errors`. `read = "copilot"` reads a wrapper that runs Copilot
+CLI under another name; `read = "none"` turns the reading off; and a runner for a CLI Layover has no
+reader for declares the events itself:
+
+```toml
+[runners.mine]
+command = ["my-cli", "--json"]
+
+[runners.mine.provider_errors]
+failed     = [{ type = "error", error.kind = "provider" }]  # the service failed a call
+carried_on = [{ type = "tool_call" }, { type = "message" }] # the run went on after one
+request_id = "error.request_id"                             # where the provider's id is
+```
+
+Each entry is the fields an event must have, with these values; a table matches the object at that
+field the same way. A failed run is the service's when the last event matching `failed` comes after
+the last matching `carried_on`. See [Configuration](./configuration.md#telling-the-model-services-failure-from-the-runs).
+
+**On by default.** An agent's `recovery` already says whether repeating its work is safe, and it
+defaults to `automatic`, so a factory that never mentioned recovery now restarts a run the service
+dropped — up to `max_recovery_attempts`, which defaults to `2`. To keep a factory's earlier
+behaviour, set `max_recovery_attempts = 0` (which also stops restarts after a Tower restart), give
+the agents whose work must not repeat `recovery = "manual"`, or set `provider_errors = { read =
+"none" }` on a runner.
 
 ## After a restart
 
@@ -133,7 +226,15 @@ which the operating system releases however the Tower ends, and every run's reco
 A chain's Fuel and run count live in the Tower's memory, so a chain continuing after a restart
 starts from its configured budget again — less what the interrupted run spent.
 
+## A chain that ends on a failure
+
+Whatever the cause, a chain whose last run failed, timed out or was interrupted — with nothing queued
+or running after it, and nobody having continued it — is `failed` on the dashboard: in the Chains
+list's *needs attention*, in the count on the tab and in the page's title, and in the bell's
+notifications. It used to read as `finished`. Restarting a provider error removes the most common
+cause; this is what makes the rest visible. See [Chains](./dashboard.md#chains).
+
 ## Status
 
-Recovery after a restart is built on everything above. Steering has its handover, and nothing yet
-that lets a person send one.
+Recovery after a restart and after a model-service failure is built on everything above. Steering
+has its handover, and nothing yet that lets a person send one.

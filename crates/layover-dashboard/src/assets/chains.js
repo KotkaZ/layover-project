@@ -5,15 +5,15 @@
 //
 // A real factory starts hundreds a week, almost all of them a schedule's routine work that
 // finished, so the list opens on what needs a person — working, waiting for an answer, stalled,
-// halted — and is searched and paged in the page rather than drawn whole: 830 rows is a page
+// failed, halted — and is searched and paged in the page rather than drawn whole: 830 rows is a page
 // nobody reads to the bottom of.
 //
 // Uses app.js's helpers (`get`, `el`, `$`, `money`, `whenCell`, `workflowCell`, `STATES`,
 // `scope`, `pipelinesByName`) and chain.js's and reply.js's `openChain` and `openReplyFor`.
 
-const chainsView = { all: [], shown: 0, stalled: 0, awaiting: 0 };
+const chainsView = { all: [], shown: 0, stalled: 0, awaiting: 0, failed: 0 };
 const CHAINS_PAGE = 50;
-const ATTENTION = new Set(["working", "awaiting_human", "stalled", "halted"]);
+const ATTENTION = new Set(["working", "awaiting_human", "stalled", "failed", "halted"]);
 
 /// A chain's state, and for one that is working, where it is.
 function chainState(chain) {
@@ -98,6 +98,7 @@ function showChains(more = false) {
   const parts = [`${total} chain(s)`];
   if (attention) parts.push(`${attention} need attention`);
   if (chainsView.stalled) parts.push(`${chainsView.stalled} stalled`);
+  if (chainsView.failed) parts.push(`${chainsView.failed} failed`);
   if (chainsView.awaiting) parts.push(`${chainsView.awaiting} waiting for you`);
   if (shown.length !== total) parts.push(`${shown.length} shown`);
   $("#chains-count").textContent = total === 0 ? "Nothing ran in this window." : parts.join(" · ");
@@ -134,23 +135,34 @@ async function loadChains() {
   const params = new URLSearchParams({ window: $("#chains-window").value });
 
   try {
-    const { itineraries, stalled, awaiting_human: awaiting } = await get(`/itineraries?${params}`);
+    const {
+      itineraries,
+      stalled,
+      awaiting_human: awaiting,
+      failed,
+    } = await get(`/itineraries?${params}`);
     chainsView.all = itineraries;
     chainsView.stalled = stalled;
     chainsView.awaiting = awaiting;
+    chainsView.failed = failed;
     // A refresh keeps however many pages somebody had opened, so they do not lose their place.
     const pages = Math.max(1, Math.ceil(chainsView.shown / CHAINS_PAGE));
     showChains();
     for (let page = 1; page < pages; page += 1) showChains(true);
     updated("#chains-updated");
 
+    // Red for the chains nothing will move again by itself: stalled at a barrier, or ended on a
+    // run that failed.
     const badge = $("#stalled-badge");
-    badge.textContent = String(stalled);
-    badge.hidden = stalled === 0;
+    badge.textContent = String(stalled + failed);
+    badge.hidden = stalled + failed === 0;
+    badge.title = [stalled && `${stalled} stalled`, failed && `${failed} ended on a failed run`]
+      .filter(Boolean)
+      .join(", ");
     const waiting = $("#awaiting-badge");
     waiting.textContent = String(awaiting);
     waiting.hidden = awaiting === 0;
-    noteAttention({ stalled, awaiting });
+    noteAttention({ stalled, awaiting, failed });
   } catch (error) {
     $("#chains-table tbody").replaceChildren();
     $("#chains-table").hidden = true;

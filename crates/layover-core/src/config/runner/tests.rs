@@ -549,3 +549,61 @@ fn an_agents_args_go_where_a_command_says_or_at_the_end() {
         "no args, no trace"
     );
 }
+
+#[test]
+fn copilot_is_read_for_provider_errors_whichever_way_its_runner_is_written() {
+    use crate::provider::Reading;
+
+    assert_eq!(
+        preset(r#"cli = "copilot""#).provider_reading(),
+        Reading::Copilot
+    );
+    assert_eq!(
+        runner(&["cmd", "/c", "copilot.cmd", "--output-format", "json"]).provider_reading(),
+        Reading::Copilot,
+        "a command that runs Copilot CLI by name is read like the preset"
+    );
+    assert_eq!(
+        preset(r#"cli = "claude""#).provider_reading(),
+        Reading::Nothing,
+        "no reader for Claude Code yet"
+    );
+    assert_eq!(
+        runner(&["python", "stand-in.py"]).provider_reading(),
+        Reading::Nothing
+    );
+}
+
+#[test]
+fn a_runner_can_name_a_reader_turn_reading_off_or_declare_its_events() {
+    use crate::provider::Reading;
+
+    let wrapped = preset(
+        r#"command = ["node", "wrapper.mjs"]
+provider_errors = { read = "copilot" }"#,
+    );
+    let quiet = preset(
+        r#"cli = "copilot"
+provider_errors = { read = "none" }"#,
+    );
+    let declared = preset(
+        r#"command = ["my-cli", "--json"]
+[provider_errors]
+failed = [{ type = "error", error.kind = "provider" }]
+carried_on = [{ type = "tool_call" }]"#,
+    );
+
+    assert_eq!(wrapped.provider_reading(), Reading::Copilot);
+    assert_eq!(quiet.provider_reading(), Reading::Nothing);
+    assert!(
+        matches!(declared.provider_reading(), Reading::Declared(errors) if errors.failed.len() == 1)
+    );
+    assert!(
+        toml::from_str::<Runner>(
+            r#"cli = "copilot"
+provider_errors = { read = "claude" }"#
+        )
+        .is_err(),
+        "a reader Layover does not have is refused, not ignored"
+    );
+}

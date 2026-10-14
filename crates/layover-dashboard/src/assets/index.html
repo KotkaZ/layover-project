@@ -68,6 +68,7 @@
           <option value="working">working</option>
           <option value="finished">finished</option>
           <option value="stalled">stalled</option>
+          <option value="failed">failed</option>
           <option value="awaiting_human">waiting for you</option>
           <option value="halted">halted</option>
         </select>
@@ -82,7 +83,8 @@
       A chain is everything one trigger caused, and the budget it shares. <b>Stalled</b> is the one
       worth looking for: every run in it succeeded and nothing will ever happen again, so a list of
       runs cannot show it. <b>Waiting for you</b> looks finished too: its last run stopped to ask
-      you something, and nothing will run until you <b>Reply</b>. The list opens on what needs
+      you something, and nothing will run until you <b>Reply</b>. <b>Failed</b> ended on a run that
+      failed, and nothing will carry its work on. The list opens on what needs
       attention; click a chain to see it whole, and to continue it.
     </p>
     <table id="chains-table">

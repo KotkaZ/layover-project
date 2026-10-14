@@ -68,6 +68,8 @@ pub(crate) struct Ticket<'a> {
     pub sent_by: Option<Vec<AgentName>>,
     /// What the run's command line was built with, so its record says what it ran on.
     pub selection: layover_core::config::Selection,
+    /// The work as it was queued, which a restart after a model-service failure starts again.
+    pub queued: Option<Queued>,
 }
 
 /// A run whose process is alive.
@@ -128,6 +130,12 @@ impl Waiting {
             }
             self.waiting.push_back(queued);
         }
+    }
+
+    /// Whether a flight is waiting only for its time: a restart backing off after the model
+    /// service failed, which starts by itself once it is due.
+    fn backing_off(&self, now: Timestamp) -> bool {
+        self.waiting.iter().any(|queued| !queued.is_due(now))
     }
 
     fn take(&mut self, index: usize) -> Option<Queued> {
@@ -315,8 +323,20 @@ impl Factory {
                 }
 
                 if flying == 0 {
-                    if stopping || dry {
+                    if stopping {
                         break;
+                    }
+                    if dry {
+                        // Nothing can start now. A restart backing off is waited for — still
+                        // looking for new work, and for a Ground Stop — rather than left queued
+                        // until something else happens to run.
+                        if !queue.backing_off(Timestamp::now()) {
+                            break;
+                        }
+                        std::thread::sleep(POLL);
+                        queue.merge(refill(&done));
+                        done.clear();
+                        continue;
                     }
                     queue.merge(refill(&done));
                     done.clear();
@@ -375,7 +395,8 @@ impl Factory {
     /// Starts every waiting flight that fits, in order, and says how many runs it started.
     ///
     /// A way into a workflow in `off` waits where it is, as a flight for a full agent does: it is
-    /// still asked for, and starts once the workflow is switched back on.
+    /// still asked for, and starts once the workflow is switched back on. So does a restart that is
+    /// not due yet.
     #[allow(clippy::too_many_arguments)]
     fn start_what_fits<'scope, 'env>(
         &'env self,
@@ -388,12 +409,14 @@ impl Factory {
         off: &BTreeSet<PipelineName>,
     ) -> usize {
         let limit = self.config.defaults.max_concurrent_runs.max(1);
+        let now = Timestamp::now();
         let mut started = 0;
         let mut index = 0;
 
         while index < queue.waiting.len() && self.alive_runs() < limit {
             let waiting = &queue.waiting[index];
-            if self.agent_is_full(&waiting.flight.to)
+            if !waiting.is_due(now)
+                || self.agent_is_full(&waiting.flight.to)
                 || waiting
                     .way_in()
                     .is_some_and(|pipeline| off.contains(pipeline))

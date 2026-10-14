@@ -8,6 +8,47 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+A run the model service ended is restarted like an interrupted one, and a chain that ends on a
+failed run no longer reads as finished.
+
+**Compatibility.** Additive for `layover.toml`: every factory that loaded under 1.13 loads unchanged,
+and the one new key, a runner's `provider_errors`, is optional. What an existing factory will notice:
+- **A Copilot run the model service ended is restarted**, after a minute, where its agent's
+  `recovery` is `automatic` — the default — up to `max_recovery_attempts` (default `2`). It is on by
+  default because `recovery` already says whether an agent's work is safe to repeat. To keep the old
+  behaviour, set `max_recovery_attempts = 0`, `recovery = "manual"` on an agent, or
+  `provider_errors = { read = "none" }` on a runner. No other failed run is restarted.
+- **Chains that ended on a failed, timed-out or interrupted run show as `failed`**, in Chains'
+  *needs attention*, the tab's count, the page title and notifications — including ones that ended
+  that way before this release, within the window shown.
+- **`layover run` waits** for a restart that is backing off rather than stopping with it queued.
+- **The HTTP API**: `ItineraryState` gains `failed` and `ItineraryList` a `failed` count; a run gains
+  `cause` and `request_id`; a queued flight gains `attempt` and `not_before`. A client that treats
+  the chain state as a closed set should expect the new value.
+- **Run records** in `runs-*.jsonl` gain `cause` and `request_id`, absent from older records.
+- **Going back to 1.13 or earlier**: a restart this release queued, or one alive when the Tower
+  stopped, is not understood by them and would be dropped. Let it start, or cancel it, first.
+
+### Added
+
+- **A run the model service ended is told apart from one that failed its own work.** Copilot CLI's
+  events are read: a failed run is a *provider error* when its last model call came back with a
+  `result` other than `success` (`http_400`, `transport_error`, …) or a `session.error` of type
+  `query`, and no tool started and no call succeeded after it. Only top-level event fields are read,
+  so an agent quoting an error never counts. The run stays `failed`, with `cause: provider_error`,
+  the provider's request id, and a detail saying what the service said.
+- **Such a run is restarted like an interrupted one**: the agent's `recovery` policy and
+  `max_recovery_attempts`, counted per piece of work, a Ground Stop forbidding it, and every rail
+  applying to the restart. It waits a minute before the first restart, five before the second and
+  fifteen after that, and is told the model service failed and that the earlier run's tools may have
+  acted. Upcoming says when it starts.
+- **`provider_errors` on a runner**: `read = "copilot"` for Copilot CLI under another name,
+  `read = "none"` to turn it off, or the events that say the service failed (`failed`) and that the
+  run carried on (`carried_on`), for a CLI Layover has no reader for. Claude Code and Codex have
+  none yet. `validate` refuses a declaration that cannot decide or matches every event.
+- **The `failed` chain state**, for a chain whose last run failed, timed out or was interrupted with
+  nothing queued or running after it and nobody having continued it.
+
 ## [1.13.0] — 2026-10-13
 
 A dashboard for a factory that has been running for weeks: lists that open on what needs a person

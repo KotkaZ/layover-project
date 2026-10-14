@@ -13,8 +13,8 @@ use layover_core::pipeline::{Schedule, Trigger as CoreTrigger};
 use layover_core::route::Join as CoreJoin;
 use layover_core::run::{Outcome, RunRecord};
 use layover_http::{
-    Access, Agent, AgentList, Blocker, CostDay, CostSource, CostSummary, CostWindow, Flag,
-    FlagValue, HelpRequest, Impact, Join, Learning, LearningState, PendingFlight, Pipeline,
+    Access, Agent, AgentList, Blocker, CostDay, CostSource, CostSummary, CostWindow, FailureCause,
+    Flag, FlagValue, HelpRequest, Impact, Join, Learning, LearningState, PendingFlight, Pipeline,
     PipelineAgent, PipelineList, Report, Route, Run, RunStatus, TokenUsage, Trigger, TriggerKind,
     WindowSpan, Workspace,
 };
@@ -186,6 +186,10 @@ pub fn run(record: &RunRecord) -> Run {
         cost_usd: (record.source != CoreSource::Unreported).then_some(record.usd),
         cost_source: source(record.source),
         detail: record.detail.clone(),
+        cause: record.cause.map(|cause| match cause {
+            layover_core::run::FailureCause::ProviderError => FailureCause::ProviderError,
+        }),
+        request_id: record.request_id.clone(),
         blocked_on: record.blocked_on.clone(),
         hops_remaining: None,
         flags: (!record.flags.is_empty()).then(|| record.flags.clone()),
@@ -420,6 +424,8 @@ pub fn pending(queued: &layover_core::queue::Queued, off: &crate::switch::Off) -
                 .collect(),
         ),
         queued_at: flight.sent_at.to_string(),
+        not_before: queued.not_before.map(|at| at.to_string()),
+        attempt: i32::try_from(queued.attempt()).unwrap_or(i32::MAX),
     }
 }
 

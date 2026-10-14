@@ -223,6 +223,8 @@ impl Factory {
             },
             exit_code: None,
             detail: Some(detail),
+            cause: None,
+            request_id: None,
             blocked_on: None,
             pid: None,
             flags: live

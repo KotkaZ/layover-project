@@ -35,6 +35,8 @@ fn run(
         usage: TokenUsage::default(),
         exit_code: None,
         detail: None,
+        cause: None,
+        request_id: None,
         blocked_on: None,
         pid: None,
         queued_at: None,
@@ -274,4 +276,131 @@ fn the_most_recently_started_chain_comes_first() {
     let built = itineraries(&records, Context::default());
 
     assert_eq!(built[0].itinerary_id, newer.as_str());
+}
+
+/// A run that ended `minutes` after now, rather than one minute after it started.
+fn ended(mut record: RunRecord, minutes: i32) -> RunRecord {
+    record.finished_at = Some(
+        Timestamp::now()
+            .checked_add(minutes.minutes())
+            .expect("in range"),
+    );
+    record
+}
+
+#[test]
+fn a_chain_that_ended_on_a_failed_run_is_failed_and_says_which() {
+    // Three DevForge chains sat dead overnight like this: the run that would have sent the work on
+    // failed, nothing was queued, nothing was stalled or refused, and the chain read as finished.
+    let id = chain();
+    let mut wolf = ended(run(&id, "wolf", Outcome::Failed, 0.30, true), 2);
+    wolf.detail = Some(
+        "exited with code 1: the model service failed (http_400); not restarted: this agent's \
+         `recovery` policy is `manual`; a human decides"
+            .to_owned(),
+    );
+    let records = vec![
+        ended(run(&id, "bob", Outcome::Succeeded, 0.10, true), 1),
+        wolf,
+    ];
+
+    let built = itineraries(&records, Context::default());
+
+    assert_eq!(built[0].state, ItineraryState::Failed);
+    let detail = built[0].detail.as_deref().unwrap_or_default();
+    assert!(
+        detail.starts_with("`wolf` failed, and nothing came after it: exited with code 1"),
+        "{detail}"
+    );
+}
+
+#[test]
+fn a_chain_that_ended_on_a_timeout_or_an_interruption_is_failed_too() {
+    for outcome in [Outcome::TimedOut, Outcome::Interrupted] {
+        let id = chain();
+        let records = vec![run(&id, "wolf", outcome, 0.30, true)];
+
+        let built = itineraries(&records, Context::default());
+
+        assert_eq!(built[0].state, ItineraryState::Failed, "{outcome}");
+        assert!(
+            built[0]
+                .detail
+                .as_deref()
+                .is_some_and(|detail| detail.contains(&outcome.slug().replace('_', " "))),
+            "{:?}",
+            built[0].detail
+        );
+    }
+}
+
+#[test]
+fn a_failed_run_whose_restart_is_queued_is_still_working_and_one_that_recovered_finished() {
+    let id = chain();
+    let failed = ended(run(&id, "wolf", Outcome::Failed, 0.30, true), 1);
+    let pending = vec![queued_for(&id)];
+
+    let waiting = itineraries(
+        std::slice::from_ref(&failed),
+        Context {
+            pending: &pending,
+            ..Context::default()
+        },
+    );
+    assert_eq!(
+        waiting[0].state,
+        ItineraryState::Working,
+        "its restart waits"
+    );
+
+    let recovered = itineraries(
+        &[
+            failed,
+            ended(run(&id, "wolf", Outcome::Succeeded, 0.30, true), 9),
+        ],
+        Context::default(),
+    );
+    assert_eq!(recovered[0].state, ItineraryState::Finished);
+}
+
+#[test]
+fn a_branch_that_failed_while_another_went_on_is_not_where_the_chain_ended() {
+    let id = chain();
+    let records = vec![
+        ended(run(&id, "tester", Outcome::Failed, 0.10, true), 1),
+        ended(run(&id, "reviewer", Outcome::Succeeded, 0.10, true), 5),
+    ];
+
+    let built = itineraries(&records, Context::default());
+
+    assert_eq!(built[0].state, ItineraryState::Finished);
+}
+
+#[test]
+fn a_failed_chain_somebody_continued_has_been_dealt_with() {
+    let id = chain();
+    let mut continuation = run(&chain(), "bob", Outcome::Succeeded, 0.10, true);
+    continuation.continues = Some(id.clone());
+    let records = vec![run(&id, "wolf", Outcome::Failed, 0.30, true), continuation];
+
+    let built = itineraries(&records, Context::default());
+    let earlier = built
+        .iter()
+        .find(|chain| chain.itinerary_id == id.as_str())
+        .expect("listed");
+
+    assert_eq!(earlier.state, ItineraryState::Finished);
+}
+
+#[test]
+fn a_chain_whose_run_was_halted_is_halted_even_when_it_also_failed() {
+    let id = chain();
+    let records = vec![
+        ended(run(&id, "bob", Outcome::Halted, 0.0, true), 1),
+        ended(run(&id, "wolf", Outcome::Failed, 0.30, true), 2),
+    ];
+
+    let built = itineraries(&records, Context::default());
+
+    assert_eq!(built[0].state, ItineraryState::Halted);
 }

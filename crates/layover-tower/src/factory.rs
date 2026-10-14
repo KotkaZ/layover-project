@@ -67,6 +67,8 @@ pub enum Dispatched {
         usd: f64,
         /// Where the figure came from.
         source: CostSource,
+        /// What was done about a run the model service ended: restarted, or why not.
+        restart: Option<String>,
     },
     /// The flight was refused before anything started.
     Refused(Refusal),
@@ -91,6 +93,12 @@ pub enum Dispatched {
 impl std::fmt::Display for Dispatched {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Ran {
+                outcome,
+                usd,
+                restart: Some(restart),
+                ..
+            } => write!(f, "{outcome} ${usd:.2}; {restart}"),
             Self::Ran { outcome, usd, .. } => write!(f, "{outcome} ${usd:.2}"),
             Self::Refused(refusal) => write!(f, "refused: {refusal}"),
             Self::Parked { waiting_for } => {
@@ -444,6 +452,7 @@ impl Factory {
                 queued_at,
                 sent_by,
                 selection,
+                queued: queued.cloned(),
             },
             started,
             token,
@@ -530,6 +539,8 @@ impl Factory {
             usage: TokenUsage::default(),
             exit_code: None,
             detail: Some(why),
+            cause: None,
+            request_id: None,
             blocked_on: None,
             pid: None,
             flags: self.recorded_flags(itinerary.id()),
@@ -565,6 +576,23 @@ impl Factory {
 
         let outcome = outcome_of(ended, finished.succeeded());
 
+        // A failed run is the run's own failure unless its CLI says the model service ended it.
+        // Only that is restarted: a run that failed its own work would fail it again.
+        let provider = (outcome == Outcome::Failed)
+            .then(|| self.provider_failure(&ticket.authorised.runner, &transcript))
+            .flatten();
+        let restart = provider
+            .as_ref()
+            .map(|failure| self.restart_after(ticket, failure));
+        let detail = match (&provider, &restart) {
+            (Some(failure), Some(restart)) => Some(crate::provider::detail(
+                finished.exit_code,
+                failure,
+                restart,
+            )),
+            _ => detail_for(ended, finished.exit_code, &transcript),
+        };
+
         self.record(&RunRecord {
             run: ticket.run.clone(),
             itinerary: ticket.chain.clone(),
@@ -587,7 +615,11 @@ impl Factory {
                 ..TokenUsage::default()
             },
             exit_code: finished.exit_code,
-            detail: detail_for(ended, finished.exit_code, &transcript),
+            detail,
+            cause: provider
+                .as_ref()
+                .map(|_| layover_core::run::FailureCause::ProviderError),
+            request_id: provider.and_then(|failure| failure.request_id),
             blocked_on: self.blocked_on(&ticket.run, ticket.started_at),
             pid: None,
             flags: self.recorded_flags(&ticket.chain),
@@ -598,12 +630,17 @@ impl Factory {
         // Last, because until the outcome is written the run is still unaccounted for. Forgetting
         // it first would lose a run that this process failed to finish recording.
         let _ = self.live.finished(&ticket.run);
+        // Before the run stops counting as alive: a schedule asks whether its workflow is busy by
+        // looking at runs alive and then at the queue, and a restart queued after the run was
+        // forgotten could be in neither, letting a tick start a second wave beside it.
+        let restart = restart.map(|restart| self.queue_restart(restart));
         self.forget(&ticket.run);
 
         Dispatched::Ran {
             outcome,
             usd: reported.usd,
             source: reported.source,
+            restart,
         }
     }
 
@@ -672,6 +709,8 @@ impl Factory {
             usage: TokenUsage::default(),
             exit_code: None,
             detail: Some(why.to_owned()),
+            cause: None,
+            request_id: None,
             blocked_on: None,
             pid: None,
             flags: self.recorded_flags(chain),

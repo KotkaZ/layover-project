@@ -93,6 +93,29 @@ impl std::fmt::Display for Outcome {
     }
 }
 
+/// Why a run that failed failed, when Layover can tell it was not the run's own work.
+///
+/// Only ever beside [`Outcome::Failed`]. A run the model service dropped did not succeed, and saying
+/// so with its own outcome would hide that the work is unfinished; the cause says whose the failure
+/// was, which decides whether the work is started again.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FailureCause {
+    /// The model service failed a call and the run ended there: the request was rejected or never
+    /// answered, and nothing after it shows the run carried on. See [`crate::provider`].
+    ProviderError,
+}
+
+impl FailureCause {
+    /// The identifier used in JSON.
+    #[must_use]
+    pub fn slug(self) -> &'static str {
+        match self {
+            Self::ProviderError => "provider_error",
+        }
+    }
+}
+
 /// One supervised CLI execution, as recorded in history.
 ///
 /// Serialised one per line as JSON. Field names are the wire format: renaming one silently
@@ -161,6 +184,15 @@ pub struct RunRecord {
     /// For a failure, how the process exited and the line of its output most likely to say why.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
+    /// Whose failure a failed run was, when it was not the run's own. Absent for every other run,
+    /// and in records written before causes were kept.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cause: Option<FailureCause>,
+    /// The provider's identifier for the request that failed, for a run whose cause is
+    /// [`FailureCause::ProviderError`] and whose CLI said it — what the provider's support asks
+    /// for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
     /// What the run could not get past, when it asked for help.
     ///
     /// Present whether or not the run succeeded, because the two are independent: an agent can
@@ -229,6 +261,8 @@ impl RunRecord {
             usage: TokenUsage::default(),
             exit_code: None,
             detail: None,
+            cause: None,
+            request_id: None,
             blocked_on: None,
             pid: None,
             flags: BTreeMap::new(),

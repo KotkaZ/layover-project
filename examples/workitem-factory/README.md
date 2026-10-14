@@ -168,6 +168,12 @@ is set to 40 rather than left at the default. The run cap matters more than it l
 deterministic backstop that holds when a runner does not report its cost, and Fuel is the only
 other bound on breadth.
 
+A restart is a run too. Work interrupted by the Tower going away, or ended by the model service
+failing a call, is started again up to `max_recovery_attempts` times — two by default — and each
+restart counts against `max_runs` and draws Fuel like any run. It re-flies the same flight, so it
+spends no extra hop. The nine runs of headroom above 31 are what lets a long chain survive a couple
+of provider faults rather than being cut by the cap that was sized for a clean pass.
+
 ### What validation does and does not catch
 
 `layover validate` warns when an agent sits further from an entry point than `max_hops` can reach,

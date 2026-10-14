@@ -138,7 +138,8 @@ function chainRuns(runs, pending) {
       whenCell(run.started_at),
       el("td", "", run.agent),
       fromCell,
-      el("td", `outcome ${run.status}`, run.status.replace("_", " ")),
+      // runs.js's: a failure the model service caused says so.
+      outcomeCell(run),
       el("td", "num", duration(run.duration_sec)),
       el(
         "td",

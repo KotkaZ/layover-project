@@ -234,6 +234,19 @@ pub enum CostWindow {
     AllTime,
 }
 
+/// Whose failure a failed run was, when it was not the run's own work.
+///
+/// `provider_error`: the model service rejected or dropped a call, and nothing after it shows
+/// the run carried on — read from the CLI's events, never from its text. Such a run is
+/// restarted like one the Tower was interrupted in, where its agent's `recovery` policy
+/// allows; a run that failed its own work never is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FailureCause {
+    /// `provider_error`
+    #[serde(rename = "provider_error")]
+    ProviderError,
+}
+
 /// A boolean parameter a pipeline accepts at trigger time.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Flag {
@@ -493,6 +506,8 @@ pub struct ItineraryDetail {
 pub struct ItineraryList {
     /// How many of them are waiting for a person to answer a help request.
     pub awaiting_human: i32,
+    /// How many of them ended on a run that failed, with nothing after it.
+    pub failed: i32,
     /// Chains, most recently started first.
     pub itineraries: Vec<Itinerary>,
     /// How many of them are stalled. Counted separately so the number can be shown without
@@ -512,6 +527,10 @@ pub struct ItineraryList {
 ///
 /// `halted` is a chain a Ground Stop stopped or holds, or one that has not started because its
 /// workflow is switched off.
+///
+/// `failed` ended on a run that failed, timed out or was interrupted, with nothing queued or
+/// running after it: the work stopped short, and no agent will pick it up. A chain somebody
+/// has continued is not counted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ItineraryState {
     /// `working`
@@ -529,6 +548,9 @@ pub enum ItineraryState {
     /// `awaiting_human`
     #[serde(rename = "awaiting_human")]
     AwaitingHuman,
+    /// `failed`
+    #[serde(rename = "failed")]
+    Failed,
 }
 
 /// The condition under which a rendezvous barrier releases.
@@ -631,6 +653,8 @@ pub enum LearningState {
 /// A flight that has been asked for and not yet dispatched.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PendingFlight {
+    /// Which attempt at its work this is — 1 as asked for, 2 for the first restart.
+    pub attempt: i32,
     /// The prompt the run will be given.
     pub body: String,
     /// The flags set for this run.
@@ -646,6 +670,10 @@ pub struct PendingFlight {
     /// What its chain is called, when the person who triggered it named it.
     #[serde(default)]
     pub name: Option<String>,
+    /// When it may start, for a restart waiting out the back-off after the model service
+    /// failed. Null for everything else, which starts as soon as there is a slot.
+    #[serde(default)]
+    pub not_before: Option<String>,
     /// The pipeline it was triggered through, when one was named.
     #[serde(default)]
     pub pipeline: Option<String>,
@@ -875,6 +903,10 @@ pub struct Run {
     /// blocked run looks exactly like a clean one on a list.
     #[serde(default)]
     pub blocked_on: Option<String>,
+    /// Whose failure a `failed` run was, when it was not the run's own. Absent for every other
+    /// run, and for runs recorded before causes were kept.
+    #[serde(default)]
+    pub cause: Option<FailureCause>,
     /// What the run's chain is called, when the person who triggered it named it. Null for an
     /// unnamed chain and for runs recorded before Layover kept it.
     #[serde(default)]
@@ -891,7 +923,8 @@ pub struct Run {
     /// Why the run ended, for the outcomes where that is not self-evident. For a failure, how
     /// the process exited and the line of its output most likely to say why — picked from the
     /// transcript, redacted and capped — so a run that failed in one second says what it
-    /// said without anybody opening its Hangar.
+    /// said without anybody opening its Hangar. For a run the model service ended, what the
+    /// service said and whether the run was restarted.
     #[serde(default)]
     pub detail: Option<String>,
     /// How long the run took. Null while it is still going, and also null if the clock moved
@@ -927,6 +960,10 @@ pub struct Run {
     /// none, and for runs recorded before Layover kept it.
     #[serde(default)]
     pub reasoning_effort: Option<String>,
+    /// The provider's identifier for the request that failed, for a run whose `cause` is
+    /// `provider_error` and whose CLI said it. What the provider's support asks for.
+    #[serde(default)]
+    pub request_id: Option<String>,
     /// Identifier of this run.
     pub run_id: String,
     /// The agents whose flights started this run — for a released join, every arrival. Empty

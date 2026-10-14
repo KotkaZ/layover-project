@@ -217,6 +217,7 @@ test and doc build, with warnings denied. CI runs the same command, unchanged.
 | **Sessions: every agent's CLI output, live or replayed, read-only in the dashboard** | |
 | **`serve`: the Tower — fires schedules, runs the queue in parallel, hosts MCP, serves the dashboard** | |
 | **Restart recovery: a run the last Tower left is stopped, recorded and restarted** | |
+| **A run the model service ended is told from one that failed its own work, and restarted** | Reading Claude Code's and Codex's events for it |
 | **Schedules: `every` and `cron`, skipping a tick whose previous wave is still going** | |
 | **Upcoming: every scheduled tick, layover and queued flight, in the order it will start** | |
 | **Rendezvous joins: work is parked and its agent wakes once, with every verdict** | |
@@ -225,7 +226,7 @@ test and doc build, with warnings denied. CI runs the same command, unchanged.
 | **The MCP endpoint agents call back into: `layover_send` queues a real flight** | |
 | **Ground Stop, cancelling queued work, settling learnings** | |
 | **Help: answer an agent from the dashboard and the work continues, with its chain's flags** | |
-| **Chains: what one trigger caused, and whether it finished or stalled** | |
+| **Chains: what one trigger caused, and whether it finished, stalled or failed** | |
 | **A versioned state directory: a newer layout is refused, an older one migrated** | |
 | **A token on the API by default, signed build provenance, and an SBOM per release** | |
 | `run`: drains the queue once, for when you want to watch it | |

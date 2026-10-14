@@ -628,6 +628,7 @@ impl Api for Dashboard {
         Ok(ItineraryList {
             stalled: count(ItineraryState::Stalled),
             awaiting_human: count(ItineraryState::AwaitingHuman),
+            failed: count(ItineraryState::Failed),
             itineraries: chains,
         })
     }

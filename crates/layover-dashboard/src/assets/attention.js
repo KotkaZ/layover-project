@@ -16,6 +16,7 @@ const attention = {
   help: null,
   helpScope: "",
   stalled: null,
+  failed: null,
   awaiting: null,
   known: false,
   timer: null,
@@ -39,10 +40,12 @@ function announce(before) {
   const more = (now, was) => Math.max(0, (now ?? 0) - (was ?? 0));
   const waiting = more(attention.awaiting, before.awaiting);
   const stalled = more(attention.stalled, before.stalled);
+  const failed = more(attention.failed, before.failed);
   // Narrowing the page to another workflow changes the help count without anybody asking anything.
   const help = attention.helpScope === before.helpScope ? more(attention.help, before.help) : 0;
   if (waiting) news.push(`${waiting} chain(s) waiting for you`);
   if (stalled) news.push(`${stalled} chain(s) stalled`);
+  if (failed) news.push(`${failed} chain(s) ended on a failed run`);
   if (help) news.push(`${help} new help request(s)`);
   if (news.length === 0 || !notifying()) return;
 
@@ -53,7 +56,7 @@ function announce(before) {
   note.addEventListener("click", () => {
     window.focus();
     // Straight to what it is about: a stopped chain on Chains, a question on Help.
-    if (waiting || stalled) {
+    if (waiting || stalled || failed) {
       $("#chains-state").value = "attention";
       showView("chains");
     } else {
@@ -70,9 +73,10 @@ function noteAttention(counts) {
   if (attention.known) announce(before);
   attention.known = attention.help !== null && attention.stalled !== null;
 
-  // Open help requests, and chains nothing will ever move again. A chain waiting for you is
-  // already counted: what it waits on is an open help request.
-  const count = (attention.help ?? 0) + (attention.stalled ?? 0);
+  // Open help requests, and chains nothing will move again by itself: stalled, or ended on a run
+  // that failed. A chain waiting for you is already counted: what it waits on is an open help
+  // request.
+  const count = (attention.help ?? 0) + (attention.stalled ?? 0) + (attention.failed ?? 0);
   document.title = count > 0 ? `(${count}) Layover` : "Layover";
 }
 
@@ -83,10 +87,10 @@ function showNotifySwitch() {
   const on = notifying();
   button.setAttribute("aria-pressed", String(on));
   button.title = on
-    ? "Notifying you when a chain waits for you, stalls, or an agent asks for help. Click to stop."
+    ? "Notifying you when a chain waits for you, stalls or fails, or an agent asks for help. Click to stop."
     : Notification.permission === "denied"
       ? "Notifications are blocked for this page in the browser's settings."
-      : "Notify me when a chain waits for me, stalls, or an agent asks for help.";
+      : "Notify me when a chain waits for me, stalls or fails, or an agent asks for help.";
 }
 
 async function toggleNotify() {

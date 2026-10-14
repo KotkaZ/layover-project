@@ -169,7 +169,15 @@ layover run --dry-run        # say what would run, start nothing
 
 Drains the queue **once** and stops, running up to `max_concurrent_runs` agents at once. Each flight
 is authorised against the route map and the safety rails, spawned, watched, and written to history;
-agents can call back over MCP, so a chain sent by one run is picked up by the same command.
+agents can call back over MCP, so a chain sent by one run is picked up by the same command. A run
+the model service ended is [restarted](./recovery.md#when-the-model-service-fails) after a short
+wait where its agent allows, and `run` waits for that restart rather than stopping with it queued:
+
+```text
+Ran 2 flight(s):
+  wolf failed $0.03 (measured); the model service failed; restarting as attempt 2 after a 1-minute wait
+  wolf succeeded $0.02 (measured)
+```
 
 Before it reads the queue it settles runs a Tower that went away left behind, as `serve` does —
 except with `--dry-run`, which starts nothing and so stops nothing either.

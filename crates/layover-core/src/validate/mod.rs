@@ -15,6 +15,7 @@ mod overrides;
 mod paths;
 mod pipelines;
 mod prompts;
+mod provider_errors;
 mod reach;
 mod routes;
 mod runners;
@@ -86,6 +87,7 @@ pub fn validate(config: &Config) -> Vec<Diagnostic> {
     agents::check_runners_exist(config, &mut found);
     runners::check_runner_shapes(config, &mut found);
     runners::check_agent_args(config, &mut found);
+    provider_errors::check_provider_errors(config, &mut found);
     overrides::check_pipeline_overrides(config, &mut found);
     agents::check_prompts_are_unambiguous(config, &mut found);
     agents::check_agents_are_described(config, &mut found);

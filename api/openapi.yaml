@@ -1277,7 +1277,18 @@ components:
             Why the run ended, for the outcomes where that is not self-evident. For a failure, how
             the process exited and the line of its output most likely to say why — picked from the
             transcript, redacted and capped — so a run that failed in one second says what it
-            said without anybody opening its Hangar.
+            said without anybody opening its Hangar. For a run the model service ended, what the
+            service said and whether the run was restarted.
+        cause:
+          $ref: "#/components/schemas/FailureCause"
+          description: |
+            Whose failure a `failed` run was, when it was not the run's own. Absent for every other
+            run, and for runs recorded before causes were kept.
+        request_id:
+          type: [string, "null"]
+          description: |
+            The provider's identifier for the request that failed, for a run whose `cause` is
+            `provider_error` and whose CLI said it. What the provider's support asks for.
         blocked_on:
           type: [string, "null"]
           description: |
@@ -1672,7 +1683,7 @@ components:
     PendingFlight:
       type: object
       description: A flight that has been asked for and not yet dispatched.
-      required: [flight_id, itinerary_id, to, body, queued_at, held]
+      required: [flight_id, itinerary_id, to, body, queued_at, held, attempt]
       properties:
         flight_id:
           type: string
@@ -1706,6 +1717,16 @@ components:
           type: string
           format: date-time
           description: When it was asked for.
+        not_before:
+          type: [string, "null"]
+          format: date-time
+          description: |
+            When it may start, for a restart waiting out the back-off after the model service
+            failed. Null for everything else, which starts as soon as there is a slot.
+        attempt:
+          type: integer
+          format: int32
+          description: Which attempt at its work this is — 1 as asked for, 2 for the first restart.
 
     ResolveHelpRequest:
       type: object
@@ -1756,6 +1777,17 @@ components:
           $ref: "#/components/schemas/Judgement"
           description: The verdict.
 
+    FailureCause:
+      type: string
+      description: |
+        Whose failure a failed run was, when it was not the run's own work.
+
+        `provider_error`: the model service rejected or dropped a call, and nothing after it shows
+        the run carried on — read from the CLI's events, never from its text. Such a run is
+        restarted like one the Tower was interrupted in, where its agent's `recovery` policy
+        allows; a run that failed its own work never is.
+      enum: [provider_error]
+
     ItineraryState:
       type: string
       description: |
@@ -1771,7 +1803,11 @@ components:
 
         `halted` is a chain a Ground Stop stopped or holds, or one that has not started because its
         workflow is switched off.
-      enum: [working, finished, stalled, halted, awaiting_human]
+
+        `failed` ended on a run that failed, timed out or was interrupted, with nothing queued or
+        running after it: the work stopped short, and no agent will pick it up. A chain somebody
+        has continued is not counted.
+      enum: [working, finished, stalled, halted, awaiting_human, failed]
 
     HelpAsk:
       type: object
@@ -1898,7 +1934,7 @@ components:
     ItineraryList:
       type: object
       description: Chains of work.
-      required: [itineraries, stalled, awaiting_human]
+      required: [itineraries, stalled, awaiting_human, failed]
       properties:
         itineraries:
           type: array
@@ -1913,6 +1949,9 @@ components:
         awaiting_human:
           type: integer
           description: How many of them are waiting for a person to answer a help request.
+        failed:
+          type: integer
+          description: How many of them ended on a run that failed, with nothing after it.
 
     PendingList:
       type: object

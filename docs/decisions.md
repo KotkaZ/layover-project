@@ -612,6 +612,58 @@ would wait for upstreams whose runs finished before the restart and be given up 
 the live record keeps the one flight carrying every arrival, marked as already released, and a
 restart delivers it straight to its agent.
 
+**Why a run the model service ended is restarted, and no other failed run is.** Karl's factory lost
+three DevForge chains in a day the same way: a run that had done its work — one had passed a
+35-minute verification matrix — made one more model call, the service answered `400 internal server
+error`, Copilot CLI does not retry a 400, and the process exited 1. Recorded as `failed`, it was
+indistinguishable from a run whose tests failed, and nothing restarted it, because recovery covered
+only runs alive when the Tower went away. But the two failures want opposite things. A run that
+failed its *own* work — a test that failed, a command its runner denied — would fail the same way
+again, so restarting it spends money to arrive in the same place, and in a loop between two agents
+it would spend it until a rail cut it off. A run the *service* dropped did not fail its work; its
+work was interrupted, and that is exactly what `recovery` exists to decide about. So a provider error
+is treated as an interruption — the agent's `recovery` policy, `max_recovery_attempts` counted per
+piece of work across every restart of it, a Ground Stop forbidding it, an ordinary run on every rail
+— and every other non-zero exit is left as the failure it is. `first-release.md` records that "a
+crash reuses the recovery policy"; restarting every crash was never built, and this narrows it on
+purpose to the one kind of crash that is not the run's.
+
+**Why a provider error is read from the CLI's events, and from the end.** A pattern over the output
+would match an agent *quoting* an error — a tool result holding a log that says `session.error`, a
+message explaining a 400 — and restart a run because it read about a failure. Only the top-level
+fields of each JSON event are matched, so a quote, which is a string inside another event, never
+does. And the failure has to be the last thing that happened: Copilot CLI recovers from many failed
+calls itself, reports a sub-agent's exhausted retries with the session's own error, and in one real
+run went on — woken by a background task — to finish its work after a 400 and then exit 1 for it.
+So a failure counts only with no tool started and no call succeeding after it. Claude Code and Codex
+have no reader yet, because a guessed one would restart runs that failed for their own reasons; a
+runner can declare the events instead, as fields an event must have rather than a pattern.
+
+**Why the restart waits.** A provider fault often comes in a cluster; restarting into the same
+minute would meet it again and spend an attempt on nothing. A minute before the first restart, five
+before the second, fifteen after that: long enough to step out of a cluster, short enough that a
+night's work is not lost to it. The wait is kept on the queued flight rather than in a timer, so a
+Tower restarted while it waits still waits — and one that comes back after it is due starts it at
+once. A restart after a Tower restart waits for nothing, because what interrupted it is over by the
+time a Tower comes back.
+
+**Why restarting provider errors is on by default.** `recovery` already says, per agent, whether
+doing its work twice is safe, and it defaults to `automatic`; a separate switch for provider errors
+would be a second knob for the same question. A factory that marked its irreversible agents
+`manual` — as the reference factory and Karl's do — is already protected, and one that wants the
+old behaviour has three ways back: `max_recovery_attempts = 0`, `recovery = "manual"` per agent, or
+`provider_errors = { read = "none" }` per runner. The other default — off, until a factory opts in
+— would leave every existing factory losing chains exactly as before, which is the problem.
+
+**Why a chain that ended on a failed run is a state of its own.** Restarting provider errors removes
+the commonest way a chain dies silently, not every way. A run that fails, times out or is
+interrupted and not restarted never sends the flight that would carry its work on, so nothing is
+queued, nothing is stalled at a barrier, nothing was refused — and the chain read as `finished`. So
+`failed` joins `stalled` and `awaiting_human` as a state a list of runs cannot show: the chain's
+last run, by when it finished, ended badly, and nothing came after it. "Last by finish" so that a
+fan-out branch that failed while another went on to the end is not the chain's end. A chain somebody
+continued is `finished`, because a person dealt with it.
+
 **Why history files a run by the day it finished.** The run was written by hand into the segment of
 the day it *started*, while the history reader looks for a run by its finish. An hour-long run that
 crossed midnight landed in a segment its own window never opened, and parallel runs appending by

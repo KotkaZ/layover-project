@@ -841,6 +841,7 @@ pub fn run(path: &Path, dry_run: bool) -> Result<String, Failure> {
                     outcome,
                     usd,
                     source,
+                    restart,
                 } => {
                     // A figure's provenance is part of the figure. "$0.00 unmeasured" and
                     // "$0.00 measured" mean opposite things, and a line that shows only the
@@ -850,7 +851,11 @@ pub fn run(path: &Path, dry_run: bool) -> Result<String, Failure> {
                     } else {
                         "not measured"
                     };
-                    format!("  {} {outcome} ${usd:.2} ({measured})", flight.to)
+                    let then = restart
+                        .as_ref()
+                        .map(|restart| format!("; {restart}"))
+                        .unwrap_or_default();
+                    format!("  {} {outcome} ${usd:.2} ({measured}){then}", flight.to)
                 }
                 other => format!("  {} {other}", flight.to),
             });

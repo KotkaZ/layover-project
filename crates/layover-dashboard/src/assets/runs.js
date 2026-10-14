@@ -29,6 +29,16 @@ function ranOn(run) {
   return cell;
 }
 
+/// How a run ended — and, for a failure that was not the run's own, whose it was.
+function outcomeCell(run) {
+  const cell = el("td", `outcome ${run.status}`, run.status.replace("_", " "));
+  if (run.cause === "provider_error") {
+    cell.append(el("span", "cause", " · model service"));
+    cell.title = `The model service failed a call and the run ended there${run.request_id ? ` (request ${run.request_id})` : ""}. ${run.detail ?? ""}`.trim();
+  }
+  return cell;
+}
+
 function runRow(run) {
   const row = el("tr");
   // A run still going has not finished: say when it started, and that it is still going.
@@ -39,7 +49,7 @@ function runRow(run) {
     el("td", "", run.agent),
     workflowCell(run.pipeline, run.chain_name),
     ranOn(run),
-    el("td", `outcome ${run.status}`, run.status.replace("_", " ")),
+    outcomeCell(run),
     el("td", "num", duration(run.duration_sec)),
     // A run still going has not been billed yet, which is not the same as reporting nothing.
     el(

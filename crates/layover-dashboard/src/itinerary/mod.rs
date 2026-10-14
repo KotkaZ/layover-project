@@ -26,6 +26,14 @@
 //! without a person files a fatal help request and ends its run, so every run in the chain ended
 //! cleanly and nothing is queued — and nothing will run until somebody answers. The open request is
 //! the record that says so.
+//!
+//! # The chain that died
+//!
+//! `failed` is the plainest of the three, and was the easiest to miss. A run fails — its tests, the
+//! model service, its timeout — and so never sends the flight that would have carried the work on.
+//! Nothing is queued, nothing is stalled at a barrier, nothing was refused: the chain simply stops,
+//! and without a state of its own it read as `finished`. So a chain whose last run failed, timed out
+//! or was interrupted, and that nobody has continued, says so.
 
 use std::collections::BTreeMap;
 
@@ -108,14 +116,14 @@ fn not_started(id: &str, queued: &[&Queued], context: Context<'_>) -> Itinerary 
         false,
         Activity::Waiting,
         None,
-        false,
+        Ending::Clean,
         context.ground_stop || held.is_some(),
     );
     let detail = match held {
         Some(pipeline) if !context.ground_stop => Some(format!(
             "`{pipeline}` is switched off; this starts once it is switched back on"
         )),
-        _ => detail_for(state, None, None, &[]),
+        _ => detail_for(state, None, None, &[], None),
     };
     let opened = queued
         .iter()
@@ -213,17 +221,21 @@ fn build(
         Activity::Quiet
     };
 
-    let state = state_of(
-        stall.is_some(),
-        activity,
-        asked,
-        runs.iter().any(|record| record.outcome == Outcome::Halted),
-        ground_stop,
-    );
-
     // Both directions of a reply: the chain this one continues, and every chain that continues
     // it, whether its runs have started yet or it is only the answer on a request.
     let continued_by = continued_by(id, help, everything);
+
+    // A chain somebody has continued has been dealt with, however it ended.
+    let died = ended_on_failure(runs).filter(|_| continued_by.is_empty());
+
+    let ending = if runs.iter().any(|record| record.outcome == Outcome::Halted) {
+        Ending::Halted
+    } else if died.is_some() {
+        Ending::Failed
+    } else {
+        Ending::Clean
+    };
+    let state = state_of(stall.is_some(), activity, asked, ending, ground_stop);
 
     // Named in the order they first ran, which is the order somebody reading the chain thinks
     // about it. Alphabetical would put the publisher before the analyst.
@@ -266,9 +278,12 @@ fn build(
         measured: Some(measured),
         started_at,
         finished_at,
-        detail: detail_for(state, stall, asked, runs).or_else(|| {
-            (!continued_by.is_empty()).then(|| format!("continued as {}", continued_by.join(", ")))
-        }),
+        detail: detail_for(state, stall, asked, runs, died)
+            .or_else(|| backing_off(id, pending))
+            .or_else(|| {
+                (!continued_by.is_empty())
+                    .then(|| format!("continued as {}", continued_by.join(", ")))
+            }),
         waiting_for: asked.map(|request| HelpAsk {
             run_id: request.run.to_string(),
             agent: request.agent.to_string(),
@@ -295,6 +310,33 @@ fn build(
                 .map(|queued| &queued.flight.to),
         ),
     }
+}
+
+/// What a chain waiting only for a restart's back-off is waiting for, so `working` with nothing
+/// running does not read as stuck.
+fn backing_off(id: &str, pending: &[Queued]) -> Option<String> {
+    let now = jiff::Timestamp::now();
+    pending
+        .iter()
+        .filter(|queued| queued.flight.itinerary.as_str() == id && !queued.is_due(now))
+        .map(|queued| {
+            format!(
+                "`{}` restarts after the model service failed — attempt {}, once its wait is over",
+                queued.flight.to,
+                queued.attempt()
+            )
+        })
+        .next()
+}
+
+/// The run a chain ended on, when it ended on one that failed, timed out or was interrupted: the
+/// last to finish, so in a fan-out a branch that died while another went on does not count.
+fn ended_on_failure<'a>(runs: &[&'a RunRecord]) -> Option<&'a RunRecord> {
+    runs.iter()
+        .copied()
+        .filter(|record| record.finished_at.is_some())
+        .max_by_key(|record| (record.finished_at, record.started_at))
+        .filter(|record| record.outcome.is_failure())
 }
 
 /// Every chain that continues `id`: the chains replies to its help requests started, and any run
@@ -336,6 +378,17 @@ enum Activity {
     Quiet,
 }
 
+/// How a chain's runs ended, for a chain where nothing is happening.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Ending {
+    /// Nothing went wrong that the runs can show.
+    Clean,
+    /// A rail refused one of its runs, or a Ground Stop ended one.
+    Halted,
+    /// The run it ended on failed, timed out or was interrupted, and nobody has continued it.
+    Failed,
+}
+
 /// What became of a chain, decided in the order the answers matter.
 ///
 /// A stall is definitive and comes first: the Tower said this chain is over, and nothing observed
@@ -346,7 +399,7 @@ fn state_of(
     stalled: bool,
     activity: Activity,
     asked: Option<&HelpRequest>,
-    halted_run: bool,
+    ending: Ending,
     ground_stop: bool,
 ) -> ItineraryState {
     if stalled {
@@ -360,8 +413,12 @@ fn state_of(
         Activity::Running | Activity::Waiting => ItineraryState::Working,
         // Before a halt: whatever stopped the factory, this chain needs a person either way.
         Activity::Quiet if asked.is_some() => ItineraryState::AwaitingHuman,
-        Activity::Quiet if halted_run => ItineraryState::Halted,
-        Activity::Quiet => ItineraryState::Finished,
+        Activity::Quiet => match ending {
+            Ending::Halted => ItineraryState::Halted,
+            // Nothing will carry the work on: the run that would have sent it did not finish.
+            Ending::Failed => ItineraryState::Failed,
+            Ending::Clean => ItineraryState::Finished,
+        },
     }
 }
 
@@ -374,6 +431,7 @@ fn detail_for(
     stall: Option<&Stall>,
     asked: Option<&HelpRequest>,
     runs: &[&RunRecord],
+    died: Option<&RunRecord>,
 ) -> Option<String> {
     match state {
         ItineraryState::Stalled => stall.map(Stall::summary),
@@ -385,6 +443,13 @@ fn detail_for(
             .find(|record| record.outcome == Outcome::Halted)
             .and_then(|record| record.detail.clone())
             .or_else(|| Some("a Ground Stop is engaged".to_owned())),
+        ItineraryState::Failed => died.map(|record| {
+            let how = record.outcome.slug().replace('_', " ");
+            match &record.detail {
+                Some(why) => format!("`{}` {how}, and nothing came after it: {why}", record.agent),
+                None => format!("`{}` {how}, and nothing came after it", record.agent),
+            }
+        }),
         ItineraryState::Working | ItineraryState::Finished => None,
     }
 }

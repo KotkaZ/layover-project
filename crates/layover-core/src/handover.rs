@@ -54,6 +54,14 @@ pub enum Interruption {
     },
     /// A Ground Stop halted it.
     GroundStop,
+    /// The model service failed a call, and the run ended there. The work was not at fault — see
+    /// [`crate::provider`] — so it is restarted like work the Tower was interrupted in, and only
+    /// this kind of non-zero exit is: a run that failed its own work would fail again.
+    ProviderError {
+        /// The provider's identifier for the request that failed, when the CLI said it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request_id: Option<String>,
+    },
 }
 
 impl Interruption {
@@ -93,6 +101,12 @@ impl fmt::Display for Interruption {
             } => write!(f, "it exited with code {code}"),
             Self::Crashed { exit_code: None } => f.write_str("it exited abnormally"),
             Self::GroundStop => f.write_str("a Ground Stop halted it"),
+            Self::ProviderError {
+                request_id: Some(id),
+            } => write!(f, "the model service failed mid-run (request {id})"),
+            Self::ProviderError { request_id: None } => {
+                f.write_str("the model service failed mid-run")
+            }
         }
     }
 }
@@ -270,6 +284,14 @@ impl Handover {
                      attempt {}.\n",
                     recovery.previous, recovery.interruption, recovery.attempt
                 );
+                if matches!(recovery.interruption, Interruption::ProviderError { .. }) {
+                    out.push_str(
+                        "It was not the work that failed: a call to the model service was \
+                         rejected or never answered, and the run ended there. Everything it did \
+                         before that — commands it ran, files it changed, commits, comments, \
+                         messages it sent — may well have taken effect.\n\n",
+                    );
+                }
                 out.push_str(
                     "You are a new process and remember none of it. Before repeating anything \
                      that changes the world — a commit, a comment, a published pull request — \
@@ -343,6 +365,22 @@ impl Handover {
 
         out
     }
+}
+
+/// How long a restart after a model-service failure waits before it starts: a minute before the
+/// first, five before the second, fifteen before any after that.
+///
+/// A provider fault often comes in a cluster, and a restart into the same minute would meet the
+/// same fault and spend an attempt on it. `attempt` is the attempt being started, so the first
+/// restart is attempt 2. A restart after the Tower went away waits for nothing: what interrupted it
+/// is over by the time a Tower comes back.
+#[must_use]
+pub const fn provider_backoff(attempt: u32) -> std::time::Duration {
+    std::time::Duration::from_secs(match attempt {
+        0..=2 => 60,
+        3 => 5 * 60,
+        _ => 15 * 60,
+    })
 }
 
 /// Longest a piece of carried context may be, in bytes, before it is cut.
@@ -508,6 +546,68 @@ mod tests {
         assert!(
             brief.contains("Doing it twice is worse than doing it late"),
             "a restarted run must be warned before repeating a side effect"
+        );
+    }
+
+    #[test]
+    fn a_run_restarted_after_the_model_service_failed_is_told_its_tools_may_have_acted() {
+        let failed = Recovery {
+            previous: RunId::from("run_01DEF"),
+            interruption: Interruption::ProviderError {
+                request_id: Some("00000-7a12".to_owned()),
+            },
+            attempt: 2,
+        };
+        let brief = Handover::recovered(failed, vec![flight()]).brief();
+
+        assert!(
+            brief.contains("the model service failed mid-run (request 00000-7a12)"),
+            "{brief}"
+        );
+        assert!(brief.contains("It was not the work that failed"), "{brief}");
+        assert!(brief.contains("may well have taken effect"), "{brief}");
+        assert!(
+            brief.contains("Doing it twice is worse than doing it late"),
+            "the usual warning still applies: {brief}"
+        );
+        assert!(
+            !Handover::recovered(recovery(), vec![flight()])
+                .brief()
+                .contains("It was not the work that failed"),
+            "a Tower restart is not a model-service failure"
+        );
+    }
+
+    #[test]
+    fn a_restart_after_a_provider_error_waits_a_minute_then_longer() {
+        use std::time::Duration;
+
+        assert_eq!(provider_backoff(2), Duration::from_mins(1));
+        assert_eq!(provider_backoff(3), Duration::from_mins(5));
+        assert_eq!(provider_backoff(4), Duration::from_mins(15));
+        assert_eq!(provider_backoff(40), Duration::from_mins(15), "capped");
+    }
+
+    #[test]
+    fn a_provider_error_is_a_retryable_interruption_of_a_process_known_to_be_gone() {
+        let error = Interruption::ProviderError { request_id: None };
+
+        assert!(error.is_retryable());
+        assert!(
+            !error.child_may_still_be_running(),
+            "the Tower watched it exit"
+        );
+        assert_eq!(
+            authorize_recovery(RecoveryPolicy::Automatic, &error, ChildState::Gone, 0, 2),
+            Ok(())
+        );
+        assert_eq!(
+            authorize_recovery(RecoveryPolicy::Manual, &error, ChildState::Gone, 0, 2),
+            Err(RecoveryDenied::NeedsAHuman)
+        );
+        assert_eq!(
+            authorize_recovery(RecoveryPolicy::Automatic, &error, ChildState::Gone, 2, 2),
+            Err(RecoveryDenied::OutOfAttempts { max_attempts: 2 })
         );
     }
 

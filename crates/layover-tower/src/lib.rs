@@ -35,6 +35,7 @@ pub mod mcp_config;
 pub mod outcome;
 mod owner;
 pub mod probe;
+mod provider;
 pub mod recovery;
 pub mod reserve;
 pub mod runtime;

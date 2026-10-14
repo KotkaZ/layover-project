@@ -95,6 +95,12 @@ keep_lapsed_days = 14
 # needs -- print mode, the output a cost is read from, the agent's model (and for Copilot its effort
 # and context), and the MCP wiring -- so a runner says only what is particular to it. Neither grants
 # Claude Code a permission mode: add the one you mean to `args`.
+#
+# A run that exits because the model service failed a call -- `400 internal server error`, retries
+# exhausted -- is restarted like an interrupted one, after a minute, where its agent's `recovery`
+# allows; a run that failed its own work never is. Layover reads that from Copilot CLI's events. It
+# has no reader for Claude Code's or Codex's yet, so their failed runs stay failed; a runner can
+# declare the events itself in `provider_errors`.
 [runners.claude]
 cli = "claude"
 

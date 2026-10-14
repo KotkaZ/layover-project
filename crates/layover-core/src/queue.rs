@@ -16,6 +16,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 
 use crate::chosen::Chosen;
@@ -56,6 +57,13 @@ pub struct Queued {
     /// which are exactly when a count held in memory would be lost.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recovering: Option<Recovery>,
+    /// When it may start, for a restart backing off after the model service failed — see
+    /// [`crate::handover::provider_backoff`]. `None` for everything else, which may start at once.
+    ///
+    /// Kept on the queued flight rather than in a timer, so a Tower restarted while the restart
+    /// waits still waits, and one that comes back after it was due starts it at once.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub not_before: Option<Timestamp>,
     /// Whether the flight is a rendezvous that already released, carrying every arrival.
     ///
     /// Only a restarted run of a released join is queued like this. The barrier it passed was
@@ -90,6 +98,7 @@ impl Queued {
             flags,
             within: BTreeSet::new(),
             recovering: None,
+            not_before: None,
             released: false,
             continues: None,
             chosen: Chosen::default(),
@@ -124,6 +133,19 @@ impl Queued {
     pub fn restarting(mut self, recovery: Recovery) -> Self {
         self.recovering = Some(recovery);
         self
+    }
+
+    /// Holds the flight until `at`.
+    #[must_use]
+    pub fn waiting_until(mut self, at: Timestamp) -> Self {
+        self.not_before = Some(at);
+        self
+    }
+
+    /// Whether the flight may start at `now`.
+    #[must_use]
+    pub fn is_due(&self, now: Timestamp) -> bool {
+        self.not_before.is_none_or(|at| at <= now)
     }
 
     /// Marks the flight as a join that already released, to be delivered straight to its agent.
@@ -266,12 +288,27 @@ mod tests {
     }
 
     #[test]
+    fn a_restart_backing_off_waits_across_storage_and_then_is_due() {
+        let at: Timestamp = "2026-10-14T11:00:00Z".parse().expect("an instant");
+        let queued = Queued::new(flight(), None, BTreeMap::new()).waiting_until(at);
+
+        let json = serde_json::to_string(&queued).expect("serialises");
+        let read: Queued = serde_json::from_str(&json).expect("deserialises");
+
+        assert_eq!(read.not_before, Some(at));
+        assert!(!read.is_due(at - jiff::SignedDuration::from_secs(1)));
+        assert!(read.is_due(at));
+        assert!(Queued::new(flight(), None, BTreeMap::new()).is_due(Timestamp::MIN));
+    }
+
+    #[test]
     fn work_as_asked_for_is_the_first_attempt_and_says_nothing_about_restarts() {
         let queued = Queued::new(flight(), None, BTreeMap::new());
         let json = serde_json::to_string(&queued).expect("serialises");
 
         assert_eq!(queued.attempt(), 1);
         assert!(!json.contains("recovering"), "{json}");
+        assert!(!json.contains("not_before"), "{json}");
         assert!(!json.contains("released"), "{json}");
     }
 }

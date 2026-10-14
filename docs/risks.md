@@ -283,7 +283,9 @@ runner that wants an allow-list instead writes its `command` out.
 and later amending it to `Resumed`. A crash between the second and third steps leaves it `Booked`,
 so the next sweep starts a second itinerary for the same work — and both are *initial* runs, so
 `recovery = "manual"` never applies. Automatic recovery has the mirror problem: `ChildState::Gone`
-proves the local process ended, never that the pull request it was opening did not succeed.
+proves the local process ended, never that the pull request it was opening did not succeed. A
+restart after the model service failed has it worse, not better: that run's tools ran right up to
+the call that failed, so whatever it was doing to the world very likely happened.
 
 **Why it is not fixed.** Exactly-once external effects need a durable claim with a lease, and a
 stable operation identity carried across recovery, layover pickup and spawn. That is supervisor
@@ -291,7 +293,8 @@ work, and doing half of it would be worse than none.
 
 **Mitigation until then.** `recovery = "manual"` on the one irreversible agent in the reference
 factory, and the handover text telling a resumed run to check whether the earlier one already did
-the thing. Both rely on the agent looking, which is weaker than a key.
+the thing — after a model-service failure, that its tools may well have acted. Both rely on the
+agent looking, which is weaker than a key.
 
 ### 18. A runner that under-reports its cost defeats both money rails
 
@@ -441,3 +444,22 @@ stopping the Tower means, and it deserves a decision of its own rather than a li
 **Mitigation until then.** Most children end when their parent does, because the pipe they read from
 closes. A Tower restart settles the agent CLI itself. `timeout_sec` still ends the run's process,
 which is what `doctor`, the slots and the Fuel meter all count.
+
+### 25. Telling a model-service failure apart depends on the CLI's event names
+
+**What could happen.** A failed run is restarted only when its CLI's events say the model service
+failed its last call: for Copilot CLI, `model.call_final_result` with a `result` other than
+`success`, or `session.error` with `errorType` `query`, and no `tool.execution_start` or successful
+call after it. Those are names and values a CLI release can change. Renamed, a provider error reads
+as the run's own failure and is not restarted — the behaviour before restarts existed, and the chain
+shows as `failed`. Misread the other way, a run that failed its own work is restarted, and fails
+again.
+
+**Why it is not fixed.** The alternative — matching text in the output — would also match an agent
+quoting an error, which is worse. Only the CLI knows its events, and it does not promise them.
+
+**Mitigation until then.** A misread restart is bounded like every other: `max_recovery_attempts`
+per piece of work, each restart an ordinary run against Hops, Fuel, `max_runs` and the Reserve,
+`recovery = "manual"` honoured, and a Ground Stop forbidding it. The shapes are pinned by tests built
+from real Copilot CLI 1.0.97 transcripts. A runner that wants none of it sets
+`provider_errors = { read = "none" }`; one for a CLI that changed declares the events itself.

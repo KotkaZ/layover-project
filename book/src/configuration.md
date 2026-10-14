@@ -68,7 +68,7 @@ layout must be interchangeable, or the layout number means nothing.
 | `fuel_usd` | `5.00` | Shared cost budget for an itinerary. Bounds **breadth**. |
 | `max_runs` | `64` | Deterministic run cap; holds when a runner reports no cost. |
 | `timeout` (`timeout_sec`) | `"15m"` (`900`) | Wall-clock limit for one run. |
-| `max_recovery_attempts` | `2` | How many times interrupted work may be [restarted](./recovery.md). |
+| `max_recovery_attempts` | `2` | How many times work may be [restarted](./recovery.md) — after the Tower went away, or after the [model service failed](./recovery.md#when-the-model-service-fails) — counted per piece of work. `0` turns automatic restarts off. |
 | `max_concurrent_runs` | `4` | How many agent runs may be alive **at once**, factory-wide. Queued work waits for a slot and starts, oldest first, the moment one frees. `1` runs one at a time. |
 | `max_spawn_generations` | `1` | How many `mode = "spawn"` hops separate a chain from the trigger that began it. |
 
@@ -197,6 +197,7 @@ cli = "claude"
 | `args` | Arguments after what the preset supplies: the runner's own permission set. Only with `cli`. |
 | `command` | The whole command, written out, instead of `cli`. For a CLI with no preset (Codex, a script), or a runner that wants none of a preset's defaults. |
 | `mcp` | How the CLI is told where Layover's MCP server is. A preset supplies it; given here, it replaces the preset's. |
+| `provider_errors` | How a failed run's output tells the model service's failure from the run's own. Copilot CLI is read without it; see [below](#telling-the-model-services-failure-from-the-runs). |
 
 Exactly one of `cli` and `command` is given; `validate` refuses neither and both.
 
@@ -281,6 +282,49 @@ it, and about a Codex runner without `--json` when a rate card has a row for one
 models — the cases a change to the command would fix. A `cli` preset supplies it. The CLI is
 recognised by name anywhere in a written-out command, so `cmd /c copilot` counts; a command that
 names none of them is not judged.
+
+### Telling the model service's failure from the run's
+
+A run the model service ended — a call rejected with `400 internal server error`, retries
+exhausted — is restarted like an interrupted one, where its agent's `recovery` allows; a run that
+failed its own work never is. Layover tells them apart from the CLI's JSON events, never from its
+text. See [Recovery](./recovery.md#when-the-model-service-fails).
+
+Copilot CLI is read without being asked: the `copilot` preset, and a `command` that runs it by name
+with `--output-format json`. Claude Code and Codex are not read yet. `provider_errors` says
+otherwise:
+
+```toml
+[runners.wrapped]
+command         = ["node", "copilot-wrapper.mjs"]
+provider_errors = { read = "copilot" }   # Copilot CLI under another name
+
+[runners.quiet]
+cli             = "copilot"
+provider_errors = { read = "none" }      # never restart a failed run of this runner
+
+[runners.mine]
+command = ["my-cli", "--json"]
+
+[runners.mine.provider_errors]           # a CLI Layover has no reader for
+failed     = [{ type = "error", error.kind = "provider" }]
+carried_on = [{ type = "tool_call" }, { type = "message" }]
+request_id = "error.request_id"
+```
+
+| Key | Meaning |
+|---|---|
+| `read` | `copilot` or `none`. A reader Layover has, instead of `failed`. |
+| `failed` | Events that say the model service failed a call. Each is the fields an event must have, with these values; a table matches the object at that field the same way, so `error.kind = "provider"` matches `{"error": {"kind": "provider"}}`. |
+| `carried_on` | Events that say the run went on after such a failure: a tool starting, a call that succeeded. |
+| `request_id` | Where in a `failed` event the provider's request id is, as a dotted path. Recorded on the run. |
+
+A failed run is the service's when the last event matching `failed` comes after the last one
+matching `carried_on`. Only the top-level fields of each line of JSON are matched, so an agent
+quoting an error inside a tool result or a message never counts. `validate` refuses a declaration
+with both `read` and `failed` or neither, and an empty table, which would match every event; it
+warns about `failed` with no `carried_on`, under which a failure the CLI recovered from would still
+end the run as the service's.
 
 ### Credentials for the CLI itself
 
@@ -443,7 +487,7 @@ prompt_file = "tester.md"
 | `resident` | `false` | Pin the agent resident rather than transient. Not built. |
 | `fuel_usd` | — | Fuel for itineraries that *start* at this agent: a trigger or tick entering here, or a chain spawned here. A workflow's own `fuel_usd` wins over it. |
 | `work_dir` | — | Work somewhere other than the shared `work_dir`. Relative to this file; an absolute path is used as written. |
-| `recovery` | `automatic` | `manual` if repeating this agent's work would do damage. See [Recovery](./recovery.md). |
+| `recovery` | `automatic` | `manual` if repeating this agent's work would do damage. Applies to a run interrupted by the Tower going away and to one the [model service ended](./recovery.md#when-the-model-service-fails). See [Recovery](./recovery.md). |
 | `max_concurrent` | — | At most this many runs of this agent alive at once, within `max_concurrent_runs`. `1` for an agent that must never overlap itself. |
 
 ### MCP servers
