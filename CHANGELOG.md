@@ -8,6 +8,8 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+## [1.14.0] — 2026-10-14
+
 A run the model service ended is restarted like an interrupted one, and a chain that ends on a
 failed run no longer reads as finished.
 
@@ -1648,7 +1650,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.13.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.14.0...HEAD
+[1.14.0]: https://github.com/KotkaZ/layover-project/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/KotkaZ/layover-project/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/KotkaZ/layover-project/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/KotkaZ/layover-project/compare/v1.10.0...v1.11.0
