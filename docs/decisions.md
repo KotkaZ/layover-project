@@ -1132,6 +1132,38 @@ the rail that looks configured and is not. A chain keeps the rails it was minted
 re-minted from its workflow's rails without the agent's Fuel, because which agent it began at is
 not on record.
 
+**Why the first Ctrl+C drains, and only the second cuts off.** `serve` used to end its process at
+the first Ctrl+C. Every live run was cut off, recorded `interrupted` by the next Tower and restarted
+from the top, so stopping the Tower to change its configuration cost the work and the spend of
+whatever was running; and an arrival parked at a rendezvous, which exists only in the Tower's
+memory, was simply lost. A Tower that cannot be stopped without damage cannot be updated without
+damage either, which is what made this the first step of updating Layover. So the first Ctrl+C now
+drains: nothing new starts, what is running finishes with its MCP endpoint still up, and the process
+exits once the factory is quiet. Queued work is left in the queue rather than run, because a drain
+that runs the queue dry may never end in a factory that keeps itself busy. A second Ctrl+C cuts off,
+because a person who presses it twice means it; and a drain has no deadline of its own for the same
+reason — the person watching it decides. Cutting off kills each live run's process tree rather than
+leaving it: a run whose Tower has gone can no longer send a flight or be recorded, but it can still
+push a branch, so it must not outlive the Tower that could hear from it. It is not written down — a
+run killed halfway has no outcome of its own — and its live record is left for the next Tower to
+settle as `interrupted`, the same path a crash takes, so recovery has one way in rather than two.
+Every way of stopping exits 0: the Tower stopped because it was asked to, and the systemd unit and
+launchd agent `autostart` writes restart a Tower that exits non-zero. The one exception to "nothing new starts"
+is a flight that completes a rendezvous already holding an arrival, in the same chain: refusing it
+would lose the arrival, which is the damage draining exists to avoid, and such a flight cannot loop,
+because the barrier releases once. A schedule's tick that comes due while the Tower drains is held,
+so if the stop is called off it fires once rather than being skipped.
+
+**Why stopping is asked for with a file.** `layover stop` writes `.layover/stop-request.json`
+rather than calling the HTTP API: the API needs the token, which a script stopping the factory
+should not have to scrape from a log, and a file works with the dashboard's port unknown, the network
+down, or the Tower started by the operating system without a terminal anyone can press Ctrl+C in.
+It is the Ground Stop's mechanism for the same reasons. A Ctrl+C writes the same file, so a dashboard
+in another process can say the Tower is stopping however it was asked. A request found when a Tower
+starts was written for one that has gone, and honouring it would stop a Tower nobody asked to stop,
+so it is removed and reported. An unreadable request is a request to drain rather than to cut off,
+because when it is unclear what was asked, the gentler reading loses nothing.
+
 ---
 
 ## Still open

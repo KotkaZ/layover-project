@@ -8,6 +8,30 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+A Tower that is asked to stop now lets what it is running finish.
+
+**Compatibility.** Additive for `layover.toml` and the HTTP API. What an existing factory will
+notice:
+- **The first Ctrl+C on `layover serve` drains** instead of exiting at once: nothing new starts, what
+  is running finishes, and then it exits. A second Ctrl+C cuts what is running off and exits.
+- **`GET /health` gains `stopping`.**
+
+### Added
+
+- **`layover stop`** asks the Tower serving a factory to stop, from another terminal or a script: it
+  drains and exits, and `--now` cuts what is running off. It writes `.layover/stop-request.json`,
+  which the Tower honours and removes, and which a Tower starting later ignores.
+- **Cutting off kills the runs.** A Tower cut off — a second Ctrl+C, or `layover stop --now` — kills
+  each live run's process tree and leaves it for the next Tower to record as `interrupted`, rather
+  than leaving it running with nobody listening. Every way of stopping exits 0, so a systemd or
+  launchd service that restarts on failure leaves a stopped Tower stopped.
+- **Draining.** While a Tower stops, nothing new starts — queued work stays queued for the next
+  start, and schedule ticks are held — except work that completes a rendezvous already holding an
+  arrival, which would otherwise be lost. The Tower exits once nothing is alive and nothing is
+  parked, so stopping it no longer interrupts runs or loses arrivals.
+- **The dashboard says when a Tower is stopping**: the version pill reads `· stopping`, also from a
+  `--watch-only` dashboard in another process.
+
 ## [1.14.0] — 2026-10-14
 
 A run the model service ended is restarted like an interrupted one, and a chain that ends on a

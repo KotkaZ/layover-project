@@ -168,6 +168,13 @@ pub struct Factory {
     /// This Tower's claim on the runs it starts, taken when it starts its first. See
     /// [`crate::owner`].
     owner: std::sync::OnceLock<Option<crate::owner::Owner>>,
+    /// Whether the factory is draining: starting nothing new. See [`crate::drain`].
+    pub(crate) draining: std::sync::atomic::AtomicBool,
+    /// Whether the factory is cutting off what is running. See [`crate::drain`].
+    pub(crate) cutting_off: std::sync::atomic::AtomicBool,
+    /// Flights taken off the queue and not yet a run or a refusal, so a drain does not call the
+    /// factory quiet in the moment between the two.
+    pub(crate) launching: std::sync::atomic::AtomicUsize,
 }
 
 impl Factory {
@@ -201,6 +208,9 @@ impl Factory {
             endpoint: None,
             inflight: std::sync::Mutex::default(),
             owner: std::sync::OnceLock::new(),
+            draining: std::sync::atomic::AtomicBool::new(false),
+            cutting_off: std::sync::atomic::AtomicBool::new(false),
+            launching: std::sync::atomic::AtomicUsize::new(0),
         })
     }
 
@@ -459,8 +469,9 @@ impl Factory {
         })
     }
 
-    /// Waits for a launched run — killing it at `timeout_sec` or on a Ground Stop — then prices
-    /// it, charges its chain through `charge`, and writes it down.
+    /// Waits for a launched run — killing it at `timeout_sec`, on a Ground Stop, or when the Tower
+    /// cuts off what it is running — then prices it, charges its chain through `charge`, and writes
+    /// it down.
     ///
     /// Safe to call on its own thread: the timeout, the Ground Stop and the kill are this run's
     /// alone, and the chain is held only inside `charge`.
@@ -479,7 +490,8 @@ impl Factory {
         let timeout = Some(Duration::from_secs(
             self.rails_of(&ticket.chain, None).timeout_sec,
         ));
-        let (finished, ended) = match wait_for(started, timeout, || self.ground_stop_engaged()) {
+        let stop = || self.ground_stop_engaged() || self.is_cutting_off();
+        let (finished, ended) = match wait_for(started, timeout, stop) {
             Ok(result) => result,
             Err(error) => {
                 let _ = self.live.finished(&ticket.run);
@@ -488,6 +500,17 @@ impl Factory {
                 return Dispatched::Failed(error.to_string());
             }
         };
+
+        // Not written down: its live record stays for the next Tower to settle as interrupted,
+        // exactly as if this one had gone away with the run still going.
+        if ended == Ended::Halted && self.leaves_it_to_the_next_tower() {
+            self.revoke(token.as_deref());
+            self.forget(&ticket.run);
+            return Dispatched::Failed(
+                "cut off: the Tower stopped before the run finished; the next Tower settles it"
+                    .to_owned(),
+            );
+        }
 
         // The moment the process is gone, before anything else is written. Whatever the child was
         // doing, it may no longer send flights — and this is the first instant at which that is

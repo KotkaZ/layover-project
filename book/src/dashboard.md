@@ -204,6 +204,11 @@ flight sent straight to an `entry = true` agent belongs to no workflow, so no sw
 
 ## Stopping it
 
+Two different things stop, and the header shows both. A **Tower asked to stop** — a Ctrl+C in its
+terminal, or [`layover stop`](./cli.md#stop) — drains: nothing new starts, what is running finishes,
+and then the process exits. The version pill gains `· stopping`, in amber, while it does. A
+**Ground Stop** halts the factory without stopping the Tower.
+
 The **Ground Stop** button is in the header, not behind a tab, because the moment you want it is
 the moment you do not want to go looking for it. Pressing it halts everything: running agents are
 ended, and no new work starts.

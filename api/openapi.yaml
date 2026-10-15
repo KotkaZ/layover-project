@@ -831,7 +831,7 @@ components:
     Health:
       type: object
       description: Whether the Tower is up and whether it is allowed to do anything.
-      required: [status, version, ground_stop]
+      required: [status, version, ground_stop, stopping]
       properties:
         status:
           $ref: "#/components/schemas/Status"
@@ -842,6 +842,11 @@ components:
         ground_stop:
           type: boolean
           description: True when a Ground Stop is engaged and no new work may start.
+        stopping:
+          type: boolean
+          description: |
+            True when the Tower has been asked to stop — a Ctrl+C or `layover stop` — and is
+            draining: nothing new starts, and it exits once what it is running has finished.
 
     Access:
       type: string

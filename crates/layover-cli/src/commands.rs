@@ -299,7 +299,6 @@ pub fn serve(
         running.as_ref().map(|(_, tower)| tower.timetable()),
     );
 
-    // Copied out before the async block, which would otherwise take ownership of the pair and
     // Minted before anything binds, so the address that gets printed is the address that works.
     let guard = if no_auth {
         layover_dashboard::Guard::Open
@@ -308,61 +307,102 @@ pub fn serve(
     };
     let announced = guard.clone();
 
+    // Copied out before the async block, which would otherwise take ownership of the pair and
     // stop it being dropped — and therefore stopped — after the server returns.
     let endpoint = running.as_ref().map(|(served, _)| served.endpoint.clone());
 
+    // How this process will be stopped: drained when it runs the factory, at once when it only
+    // watches. A request to stop left by a Tower that went away is not this one's to honour.
+    let control = running.as_ref().map(|(_, tower)| tower.control());
+    // The factory's own state directory, where `layover stop` writes: beside the configuration,
+    // whatever `--history` says.
+    let state_dir = path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(".layover");
+    let state = state_dir.clone();
+    if control.is_some()
+        && let Some(said) = crate::stopping::clear_stale(&state)
+    {
+        println!("{said}");
+    }
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .map_err(|error| error.to_string())?;
 
-    runtime.block_on(async move {
+    let stopped = runtime.block_on(async move {
         // Bind before announcing, so the address printed is a fact rather than a hope.
         let listener = tokio::net::TcpListener::bind(addr)
             .await
             .map_err(|error| format!("could not listen on {addr}: {error}"))?;
         let bound = listener.local_addr().map_err(|error| error.to_string())?;
 
-        println!("Layover dashboard on {}", announced.address(&bound));
-        println!("Reading {}", path.display());
-        println!("History in {}", history_dir.display());
+        announce(
+            &announced,
+            bound,
+            path,
+            &history_dir,
+            endpoint.as_deref(),
+            control.is_some(),
+        );
 
-        if announced.token().is_some() {
-            println!("The token is in that address; the page keeps it in a cookie afterwards.");
-        } else {
-            println!("Open to anything that can reach the port (--no-auth).");
-        }
-
-        match &endpoint {
-            Some(url) => {
-                println!("Agents reach Layover at {url}");
-                println!("Running the factory: scheduled pipelines fire, queued work starts.");
-            }
-            // Said plainly, because a dashboard showing a queue that nothing will drain is the
-            // failure this whole surface is meant to avoid.
-            None => println!("Watching only: nothing here will start work (--watch-only)."),
-        }
-
-        // A token makes an off-loopback bind defensible; without one it is an open control plane
-        // on a network. The warning is about the combination, not the address.
-        if !bound.ip().is_loopback() && announced.token().is_none() {
-            eprintln!();
-            eprintln!("warning: {bound} is not loopback, and --no-auth is set.");
-            eprintln!("         Anyone who can reach it can read run history, reports and help");
-            eprintln!("         requests, and queue work this process will run. Drop --no-auth,");
-            eprintln!("         or put something in front of it.");
-        }
-
-        println!("Press Ctrl+C to stop.");
-
-        axum::serve(listener, layover_dashboard::router(dashboard, guard))
+        let router = layover_dashboard::router(dashboard, guard);
+        crate::stopping::serve_until_stopped(listener, router, control, state)
             .await
             .map_err(|error| error.to_string())
     })?;
 
+    crate::stopping::finish(stopped, running.is_some().then_some(state_dir.as_path()));
     drop(running);
 
     Ok(String::new())
+}
+
+/// What `serve` says once it is listening: where, what it reads, and how to stop it.
+fn announce(
+    guard: &layover_dashboard::Guard,
+    bound: std::net::SocketAddr,
+    path: &Path,
+    history_dir: &Path,
+    endpoint: Option<&str>,
+    drains: bool,
+) {
+    println!("Layover dashboard on {}", guard.address(&bound));
+    println!("Reading {}", path.display());
+    println!("History in {}", history_dir.display());
+
+    if guard.token().is_some() {
+        println!("The token is in that address; the page keeps it in a cookie afterwards.");
+    } else {
+        println!("Open to anything that can reach the port (--no-auth).");
+    }
+
+    match endpoint {
+        Some(url) => {
+            println!("Agents reach Layover at {url}");
+            println!("Running the factory: scheduled pipelines fire, queued work starts.");
+        }
+        // Said plainly, because a dashboard showing a queue that nothing will drain is the
+        // failure this whole surface is meant to avoid.
+        None => println!("Watching only: nothing here will start work (--watch-only)."),
+    }
+
+    // A token makes an off-loopback bind defensible; without one it is an open control plane
+    // on a network. The warning is about the combination, not the address.
+    if !bound.ip().is_loopback() && guard.token().is_none() {
+        eprintln!();
+        eprintln!("warning: {bound} is not loopback, and --no-auth is set.");
+        eprintln!("         Anyone who can reach it can read run history, reports and help");
+        eprintln!("         requests, and queue work this process will run. Drop --no-auth,");
+        eprintln!("         or put something in front of it.");
+    }
+
+    if drains {
+        println!("Press Ctrl+C, or run `layover stop`, to stop once what is running finishes.");
+    } else {
+        println!("Press Ctrl+C to stop.");
+    }
 }
 
 pub fn explain(path: &Path) -> Result<String, Failure> {
@@ -743,6 +783,42 @@ fn strip_verbatim(path: &Path) -> PathBuf {
         Some(rest) => PathBuf::from(rest),
         None => path.to_path_buf(),
     }
+}
+
+/// Asks the Tower serving the factory at `path` to stop, by writing the request it looks for.
+///
+/// # Errors
+///
+/// Returns a failure when the request cannot be written.
+pub fn stop(path: &Path, now: bool) -> Result<String, Failure> {
+    let path = absolute(path)?;
+    let state = path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(".layover");
+    let by = std::env::var("USERNAME")
+        .or_else(|_| std::env::var("USER"))
+        .map_or_else(
+            |_| "layover stop".to_owned(),
+            |user| format!("{user}, with layover stop"),
+        );
+    let request = if now {
+        layover_store::stop::StopRequest::now(by)
+    } else {
+        layover_store::stop::StopRequest::drain(by)
+    };
+    layover_store::stop::request(&state, &request).map_err(|error| error.to_string())?;
+
+    Ok(if now {
+        "Asked the Tower to stop now. What it is running is cut off; the next Tower to open this \
+         factory settles it, and restarts it where recovery allows.\n"
+            .to_owned()
+    } else {
+        "Asked the Tower to stop. It starts nothing new, and exits once what it is running has \
+         finished; queued work waits for the next start. `layover stop --now` cuts that short.\n\
+         If no Tower is serving this factory, the next one to start ignores the request.\n"
+            .to_owned()
+    })
 }
 
 /// Runs everything waiting in the queue, once.

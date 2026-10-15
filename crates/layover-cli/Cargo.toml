@@ -32,7 +32,7 @@ layover-store = { path = "../layover-store", version = "1.14.0" }
 layover-tower = { path = "../layover-tower", version = "1.14.0" }
 axum = { workspace = true }
 jiff = { workspace = true }
-tokio = { workspace = true, features = ["rt", "rt-multi-thread", "net", "macros", "signal", "sync"] }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "net", "macros", "signal", "sync", "time"] }
 
 [lints]
 workspace = true

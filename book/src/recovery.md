@@ -193,8 +193,10 @@ the agents whose work must not repeat `recovery = "manual"`, or set `provider_er
 
 ## After a restart
 
-A Tower that goes away — a restart, a crash, a closed terminal — leaves a record of every run it
-was watching. The next Tower to open the factory, `layover serve` or `layover run`, settles each one
+A Tower stopped with Ctrl+C or [`layover stop`](./cli.md#stop) drains first — nothing new starts, and
+it exits once what it is running has finished — so it leaves nothing to settle. One that goes away
+any other way — a reboot, a crash, a closed terminal, a second Ctrl+C — leaves a record of every run
+it was watching. The next Tower to open the factory, `layover serve` or `layover run`, settles each one
 before it starts anything:
 
 1. **It makes sure the process is gone.** A run still alive is cut off — its MCP endpoint and token

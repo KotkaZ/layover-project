@@ -283,6 +283,7 @@ Everything a factory accumulates lives in `.layover/`, beside its `layover.toml`
 .layover/
 ├── version.json                 # the layout version: a newer one is refused, an older one migrated
 ├── ground-stop                  # presence of this file means everything is halted
+├── stop-request.json            # `layover stop` or a Ctrl+C: the Tower drains, exits, removes it
 ├── logbook.md                   # shared memory (the default path); Tower-serialized writes
 ├── history/
 │   └── runs-2026-09-23.jsonl    # one record per run, segmented by UTC day
@@ -316,6 +317,11 @@ and the queue are not.
 Ground Stop is a file rather than in-memory state so that it survives a Tower crash and can be
 set by hand when nothing else is responding. A workflow's switch is kept the same way, one line
 per workflow that is off, and the Tower reads both on every pass.
+
+A request to stop the Tower is a file for the same reason. A Tower that finds one drains: nothing
+new starts except a flight that completes a rendezvous already holding an arrival, and the process
+exits once no run is alive and no barrier holds anything. A request with `now` set cuts off what is
+running instead, for the next Tower to settle as `interrupted`.
 
 ## 8. The Flight envelope
 
@@ -376,7 +382,7 @@ exists in the specification but is not implemented is a compile error.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/health` | Liveness, version, and whether a Ground Stop is engaged |
+| `GET` | `/health` | Liveness, version, whether a Ground Stop is engaged, and whether the Tower is stopping |
 | `GET` | `/agents` · `/pipelines` · `/graph` | What the factory is made of, and its route map drawn |
 | `POST` · `DELETE` | `/pipelines/:name/switch-off` | Switch one workflow off — its ways in close, its chains under way finish — or back on |
 | `POST` · `GET` · `DELETE` | `/flights` · `/flights/:id` | Queue work, see what is waiting, cancel what has not started |

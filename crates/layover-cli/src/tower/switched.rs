@@ -1,5 +1,6 @@
 //! The loop's side of a switched-off workflow: its schedule neither fires nor skips, a resuming one
-//! collects nothing, and switched back on it waits for its next tick.
+//! collects nothing, and switched back on it waits for its next tick. And of a draining Tower, which
+//! holds its ticks the same way and fires them once when the drain ends.
 
 use std::sync::Mutex;
 
@@ -132,6 +133,65 @@ resumes = true
             .expect("reads")
             .iter()
             .all(|layover| layover.standing == layover_core::layover::Standing::Booked)
+    );
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_tick_that_comes_due_while_the_tower_drains_is_held_and_fires_once_after() {
+    // Draining is the Tower winding down to stop: a schedule that fired into it would queue work
+    // the drain then refuses to start, or start a wave the Tower is about to cut off.
+    let root = temp("drain-tick");
+    let config = factory_config(
+        r#"
+[pipelines.sweep]
+entry = "worker"
+trigger = { every = "1h" }
+"#,
+    );
+    let factory = Factory::new(config.clone(), &root).expect("opens");
+    let journal = Journal::open(root.join(".layover").join("journal")).expect("opens");
+    let now = Timestamp::now();
+    let clock = Clock::new(&config, now);
+    let announce = |_: String| {};
+
+    factory.start_draining();
+    fire_due(
+        &factory,
+        &journal,
+        &clock,
+        &config,
+        after(now, 61),
+        &announce,
+    );
+    fire_due(
+        &factory,
+        &journal,
+        &clock,
+        &config,
+        after(now, 125),
+        &announce,
+    );
+    assert!(
+        journal.pending().expect("reads").is_empty(),
+        "nothing fired while draining"
+    );
+    assert_eq!(skips(&journal, now), 0, "and nothing counted as skipped");
+
+    factory.stop_draining();
+    fire_due(
+        &factory,
+        &journal,
+        &clock,
+        &config,
+        after(now, 126),
+        &announce,
+    );
+    assert_eq!(
+        journal.pending().expect("reads").len(),
+        1,
+        "the ticks held by the drain fire once, not once each"
     );
 
     let _ = std::fs::remove_dir_all(&root);

@@ -66,6 +66,44 @@ pub struct Tower {
     stop: Arc<AtomicBool>,
     thread: Option<std::thread::JoinHandle<()>>,
     timetable: Arc<timetable::TowerTimetable>,
+    factory: Arc<Factory>,
+}
+
+/// What `serve` needs of a running Tower to stop it well: to start draining it, and to know when
+/// it has gone quiet. Cheap to clone and shareable across threads, unlike the Tower itself.
+#[derive(Clone)]
+pub struct TowerControl(Arc<Factory>);
+
+impl TowerControl {
+    /// Starts draining: nothing new starts except work that completes a parked rendezvous.
+    pub fn start_draining(&self) {
+        self.0.start_draining();
+    }
+
+    /// Cuts off what is running, leaving it for the next Tower to settle.
+    pub fn cut_off(&self) {
+        self.0.cut_off();
+    }
+
+    /// Whether nothing is running, starting, or parked at a rendezvous.
+    pub fn is_quiescent(&self) -> bool {
+        self.0.is_quiescent()
+    }
+
+    /// Whether nothing is running or starting.
+    pub fn is_idle(&self) -> bool {
+        self.0.is_idle()
+    }
+
+    /// The agents with a run alive.
+    pub fn alive_agents(&self) -> Vec<layover_core::agent::AgentName> {
+        self.0.alive_agent_names()
+    }
+
+    /// How many rendezvous hold an arrival.
+    pub fn parked_rendezvous(&self) -> usize {
+        self.0.parked_rendezvous()
+    }
 }
 
 impl Tower {
@@ -80,6 +118,11 @@ impl Tower {
         announce: impl Fn(String) + Send + 'static,
     ) -> std::io::Result<Self> {
         Self::start_at(factory, journal, announce, Arc::new(Timestamp::now))
+    }
+
+    /// A handle `serve` stops the Tower through.
+    pub fn control(&self) -> TowerControl {
+        TowerControl(Arc::clone(&self.factory))
     }
 
     /// The Tower's clock and what it counts as still working, for the dashboard in this process.
@@ -115,6 +158,7 @@ impl Tower {
 
         let stop = Arc::new(AtomicBool::new(false));
         let stopping = Arc::clone(&stop);
+        let control = Arc::clone(&factory);
 
         let thread = std::thread::Builder::new()
             .name("layover-tower".to_owned())
@@ -124,6 +168,7 @@ impl Tower {
             stop,
             thread: Some(thread),
             timetable,
+            factory: control,
         })
     }
 }
@@ -179,6 +224,12 @@ fn fire_due(
     now: Timestamp,
     announce: &dyn Fn(String),
 ) {
+    // Held while the Tower drains, as during a Ground Stop: a tick that comes due fires once, at the
+    // next tick after the drain ends — or not at all from this Tower, which is about to stop.
+    if factory.is_draining() {
+        return;
+    }
+
     // What is running, then what is queued. A run that finishes between the two reads queued
     // whatever it sent before it finished, and nothing moves a flight from the queue to a slot
     // while this looks, because the same thread does both.

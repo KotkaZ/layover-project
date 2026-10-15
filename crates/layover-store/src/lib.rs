@@ -35,6 +35,7 @@ pub mod live;
 pub mod lock;
 mod segment;
 mod skips;
+pub mod stop;
 mod switches;
 
 pub use answer::Answered;

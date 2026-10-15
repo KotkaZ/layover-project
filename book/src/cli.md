@@ -148,6 +148,48 @@ one factory directory would race for its queue.**
 A Ground Stop is a pause. Engage it and nothing new starts; release it and the next tick fires as
 usual.
 
+### Stopping it
+
+**The first Ctrl+C drains.** Nothing new starts — queued work stays queued for the next start, and a
+schedule's tick that comes due is held — while what is running finishes and the dashboard and the MCP
+endpoint stay up for it. When nothing is alive and no rendezvous holds an arrival, `serve` exits:
+
+```text
+  Stopping: nothing new starts. Waiting for 2 run(s) to finish (bob, wolf).
+  Press Ctrl+C again, or run `layover stop --now`, to cut it off.
+Stopped: everything that was running has finished. Queued work waits for the next start.
+```
+
+The one thing a drain still starts is work that completes a rendezvous already holding an arrival —
+a flight to the joined agent, or to an upstream it still waits for, in the same chain — because an
+arrival parked at a barrier lives only in the Tower's memory and is lost when it stops.
+
+**A second Ctrl+C cuts it off.** Each live run is killed with everything it started, and is left
+unrecorded: the next Tower to open the factory records it as `interrupted` and restarts it where its
+agent's [`recovery`](./recovery.md) allows, as if this Tower had gone away mid-run. Then the process
+exits.
+
+Either way it exits 0, because it stopped as asked: a service manager that restarts a Tower which
+fails — the systemd unit and launchd agent [`autostart`](#autostart) writes both do — leaves one
+somebody stopped stopped.
+
+The dashboard's version pill reads `· stopping` while a Tower drains. A Tower killed from outside —
+Task Manager, `kill -9`, a task ended by the scheduler — cuts everything off and leaves its runs
+going with nobody listening until the next Tower stops them; use [`stop`](#stop) instead.
+
+## `stop`
+
+```sh
+layover stop            # drain, as a Ctrl+C in the Tower's own terminal would
+layover stop --now      # cut what is running off, as a second Ctrl+C would
+```
+
+Asks the Tower serving the factory to stop, from anywhere: another terminal, a script, the logon
+task's own wrapper. It writes `.layover/stop-request.json`, which the Tower looks for twice a second
+as it looks for its Ground Stop, and which the Tower removes once it has stopped. No Tower running
+means no one to ask: the next one to start ignores the request, and says so. A `--watch-only`
+dashboard neither honours the request nor writes one.
+
 ## `autostart`
 
 ```sh

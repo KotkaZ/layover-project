@@ -19,6 +19,7 @@
 //!             status: Status::Ok,
 //!             version: env!("CARGO_PKG_VERSION").to_owned(),
 //!             ground_stop: false,
+//!             stopping: false,
 //!         })
 //!     }
 //!     # async fn list_agents(&self) -> Result<layover_http::AgentList, Problem> { todo!() }

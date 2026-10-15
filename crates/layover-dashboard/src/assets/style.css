@@ -86,6 +86,7 @@ nav { display: flex; gap: 4px; }
   border-radius: 999px;
 }
 .pill.down { color: var(--bad); border-color: var(--bad); }
+.pill.stopping { color: var(--warn); border-color: var(--warn); }
 
 main { padding: 24px; max-width: 1400px; margin: 0 auto; }
 

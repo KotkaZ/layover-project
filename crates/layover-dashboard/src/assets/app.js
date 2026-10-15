@@ -140,8 +140,13 @@ async function loadHealth() {
   const button = $("#ground-stop");
   try {
     const health = await get("/health");
-    pill.textContent = `v${health.version}${health.ground_stop ? " · ground stop" : ""}`;
+    pill.textContent = `v${health.version}${health.ground_stop ? " · ground stop" : ""}${health.stopping ? " · stopping" : ""}`;
     pill.classList.toggle("down", health.ground_stop);
+    // Draining to stop: nothing new starts, and the Tower exits once what is running finishes.
+    pill.classList.toggle("stopping", Boolean(health.stopping) && !health.ground_stop);
+    pill.title = health.stopping
+      ? "Asked to stop: nothing new starts, and the Tower exits once what it is running has finished."
+      : "";
 
     // The button says what pressing it will do, not what the state is. "Ground Stop" next to a
     // factory that is already stopped reads as though pressing it would stop it again.
@@ -417,6 +422,8 @@ function start() {
   loadQueued();
   // Runs start and finish on their own, so the count is kept current rather than drawn once.
   setInterval(loadQueued, 5000);
+  // A Ground Stop engaged elsewhere, or a Tower asked to stop, shows without a reload.
+  setInterval(loadHealth, 10000);
   // The pipeline list has to exist before the first draw, or the selector is empty on load —
   // and before the address is read, since it may name a workflow.
   loadPipelines().then(() => {

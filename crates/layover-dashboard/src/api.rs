@@ -139,6 +139,15 @@ impl Dashboard {
         self.0.ground_stop.exists()
     }
 
+    /// Whether the Tower has been asked to stop and is draining. Read from the request file beside
+    /// the Ground Stop, so a dashboard watching from another process sees it too.
+    pub(crate) fn stopping(&self) -> bool {
+        self.0
+            .ground_stop
+            .parent()
+            .is_some_and(|state| layover_store::stop::pending(state).is_some())
+    }
+
     /// The Ground Stop as it is on disk right now, and when it was engaged.
     ///
     /// The timestamp is read from the file rather than held in memory, so it survives the restart
@@ -219,6 +228,7 @@ impl Api for Dashboard {
             status: Status::Ok,
             version: env!("CARGO_PKG_VERSION").to_owned(),
             ground_stop: self.ground_stop_engaged(),
+            stopping: self.stopping(),
         })
     }
 

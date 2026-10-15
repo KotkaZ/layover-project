@@ -35,6 +35,7 @@ layover explain                            # what can trigger what, and what tal
 layover graph --pipeline nightly           # one workflow's route map, as Mermaid
 layover prompt tester --flag run_e2e=true  # what an agent would actually be told
 layover serve                              # run the factory and serve the dashboard
+layover stop                               # stop it once what it is running has finished
 layover doctor                             # report anything a person should look at
 layover autostart --show                   # the file that starts Layover at logon
 ```

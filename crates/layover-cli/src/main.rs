@@ -8,6 +8,7 @@
 mod commands;
 mod doctor;
 mod mcp;
+mod stopping;
 mod tower;
 
 use std::path::PathBuf;
@@ -125,6 +126,17 @@ enum Command {
         dry_run: bool,
     },
 
+    /// Ask the Tower serving this factory to stop.
+    ///
+    /// It drains: nothing new starts, what is running finishes, and then it exits — the same as a
+    /// Ctrl+C in its own terminal. Queued work stays queued for the next start. `--now` cuts what
+    /// is running off instead; the next Tower settles it and restarts it where recovery allows.
+    Stop {
+        /// Cut running work off rather than waiting for it.
+        #[arg(long)]
+        now: bool,
+    },
+
     /// Report anything about a running factory that a person should look at.
     ///
     /// The failures that matter in a lights-out factory are the quiet ones: a chain that stalled
@@ -209,6 +221,7 @@ fn main() -> ExitCode {
             no_auth,
         ),
         Command::Run { dry_run } => commands::run(&cli.config, dry_run),
+        Command::Stop { now } => commands::stop(&cli.config, now),
         Command::Doctor { .. } => unreachable!("handled above"),
     };
 

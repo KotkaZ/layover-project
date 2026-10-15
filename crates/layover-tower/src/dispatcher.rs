@@ -396,7 +396,8 @@ impl Factory {
     ///
     /// A way into a workflow in `off` waits where it is, as a flight for a full agent does: it is
     /// still asked for, and starts once the workflow is switched back on. So does a restart that is
-    /// not due yet.
+    /// not due yet, and — while the factory drains — anything that does not complete a parked
+    /// rendezvous.
     #[allow(clippy::too_many_arguments)]
     fn start_what_fits<'scope, 'env>(
         &'env self,
@@ -416,6 +417,7 @@ impl Factory {
         while index < queue.waiting.len() && self.alive_runs() < limit {
             let waiting = &queue.waiting[index];
             if !waiting.is_due(now)
+                || (self.is_draining() && !self.may_start_while_draining(waiting))
                 || self.agent_is_full(&waiting.flight.to)
                 || waiting
                     .way_in()
@@ -427,6 +429,10 @@ impl Factory {
             let Some(queued) = queue.take(index) else {
                 break;
             };
+
+            // Counted from the moment it leaves the queue until it is a run or a refusal, so a drain
+            // never sees the factory quiet with a flight in between.
+            let _launching = Launching::new(&self.launching);
 
             // Off the queue before it runs. One that was no longer there was cancelled, or taken by
             // something else, and running it anyway is how work gets done twice.
@@ -560,3 +566,19 @@ impl Factory {
 
 /// Runs alive, by run.
 pub(crate) type Registry = BTreeMap<RunId, InFlight>;
+
+/// One flight on its way from the queue to a run, counted for as long as this lives.
+struct Launching<'a>(&'a std::sync::atomic::AtomicUsize);
+
+impl<'a> Launching<'a> {
+    fn new(count: &'a std::sync::atomic::AtomicUsize) -> Self {
+        count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Self(count)
+    }
+}
+
+impl Drop for Launching<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}

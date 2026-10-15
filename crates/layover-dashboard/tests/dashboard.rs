@@ -593,6 +593,24 @@ async fn a_ground_stop_can_be_engaged_and_released_over_http() {
 }
 
 #[tokio::test]
+async fn health_says_when_the_tower_has_been_asked_to_stop() {
+    // A dashboard in another process — `serve --watch-only` beside the Tower — learns from the same
+    // file the Tower acts on.
+    let factory = Factory::new("stopping");
+    let (_, before) = call(factory.router(), "/health").await;
+    assert!(before.contains("\"stopping\":false"), "{before}");
+
+    layover_store::stop::request(
+        factory.path(),
+        &layover_store::stop::StopRequest::drain("karl"),
+    )
+    .expect("asks");
+    let (_, after) = call(factory.router(), "/health").await;
+
+    assert!(after.contains("\"stopping\":true"), "{after}");
+}
+
+#[tokio::test]
 async fn engaging_a_ground_stop_twice_is_not_an_error() {
     // Somebody pressing the button again because the first press was not obviously acknowledged
     // must not be told it failed. That is how people learn a kill switch is unreliable.

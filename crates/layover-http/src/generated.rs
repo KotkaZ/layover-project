@@ -296,6 +296,9 @@ pub struct Health {
     pub ground_stop: bool,
     /// Always `ok`; failure is signalled by not answering at all.
     pub status: Status,
+    /// True when the Tower has been asked to stop — a Ctrl+C or `layover stop` — and is
+    /// draining: nothing new starts, and it exits once what it is running has finished.
+    pub stopping: bool,
     /// The Tower's own version.
     pub version: String,
 }

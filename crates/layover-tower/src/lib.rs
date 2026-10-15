@@ -30,6 +30,7 @@ pub mod clock;
 pub mod cost;
 pub mod dispatch;
 pub mod dispatcher;
+pub mod drain;
 pub mod factory;
 pub mod mcp_config;
 pub mod outcome;

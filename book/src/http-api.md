@@ -26,7 +26,7 @@ Point any OpenAPI tool at the file to get a client, a mock server or rendered do
 
 | Method | Path | Query | Purpose |
 |---|---|---|---|
-| `GET` | `/health` | | Liveness, version, and whether a Ground Stop is engaged. |
+| `GET` | `/health` | | Liveness, version, whether a Ground Stop is engaged, and `stopping` while the Tower drains to stop. |
 | `GET` | `/agents` | | Every agent and the route map between them. Each agent's `model`, `reasoning_effort` and `context` are read from the command line Layover will run for it — with its own `model`, `effort` and `context` filled into its runner's placeholders — and are `null` where it sets none. A route's `pipelines` lists the workflows whose chains may use it, and is `null` for a global route. |
 | `GET` | `/pipelines` | | Declared pipelines, their triggers and their flags, and `agents`: every agent each one's chains reach, entry first, with the `model`, `reasoning_effort` and `context` it runs at in that workflow and whether its runner can carry each (`takes_model`, `takes_effort`, `takes_context`) — what a trigger may choose differently. Empty for a pipeline that `resumes`. `entry` is `null` for a resuming pipeline that names none, which cannot be triggered by hand: `POST /flights` for it is a `400`. Each says whether a person has `switched_off` it, and since when. |
 | `POST` | `/pipelines/{pipeline_name}/switch-off` | | Switch a workflow off: its schedule stops firing, a trigger is refused, a resuming workflow collects nothing, and a trigger already queued is held. Chains of it already under way finish. Switching off twice is a success. See [switching a workflow off](./dashboard.md#switching-a-workflow-off). |

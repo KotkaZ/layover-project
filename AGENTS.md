@@ -32,7 +32,7 @@ The crates, all built and tested:
 - `crates/layover-mcp` — the MCP surface agents talk to Layover through. Untrusted input arrives
   here; identity comes from the token and never from the request.
 - `crates/layover-cli` — the `layover` binary: `validate`, `explain`, `graph`, `prompt`, `serve`,
-  `run`, `doctor`, `autostart`.
+  `stop`, `run`, `doctor`, `autostart`.
 
 **`layover serve` runs a factory unattended.** It fires scheduled pipelines, drains the queue —
 up to `max_concurrent_runs` agents at once — spawns agent CLIs with an MCP endpoint and a per-run
