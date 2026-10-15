@@ -13,6 +13,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::EventStream;
 
+/// The version of `api/openapi.yaml` this was generated from: the API this server serves.
+pub const API_VERSION: &str = "1.14.0";
+
 /// Whether an agent is declared to write to the shared workspace or only to read it. Declared,
 /// not yet enforced: every agent runs in its working directory whatever this says.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -83,6 +86,31 @@ pub struct AgentList {
     pub agents: Vec<Agent>,
     /// The route map.
     pub routes: Vec<Route>,
+}
+
+/// A newer release, and what it says an existing factory will notice.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AvailableUpdate {
+    /// The paragraph of the notes that says what an existing factory will notice, from
+    /// `**Compatibility.**` to the first blank line.
+    #[serde(default)]
+    pub compatibility: Option<String>,
+    /// How far a move to it goes.
+    pub kind: UpdateKind,
+    /// Its CHANGELOG section, in Markdown.
+    pub notes: String,
+    /// True for a pre-release, such as `1.15.0-rc.1`.
+    pub prerelease: bool,
+    /// When it was published, where that is known.
+    #[serde(default)]
+    pub published_at: Option<String>,
+    /// The release's title.
+    #[serde(default)]
+    pub title: Option<String>,
+    /// Where a person reads about it.
+    pub url: String,
+    /// Its version.
+    pub version: String,
 }
 
 /// What kind of thing an agent is stuck on. Coarse on purpose: the point is to make "half my
@@ -1193,6 +1221,75 @@ pub struct Upcoming {
     pub workflows: Vec<ScheduledWorkflow>,
 }
 
+/// Which releases are considered — releases only, or pre-releases too.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UpdateChannel {
+    /// `stable`
+    #[serde(rename = "stable")]
+    Stable,
+    /// `prerelease`
+    #[serde(rename = "prerelease")]
+    Prerelease,
+}
+
+/// The first part of the version that changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UpdateKind {
+    /// `patch`
+    #[serde(rename = "patch")]
+    Patch,
+    /// `minor`
+    #[serde(rename = "minor")]
+    Minor,
+    /// `major`
+    #[serde(rename = "major")]
+    Major,
+}
+
+/// Whether the Tower looks for new releases: `off` never, `notify` once per `check_every`,
+/// saying what it found and changing nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UpdateMode {
+    /// `off`
+    #[serde(rename = "off")]
+    Off,
+    /// `notify`
+    #[serde(rename = "notify")]
+    Notify,
+}
+
+/// Where updates stand for this factory on this machine: the version running, the factory's
+/// `[update]` settings, the last check and what it found.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UpdateStatus {
+    /// A release newer than the one running, on the factory's channel and not skipped. Absent
+    /// when there is none.
+    #[serde(default)]
+    pub available: Option<AvailableUpdate>,
+    /// The factory's `[update] channel`.
+    pub channel: UpdateChannel,
+    /// When this machine last looked on the factory's channel. Null if never.
+    #[serde(default)]
+    pub checked_at: Option<String>,
+    /// The version running.
+    pub current: String,
+    /// Why the last look failed, when it did.
+    #[serde(default)]
+    pub error: Option<String>,
+    /// The newest release the last look that worked found, which may be the one running.
+    #[serde(default)]
+    pub latest: Option<String>,
+    /// The factory's `[update] mode`.
+    pub mode: UpdateMode,
+    /// Versions a person said not to offer on this machine.
+    pub skipped: Vec<String>,
+    /// When looking last worked.
+    #[serde(default)]
+    pub succeeded_at: Option<String>,
+    /// True when `LAYOVER_UPDATE=off` stops every check on this machine.
+    pub switched_off: bool,
+}
+
 /// Work an agent set down to be picked up later, and when it will be.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WaitingLayover {
@@ -1754,6 +1851,16 @@ pub trait Api: Send + Sync + 'static {
         &self,
         query: GetUpcomingQuery,
     ) -> impl core::future::Future<Output = Result<Upcoming, Problem>> + Send;
+    /// Whether a newer Layover has been released, and what this factory does about one.
+    ///
+    /// Read from what this machine last found, so a `--watch-only` dashboard says the same as the
+    /// Tower beside it. Asking does not look: the Tower looks on the factory's `[update]
+    /// check_every`, and `layover update check` looks at once.
+    ///
+    /// `GET /update`
+    fn get_update(
+        &self,
+    ) -> impl core::future::Future<Output = Result<UpdateStatus, Problem>> + Send;
 }
 
 /// Builds the axum router for this API.
@@ -1815,6 +1922,7 @@ pub fn router<A: Api>(api: std::sync::Arc<A>) -> axum::Router {
             axum::routing::get(handle_stream_run::<A>),
         )
         .route("/upcoming", axum::routing::get(handle_get_upcoming::<A>))
+        .route("/update", axum::routing::get(handle_get_update::<A>))
         .with_state(api)
 }
 
@@ -2054,10 +2162,19 @@ async fn handle_get_upcoming<A: Api>(
     }
 }
 
+async fn handle_get_update<A: Api>(
+    axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
+) -> axum::response::Response {
+    match api.get_update().await {
+        Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
+        Err(problem) => problem.into_response(),
+    }
+}
+
 /// Every operation the specification declares, as (method, path, operationId).
 ///
 /// Exposed so tests can assert the router and the specification agree.
-pub const OPERATIONS: [(&str, &str, &str); 24] = [
+pub const OPERATIONS: [(&str, &str, &str); 25] = [
     ("GET", "/agents", "listAgents"),
     ("GET", "/costs", "getCosts"),
     ("GET", "/flights", "listPending"),
@@ -2090,4 +2207,5 @@ pub const OPERATIONS: [(&str, &str, &str); 24] = [
     ("GET", "/runs/{run_id}/report", "getReport"),
     ("GET", "/runs/{run_id}/stream", "streamRun"),
     ("GET", "/upcoming", "getUpcoming"),
+    ("GET", "/update", "getUpdate"),
 ];

@@ -140,13 +140,14 @@ async function loadHealth() {
   const button = $("#ground-stop");
   try {
     const health = await get("/health");
-    pill.textContent = `v${health.version}${health.ground_stop ? " · ground stop" : ""}${health.stopping ? " · stopping" : ""}`;
+    pill.textContent = `v${health.version}${updateSuffix()}${health.ground_stop ? " · ground stop" : ""}${health.stopping ? " · stopping" : ""}`;
     pill.classList.toggle("down", health.ground_stop);
     // Draining to stop: nothing new starts, and the Tower exits once what is running finishes.
     pill.classList.toggle("stopping", Boolean(health.stopping) && !health.ground_stop);
     pill.title = health.stopping
       ? "Asked to stop: nothing new starts, and the Tower exits once what it is running has finished."
       : "";
+    paintUpdate();
 
     // The button says what pressing it will do, not what the state is. "Ground Stop" next to a
     // factory that is already stopped reads as though pressing it would stop it again.
@@ -416,7 +417,7 @@ function start() {
     if (!$("#upcoming").hidden) loadUpcoming();
   });
 
-  loadHealth();
+  startUpdate();
   loadChains();
   loadHelpBadge();
   loadQueued();

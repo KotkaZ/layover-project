@@ -46,6 +46,11 @@ window       = "24h"
 [learnings]
 keep_lapsed = "7d"
 
+# A team trying a release candidate before its other factories take the release: this one is told
+# about pre-releases too. Told only; nothing is downloaded.
+[update]
+channel = "prerelease"
+
 # ── One runner ─────────────────────────────────────────────────────
 # A runner is a CLI and a permission set. `cli = "copilot"` has Layover supply everything an
 # unattended Copilot run needs: the agent's --model, --reasoning-effort and --context, the session's

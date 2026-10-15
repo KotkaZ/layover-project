@@ -144,6 +144,16 @@ cargo install --path crates/layover-cli
 layover --version
 ```
 
+## Hearing about a new release
+
+A running factory asks github.com once a day whether a newer Layover has been released. When one
+has, the dashboard's version pill reads `v1.14.0 → 1.15.0` and opens what it changes, `layover
+doctor` says so, and `layover update check` asks at once. Nothing is downloaded: install a new
+release the way you installed this one. One request a day for a public file is all it does; it
+sends nothing about your factory. To stop it, set `[update] mode = "off"` in a factory, or
+`LAYOVER_UPDATE=off` for the whole machine — see
+[configuration](./configuration.md#update--hearing-about-a-newer-layover).
+
 ## Agent CLIs
 
 Layover supervises other tools; it does not replace them. Install whichever runners your factory

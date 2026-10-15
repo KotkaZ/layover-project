@@ -212,6 +212,12 @@ pub fn render(document: &Document) -> Result<String, Error> {
     if server.contains("EventStream") {
         out.push_str("use crate::EventStream;\n\n");
     }
+    let _ = writeln!(
+        out,
+        "/// The version of `{SPEC_PATH}` this was generated from: the API this server serves.\n\
+         pub const API_VERSION: &str = {:?};\n",
+        document.info.version
+    );
 
     out.push_str(&schemas);
     out.push_str(&server);

@@ -438,6 +438,27 @@
   </form>
 </dialog>
 
+<dialog id="update-dialog">
+  <form method="dialog">
+    <h2 id="update-headline"></h2>
+    <p class="hint" id="update-meta"></p>
+    <p id="update-compatibility"></p>
+    <details>
+      <summary>Everything in the release notes</summary>
+      <pre id="update-notes"></pre>
+    </details>
+    <p class="hint">
+      Install it the way you installed Layover — see the
+      <a href="https://kotkaz.github.io/layover-project/install.html" target="_blank" rel="noopener">install guide</a>.
+      To stop being offered it on this machine: <code id="update-skip"></code>
+    </p>
+    <menu>
+      <a id="update-page" class="btn" target="_blank" rel="noopener">Release notes</a>
+      <button value="close">Close</button>
+    </menu>
+  </form>
+</dialog>
+
 <script src="/routemap.js"></script>
 <script src="/sessions.js"></script>
 <script src="/reply.js"></script>
@@ -453,6 +474,7 @@
 <script src="/runs.js"></script>
 <script src="/journal.js"></script>
 <script src="/attention.js"></script>
+<script src="/update.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

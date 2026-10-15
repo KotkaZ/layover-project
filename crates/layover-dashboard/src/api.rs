@@ -28,6 +28,7 @@ use layover_http::{
     ListRunsQuery, PendingList, PipelineList, PipelineSwitch, Problem, Report, ReserveState,
     ResolveHelpRequest, RouteMap, Run, RunList, RunStatus, SendFlightRequest, Status,
     StreamRunPath, StreamRunQuery, SwitchOffPipelinePath, SwitchOnPipelinePath, Upcoming,
+    UpdateStatus,
 };
 use layover_store::{HelpFilter, History, Journal, RunFilter};
 
@@ -61,6 +62,7 @@ pub struct Dashboard(
     Arc<DashboardState>,
     Option<Arc<str>>,
     Option<crate::upcoming::Clocked>,
+    Option<Arc<layover_update::Settings>>,
 );
 
 impl Dashboard {
@@ -70,7 +72,20 @@ impl Dashboard {
     /// that it has no clock until [`Dashboard::timetable`] gives it one.
     #[must_use]
     pub fn new(state: DashboardState) -> Self {
-        Self(Arc::new(state), None, None)
+        Self(Arc::new(state), None, None, None)
+    }
+
+    /// Where `GET /update` reads what this machine knows about releases. The environment's, by
+    /// default; a test gives its own.
+    #[must_use]
+    pub fn updates(mut self, settings: layover_update::Settings) -> Self {
+        self.3 = Some(Arc::new(settings));
+        self
+    }
+
+    /// The update settings given, if any.
+    pub(crate) fn update_settings(&self) -> Option<&layover_update::Settings> {
+        self.3.as_deref()
     }
 
     /// Names what runs this factory's queue — the Tower in the same process — so the dashboard can
@@ -230,6 +245,10 @@ impl Api for Dashboard {
             ground_stop: self.ground_stop_engaged(),
             stopping: self.stopping(),
         })
+    }
+
+    async fn get_update(&self) -> Result<UpdateStatus, Problem> {
+        self.update_status()
     }
 
     async fn list_agents(&self) -> Result<AgentList, Problem> {

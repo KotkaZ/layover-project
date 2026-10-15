@@ -463,3 +463,25 @@ per piece of work, each restart an ordinary run against Hops, Fuel, `max_runs` a
 `recovery = "manual"` honoured, and a Ground Stop forbidding it. The shapes are pinned by tests built
 from real Copilot CLI 1.0.97 transcripts. A runner that wants none of it sets
 `provider_errors = { read = "none" }`; one for a CLI that changed declares the events itself.
+
+### 26. Layover now makes a request of its own
+
+**What could happen.** Every running factory with `[update] mode = "notify"` — the default — asks
+github.com once a day for the newest release's manifest. That request carries the machine's address
+and a `User-Agent` of `layover/<version>`: GitHub learns that a Layover of that version runs there. On
+a network that must not reach out, it is a request nobody expected, and a proxy may log or refuse it.
+What is read back steers nothing yet — it is only shown — but a manifest is input from the network,
+and the next step, applying a release, makes it load-bearing.
+
+**Why it is accepted.** The alternative is a factory that runs a release with a known fault for
+weeks because nobody looked; the request names nothing about the factory, its agents or its work.
+It is one request for a public file, on github.com rather than the rate-limited API, so a building
+of factories behind one NAT does not spend each other's budget. No telemetry is sent, and none is
+planned while Karl is the only user.
+
+**Mitigation.** `LAYOVER_UPDATE=off` stops every request on a machine, whatever a factory says, and
+`[update] mode = "off"` stops one factory's. A failed check is retried with back-off and never fails
+a run, a start or a validation. The manifest is parsed with every field optional and size-capped at
+2 MB; a manifest naming no version is refused; nothing in it is executed or rendered as HTML.
+`LAYOVER_UPDATE_SOURCE` points a site at a mirror it controls.
+

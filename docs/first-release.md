@@ -340,7 +340,10 @@ plainly what is and is not checked, and give a fail-closed manual path.
 about the format is a data-loss bug waiting for its moment. A newer layout is refused rather than
 read hopefully; an older one is migrated forward once, and says so. There is no self-update: a tool
 that rewrites its own binary while potentially supervising running children is a category of bug
-nobody needs, and the installers already handle it.
+nobody needs, and the installers already handle it. *(Revisited on 15 October 2026: Layover may
+update itself, but only once nothing is running and no rendezvous holds work — the condition this
+paragraph names. The reasoning is in [`decisions.md`](decisions.md#13-decision-log), under "Why
+Layover looks for its own updates after all".)*
 
 ### What the first runnable release had to prove
 

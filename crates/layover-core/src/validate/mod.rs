@@ -21,6 +21,7 @@ mod routes;
 mod runners;
 mod scopes;
 mod selection;
+mod update;
 mod wiring;
 
 use crate::config::Config;
@@ -96,6 +97,7 @@ pub fn validate(config: &Config) -> Vec<Diagnostic> {
     agents::check_reserve_cap_is_deliberate(config, &mut found);
     agents::check_copilot_price_is_usable(config, &mut found);
     learnings::check_learning_rules(config, &mut found);
+    update::check_update(config, &mut found);
     paths::check_state_dir_is_not_set(config, &mut found);
     costs::check_runners_report_cost(config, &mut found);
     agents::check_concurrency_is_usable(config, &mut found);

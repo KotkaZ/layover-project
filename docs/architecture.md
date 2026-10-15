@@ -56,6 +56,7 @@ carries budget across a causal chain, and *Ground Stop* says exactly what a kill
 | Workspace | One shared working directory; contention not yet mediated — worktrees are designed and not built (risk 2) |
 | Outside surface | HTTP API with SSE, **generated from `api/openapi.yaml`**, behind a token minted at start; the UI is purely a client |
 | Distribution | `dist`-generated installers: shell, PowerShell, npm and prebuilt archives, each attested; a Homebrew tap; `cargo install layover-cli` for those who have it; documentation on GitHub Pages |
+| Updates | The Tower looks for a newer release daily and says so (`[update]`); it may update itself only once nothing is running and no rendezvous holds work — see `docs/decisions.md` |
 | Safety rails | Hops (TTL), Fuel (chain budget), Reserve (factory budget), Ground Stop |
 | Hops semantics | One hop per flight; branches inherit the remaining count, so Hops bounds **depth** only |
 | Breadth bound | Fuel, on every chain; the run cap is the deterministic fallback when a runner cannot report cost |
@@ -180,6 +181,10 @@ run_e2e = { default = false, description = "Also run the remote end-to-end suite
 [learnings]
 provisional_runs = 20     # runs a new learning applies for before it lapses
 keep_lapsed      = "14d"  # a lapsed learning nobody rediscovers is deleted after this; 0 at once
+
+[update]
+mode    = "notify"        # look for a newer Layover daily and say so; "off" never looks
+channel = "stable"        # "prerelease" is told about release candidates too
 
 # ── Agents ─────────────────────────────────────────────────────────
 [agents.planner]
@@ -323,6 +328,12 @@ new starts except a flight that completes a rendezvous already holding an arriva
 exits once no run is alive and no barrier holds anything. A request with `now` set cuts off what is
 running instead, for the next Tower to settle as `interrupted`.
 
+One thing lives outside `.layover/`, because it belongs to the installation rather than a factory:
+what this machine last learned about releases, and the versions a person said to skip — in
+`%LOCALAPPDATA%\layover\updates` on Windows, `~/Library/Application Support/layover/updates` on
+macOS, and `$XDG_STATE_HOME/layover/updates` elsewhere. Every factory served by one binary reads it,
+so they ask GitHub once between them.
+
 ## 8. The Flight envelope
 
 ```json
@@ -383,6 +394,7 @@ exists in the specification but is not implemented is a compile error.
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/health` | Liveness, version, whether a Ground Stop is engaged, and whether the Tower is stopping |
+| `GET` | `/update` | Whether a newer Layover has been released, what it changes, and the factory's `[update]` |
 | `GET` | `/agents` · `/pipelines` · `/graph` | What the factory is made of, and its route map drawn |
 | `POST` · `DELETE` | `/pipelines/:name/switch-off` | Switch one workflow off — its ways in close, its chains under way finish — or back on |
 | `POST` · `GET` · `DELETE` | `/flights` · `/flights/:id` | Queue work, see what is waiting, cancel what has not started |
@@ -410,6 +422,7 @@ layover/
 │   ├── layover-mcp/      # the MCP endpoint agents call back into, per-run token auth
 │   ├── layover-tower/    # the supervisor: clock, dispatch, rails, recovery, ground stop
 │   ├── layover-dashboard/# the monitoring page and the Api implementation behind it
+│   ├── layover-update/   # finding newer releases: the manifest, versions, what this machine knows
 │   └── layover-cli/      # the `layover` binary
 ├── examples/             # six factories, parsed and validated by the test suite
 └── xtask/                # cargo xtask verify / generate-api / docs
@@ -417,7 +430,8 @@ layover/
 
 The dashboard is HTML, CSS and plain JavaScript embedded in `layover-dashboard`; there is no
 separate UI build. Dependencies are few on purpose: `tokio`, `axum`, `futures-util`, `serde`,
-`serde_json`, `toml`, `clap`, `croner`, `jiff`, `ulid`, `thiserror`.
+`serde_json`, `toml`, `clap`, `croner`, `jiff`, `ulid`, `thiserror` — and `ureq`, with rustls and
+the platform's certificate verifier, for the one request a day that looks for a newer release.
 
 The split is not only separation of concerns. Each crate plus its tests should fit inside a single
 agent's working context — see §12.

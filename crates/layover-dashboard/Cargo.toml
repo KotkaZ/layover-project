@@ -11,6 +11,7 @@ repository.workspace = true
 layover-core = { path = "../layover-core", version = "1.14.0" }
 layover-http = { path = "../layover-http", version = "1.14.0" }
 layover-store = { path = "../layover-store", version = "1.14.0" }
+layover-update = { path = "../layover-update", version = "1.14.0" }
 axum = { workspace = true }
 futures-util = { version = "0.3", default-features = false }
 jiff = { workspace = true }

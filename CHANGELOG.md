@@ -8,13 +8,20 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
-A Tower that is asked to stop now lets what it is running finish.
+A Tower that is asked to stop now lets what it is running finish, and a factory hears when a newer
+Layover is released.
 
-**Compatibility.** Additive for `layover.toml` and the HTTP API. What an existing factory will
+**Compatibility.** Additive for `layover.toml` and the HTTP API: every factory that loaded under
+1.14 loads unchanged, and the one new table, `[update]`, is optional. What an existing factory will
 notice:
 - **The first Ctrl+C on `layover serve` drains** instead of exiting at once: nothing new starts, what
   is running finishes, and then it exits. A second Ctrl+C cuts what is running off and exits.
-- **`GET /health` gains `stopping`.**
+- **The Tower makes one request a day to github.com**, for the newest release's manifest, and says
+  when a newer release exists. It downloads and changes nothing. `[update] mode = "off"` stops it
+  for a factory and `LAYOVER_UPDATE=off` for a machine.
+- **`layover doctor` begins with a line** saying which Layover runs and what this machine last
+  learned about releases.
+- **The HTTP API**: `GET /health` gains `stopping`, and `GET /update` is new.
 
 ### Added
 
@@ -31,6 +38,18 @@ notice:
   parked, so stopping it no longer interrupts runs or loses arrivals.
 - **The dashboard says when a Tower is stopping**: the version pill reads `· stopping`, also from a
   `--watch-only` dashboard in another process.
+- **Hearing about a newer Layover.** `[update]` — `mode` (`notify` by default, or `off`), `channel`
+  (`stable`, or `prerelease` for release candidates) and `check_every` (`"24h"`). The Tower looks on
+  that schedule; the version pill reads `v1.14.0 → 1.15.0` and opens the release's Compatibility
+  note and notes; `doctor` says so. What was found is kept per machine, so factories sharing a
+  binary ask once between them.
+- **`layover update check`** looks now and prints what a newer release changes; **`layover update
+  skip <version>`** stops offering one on this machine, and `--clear` undoes it.
+- **`layover about`** says what a binary is — version, platform, state layout, HTTP API and the
+  oldest release it can be updated from — and `--json` says it to a program.
+- **`GET /update`**: what this machine last learned about releases, for this factory.
+- `LAYOVER_UPDATE`, `LAYOVER_UPDATE_SOURCE` (a mirror laid out as GitHub's releases) and
+  `LAYOVER_GITHUB_TOKEN` (for the API, on the `prerelease` channel).
 
 ## [1.14.0] — 2026-10-14
 

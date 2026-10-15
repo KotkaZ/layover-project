@@ -19,12 +19,14 @@ mod learnings;
 mod offered;
 mod rails;
 mod runner;
+mod update;
 mod written;
 
 pub use copilot::CopilotConfig;
 pub use learnings::LearningsConfig;
 pub use rails::Rails;
 pub use runner::{Cli, McpWiring, Runner, Selection, fixes_beside};
+pub use update::{UpdateChannel, UpdateConfig, UpdateMode};
 
 /// Filesystem and network locations used by the Tower.
 #[derive(Debug, Clone, Deserialize)]
@@ -222,6 +224,8 @@ pub struct Config {
     pub copilot: CopilotConfig,
     /// The numbers learnings live by.
     pub learnings: LearningsConfig,
+    /// Whether the Tower looks for a newer Layover.
+    pub update: UpdateConfig,
     /// Flags declared for every workflow at once, `[flags]`. Already merged into each pipeline's
     /// own `flags`; kept here so validation can tell what a pipeline repeats.
     pub flags: BTreeMap<String, crate::pipeline::FlagSpec>,

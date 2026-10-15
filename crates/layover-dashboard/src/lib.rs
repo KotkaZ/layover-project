@@ -39,6 +39,7 @@ mod stream;
 mod switch;
 pub mod transcript;
 mod upcoming;
+mod update;
 mod view;
 
 pub use api::{Dashboard, DashboardState};

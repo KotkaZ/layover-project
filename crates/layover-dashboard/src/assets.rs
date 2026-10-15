@@ -51,6 +51,8 @@ const SCRIPTS: &[(&str, &str)] = &[
     ("/journal.js", include_str!("assets/journal.js")),
     // What needs a person, in the title and as notifications.
     ("/attention.js", include_str!("assets/attention.js")),
+    // A newer Layover, beside the version.
+    ("/update.js", include_str!("assets/update.js")),
     // The shared helpers, and starting everything.
     ("/app.js", include_str!("assets/app.js")),
 ];

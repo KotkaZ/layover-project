@@ -1,6 +1,6 @@
 # The `layover` command
 
-Eight commands. `--config` (or `-c`) is global and defaults to `layover.toml` in the working
+Eleven commands. `--config` (or `-c`) is global and defaults to `layover.toml` in the working
 directory, so it can go before or after the subcommand.
 
 `serve`, `run` and `autostart` make that path **absolute** before doing anything else, and every
@@ -136,6 +136,10 @@ things in one process:
 They share one process because they share one factory definition, one queue and one set of live
 tokens. Splitting them would mean keeping three copies of that agreeing.
 
+Once a day it also asks github.com whether a newer Layover has been released, and prints a line when
+one has — see [`update`](#update). Its factory's `[update] mode = "off"`, or `LAYOVER_UPDATE=off` on
+the machine, stops that; a `--watch-only` dashboard never asks.
+
 It also prunes history past its 90-day horizon on startup, and settles what the last Tower left
 behind: a run that was alive when that Tower went away is stopped if it is still going — it can no
 longer reach Layover — written to history as `interrupted`, and restarted where its agent's
@@ -268,9 +272,61 @@ is one people stop running.
 Windows are the same set the [dashboard](./dashboard.md) offers: `today`, `last_24h`, `last_7d`,
 `last_30d`, `last_90d`, `month_to_date`, `all_time`.
 
+Its first line says which Layover is running and what this machine last learned about releases —
+`Layover 1.14.0; 1.15.0 is available (minor): layover update check says what changes. Checked 3
+hour(s) ago.` — read from that record, without asking GitHub again. It is not a finding: a release
+not yet installed fails nothing.
+
 ### It will not invent a verdict
 
 A factory with no history in the window is reported as exactly that, and exits **zero**. Nothing
 has run, so nothing has passed and nothing has failed — and a schedule that has not fired is not a
 finding about that schedule when *nothing at all* has fired. Widen `--window` if you expected
 history and see none.
+
+## `update`
+
+```sh
+layover update check              # look now, and say what a newer release changes
+layover update skip 1.15.0        # stop offering 1.15.0 on this machine
+layover update skip --clear       # offer every skipped version again
+```
+
+`check` asks for the newest release on the factory's [`[update] channel`](./configuration.md#update--hearing-about-a-newer-layover)
+— `stable` when there is no factory — whatever the schedule, and says what it found:
+
+```text
+Layover 1.14.0 (x86_64-pc-windows-msvc), stable channel.
+1.15.0 is available — released 2026-10-17, minor.
+  **Compatibility.** Additive for `layover.toml`: every factory that loaded under 1.14 loads unchanged…
+Release notes: https://github.com/KotkaZ/layover-project/releases/tag/v1.15.0
+Install it the way you installed Layover: https://kotkaz.github.io/layover-project/install.html
+```
+
+The indented paragraph is the release's own Compatibility note: what an existing factory will
+notice. It exits non-zero only when it could not look — offline, refused by a proxy, or
+`LAYOVER_UPDATE=off`, under which it makes no request at all.
+
+A Tower whose factory has `[update] mode = "notify"`, the default, does the same once a day by itself
+and prints one line when it finds something; the [dashboard](./dashboard.md#a-newer-layover) and
+[`doctor`](#doctor) say so too. Nothing is downloaded and nothing changes: installing a release is
+still yours to do, the way you [installed](./install.md) Layover.
+
+`skip` is for a release you have decided against. It is kept per machine, like what was found, and
+a newer release is offered as usual.
+
+## `about`
+
+```sh
+layover about           # what this binary is
+layover about --json    # the same, for a program
+```
+
+```json
+{"version":"1.14.0","target":"x86_64-pc-windows-msvc","layout":1,"api":"1.14.0","min_upgrade_from":"1.0.0"}
+```
+
+The version; the platform it was built for; the version of the
+[state directory's layout](./configuration.md#the-state-directory-is-versioned) it reads and writes;
+the HTTP API it serves; and the oldest release it can be updated from in one step. An updater asks
+a binary this before trusting it, which is why every release from now on carries it.

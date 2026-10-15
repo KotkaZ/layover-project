@@ -1,0 +1,22 @@
+[package]
+name = "layover-update"
+description = "Finds, verifies and applies Layover releases, for the Tower to update itself between runs."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+layover-core = { path = "../layover-core", version = "1.14.0" }
+jiff = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+# A blocking client, because a check is one small request a day on a thread of its own. rustls
+# with the platform verifier rather than OpenSSL or a bundled root store, so a corporate proxy's
+# certificate that the machine trusts is trusted here too.
+ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier"] }
+
+[lints]
+workspace = true

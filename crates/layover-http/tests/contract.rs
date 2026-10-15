@@ -89,6 +89,21 @@ impl Api for Stub {
         })
     }
 
+    async fn get_update(&self) -> Result<layover_http::UpdateStatus, Problem> {
+        Ok(layover_http::UpdateStatus {
+            current: env!("CARGO_PKG_VERSION").to_owned(),
+            mode: layover_http::UpdateMode::Notify,
+            channel: layover_http::UpdateChannel::Stable,
+            switched_off: false,
+            checked_at: None,
+            succeeded_at: None,
+            error: None,
+            latest: None,
+            available: None,
+            skipped: Vec::new(),
+        })
+    }
+
     async fn list_agents(&self) -> Result<AgentList, Problem> {
         Ok(AgentList {
             agents: vec![Agent {
@@ -522,7 +537,7 @@ fn json(body: &str) -> serde_json::Value {
 
 #[test]
 fn every_specified_operation_is_routed() {
-    assert_eq!(OPERATIONS.len(), 24);
+    assert_eq!(OPERATIONS.len(), 25);
 
     for (method, path, operation) in OPERATIONS {
         assert!(path.starts_with('/'), "`{operation}` has an odd path");

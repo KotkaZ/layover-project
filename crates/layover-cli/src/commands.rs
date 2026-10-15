@@ -286,6 +286,7 @@ pub fn serve(
 
         let tower = Tower::start(factory, Arc::clone(&journal), |line| println!("  {line}"))
             .map_err(|error| error.to_string())?;
+        crate::update::watch(config.update, |line| println!("  {line}"));
 
         Some((served, tower))
     };
@@ -723,8 +724,9 @@ pub fn doctor(path: &Path, window: &str) -> Result<(String, bool), Failure> {
 
     let root = path.parent().unwrap_or(Path::new("."));
     let report = crate::doctor::check(&config, root, window)?;
+    let version = crate::update::doctor_line(&config.update, jiff::Timestamp::now());
 
-    Ok((report.render(), report.healthy()))
+    Ok((format!("{version}\n{}", report.render()), report.healthy()))
 }
 
 /// The dashboard `serve` puts on a factory.

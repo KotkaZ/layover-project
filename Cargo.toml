@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/layover-cli", "crates/layover-core", "crates/layover-dashboard", "crates/layover-http", "crates/layover-mcp", "crates/layover-store", "crates/layover-tower", "xtask"]
+members = ["crates/layover-cli", "crates/layover-core", "crates/layover-dashboard", "crates/layover-http", "crates/layover-mcp", "crates/layover-store", "crates/layover-tower", "crates/layover-update", "xtask"]
 
 [workspace.package]
 version = "1.14.0"

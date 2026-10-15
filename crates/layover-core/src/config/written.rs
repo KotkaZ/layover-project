@@ -10,7 +10,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Deserialize;
 
-use super::{Config, CopilotConfig, Defaults, LearningsConfig, Paths, ReserveConfig, Runner};
+use super::{
+    Config, CopilotConfig, Defaults, LearningsConfig, Paths, ReserveConfig, Runner, UpdateConfig,
+};
 use crate::agent::{Agent, AgentName};
 use crate::cost::RateCard;
 use crate::pipeline::{FlagSpec, Pipeline, PipelineName};
@@ -32,6 +34,8 @@ pub(super) struct Written {
     copilot: CopilotConfig,
     #[serde(default)]
     learnings: LearningsConfig,
+    #[serde(default)]
+    update: UpdateConfig,
     #[serde(default)]
     flags: BTreeMap<String, FlagSpec>,
     #[serde(default)]
@@ -60,6 +64,7 @@ impl From<Written> for Config {
             rates: written.rates,
             copilot: written.copilot,
             learnings: written.learnings,
+            update: written.update,
             flags: written.flags,
             runners: written.runners,
             agents: written.agents,

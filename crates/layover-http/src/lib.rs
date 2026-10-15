@@ -22,6 +22,7 @@
 //!             stopping: false,
 //!         })
 //!     }
+//!     # async fn get_update(&self) -> Result<layover_http::UpdateStatus, Problem> { todo!() }
 //!     # async fn list_agents(&self) -> Result<layover_http::AgentList, Problem> { todo!() }
 //!     # async fn list_pipelines(&self) -> Result<layover_http::PipelineList, Problem> { todo!() }
 //!     # async fn get_graph(&self, _: layover_http::GetGraphQuery) -> Result<layover_http::RouteMap, Problem> { todo!() }

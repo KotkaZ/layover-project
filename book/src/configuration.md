@@ -176,6 +176,40 @@ stops an agent proposing again what a person refused.
 failing. What is not configurable: how two learnings are judged to say the same thing, and what a
 learning may not say — see [learnings](./learning.md). The whole table is optional.
 
+## `[update]` — hearing about a newer Layover
+
+```toml
+[update]
+mode        = "notify"   # off | notify
+channel     = "stable"   # stable | prerelease
+check_every = "24h"
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `mode` | `"notify"` | `notify`: the Tower looks for a newer release once per `check_every`, and the [dashboard](./dashboard.md#a-newer-layover), [`doctor`](./cli.md#doctor) and [`layover update check`](./cli.md#update) say what it found and what it changes. Nothing is downloaded and nothing changes. `off`: the Tower never looks; a person can still run `layover update check`. |
+| `channel` | `"stable"` | `prerelease` considers pre-releases too, such as `1.15.0-rc.1`, for trying one before stable factories do. |
+| `check_every` | `"24h"` | How often the Tower looks, give or take a twelfth so machines that started together do not ask in the same minute. `validate` refuses less than an hour. A look that fails is retried after an hour, then two, four and so on up to this. |
+
+A look is one request for a public file on github.com — the newest release's
+`dist-manifest.json` — which sends nothing about the factory: only the address it comes from and
+a `User-Agent` of `layover/<version>`. The `prerelease` channel also asks GitHub's API for the list
+of releases. What was found is kept per machine, not per factory, so two factories served by one
+installation ask once between them: in `%LOCALAPPDATA%\layover\updates` on Windows,
+`~/Library/Application Support/layover/updates` on macOS, and `$XDG_STATE_HOME/layover/updates`
+(by default `~/.local/state/layover/updates`) elsewhere.
+
+Three environment variables apply to every factory on a machine, whatever `[update]` says:
+
+| Variable | Effect |
+|---|---|
+| `LAYOVER_UPDATE=off` | No request is made at all — not by the Tower, not by `layover update check`. Set it in CI and on a machine that must not reach out. |
+| `LAYOVER_UPDATE_SOURCE` | Fetch releases from a mirror laid out as GitHub's releases are: `<url>/latest/download/dist-manifest.json`, `<url>/download/<tag>/<file>`, and the API's release list at `<url>/releases.json`. For sites that cannot reach GitHub, and for tests. |
+| `LAYOVER_GITHUB_TOKEN` | A token for GitHub's API, for the `prerelease` channel behind a NAT whose sixty unauthenticated requests an hour are spent. Never `GITHUB_TOKEN`, which is usually a token meant for something else. |
+
+None of the three reaches an agent: a child's environment is [scrubbed](#credentials-for-the-cli-itself)
+as it always was. The whole table is optional.
+
 ## `[runners.*]` — how to invoke a CLI
 
 A runner is **a CLI and a permission set**, shared by every agent with those permissions. For a CLI

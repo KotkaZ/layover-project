@@ -10,6 +10,7 @@ mod doctor;
 mod mcp;
 mod stopping;
 mod tower;
+mod update;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -137,6 +138,21 @@ enum Command {
         now: bool,
     },
 
+    /// Say what this binary is: its version, platform and state-directory layout.
+    ///
+    /// `--json` is for programs. The updater asks a downloaded binary this before it trusts it.
+    About {
+        /// Print JSON.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Look for a newer Layover, or stop being offered one.
+    Update {
+        #[command(subcommand)]
+        action: UpdateAction,
+    },
+
     /// Report anything about a running factory that a person should look at.
     ///
     /// The failures that matter in a lights-out factory are the quiet ones: a chain that stalled
@@ -165,6 +181,26 @@ enum Command {
         /// Print the file instead of writing it.
         #[arg(long)]
         show: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum UpdateAction {
+    /// Look for a newer release now, and say what it changes.
+    ///
+    /// Reads the factory's `[update] channel` when there is a factory. Makes no request when
+    /// `LAYOVER_UPDATE=off`.
+    Check,
+
+    /// Stop offering a version on this machine. A newer one is still offered.
+    Skip {
+        /// The version, such as 1.15.0.
+        #[arg(required_unless_present = "clear")]
+        version: Option<String>,
+
+        /// Offer every skipped version again.
+        #[arg(long, conflicts_with = "version")]
+        clear: bool,
     },
 }
 
@@ -222,6 +258,11 @@ fn main() -> ExitCode {
         ),
         Command::Run { dry_run } => commands::run(&cli.config, dry_run),
         Command::Stop { now } => commands::stop(&cli.config, now),
+        Command::About { json } => Ok(update::about(json)),
+        Command::Update { action } => match action {
+            UpdateAction::Check => update::check_now(&cli.config),
+            UpdateAction::Skip { version, clear } => update::skip(version.as_deref(), clear),
+        },
         Command::Doctor { .. } => unreachable!("handled above"),
     };
 

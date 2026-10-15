@@ -1164,6 +1164,53 @@ starts was written for one that has gone, and honouring it would stop a Tower no
 so it is removed and reported. An unreadable request is a request to drain rather than to cut off,
 because when it is unclear what was asked, the gentler reading loses nothing.
 
+**Why Layover looks for its own updates after all.** The first release decided against self-update
+because a tool that rewrites its own binary while supervising running children is a category of bug
+nobody needs, and the installers already handle it (see `first-release.md`). Both halves have
+changed. A Tower can now stop without cutting anything off — it drains — so "while supervising
+running children" is a condition that can be waited out rather than one that is always true. And
+the installers handle installing, not hearing: a factory left unattended runs whatever it was
+installed with, for weeks, through fixes made for faults it is having. Karl decided on 15 October
+2026 to revisit it on those terms: Layover may update itself, never while a run is alive or a
+rendezvous holds an arrival. It arrives in steps, each useful alone. The first only tells: the Tower
+asks once a day whether a newer release exists, and the dashboard, `doctor` and `layover update
+check` say what it changes. Downloading, verifying and applying come later, each behind the step
+before it.
+
+**Why telling is the default, and nothing more.** A factory that says nothing in `[update]` is told
+about releases and changes nothing. Telling costs one request a day for a public file and cannot
+break a factory; applying can, and an existing factory should not start doing it because its binary
+was replaced. Off by default would be safer still and would leave the factories that most need a
+fix — the ones nobody is watching — never hearing of it. `LAYOVER_UPDATE=off` turns every request
+off on a machine whatever its factories say, for CI and for networks that must not reach out.
+
+**Why discovery reads the download address, not the API.** `api.github.com` allows sixty
+unauthenticated requests an hour per address, and behind a corporate NAT that budget belongs to the
+whole building. The newest stable release's manifest is at
+`releases/latest/download/dist-manifest.json`, a redirect github.com and its asset host serve without
+that limit, and the manifest already says everything a person needs: the version, whether it is a
+pre-release, the release notes with their Compatibility paragraph, and each platform's archive with
+its SHA-256. The API is used only for what has no such address — the newest *pre-release* — and
+takes `LAYOVER_GITHUB_TOKEN`, never `GITHUB_TOKEN`, which is usually a token meant for something
+else. The upload time from the manifest's `Last-Modified` is the release's age, which a later step
+needs for the cool-off before an unattended factory takes a release.
+
+**Why what was found is kept per machine.** The binary being updated belongs to the installation,
+which several factories may share. Kept per factory, two factories would each ask GitHub and could
+disagree about what is skipped; kept per machine, they ask once between them and a skip applies to
+the binary it is about. So it lives in the platform's own state directory rather than in
+`.layover/`. A check is never made by reading `GET /update`: the dashboard reads what the Tower last
+found, so a `--watch-only` dashboard says the same as the Tower beside it and opening a page costs
+no request.
+
+**Why `layover about` exists.** Before anything trusts a binary it has downloaded, it must ask that
+binary what it is: its version and platform, to refuse one that is not what the manifest promised,
+and the layout of the state directory it reads, because a layout change turns an update into a
+migration a person should choose. Asking the binary rather than a second file means the answer
+comes from what was verified. So every release from now on carries `layover about --json`, and
+`min_upgrade_from` with it — the oldest release one can be reached from in one step, raised only by
+a release that cannot be.
+
 ---
 
 ## Still open

@@ -88,6 +88,8 @@ fn queue(root: &Path, agent: &str) {
 fn serve(root: &Path) -> (Child, Receiver<String>) {
     let mut child = Command::new(env!("CARGO_BIN_EXE_layover"))
         .args(["serve", "--config", "layover.toml", "--no-auth"])
+        // A test asks GitHub nothing.
+        .env("LAYOVER_UPDATE", "off")
         .current_dir(root)
         .stdout(Stdio::piped())
         .stderr(Stdio::null())

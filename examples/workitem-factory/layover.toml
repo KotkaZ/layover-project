@@ -85,6 +85,12 @@ cache_write_usd = 6.25
 [learnings]
 keep_lapsed_days = 14
 
+# Once a day the Tower asks github.com whether a newer Layover has been released, and the
+# dashboard, `layover doctor` and `layover update check` say what it changes. Nothing is
+# downloaded. The default; `mode = "off"` stops it, as `LAYOVER_UPDATE=off` does for a machine.
+[update]
+mode = "notify"
+
 # ── How to invoke each supported CLI ───────────────────────────────
 # The prompt is written to each runner's stdin, never onto its command line: Windows caps a
 # command line at 32,767 characters and a real agent prompt goes well past it. `{prompt}` is

@@ -232,6 +232,17 @@ The read-only half needs no Tower at all. History outlives the process that wrot
 dashboard answers for a factory that is not currently running — which is exactly when you most
 want to know what it did. `layover serve --watch-only` serves that half alone.
 
+## A newer Layover
+
+When this machine has learned of a newer release, the version pill in the header says so —
+`v1.14.0 → 1.15.0` — and opens a window with what it changes: whether it is a patch, minor or major
+release, when it was released, its Compatibility note — what an existing factory will notice — and
+all its release notes. Installing it is still yours to do; the window links the
+[install guide](./install.md) and gives the command that stops it being offered.
+
+The pill reads what the Tower last found, on [its schedule](./configuration.md#update--hearing-about-a-newer-layover):
+opening the page asks GitHub nothing, and a `--watch-only` dashboard says the same as the Tower's.
+
 ## Knowing when it needs you
 
 A factory runs unattended, so the page is usually in a background tab when an agent stops to ask

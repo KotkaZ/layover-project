@@ -53,6 +53,23 @@ paths:
               schema:
                 $ref: "#/components/schemas/Health"
 
+  /update:
+    get:
+      operationId: getUpdate
+      summary: Whether a newer Layover has been released, and what this factory does about one.
+      description: |
+        Read from what this machine last found, so a `--watch-only` dashboard says the same as the
+        Tower beside it. Asking does not look: the Tower looks on the factory's `[update]
+        check_every`, and `layover update check` looks at once.
+      tags: [control]
+      responses:
+        "200":
+          description: What this machine knows about releases.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateStatus"
+
   /agents:
     get:
       operationId: listAgents
@@ -847,6 +864,101 @@ components:
           description: |
             True when the Tower has been asked to stop — a Ctrl+C or `layover stop` — and is
             draining: nothing new starts, and it exits once what it is running has finished.
+
+    UpdateStatus:
+      type: object
+      description: |
+        Where updates stand for this factory on this machine: the version running, the factory's
+        `[update]` settings, the last check and what it found.
+      required: [current, mode, channel, switched_off, skipped]
+      properties:
+        current:
+          type: string
+          description: The version running.
+        mode:
+          $ref: "#/components/schemas/UpdateMode"
+          description: The factory's `[update] mode`.
+        channel:
+          $ref: "#/components/schemas/UpdateChannel"
+          description: The factory's `[update] channel`.
+        switched_off:
+          type: boolean
+          description: True when `LAYOVER_UPDATE=off` stops every check on this machine.
+        checked_at:
+          type: [string, "null"]
+          format: date-time
+          description: When this machine last looked on the factory's channel. Null if never.
+        succeeded_at:
+          type: [string, "null"]
+          format: date-time
+          description: When looking last worked.
+        error:
+          type: [string, "null"]
+          description: Why the last look failed, when it did.
+        latest:
+          type: [string, "null"]
+          description: |
+            The newest release the last look that worked found, which may be the one running.
+        available:
+          $ref: "#/components/schemas/AvailableUpdate"
+          description: |
+            A release newer than the one running, on the factory's channel and not skipped. Absent
+            when there is none.
+        skipped:
+          type: array
+          description: Versions a person said not to offer on this machine.
+          items:
+            type: string
+
+    AvailableUpdate:
+      type: object
+      description: A newer release, and what it says an existing factory will notice.
+      required: [version, kind, prerelease, notes, url]
+      properties:
+        version:
+          type: string
+          description: Its version.
+        kind:
+          $ref: "#/components/schemas/UpdateKind"
+          description: How far a move to it goes.
+        prerelease:
+          type: boolean
+          description: True for a pre-release, such as `1.15.0-rc.1`.
+        title:
+          type: [string, "null"]
+          description: The release's title.
+        published_at:
+          type: [string, "null"]
+          format: date-time
+          description: When it was published, where that is known.
+        notes:
+          type: string
+          description: Its CHANGELOG section, in Markdown.
+        compatibility:
+          type: [string, "null"]
+          description: |
+            The paragraph of the notes that says what an existing factory will notice, from
+            `**Compatibility.**` to the first blank line.
+        url:
+          type: string
+          description: Where a person reads about it.
+
+    UpdateMode:
+      type: string
+      description: |
+        Whether the Tower looks for new releases: `off` never, `notify` once per `check_every`,
+        saying what it found and changing nothing.
+      enum: ["off", notify]
+
+    UpdateChannel:
+      type: string
+      description: Which releases are considered — releases only, or pre-releases too.
+      enum: [stable, prerelease]
+
+    UpdateKind:
+      type: string
+      description: The first part of the version that changes.
+      enum: [patch, minor, major]
 
     Access:
       type: string
