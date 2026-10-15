@@ -17,6 +17,12 @@ thiserror = { workspace = true }
 # with the platform verifier rather than OpenSSL or a bundled root store, so a corporate proxy's
 # certificate that the machine trusts is trusted here too.
 ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier"] }
+# What a release archive is checked against, and what it is unpacked from: a zip on Windows, an
+# xz-compressed tar elsewhere. All pure Rust, so nothing needs a C toolchain or a system library.
+sha2 = "0.11"
+zip = { version = "9", default-features = false, features = ["deflate"] }
+tar = { version = "0.4", default-features = false }
+lzma-rs = "0.3"
 
 [lints]
 workspace = true

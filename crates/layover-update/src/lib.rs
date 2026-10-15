@@ -7,20 +7,32 @@
 //!
 //! What a factory does about a release is its `[update]` table. By default it is told: once a day
 //! the Tower asks, and the dashboard, `layover doctor` and `layover update check` say what was
-//! found. `LAYOVER_UPDATE=off` stops every request on a machine, whatever a factory says.
+//! found. `stage` goes further and gets it ready — downloaded, verified, asked what it is, and
+//! measured against the factory — without installing it. `LAYOVER_UPDATE=off` stops every request
+//! on a machine, whatever a factory says.
 
 pub mod check;
+pub mod download;
+pub mod gate;
 pub mod manifest;
+pub mod probe;
+pub mod provenance;
 pub mod source;
+pub mod stage;
 pub mod state;
+pub mod unpack;
 pub mod version;
 
 pub use check::{
     Available, CheckError, Settings, Status, available, check, compatibility, due, next_check,
     status,
 };
+pub use gate::{Gate, gate};
 pub use layover_core::config::{UpdateChannel as Channel, UpdateConfig, UpdateMode as Mode};
+pub use probe::About;
+pub use provenance::{Attestation, Gh, Verifier};
 pub use source::{Source, SourceError};
+pub use stage::{Running, Staged, stage, staged};
 pub use state::{LastCheck, Release};
 pub use version::{Kind, Version};
 

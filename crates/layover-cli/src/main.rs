@@ -8,6 +8,7 @@
 mod commands;
 mod doctor;
 mod mcp;
+mod staging;
 mod stopping;
 mod tower;
 mod update;
@@ -192,6 +193,16 @@ enum UpdateAction {
     /// `LAYOVER_UPDATE=off`.
     Check,
 
+    /// Get the newest release ready to install, without installing it.
+    ///
+    /// Downloads it, checks its SHA-256 against the release, verifies with `gh` that Layover's
+    /// release workflow built it, asks the binary what it is, and has it validate this factory.
+    Stage {
+        /// Run a binary whose provenance could not be checked, on its checksum alone.
+        #[arg(long)]
+        trust_checksum_only: bool,
+    },
+
     /// Stop offering a version on this machine. A newer one is still offered.
     Skip {
         /// The version, such as 1.15.0.
@@ -261,6 +272,9 @@ fn main() -> ExitCode {
         Command::About { json } => Ok(update::about(json)),
         Command::Update { action } => match action {
             UpdateAction::Check => update::check_now(&cli.config),
+            UpdateAction::Stage {
+                trust_checksum_only,
+            } => staging::stage_now(&cli.config, trust_checksum_only),
             UpdateAction::Skip { version, clear } => update::skip(version.as_deref(), clear),
         },
         Command::Doctor { .. } => unreachable!("handled above"),

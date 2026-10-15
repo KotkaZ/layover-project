@@ -60,6 +60,9 @@ pub enum UpdateMode {
     /// Look, and say what was found. Download nothing, change nothing.
     #[default]
     Notify,
+    /// Look, and get a newer release ready: downloaded, verified, asked what it is and checked
+    /// against this factory. Install nothing.
+    Stage,
 }
 
 impl fmt::Display for UpdateMode {
@@ -67,6 +70,7 @@ impl fmt::Display for UpdateMode {
         f.write_str(match self {
             Self::Off => "off",
             Self::Notify => "notify",
+            Self::Stage => "stage",
         })
     }
 }

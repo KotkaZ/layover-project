@@ -909,6 +909,100 @@ components:
           description: Versions a person said not to offer on this machine.
           items:
             type: string
+        staged:
+          $ref: "#/components/schemas/StagedUpdate"
+          description: |
+            The available release as staged on this machine, when it has been: by `[update] mode =
+            "stage"` or `layover update stage`. Absent when it has not.
+        gate:
+          $ref: "#/components/schemas/UpdateGate"
+          description: |
+            What the staged release made of this factory's definition. Absent until it was asked.
+
+    StagedUpdate:
+      type: object
+      description: |
+        A release made ready to install: downloaded, its SHA-256 matched to the release, its
+        provenance checked, and — only once that verified — its binary asked what it is.
+      required: [version, provenance, trusted_checksum_only, ready, crosses_layout]
+      properties:
+        version:
+          type: string
+          description: Its version.
+        at:
+          type: [string, "null"]
+          format: date-time
+          description: When staging finished.
+        archive:
+          type: [string, "null"]
+          description: The archive's file name.
+        sha256:
+          type: [string, "null"]
+          description: Its SHA-256, once it matched the release's.
+        provenance:
+          $ref: "#/components/schemas/UpdateProvenance"
+          description: What its GitHub attestation said.
+        provenance_detail:
+          type: [string, "null"]
+          description: Who built it, when verified; why not, otherwise.
+        trusted_checksum_only:
+          type: boolean
+          description: True when a person said to run it on its checksum alone.
+        ready:
+          type: boolean
+          description: |
+            True when it is verified (or trusted) and its binary answered for itself: ready to
+            install.
+        crosses_layout:
+          type: boolean
+          description: |
+            True when it reads a different state-directory layout from the one running, which makes
+            installing it a person's choice.
+        refused:
+          type: [string, "null"]
+          description: Why staging stopped short, when it did.
+
+    UpdateProvenance:
+      type: string
+      description: |
+        `verified`: Layover's release workflow built it from the release's tag. `unavailable`: it
+        could not be checked here — no `gh`, or not signed in — so it was not run. `refused`: it was
+        checked and is not what the release says. `unchecked`: staging stopped before it was asked.
+      enum: [verified, unavailable, refused, unchecked]
+
+    UpdateGate:
+      type: object
+      description: |
+        The staged release's own validation of this factory. Errors refuse it; warnings this version
+        does not give refuse only an unattended install.
+      required: [version, passes, passes_unattended, errors, new_warnings]
+      properties:
+        version:
+          type: string
+          description: The release that was asked.
+        at:
+          type: [string, "null"]
+          format: date-time
+          description: When.
+        not_run:
+          type: [string, "null"]
+          description: Why it could not be asked, when it could not.
+        passes:
+          type: boolean
+          description: True when it ran and refused nothing.
+        passes_unattended:
+          type: boolean
+          description: True when it also gave no warning the running version does not.
+        errors:
+          type: array
+          description: What it refuses in the factory.
+          items:
+            type: string
+        new_warnings:
+          type: array
+          description: Warnings it gives that the running version does not.
+          items:
+            type: string
 
     AvailableUpdate:
       type: object
@@ -947,8 +1041,8 @@ components:
       type: string
       description: |
         Whether the Tower looks for new releases: `off` never, `notify` once per `check_every`,
-        saying what it found and changing nothing.
-      enum: ["off", notify]
+        saying what it found and changing nothing, `stage` also getting it ready to install.
+      enum: ["off", notify, stage]
 
     UpdateChannel:
       type: string

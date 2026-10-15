@@ -185,6 +185,104 @@ pub fn manifest(version: &str, prerelease: bool, notes: &str) -> String {
     .to_string()
 }
 
+/// A manifest announcing `version` with an archive for this platform named `archive`, whose
+/// SHA-256 it lists as `sha256`.
+pub fn manifest_with_archive(version: &str, archive: &str, sha256: &str) -> String {
+    let executable = if cfg!(windows) {
+        "layover.exe"
+    } else {
+        "layover"
+    };
+    serde_json::json!({
+        "announcement_tag": format!("v{version}"),
+        "announcement_is_prerelease": false,
+        "announcement_title": format!("{version} — 2026-10-17"),
+        "announcement_changelog": "Notes.",
+        "releases": [{ "app_name": "layover-cli", "app_version": version }],
+        "artifacts": {
+            archive: {
+                "kind": "executable-zip",
+                "target_triples": [layover_update::TARGET],
+                "checksums": { "sha256": sha256 },
+                "assets": [{ "kind": "executable", "path": executable, "name": executable }]
+            }
+        }
+    })
+    .to_string()
+}
+
+/// The archive's name for this platform, as dist names it.
+pub fn archive_name() -> String {
+    let ext = if cfg!(windows) { "zip" } else { "tar.xz" };
+    format!("layover-cli-{}.{ext}", layover_update::TARGET)
+}
+
+/// An archive in this platform's format holding `entries`, each a path and its bytes.
+pub fn archive(entries: &[(&str, &[u8])]) -> Vec<u8> {
+    if cfg!(windows) {
+        let mut out = std::io::Cursor::new(Vec::new());
+        {
+            let mut zip = zip::ZipWriter::new(&mut out);
+            for (path, bytes) in entries {
+                zip.start_file(*path, zip::write::SimpleFileOptions::default())
+                    .expect("starts");
+                std::io::Write::write_all(&mut zip, bytes).expect("writes");
+            }
+            zip.finish().expect("finishes");
+        }
+        out.into_inner()
+    } else {
+        let mut tar = tar::Builder::new(Vec::new());
+        for (path, bytes) in entries {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(bytes.len() as u64);
+            header.set_mode(0o755);
+            header.set_entry_type(tar::EntryType::Regular);
+            // Written raw, so a test can name a path the builder itself would refuse.
+            let name = header.as_old_mut().name.as_mut();
+            name[..path.len()].copy_from_slice(path.as_bytes());
+            header.set_cksum();
+            tar.append(&header, *bytes).expect("appends");
+        }
+        let tar = tar.into_inner().expect("finishes");
+        let mut xz = Vec::new();
+        lzma_rs::xz_compress(&mut std::io::Cursor::new(tar), &mut xz).expect("compresses");
+        xz
+    }
+}
+
+/// The SHA-256 of `bytes`, in hex.
+pub fn sha256(bytes: &[u8]) -> String {
+    use sha2::Digest as _;
+    sha2::Sha256::digest(bytes)
+        .iter()
+        .fold(String::new(), |mut out, byte| {
+            let _ = write!(out, "{byte:02x}");
+            out
+        })
+}
+
+impl Fake {
+    /// Publishes release `version` carrying `archive`, listed with `listed` as its SHA-256 and
+    /// with `sidecar` in its `.sha256` file.
+    pub fn publish_archive(&self, version: &str, archive: &[u8], listed: &str, sidecar: &str) {
+        let tag = format!("v{version}");
+        let name = archive_name();
+        self.answer(
+            &format!("/releases/download/{tag}/dist-manifest.json"),
+            Answer::ok(manifest_with_archive(version, &name, listed)),
+        );
+        self.answer(
+            &format!("/releases/download/{tag}/{name}"),
+            Answer::ok(archive.to_vec()),
+        );
+        self.answer(
+            &format!("/releases/download/{tag}/{name}.sha256"),
+            Answer::ok(format!("{sidecar} *{name}\n")),
+        );
+    }
+}
+
 /// A directory under the temp directory, removed when dropped.
 pub struct Temp(pub PathBuf);
 

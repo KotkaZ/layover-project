@@ -1148,6 +1148,39 @@ pub struct SkippedTick {
     pub reason: SkipReason,
 }
 
+/// A release made ready to install: downloaded, its SHA-256 matched to the release, its
+/// provenance checked, and — only once that verified — its binary asked what it is.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StagedUpdate {
+    /// The archive's file name.
+    #[serde(default)]
+    pub archive: Option<String>,
+    /// When staging finished.
+    #[serde(default)]
+    pub at: Option<String>,
+    /// True when it reads a different state-directory layout from the one running, which makes
+    /// installing it a person's choice.
+    pub crosses_layout: bool,
+    /// What its GitHub attestation said.
+    pub provenance: UpdateProvenance,
+    /// Who built it, when verified; why not, otherwise.
+    #[serde(default)]
+    pub provenance_detail: Option<String>,
+    /// True when it is verified (or trusted) and its binary answered for itself: ready to
+    /// install.
+    pub ready: bool,
+    /// Why staging stopped short, when it did.
+    #[serde(default)]
+    pub refused: Option<String>,
+    /// Its SHA-256, once it matched the release's.
+    #[serde(default)]
+    pub sha256: Option<String>,
+    /// True when a person said to run it on its checksum alone.
+    pub trusted_checksum_only: bool,
+    /// Its version.
+    pub version: String,
+}
+
 /// Liveness of the Tower itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Status {
@@ -1232,6 +1265,28 @@ pub enum UpdateChannel {
     Prerelease,
 }
 
+/// The staged release's own validation of this factory. Errors refuse it; warnings this version
+/// does not give refuse only an unattended install.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UpdateGate {
+    /// When.
+    #[serde(default)]
+    pub at: Option<String>,
+    /// What it refuses in the factory.
+    pub errors: Vec<String>,
+    /// Warnings it gives that the running version does not.
+    pub new_warnings: Vec<String>,
+    /// Why it could not be asked, when it could not.
+    #[serde(default)]
+    pub not_run: Option<String>,
+    /// True when it ran and refused nothing.
+    pub passes: bool,
+    /// True when it also gave no warning the running version does not.
+    pub passes_unattended: bool,
+    /// The release that was asked.
+    pub version: String,
+}
+
 /// The first part of the version that changes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UpdateKind {
@@ -1247,7 +1302,7 @@ pub enum UpdateKind {
 }
 
 /// Whether the Tower looks for new releases: `off` never, `notify` once per `check_every`,
-/// saying what it found and changing nothing.
+/// saying what it found and changing nothing, `stage` also getting it ready to install.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UpdateMode {
     /// `off`
@@ -1256,6 +1311,28 @@ pub enum UpdateMode {
     /// `notify`
     #[serde(rename = "notify")]
     Notify,
+    /// `stage`
+    #[serde(rename = "stage")]
+    Stage,
+}
+
+/// `verified`: Layover's release workflow built it from the release's tag. `unavailable`: it
+/// could not be checked here — no `gh`, or not signed in — so it was not run. `refused`: it was
+/// checked and is not what the release says. `unchecked`: staging stopped before it was asked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UpdateProvenance {
+    /// `verified`
+    #[serde(rename = "verified")]
+    Verified,
+    /// `unavailable`
+    #[serde(rename = "unavailable")]
+    Unavailable,
+    /// `refused`
+    #[serde(rename = "refused")]
+    Refused,
+    /// `unchecked`
+    #[serde(rename = "unchecked")]
+    Unchecked,
 }
 
 /// Where updates stand for this factory on this machine: the version running, the factory's
@@ -1276,6 +1353,9 @@ pub struct UpdateStatus {
     /// Why the last look failed, when it did.
     #[serde(default)]
     pub error: Option<String>,
+    /// What the staged release made of this factory's definition. Absent until it was asked.
+    #[serde(default)]
+    pub gate: Option<UpdateGate>,
     /// The newest release the last look that worked found, which may be the one running.
     #[serde(default)]
     pub latest: Option<String>,
@@ -1283,6 +1363,10 @@ pub struct UpdateStatus {
     pub mode: UpdateMode,
     /// Versions a person said not to offer on this machine.
     pub skipped: Vec<String>,
+    /// The available release as staged on this machine, when it has been: by `[update] mode =
+    /// "stage"` or `layover update stage`. Absent when it has not.
+    #[serde(default)]
+    pub staged: Option<StagedUpdate>,
     /// When looking last worked.
     #[serde(default)]
     pub succeeded_at: Option<String>,

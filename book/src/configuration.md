@@ -180,14 +180,14 @@ learning may not say — see [learnings](./learning.md). The whole table is opti
 
 ```toml
 [update]
-mode        = "notify"   # off | notify
+mode        = "notify"   # off | notify | stage
 channel     = "stable"   # stable | prerelease
 check_every = "24h"
 ```
 
 | Key | Default | Meaning |
 |---|---|---|
-| `mode` | `"notify"` | `notify`: the Tower looks for a newer release once per `check_every`, and the [dashboard](./dashboard.md#a-newer-layover), [`doctor`](./cli.md#doctor) and [`layover update check`](./cli.md#update) say what it found and what it changes. Nothing is downloaded and nothing changes. `off`: the Tower never looks; a person can still run `layover update check`. |
+| `mode` | `"notify"` | `notify`: the Tower looks for a newer release once per `check_every`, and the [dashboard](./dashboard.md#a-newer-layover), [`doctor`](./cli.md#doctor) and [`layover update check`](./cli.md#update) say what it found and what it changes. Nothing is downloaded and nothing changes. `stage`: as `notify`, and it also gets the release ready to install — see [staging](#staging-a-release). `off`: the Tower never looks; a person can still run `layover update check`. |
 | `channel` | `"stable"` | `prerelease` considers pre-releases too, such as `1.15.0-rc.1`, for trying one before stable factories do. |
 | `check_every` | `"24h"` | How often the Tower looks, give or take a twelfth so machines that started together do not ask in the same minute. `validate` refuses less than an hour. A look that fails is retried after an hour, then two, four and so on up to this. |
 
@@ -209,6 +209,35 @@ Three environment variables apply to every factory on a machine, whatever `[upda
 
 None of the three reaches an agent: a child's environment is [scrubbed](#credentials-for-the-cli-itself)
 as it always was. The whole table is optional.
+
+### Staging a release
+
+Under `mode = "stage"`, or when a person runs [`layover update stage`](./cli.md#update), a newer
+release is made ready to install, one step at a time, each only if the one before it passed:
+
+1. The release's manifest names an archive for this platform.
+2. The archive, downloaded with a 64 MB cap, has the SHA-256 the manifest lists, and the `.sha256`
+   file beside it agrees.
+3. Its GitHub attestation says Layover's release workflow built it from the release's own tag,
+   checked by [`gh attestation verify`](https://cli.github.com/manual/gh_attestation_verify) — so
+   `gh` must be installed and signed in.
+4. The archive holds the binary, and nothing that would unpack outside where it is put.
+5. The binary, run for the first time — with no credentials in its environment and twenty seconds
+   to answer — says it is the version and platform it should be, and that it can be reached from
+   the version running.
+6. It validates this factory. Errors refuse it; a warning the running version does not give holds
+   back an unattended install and is shown before a manual one; a warning the factory always had
+   holds nothing back.
+
+**Nothing downloaded runs before step 3 has verified it.** Without `gh`, or with `gh` signed out,
+a release is downloaded and checked against its SHA-256 and stops there; `layover update stage
+--trust-checksum-only` runs it on its checksum alone, for a person who chooses that. A release whose
+attestation `gh` refuses goes no further, whatever is said.
+
+A staged release is kept per machine — one at a time, in `staging/<version>/` under the update
+directory above — and what it made of each factory in that factory's `.layover/update/gate.json`.
+A refused one is tried again at the next check. Staging installs nothing: installing is still
+yours to do.
 
 ## `[runners.*]` — how to invoke a CLI
 

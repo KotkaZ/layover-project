@@ -58,6 +58,8 @@ function openUpdate() {
   );
   markdownish($("#update-notes"), found.notes);
   $("#update-page").href = found.url;
+  $("#update-staged").textContent = stagedSays(updateStatus.staged, updateStatus.gate);
+  $("#update-staged").hidden = !updateStatus.staged;
   $("#update-skip").textContent = `layover update skip ${found.version}`;
   $("#update-dialog").showModal();
 }
@@ -87,6 +89,24 @@ function marked(target, text) {
     at = match.index + token.length;
   }
   target.append(text.slice(at));
+}
+
+/// What staging made of the release, and what it made of this factory, in a sentence or two.
+function stagedSays(staged, gate) {
+  if (!staged) return "";
+  if (staged.refused) return `Staging it was refused: ${staged.refused.split("\n")[0]}`;
+  const parts = [];
+  if (staged.sha256) parts.push("Downloaded; its SHA-256 matches the release.");
+  if (staged.provenance === "verified") parts.push(`Built by ${staged.provenance_detail}.`);
+  else if (staged.provenance === "unavailable")
+    parts.push(`Its provenance could not be checked (${staged.provenance_detail}), so it was not run.`);
+  if (staged.crosses_layout) parts.push("It reads a different state layout: installing it is your choice.");
+  if (gate?.not_run) parts.push(`Not checked against this factory: ${gate.not_run}`);
+  else if (gate?.errors.length) parts.push(`It refuses this factory: ${gate.errors.join("; ")}`);
+  else if (gate?.new_warnings.length)
+    parts.push(`It validates this factory, with warnings this version does not give: ${gate.new_warnings.join("; ")}`);
+  else if (gate) parts.push("It validates this factory, with no new warnings.");
+  return parts.join(" ");
 }
 
 /// "3 hours ago", for when a check last worked.

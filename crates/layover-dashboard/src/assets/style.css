@@ -440,6 +440,7 @@ dialog menu { display: flex; justify-content: flex-end; gap: 10px; padding: 0; m
 dialog button { font: inherit; font-size: 13px; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
 dialog button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 #report-body { white-space: pre-wrap; font: inherit; font-size: 13px; line-height: 1.6; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; max-height: 48vh; overflow: auto; }
+#update-staged { font-size: 13px; border-left: 3px solid var(--accent); padding: 4px 10px; margin: 10px 0; }
 #update-compatibility, #update-notes { white-space: pre-wrap; font: inherit; font-size: 13px; line-height: 1.6; }
 #update-notes { background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; max-height: 40vh; overflow: auto; }
 #report-artifacts { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }

@@ -47,7 +47,15 @@ notice:
   skip <version>`** stops offering one on this machine, and `--clear` undoes it.
 - **`layover about`** says what a binary is — version, platform, state layout, HTTP API and the
   oldest release it can be updated from — and `--json` says it to a program.
-- **`GET /update`**: what this machine last learned about releases, for this factory.
+- **Staging a release**, with `[update] mode = "stage"` or **`layover update stage`**: the newest
+  release is downloaded (capped at 64 MB), its SHA-256 matched to the manifest and its `.sha256`
+  file, its GitHub attestation verified with `gh attestation verify` pinned to this repository's
+  release workflow and tag, its binary unpacked with nothing allowed outside the staging folder and
+  asked what it is with `layover about --json`, and the factory validated by it. Nothing downloaded
+  runs before it is verified; without `gh`, `--trust-checksum-only` runs it on a person's say-so.
+  Nothing is installed.
+- **`GET /update`**: what this machine last learned about releases, for this factory, and — once a
+  release is staged — how far staging got (`staged`) and what it made of this factory (`gate`).
 - `LAYOVER_UPDATE`, `LAYOVER_UPDATE_SOURCE` (a mirror laid out as GitHub's releases) and
   `LAYOVER_GITHUB_TOKEN` (for the API, on the `prerelease` channel).
 

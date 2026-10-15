@@ -1211,6 +1211,42 @@ comes from what was verified. So every release from now on carries `layover abou
 `min_upgrade_from` with it — the oldest release one can be reached from in one step, raised only by
 a release that cannot be.
 
+**Why provenance is checked by `gh`, not inside the binary.** A checksum fetched from the same
+place as the archive proves only that the two agree; a compromised release would carry a matching
+one. Every release carries a GitHub build-provenance attestation, signed through Sigstore with the
+identity of the workflow that built it, and that is what says who built it. The plan was to verify
+it in the binary with the `sigstore` crate, with `gh` as a fallback (Karl, 15 October 2026). A
+spike against the genuine 1.14.0 bundle rejected the crate: it refused the bundle ("signature
+transparency materials are inconsistent"), left the transparency-log inclusion proof and the signed
+entry timestamp as unimplemented TODOs, and brought 332 crates, an 11 MB binary and aws-lc-rs with
+it. `gh attestation verify` checked the same bundle in four seconds, and refuses a wrong ref or a
+tampered file. So `gh` is the verifier, pinned to the repository, the release workflow, the tag,
+the GitHub Actions issuer and the SLSA provenance predicate. What that costs is a dependency
+on a tool Layover does not ship: a machine without `gh`, or with it signed out, can download and
+checksum a release but not verify it — and an unverified release is never run, never installed
+unattended, and installed by hand only on an explicit `--trust-checksum-only`. A failure that is
+about reaching GitHub or signing in reads as *could not check*; anything else `gh` refuses is a
+refusal, and goes no further.
+
+**Why nothing downloaded runs before it is verified.** Asking a staged binary what it is means
+running it, with the user's privileges. Run before its provenance is known, a compromised release
+would be executed by the very step meant to vet it — automatically, under `mode = "stage"`, with
+nobody watching. So the binary is not even unpacked until `gh` has verified the archive, and runs
+with an environment stripped of everything but what a process needs to start, `LAYOVER_UPDATE=off`
+so it cannot reach out itself, and twenty seconds to answer. The checksum and the size cap come
+first because they cost nothing to check and refuse the commonest failure, a truncated or wrong
+download, without asking anyone.
+
+**Why the gate compares warnings rather than counting them.** A release that refuses a factory must
+not be installed into it, so errors refuse. Warnings are subtler: a factory may carry one on
+purpose — Karl's has an `overlap = "allow"` warning it has always had — and refusing on any warning
+would hold that factory back for ever. A warning the new release gives and the running one does not
+is news, though, and news is for a person: it holds back an unattended install and is shown before
+a manual one. The comparison is by the warning's text, so a reworded warning reads as new; that
+errs toward asking. Free space is not checked before downloading, though the plan proposed it: the
+archive is a few megabytes, standard Rust has no portable way to ask, and a write that fails for
+want of space fails the staging cleanly and leaves nothing behind.
+
 ---
 
 ## Still open

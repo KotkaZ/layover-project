@@ -288,6 +288,7 @@ history and see none.
 
 ```sh
 layover update check              # look now, and say what a newer release changes
+layover update stage              # get it ready to install: downloaded, verified, checked here
 layover update skip 1.15.0        # stop offering 1.15.0 on this machine
 layover update skip --clear       # offer every skipped version again
 ```
@@ -311,6 +312,23 @@ A Tower whose factory has `[update] mode = "notify"`, the default, does the same
 and prints one line when it finds something; the [dashboard](./dashboard.md#a-newer-layover) and
 [`doctor`](#doctor) say so too. Nothing is downloaded and nothing changes: installing a release is
 still yours to do, the way you [installed](./install.md) Layover.
+
+`stage` goes further and gets the newest release ready, without installing it — every step is in
+[staging a release](./configuration.md#staging-a-release):
+
+```text
+Layover 1.15.0 for x86_64-pc-windows-msvc:
+  layover-cli-x86_64-pc-windows-msvc.zip: SHA-256 1842a1c7… matches the release.
+  Provenance verified: built by https://github.com/KotkaZ/layover-project/.github/workflows/release.yml@refs/tags/v1.15.0.
+  It says it is 1.15.0 for x86_64-pc-windows-msvc, state layout 1, the same as this one.
+  It validates C:\factory\layover.toml, with no new warnings. Ready to install.
+```
+
+Verifying needs [`gh`](https://cli.github.com) installed and signed in. Without it the release is
+downloaded and checked against its SHA-256, and not run; `--trust-checksum-only` runs it anyway, on
+your say-so. It exits non-zero when the release is refused, or refuses the factory. A Tower whose
+factory has `[update] mode = "stage"` stages each new release after its daily look, and prints what
+it found.
 
 `skip` is for a release you have decided against. It is kept per machine, like what was found, and
 a newer release is offered as usual.

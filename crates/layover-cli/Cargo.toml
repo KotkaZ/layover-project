@@ -42,3 +42,9 @@ workspace = true
 
 [dev-dependencies]
 toml = { workspace = true }
+# For the release server the update tests stand up, shared with layover-update's own tests: it
+# packs a binary as a release would.
+sha2 = "0.11"
+zip = { version = "9", default-features = false, features = ["deflate"] }
+tar = { version = "0.4", default-features = false }
+lzma-rs = "0.3"

@@ -31,8 +31,10 @@ The crates, all built and tested:
   place in the project that can do something irreversible.
 - `crates/layover-mcp` — the MCP surface agents talk to Layover through. Untrusted input arrives
   here; identity comes from the token and never from the request.
-- `crates/layover-update` — finding newer releases: the release manifest, versions, and what this
-  machine last learned. Makes the only network request Layover itself makes.
+- `crates/layover-update` — finding newer releases and staging them: the release manifest,
+  versions, the download, its SHA-256 and `gh`-verified provenance, safe unpacking, asking the new
+  binary what it is, and the gate against a factory. Makes the only network requests Layover
+  itself makes.
 - `crates/layover-cli` — the `layover` binary: `validate`, `explain`, `graph`, `prompt`, `serve`,
   `stop`, `run`, `doctor`, `autostart`, `update`, `about`.
 
@@ -198,6 +200,6 @@ this repository's own source**. `layover doctor` reports what the run left behin
 | `crates/layover-dashboard` | The monitoring dashboard: route map, chains, sessions, runs, cost |
 | `crates/layover-tower` | The supervisor: dispatch, rails, recovery — the only crate that starts a process |
 | `crates/layover-mcp` | The MCP endpoint agents call back into |
-| `crates/layover-update` | Release discovery: manifest, versions, machine state |
+| `crates/layover-update` | Release discovery and staging: manifest, versions, download, provenance, gate |
 | `crates/layover-cli` | The `layover` binary |
 | `xtask/` | `verify`, `generate-api` and `docs` |

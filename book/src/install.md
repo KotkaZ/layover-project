@@ -149,8 +149,10 @@ layover --version
 A running factory asks github.com once a day whether a newer Layover has been released. When one
 has, the dashboard's version pill reads `v1.14.0 → 1.15.0` and opens what it changes, `layover
 doctor` says so, and `layover update check` asks at once. Nothing is downloaded: install a new
-release the way you installed this one. One request a day for a public file is all it does; it
-sends nothing about your factory. To stop it, set `[update] mode = "off"` in a factory, or
+release the way you installed this one — or set `[update] mode = "stage"` to have each one
+downloaded, verified with [`gh`](https://cli.github.com) and checked against your factory first,
+ready for you. One request a day for a public file is all `notify` does; it sends nothing about your
+factory. To stop it, set `[update] mode = "off"` in a factory, or
 `LAYOVER_UPDATE=off` for the whole machine — see
 [configuration](./configuration.md#update--hearing-about-a-newer-layover).
 

@@ -155,15 +155,22 @@ pub fn skip(version: Option<&str>, clear: bool) -> Result<String, Failure> {
 }
 
 /// Looks for a newer release on the factory's schedule while the process lives, and says once
-/// when one is found. Nothing at all when the factory or the machine has checks off.
+/// when one is found. Under `mode = "stage"` it also gets the release ready for `factory`. Nothing
+/// at all when the factory or the machine has checks off.
 ///
 /// Every Tower on a machine shares what was last found, so a second factory starting later does
 /// not ask again.
-pub fn watch(config: UpdateConfig, announce: impl Fn(String) + Send + 'static) {
+pub fn watch(
+    config: UpdateConfig,
+    factory: std::path::PathBuf,
+    announce: impl Fn(String) + Send + 'static,
+) {
     let settings = Settings::from_env();
     if config.mode == Mode::Off || settings.switched_off {
         return;
     }
+    // A release staged before this one was installed is done with.
+    layover_update::stage::forget_installed(&settings, &Version::running());
     let watching = std::thread::Builder::new()
         .name("layover-update".to_owned())
         .spawn(move || {
@@ -172,9 +179,18 @@ pub fn watch(config: UpdateConfig, announce: impl Fn(String) + Send + 'static) {
             loop {
                 let now = Timestamp::now();
                 let last = state::last_check(&settings.dir, config.channel);
-                if due(last.as_ref(), config.check_every(), now) {
+                let checked = due(last.as_ref(), config.check_every(), now)
                     // A failure is recorded and retried; it never stops the Tower.
-                    let _ = check(&settings, config.channel, now);
+                    && check(&settings, config.channel, now).is_ok();
+                if checked
+                    && config.mode == Mode::Stage
+                    && let Some(available) = status(&settings, &config, &running).available
+                    && let Some((staged, gate)) =
+                        crate::staging::ready(&settings, &available.release, &factory)
+                {
+                    for line in crate::staging::describe(&staged, Some(&gate)).lines() {
+                        announce(line.to_owned());
+                    }
                 }
                 if let Some(available) = status(&settings, &config, &running).available
                     && said.as_ref() != Some(&available.release.version)
@@ -210,6 +226,9 @@ pub fn doctor_line(config: &UpdateConfig, now: Timestamp) -> String {
                 "; {} is available ({}): `layover update check` says what changes.",
                 available.release.version, available.kind
             );
+            if let Some(staged) = layover_update::staged(&settings, &available.release.version) {
+                line.push_str(&staged_note(&staged));
+            }
         }
         (None, Some(last)) if last.succeeded_at.is_some() => {
             line.push_str(", the newest release");
@@ -227,6 +246,18 @@ pub fn doctor_line(config: &UpdateConfig, now: Timestamp) -> String {
         line.push_str(" This factory does not look by itself (`[update] mode = \"off\"`).");
     }
     line
+}
+
+/// What staging made of a release, in a few words.
+fn staged_note(staged: &layover_update::Staged) -> String {
+    if let Some(refused) = &staged.refused {
+        let first = refused.lines().next().unwrap_or_default();
+        return format!(" Staging it was refused: {first}.");
+    }
+    if staged.is_ready() {
+        return " It is staged and verified.".to_owned();
+    }
+    " It is downloaded, but its provenance could not be verified, so it was not run.".to_owned()
 }
 
 /// When this machine last looked, and whether it worked.

@@ -286,7 +286,8 @@ pub fn serve(
 
         let tower = Tower::start(factory, Arc::clone(&journal), |line| println!("  {line}"))
             .map_err(|error| error.to_string())?;
-        crate::update::watch(config.update, |line| println!("  {line}"));
+        let announce = |line: String| println!("  {line}");
+        crate::update::watch(config.update, path.to_path_buf(), announce);
 
         Some((served, tower))
     };

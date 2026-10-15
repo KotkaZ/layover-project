@@ -167,6 +167,18 @@ impl Source {
         }
     }
 
+    /// The manifest of the release tagged `tag`, for what it carries.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`SourceError`] saying what could not be reached or read.
+    pub fn manifest_of(&self, tag: &str) -> Result<Manifest, SourceError> {
+        match Self::manifest(&self.file_in(tag, "dist-manifest.json"), None, None)? {
+            Fetched::Found(found) => Ok(found.manifest),
+            Fetched::Unchanged => unreachable!("no entity tag was sent"),
+        }
+    }
+
     /// The newest release in the list, pre-releases included, and when it was published.
     fn newest_listed(&self) -> Result<(String, Option<Timestamp>), SourceError> {
         let mut request = agent()
@@ -266,8 +278,13 @@ impl Source {
 
 /// An HTTP client that trusts what the machine trusts and goes through the proxy it is told to.
 fn agent() -> Agent {
+    agent_for(Duration::from_mins(1))
+}
+
+/// The same, given `limit` for a whole request: longer for an archive than for a manifest.
+pub(crate) fn agent_for(limit: Duration) -> Agent {
     Agent::config_builder()
-        .timeout_global(Some(Duration::from_mins(1)))
+        .timeout_global(Some(limit))
         .proxy(ureq::Proxy::try_from_env())
         .tls_config(
             TlsConfig::builder()
@@ -280,7 +297,7 @@ fn agent() -> Agent {
         .into()
 }
 
-fn unreachable(url: &str, error: &ureq::Error) -> SourceError {
+pub(crate) fn unreachable(url: &str, error: &ureq::Error) -> SourceError {
     SourceError::Unreachable {
         url: url.to_owned(),
         reason: error.to_string(),

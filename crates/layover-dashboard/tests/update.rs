@@ -158,3 +158,51 @@ async fn the_factorys_own_settings_are_reported() {
     assert_eq!(said["mode"], "off");
     assert_eq!(said["channel"], "prerelease");
 }
+
+#[tokio::test]
+async fn a_staged_release_says_how_far_it_got_and_what_it_made_of_this_factory() {
+    let temp = Temp::new("staged");
+    let next = next_minor();
+    found(&temp, &next);
+    let app = temp.router(FACTORY);
+    let staged = layover_update::Staged {
+        version: next.clone(),
+        tag: format!("v{next}"),
+        at: "2026-10-18T10:00:00Z".parse().expect("valid"),
+        archive: "layover-cli.zip".to_owned(),
+        sha256: Some("a".repeat(64)),
+        attestation: Some(layover_update::Attestation::Verified {
+            signer: "release.yml@refs/tags/v".to_owned(),
+        }),
+        trusted_checksum_only: false,
+        binary: Some(temp.0.join("layover")),
+        about: Some(layover_update::About::of_this_binary(1, "x")),
+        crosses_layout: false,
+        refused: None,
+    };
+    let dir = layover_update::stage::dir_for(&temp.settings(), &next);
+    fs::create_dir_all(&dir).expect("creates");
+    fs::write(
+        dir.join("staged.json"),
+        serde_json::to_string(&staged).expect("serialises"),
+    )
+    .expect("writes");
+    layover_update::gate::record(&layover_update::Gate {
+        version: next.clone(),
+        factory: temp.0.join("layover.toml"),
+        at: "2026-10-18T10:01:00Z".parse().expect("valid"),
+        not_run: None,
+        errors: Vec::new(),
+        new_warnings: vec!["something new".to_owned()],
+    })
+    .expect("records");
+
+    let said = update(app).await;
+
+    assert_eq!(said["staged"]["version"], next.to_string());
+    assert_eq!(said["staged"]["provenance"], "verified");
+    assert_eq!(said["staged"]["ready"], true);
+    assert_eq!(said["gate"]["passes"], true);
+    assert_eq!(said["gate"]["passes_unattended"], false);
+    assert_eq!(said["gate"]["new_warnings"][0], "something new");
+}

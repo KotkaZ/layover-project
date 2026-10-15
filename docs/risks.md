@@ -485,3 +485,21 @@ a run, a start or a validation. The manifest is parsed with every field optional
 2 MB; a manifest naming no version is refused; nothing in it is executed or rendered as HTML.
 `LAYOVER_UPDATE_SOURCE` points a site at a mirror it controls.
 
+### 27. A release's provenance is only as good as `gh` and its pins
+
+**What could happen.** A staged release is trusted to run, and in time to install, because `gh
+attestation verify` said Layover's release workflow built it from its tag. If `gh` were replaced on
+`PATH` by something that always exits 0, every archive would read as verified. If the pins were
+wrong — another repository's workflow, another tag — a release built elsewhere could pass. And on a
+machine without `gh`, nothing is verified at all.
+
+**Why it is accepted.** The alternative, verifying inside the binary, was tried and the library
+refused genuine bundles and skipped the transparency-log proof (see the decision log). `gh` is
+GitHub's own verifier, and something that can replace it on `PATH` can already replace `layover`.
+
+**Mitigation.** The pins are constants, tested: repository, signer workflow, `refs/tags/<tag>`,
+issuer and predicate. The archive must also match the manifest's SHA-256 and the `.sha256` file, and
+the binary must then say it is the version and platform it should be. A release whose provenance
+could not be checked is downloaded but never run, never installed unattended, and installed by hand
+only with `--trust-checksum-only`, which is said in the record.
+

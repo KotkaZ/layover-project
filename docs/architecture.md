@@ -289,6 +289,8 @@ Everything a factory accumulates lives in `.layover/`, beside its `layover.toml`
 ├── version.json                 # the layout version: a newer one is refused, an older one migrated
 ├── ground-stop                  # presence of this file means everything is halted
 ├── stop-request.json            # `layover stop` or a Ctrl+C: the Tower drains, exits, removes it
+├── update/
+│   └── gate.json                # what the staged release made of this layover.toml
 ├── logbook.md                   # shared memory (the default path); Tower-serialized writes
 ├── history/
 │   └── runs-2026-09-23.jsonl    # one record per run, segmented by UTC day
@@ -329,7 +331,8 @@ exits once no run is alive and no barrier holds anything. A request with `now` s
 running instead, for the next Tower to settle as `interrupted`.
 
 One thing lives outside `.layover/`, because it belongs to the installation rather than a factory:
-what this machine last learned about releases, and the versions a person said to skip — in
+what this machine last learned about releases, the versions a person said to skip, and the one
+release staged to install — in
 `%LOCALAPPDATA%\layover\updates` on Windows, `~/Library/Application Support/layover/updates` on
 macOS, and `$XDG_STATE_HOME/layover/updates` elsewhere. Every factory served by one binary reads it,
 so they ask GitHub once between them.
@@ -422,7 +425,7 @@ layover/
 │   ├── layover-mcp/      # the MCP endpoint agents call back into, per-run token auth
 │   ├── layover-tower/    # the supervisor: clock, dispatch, rails, recovery, ground stop
 │   ├── layover-dashboard/# the monitoring page and the Api implementation behind it
-│   ├── layover-update/   # finding newer releases: the manifest, versions, what this machine knows
+│   ├── layover-update/   # finding, staging and verifying newer releases
 │   └── layover-cli/      # the `layover` binary
 ├── examples/             # six factories, parsed and validated by the test suite
 └── xtask/                # cargo xtask verify / generate-api / docs
@@ -430,8 +433,9 @@ layover/
 
 The dashboard is HTML, CSS and plain JavaScript embedded in `layover-dashboard`; there is no
 separate UI build. Dependencies are few on purpose: `tokio`, `axum`, `futures-util`, `serde`,
-`serde_json`, `toml`, `clap`, `croner`, `jiff`, `ulid`, `thiserror` — and `ureq`, with rustls and
-the platform's certificate verifier, for the one request a day that looks for a newer release.
+`serde_json`, `toml`, `clap`, `croner`, `jiff`, `ulid`, `thiserror` — and, for updates, `ureq` with
+rustls and the platform's certificate verifier, `sha2`, and `zip`, `tar` and `lzma-rs` to unpack a
+release, all pure Rust. Provenance is checked by the `gh` CLI rather than a library.
 
 The split is not only separation of concerns. Each crate plus its tests should fit inside a single
 agent's working context — see §12.

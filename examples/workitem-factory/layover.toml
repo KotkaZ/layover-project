@@ -87,7 +87,9 @@ keep_lapsed_days = 14
 
 # Once a day the Tower asks github.com whether a newer Layover has been released, and the
 # dashboard, `layover doctor` and `layover update check` say what it changes. Nothing is
-# downloaded. The default; `mode = "off"` stops it, as `LAYOVER_UPDATE=off` does for a machine.
+# downloaded. The default; `mode = "stage"` also gets it ready to install -- verified with `gh`,
+# and checked against this file -- and `mode = "off"` stops it, as `LAYOVER_UPDATE=off` does for a
+# machine.
 [update]
 mode = "notify"
 

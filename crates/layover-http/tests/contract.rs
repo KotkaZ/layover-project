@@ -101,6 +101,8 @@ impl Api for Stub {
             latest: None,
             available: None,
             skipped: Vec::new(),
+            staged: None,
+            gate: None,
         })
     }
 

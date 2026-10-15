@@ -237,7 +237,10 @@ want to know what it did. `layover serve --watch-only` serves that half alone.
 When this machine has learned of a newer release, the version pill in the header says so —
 `v1.14.0 → 1.15.0` — and opens a window with what it changes: whether it is a patch, minor or major
 release, when it was released, its Compatibility note — what an existing factory will notice — and
-all its release notes. Installing it is still yours to do; the window links the
+all its release notes. Once it is [staged](./configuration.md#staging-a-release), the window also
+says how far staging got — downloaded and matched, who built it, or why it stopped — and what the
+release made of this factory: validated with no new warnings, validated with warnings this version
+does not give, or refused. Installing it is still yours to do; the window links the
 [install guide](./install.md) and gives the command that stops it being offered.
 
 The pill reads what the Tower last found, on [its schedule](./configuration.md#update--hearing-about-a-newer-layover):
