@@ -1318,7 +1318,8 @@ pub enum UpdateKind {
 }
 
 /// Whether the Tower looks for new releases: `off` never, `notify` once per `check_every`,
-/// saying what it found and changing nothing, `stage` also getting it ready to install.
+/// saying what it found and changing nothing, `stage` also getting it ready to install, `auto`
+/// also installing it unattended within the factory's limits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UpdateMode {
     /// `off`
@@ -1330,6 +1331,9 @@ pub enum UpdateMode {
     /// `stage`
     #[serde(rename = "stage")]
     Stage,
+    /// `auto`
+    #[serde(rename = "auto")]
+    Auto,
 }
 
 /// `verified`: Layover's release workflow built it from the release's tag. `unavailable`: it

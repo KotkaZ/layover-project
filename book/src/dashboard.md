@@ -248,7 +248,9 @@ nothing new, swap its binary and restart on the new version. While it does, the 
 `· updating` and a line above every view says what it is waiting for, with **Cancel** to call it
 off before the swap. **Skip this version** stops it being offered on this machine, and after an
 update **Roll back to …** goes back to the version it replaced, while that is kept. A `--watch-only`
-dashboard has no Tower to ask, and says so.
+dashboard has no Tower to ask, and says so. With [notifications](#knowing-when-it-needs-you) on, the
+bell rings when a newer release is found, when an update proves healthy, and when one is rolled
+back.
 
 The pill reads what the Tower last found, on [its schedule](./configuration.md#update--hearing-about-a-newer-layover):
 opening the page asks GitHub nothing, and a `--watch-only` dashboard says the same as the Tower's.

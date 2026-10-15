@@ -295,7 +295,13 @@ pub fn serve(
         let tower = Tower::start(factory, Arc::clone(&journal), |line| println!("  {line}"))
             .map_err(|error| error.to_string())?;
         let announce = |line: String| println!("  {line}");
-        crate::update::watch(config.update, path.to_path_buf(), announce);
+        let watch = crate::watching::Watch {
+            config: config.update,
+            factory: path.to_path_buf(),
+            state: state_dir.clone(),
+            control: tower.control(),
+        };
+        crate::watching::watch(watch, announce);
 
         Some((served, tower))
     };

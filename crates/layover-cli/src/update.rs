@@ -5,19 +5,15 @@
 
 use std::fmt::Write as _;
 use std::path::Path;
-use std::time::Duration;
 
 use jiff::Timestamp;
 use layover_core::config::Config;
 use layover_update::{
-    Available, LastCheck, Mode, Settings, Status, UpdateConfig, Version, check, compatibility, due,
+    Available, LastCheck, Mode, Settings, Status, UpdateConfig, Version, check, compatibility,
     state, status,
 };
 
 use crate::commands::Failure;
-
-/// How often the Tower's watcher wakes to see whether a check is due.
-const WAKE: Duration = Duration::from_mins(1);
 
 /// What this binary is: its version, the platform it was built for, the layout of the state
 /// directory it reads and writes, the HTTP API it serves, and the oldest release it can be
@@ -152,61 +148,6 @@ pub fn skip(version: Option<&str>, clear: bool) -> Result<String, Failure> {
     Ok(format!(
         "{version} will not be offered on this machine. A newer release will be.\n"
     ))
-}
-
-/// Looks for a newer release on the factory's schedule while the process lives, and says once
-/// when one is found. Under `mode = "stage"` it also gets the release ready for `factory`. Nothing
-/// at all when the factory or the machine has checks off.
-///
-/// Every Tower on a machine shares what was last found, so a second factory starting later does
-/// not ask again.
-pub fn watch(
-    config: UpdateConfig,
-    factory: std::path::PathBuf,
-    announce: impl Fn(String) + Send + 'static,
-) {
-    let settings = Settings::from_env();
-    if config.mode == Mode::Off || settings.switched_off {
-        return;
-    }
-    // A release staged before this one was installed is done with.
-    layover_update::stage::forget_installed(&settings, &Version::running());
-    let watching = std::thread::Builder::new()
-        .name("layover-update".to_owned())
-        .spawn(move || {
-            let running = Version::running();
-            let mut said: Option<Version> = None;
-            loop {
-                let now = Timestamp::now();
-                let last = state::last_check(&settings.dir, config.channel);
-                let checked = due(last.as_ref(), config.check_every(), now)
-                    // A failure is recorded and retried; it never stops the Tower.
-                    && check(&settings, config.channel, now).is_ok();
-                if checked
-                    && config.mode == Mode::Stage
-                    && let Some(available) = status(&settings, &config, &running).available
-                    && let Some((staged, gate)) =
-                        crate::staging::ready(&settings, &available.release, &factory)
-                {
-                    for line in crate::staging::describe(&staged, Some(&gate)).lines() {
-                        announce(line.to_owned());
-                    }
-                }
-                if let Some(available) = status(&settings, &config, &running).available
-                    && said.as_ref() != Some(&available.release.version)
-                {
-                    announce(format!(
-                        "Layover {} is available ({}). `layover update check` says what changes.",
-                        available.release.version, available.kind
-                    ));
-                    said = Some(available.release.version);
-                }
-                std::thread::sleep(WAKE);
-            }
-        });
-    if let Err(error) = watching {
-        eprintln!("Could not start looking for updates: {error}");
-    }
 }
 
 /// One line for `doctor`: what runs, what this machine last learned about releases, and a rollback

@@ -87,10 +87,10 @@ function showNotifySwitch() {
   const on = notifying();
   button.setAttribute("aria-pressed", String(on));
   button.title = on
-    ? "Notifying you when a chain waits for you, stalls or fails, or an agent asks for help. Click to stop."
+    ? "Notifying you when a chain waits for you, stalls or fails, an agent asks for help, or Layover has a new release, updates or rolls back. Click to stop."
     : Notification.permission === "denied"
       ? "Notifications are blocked for this page in the browser's settings."
-      : "Notify me when a chain waits for me, stalls or fails, or an agent asks for help.";
+      : "Notify me when a chain waits for me, stalls or fails, an agent asks for help, or Layover has a new release, updates or rolls back.";
 }
 
 async function toggleNotify() {

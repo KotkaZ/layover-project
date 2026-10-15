@@ -16,6 +16,7 @@ mod stopping;
 mod tower;
 mod update;
 mod updating;
+mod watching;
 
 use std::path::PathBuf;
 use std::process::ExitCode;

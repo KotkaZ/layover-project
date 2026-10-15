@@ -71,6 +71,13 @@ notice:
   Tower keeps the dashboard's token, proves itself healthy, and writes to `.layover/serve.log`.
   With no Tower serving, the binary is replaced at once. A Homebrew or npm install is left to its
   package manager, with the command to run. Exit codes say how it went.
+- **Installing unattended**, with `[update] mode = "auto"`: a patch or minor release (`allow`), a
+  day or two after it was published (`min_age = { patch = "24h", minor = "48h" }`), staged,
+  verified (`require_provenance`) and validating the factory with no new warning, is installed in
+  the `window` (`"Sat 02:00-06:00"`, local time) or once the factory has been idle for `idle_for`
+  (`"10m"`). A major release and one that changes the state layout always wait for a person. An
+  install whose window closes before runs finish is postponed to the next. The dashboard's bell
+  rings for a new release, an update and a rollback.
 - **`layover update rollback`** goes back to the version the last update replaced; **`status`**
   says where things stand; **`log`** prints `.layover/updates.jsonl`.
 - **`GET /update`**: what this machine last learned about releases, for this factory, and — once a

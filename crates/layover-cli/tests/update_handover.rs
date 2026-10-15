@@ -229,6 +229,7 @@ fn ask(temp: &Temp) {
             at: jiff::Timestamp::now(),
             progress: Vec::new(),
             outcome: None,
+            until: None,
         },
     )
     .expect("asks");
@@ -453,4 +454,98 @@ fn under_a_supervisor_the_tower_exits_75_for_it_to_start_the_new_release() {
 
     stop(&temp, &address);
     let _ = new.wait();
+}
+
+#[test]
+fn an_unattended_install_whose_window_closes_while_a_run_goes_on_is_postponed() {
+    let temp = Temp::new("window-closes");
+    factory(&temp);
+    let sleeps = if cfg!(windows) {
+        r#"["cmd", "/c", "ping -n 9 127.0.0.1 >nul"]"#
+    } else {
+        r#"["sh", "-c", "sleep 8"]"#
+    };
+    std::fs::write(
+        temp.factory(),
+        format!(
+            "[layover]\nwork_dir = \".\"\n[runners.r]\ncommand = {sleeps}\n\
+             [agents.a]\nprompt = \"p\"\nrunner = \"r\"\nentry = true\n"
+        ),
+    )
+    .expect("writes");
+    let (mut old, address) = serve(&temp);
+    staged(&temp, Path::new(env!("CARGO_BIN_EXE_layover")));
+    let journal = layover_store::Journal::open(temp.state().join("journal")).expect("opens");
+    journal
+        .queue(layover_core::queue::Queued::new(
+            layover_core::flight::Flight::new(
+                layover_core::flight::ItineraryId::generate(),
+                layover_core::flight::Origin::Human,
+                layover_core::agent::AgentName::new("a"),
+                "go",
+                4,
+            ),
+            None,
+            std::collections::BTreeMap::new(),
+        ))
+        .expect("queues");
+    until("the run starting", Duration::from_secs(30), || {
+        std::fs::read_dir(temp.state().join("state").join("runs"))
+            .ok()?
+            .flatten()
+            .any(|entry| entry.path().extension().is_some_and(|ext| ext == "json"))
+            .then_some(())
+    });
+
+    let closes = jiff::Timestamp::now()
+        .checked_add(jiff::SignedDuration::from_secs(2))
+        .expect("in range");
+    handover::put_request(
+        &temp.state(),
+        &Request {
+            version: version(),
+            rollback: false,
+            now: false,
+            including_manual: false,
+            by: "[update] mode = \"auto\"".to_owned(),
+            at: jiff::Timestamp::now(),
+            progress: Vec::new(),
+            outcome: None,
+            until: Some(closes),
+        },
+    )
+    .expect("asks");
+
+    let request = until(
+        "the install being postponed",
+        Duration::from_secs(20),
+        || handover::request(&temp.state()).filter(|request| request.outcome.is_some()),
+    );
+    assert_eq!(
+        request.outcome.as_deref(),
+        Some("postponed"),
+        "{:?}",
+        request.progress
+    );
+    assert!(
+        request
+            .progress
+            .iter()
+            .any(|line| line.contains("window closed")),
+        "{:?}",
+        request.progress
+    );
+    assert!(
+        old.try_wait().expect("asks").is_none(),
+        "the Tower carries on"
+    );
+    assert_eq!(health(&address).as_deref(), Some(env!("CARGO_PKG_VERSION")));
+    assert!(
+        layover_update::log::read(&temp.state())
+            .iter()
+            .any(|event| event.what == "postponed")
+    );
+
+    stop(&temp, &address);
+    let _ = old.wait();
 }

@@ -1211,8 +1211,9 @@ components:
       type: string
       description: |
         Whether the Tower looks for new releases: `off` never, `notify` once per `check_every`,
-        saying what it found and changing nothing, `stage` also getting it ready to install.
-      enum: ["off", notify, stage]
+        saying what it found and changing nothing, `stage` also getting it ready to install, `auto`
+        also installing it unattended within the factory's limits.
+      enum: ["off", notify, stage, auto]
 
     UpdateChannel:
       type: string

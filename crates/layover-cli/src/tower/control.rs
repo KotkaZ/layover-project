@@ -85,6 +85,13 @@ impl TowerControl {
             .collect()
     }
 
+    /// Whether nothing waits in the queue.
+    pub fn nothing_queued(&self) -> bool {
+        self.journal
+            .pending()
+            .is_ok_and(|pending| pending.is_empty())
+    }
+
     /// How many rendezvous hold an arrival.
     pub fn parked_rendezvous(&self) -> usize {
         self.factory.parked_rendezvous()

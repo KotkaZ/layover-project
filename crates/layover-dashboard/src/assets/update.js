@@ -6,6 +6,9 @@
 
 let updateStatus = null;
 let updateTimer = null;
+// What was last said in a notification, so each news is said once. Unset until the first read, so
+// opening the page does not announce what was already so.
+let updateHeard = null;
 
 async function loadUpdate() {
   try {
@@ -13,12 +16,43 @@ async function loadUpdate() {
   } catch {
     updateStatus = null;
   }
+  ringForUpdate();
   paintBanner();
   // The pill is drawn in one place, which asks this file what to add.
   loadHealth();
   // Watched closely while the Tower installs, and at the usual pace otherwise.
   clearTimeout(updateTimer);
   updateTimer = setTimeout(loadUpdate, underWay() ? 3_000 : 600_000);
+}
+
+/// Rings the attention bell — when a person asked for notifications — for a newer release, an
+/// update that proved healthy, and one that was rolled back.
+function ringForUpdate() {
+  if (!updateStatus) return;
+  const last = updateStatus.last_update;
+  const now = {
+    available: updateStatus.available?.version ?? null,
+    healthy: last?.healthy_at ? `${last.to}@${last.healthy_at}` : null,
+    rolledBack: last?.rolled_back_at ? `${last.to}@${last.rolled_back_at}` : null,
+  };
+  const before = updateHeard;
+  updateHeard = now;
+  if (!before || !notifying()) return;
+  const news = [];
+  if (now.available && now.available !== before.available) {
+    news.push(`Layover ${now.available} is available`);
+  }
+  if (now.healthy && now.healthy !== before.healthy) news.push(`Updated to ${last.to}`);
+  if (now.rolledBack && now.rolledBack !== before.rolledBack) {
+    news.push(`${last.to} was rolled back to ${last.from}`);
+  }
+  if (news.length === 0) return;
+  const note = new Notification("Layover", { body: news.join(" · "), tag: "layover-update" });
+  note.addEventListener("click", () => {
+    window.focus();
+    openUpdate();
+    note.close();
+  });
 }
 
 /// The install or rollback under way, if one is.

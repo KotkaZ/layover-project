@@ -183,7 +183,8 @@ provisional_runs = 20     # runs a new learning applies for before it lapses
 keep_lapsed      = "14d"  # a lapsed learning nobody rediscovers is deleted after this; 0 at once
 
 [update]
-mode    = "notify"        # look for a newer Layover daily and say so; "off" never looks
+mode    = "notify"        # look for a newer Layover daily and say so; "stage" gets it ready,
+                          # "auto" installs it unattended, "off" never looks
 channel = "stable"        # "prerelease" is told about release candidates too
 
 # ── Agents ─────────────────────────────────────────────────────────

@@ -361,6 +361,9 @@ the one it leaves. `status` says where things stand — the version and how it w
 is staged, an install under way, the last update and whether it proved healthy — from what is on
 disk, asking nothing. `log` prints `.layover/updates.jsonl`.
 
+A factory with `[update] mode = "auto"` does what `apply` does by itself, within the limits in
+[installing unattended](./configuration.md#installing-unattended).
+
 `apply` and `rollback` say how it went in their exit code:
 
 | Code | Meaning |

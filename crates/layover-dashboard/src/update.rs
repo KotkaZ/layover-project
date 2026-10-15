@@ -133,6 +133,7 @@ impl Dashboard {
                 at: jiff::Timestamp::now(),
                 progress: Vec::new(),
                 outcome: None,
+                until: None,
             },
         )
         .map_err(|error| {
@@ -186,6 +187,7 @@ impl Dashboard {
                 Mode::Off => UpdateMode::Off,
                 Mode::Notify => UpdateMode::Notify,
                 Mode::Stage => UpdateMode::Stage,
+                Mode::Auto => UpdateMode::Auto,
             },
             channel: match found.channel {
                 Channel::Stable => UpdateChannel::Stable,

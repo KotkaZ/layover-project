@@ -83,7 +83,7 @@ pub fn apply(path: &Path, now: bool, including_manual: bool, trust_checksum_only
         );
     }
 
-    let (staged, gate) = match crate::staging::ready(&settings, &available.release, &path) {
+    let (staged, gate) = match crate::staging::ready(&settings, &available.release, &path, false) {
         Some(pair) => pair,
         None => match (
             layover_update::staged(&settings, &version),
@@ -125,6 +125,7 @@ pub fn apply(path: &Path, now: bool, including_manual: bool, trust_checksum_only
         at: Timestamp::now(),
         progress: Vec::new(),
         outcome: None,
+        until: None,
     };
     let source = staged.binary.clone().unwrap_or_default();
     if handover::is_served(&state) {
@@ -160,6 +161,7 @@ pub fn rollback(path: &Path) -> Said {
         at: Timestamp::now(),
         progress: Vec::new(),
         outcome: None,
+        until: None,
     };
     println!(
         "Going back to {}; {running} will not be offered again on this machine.",

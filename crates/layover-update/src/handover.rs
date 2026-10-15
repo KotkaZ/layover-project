@@ -38,6 +38,9 @@ pub struct Request {
     /// How it ended, once it has: `applied`, `postponed`, `failed`, `cancelled`.
     #[serde(default)]
     pub outcome: Option<String>,
+    /// When an unattended install's window closes: still waiting for runs then, it is postponed.
+    #[serde(default)]
+    pub until: Option<Timestamp>,
 }
 
 /// The record a Tower leaves for the Tower that replaces it.
@@ -268,6 +271,7 @@ mod tests {
                 at: Timestamp::now(),
                 progress: Vec::new(),
                 outcome: None,
+                until: None,
             },
         )
         .expect("writes");

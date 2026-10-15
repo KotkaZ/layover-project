@@ -526,3 +526,19 @@ rollback` puts it back. On Windows the old Tower supervises the new one and roll
 that does not answer within two minutes, at once. `doctor` says when a rollback happened in the last
 thirty days, and `layover update log` keeps every install, refusal, postponement and rollback.
 
+### 29. An unattended install takes a release nobody has looked at
+
+**What could happen.** Under `[update] mode = "auto"`, a factory installs a patch or minor release
+by itself. A release can be wrong in a way no check here sees — healthy, validating the factory, and
+quietly worse at the work — and every unattended factory takes it once its cool-off has passed.
+
+**Why it is accepted.** It is opt-in, per factory: the default only tells. And a factory nobody
+watches that never updates runs on known faults.
+
+**Mitigation.** The cool-off — a day for a patch, two for a minor — is the time to withdraw a bad
+release: marking it a pre-release on GitHub moves `releases/latest` back, and a fixed patch follows.
+A major release, a layout change, an unverified release and one that gives a new warning all wait
+for a person. Installs happen only in the `window` chosen, or when the factory has been idle. Every
+one is logged, the bell rings for it, the previous binary is kept a week, and `layover update
+rollback` puts it back.
+

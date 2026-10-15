@@ -158,7 +158,8 @@ downloaded, verified with [`gh`](https://cli.github.com) — install it and sign
 against your factory, and then the running Tower lets what it is running finish, swaps its own
 binary and restarts on the new version, keeping the old one for a week in case you want
 `layover update rollback`. Set `[update] mode = "stage"` to have each release made ready as soon as
-it is found. The whole of it is in [installing a release](./configuration.md#installing-a-release).
+it is found, or `mode = "auto"` to have it installed with nobody watching — a patch after a day, a
+minor after two, in a `window` you choose or when the factory is idle, and never a major. The whole of it is in [installing a release](./configuration.md#installing-a-release).
 
 How Layover was installed decides who replaces it. A binary from the shell or PowerShell installer,
 from `cargo install`, or from a manual download is replaced by Layover itself, with the prebuilt

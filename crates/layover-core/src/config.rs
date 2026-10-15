@@ -20,13 +20,14 @@ mod offered;
 mod rails;
 mod runner;
 mod update;
+mod window;
 mod written;
 
 pub use copilot::CopilotConfig;
 pub use learnings::LearningsConfig;
 pub use rails::Rails;
 pub use runner::{Cli, McpWiring, Runner, Selection, fixes_beside};
-pub use update::{UpdateChannel, UpdateConfig, UpdateMode};
+pub use update::{MinAge, UpdateAllow, UpdateChannel, UpdateConfig, UpdateMode, UpdateWindow};
 
 /// Filesystem and network locations used by the Tower.
 #[derive(Debug, Clone, Deserialize)]

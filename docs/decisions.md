@@ -1305,6 +1305,27 @@ is a path no test here can exercise. So Layover says the command and installs no
 that reads a different state-directory layout is refused by `apply` for now too: going back from it
 needs a snapshot of what the migration touched, which is not built.
 
+**Why unattended installs stop at minor, wait out a cool-off, and need `gh`.** An install with
+nobody watching is the one that has to be safest, so its limits were chosen with Karl on 15 October
+2026. It may take a patch or a minor release (`allow = "minor"` by default, after a first answer of
+`"patch"` was corrected) and never a major one, whose number says something incompatible changed;
+nor one that changes the state layout, whose way back is not built. It waits a day for a patch and
+two for a minor, counted from when the release was published — the time in which a release found
+to be bad can be withdrawn before unattended factories have it — and a minor waits longer because
+it changes more. It installs only what `gh` verified, by default: the checksum alone proves the file
+matches its manifest, not who built either. And it installs nothing whose own validation of the
+factory says something the running version does not, because that is news a person should read
+first. Everything it will not take is still offered, and installed by hand with one command.
+
+**Why a window that closes postpones rather than cuts off.** A person who chose a window chose when
+work may be interrupted. An install begun in it that is still waiting for runs when it closes has
+left that window, so it gives up for this one and work starts again; the next window tries again.
+Cutting off at the window's end would interrupt work at a time the person said not to. `max_drain`
+still applies inside the window, as it does to an install by hand. With no window, an install
+begins only once nothing has run, started, been parked or been queued for `idle_for`; the drain that
+follows makes it safe whatever happens in between, so the idle reckoning, sampled once a minute,
+needs only to pick a quiet moment, not to prove one.
+
 ---
 
 ## Still open

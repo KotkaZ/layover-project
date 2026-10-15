@@ -97,42 +97,17 @@ pub async fn drain_for(
             say(state, "Nothing is running or parked.", None);
             return Drain::Ready(request);
         }
+        if request.until.is_some_and(|until| Timestamp::now() >= until) {
+            return postpone(
+                control,
+                state,
+                &request,
+                "Postponed: the window closed while runs were still going. Work starts again; the \
+                 next window tries again.",
+            );
+        }
         if Instant::now() >= deadline {
-            let manual = control.alive_manual_agents();
-            if !manual.is_empty() && !request.including_manual {
-                control.stop_draining();
-                let names: Vec<String> = manual.iter().map(ToString::to_string).collect();
-                let line = format!(
-                    "Postponed: {} still running, and its work must not be done twice \
-                     (`recovery = \"manual\"`). Work starts again; ask again later.",
-                    names.join(", ")
-                );
-                say(state, &line, Some("postponed"));
-                let running = Version::running().to_string();
-                log::note(
-                    state,
-                    "postponed",
-                    &running,
-                    &request.version.to_string(),
-                    &line,
-                );
-                return Drain::Abandoned;
-            }
-            let cut = crate::stopping::cut_off(control).await;
-            if !cut.is_empty() {
-                let names: Vec<String> = cut.iter().map(ToString::to_string).collect();
-                say(
-                    state,
-                    &format!(
-                        "Cut off {} run(s) at the deadline ({}); recovery restarts them on {}.",
-                        names.len(),
-                        names.join(", "),
-                        request.version
-                    ),
-                    None,
-                );
-            }
-            return Drain::Ready(request);
+            return at_deadline(control, state, request).await;
         }
         let waiting = crate::stopping::waiting_for(control);
         if waiting != said {
@@ -149,6 +124,51 @@ pub async fn drain_for(
             () = tokio::time::sleep(LOOK) => {}
         }
     }
+}
+
+/// Gives up on `request` for now: work starts again, and it is said and logged why.
+fn postpone(control: &TowerControl, state: &Path, request: &Request, why: &str) -> Drain {
+    control.stop_draining();
+    say(state, why, Some("postponed"));
+    let running = Version::running().to_string();
+    log::note(
+        state,
+        "postponed",
+        &running,
+        &request.version.to_string(),
+        why,
+    );
+    Drain::Abandoned
+}
+
+/// At `max_drain`: cuts off what is still running, for recovery to restart on the new version —
+/// unless an agent whose work must not be done twice is among it, which postpones the install.
+async fn at_deadline(control: &TowerControl, state: &Path, request: Request) -> Drain {
+    let manual = control.alive_manual_agents();
+    if !manual.is_empty() && !request.including_manual {
+        let names: Vec<String> = manual.iter().map(ToString::to_string).collect();
+        let line = format!(
+            "Postponed: {} still running, and its work must not be done twice \
+             (`recovery = \"manual\"`). Work starts again; ask again later.",
+            names.join(", ")
+        );
+        return postpone(control, state, &request, &line);
+    }
+    let cut = crate::stopping::cut_off(control).await;
+    if !cut.is_empty() {
+        let names: Vec<String> = cut.iter().map(ToString::to_string).collect();
+        say(
+            state,
+            &format!(
+                "Cut off {} run(s) at the deadline ({}); recovery restarts them on {}.",
+                names.len(),
+                names.join(", "),
+                request.version
+            ),
+            None,
+        );
+    }
+    Drain::Ready(request)
 }
 
 /// The supervisor a service runs the Tower under, if any. Never on Windows, where the Task

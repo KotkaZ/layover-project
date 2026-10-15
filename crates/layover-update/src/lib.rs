@@ -18,6 +18,7 @@ pub mod handover;
 pub mod log;
 pub mod manifest;
 pub mod method;
+pub mod policy;
 pub mod probe;
 pub mod provenance;
 pub mod source;
@@ -33,8 +34,11 @@ pub use check::{
 };
 pub use gate::{Gate, gate};
 pub use handover::{Handover, Request};
-pub use layover_core::config::{UpdateChannel as Channel, UpdateConfig, UpdateMode as Mode};
+pub use layover_core::config::{
+    UpdateAllow, UpdateChannel as Channel, UpdateConfig, UpdateMode as Mode, UpdateWindow,
+};
 pub use method::Method;
+pub use policy::{Verdict, unattended};
 pub use probe::About;
 pub use provenance::{Attestation, Gh, Verifier};
 pub use source::{Source, SourceError};

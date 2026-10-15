@@ -19,6 +19,25 @@ pub(super) fn check_update(config: &Config, found: &mut Vec<Diagnostic>) {
         .chain(std::iter::once(config.defaults.timeout_sec))
         .max()
         .unwrap_or(config.defaults.timeout_sec);
+    if update.mode == UpdateMode::Auto && !update.require_provenance {
+        found.push(Diagnostic::warning(
+            "`[update] mode = \"auto\"` with `require_provenance = false` installs releases nobody \
+             verified Layover's release workflow built, with nobody watching. Leave it out, and \
+             sign `gh` in on this machine",
+        ));
+    }
+    if let Some(window) = update.window {
+        if update.mode != UpdateMode::Auto {
+            found.push(Diagnostic::warning(format!(
+                "`[update] window = \"{window}\"` does nothing unless `mode = \"auto\"`"
+            )));
+        } else if u64::from(window.length_minutes()) * 60 < update.max_drain_sec {
+            found.push(Diagnostic::warning(format!(
+                "`[update] window = \"{window}\"` is shorter than `max_drain`: an install still \
+                 waiting for runs when the window closes is postponed to the next one"
+            )));
+        }
+    }
     if update.max_drain_sec < longest {
         found.push(Diagnostic::warning(format!(
             "`[update] max_drain` is {}s, shorter than a run may take ({longest}s): installing a \
@@ -57,6 +76,33 @@ mod tests {
             about_updates("[update]\nmode = \"off\"\ncheck_every = \"10m\"\n").is_empty(),
             "a factory that never checks is not asked how often"
         );
+    }
+
+    #[test]
+    fn unattended_installs_of_unverified_releases_and_idle_windows_are_warned_about() {
+        let warned = |text: &str| -> Vec<String> {
+            crate::validate::validate(&parse(text))
+                .into_iter()
+                .filter(|found| !found.is_error() && found.message.contains("[update]"))
+                .map(|found| found.message)
+                .collect()
+        };
+        assert!(
+            warned("[update]\nmode = \"auto\"\nrequire_provenance = false\n")
+                .iter()
+                .any(|warning| warning.contains("nobody"))
+        );
+        assert!(
+            warned("[update]\nwindow = \"Sat 02:00-06:00\"\n")
+                .iter()
+                .any(|warning| warning.contains("does nothing unless"))
+        );
+        assert!(
+            warned("[update]\nmode = \"auto\"\nwindow = \"Sat 02:00-03:00\"\n")
+                .iter()
+                .any(|warning| warning.contains("shorter than `max_drain`"))
+        );
+        assert!(warned("[update]\nmode = \"auto\"\nwindow = \"Sat 02:00-06:00\"\n").is_empty());
     }
 
     #[test]

@@ -180,20 +180,31 @@ learning may not say — see [learnings](./learning.md). The whole table is opti
 
 ```toml
 [update]
-mode          = "notify"   # off | notify | stage
-channel       = "stable"   # stable | prerelease
-check_every   = "24h"
-max_drain     = "4h"       # how long an install waits for what is running
-keep_previous = "7d"       # how long the binary an update replaced is kept for a rollback
+mode               = "notify"   # off | notify | stage | auto
+channel            = "stable"   # stable | prerelease
+check_every        = "24h"
+max_drain          = "4h"       # how long an install waits for what is running
+keep_previous      = "7d"       # how long the binary an update replaced is kept for a rollback
+# auto only:
+window             = "Sat 02:00-06:00"   # local time; leave it out to install when idle
+idle_for           = "10m"      # with no window: how long nothing ran or waited
+min_age            = { patch = "24h", minor = "48h" }   # how old a release must be
+allow              = "minor"    # patch | minor — a major release always waits for a person
+require_provenance = true       # install only what `gh` verified
 ```
 
 | Key | Default | Meaning |
 |---|---|---|
-| `mode` | `"notify"` | `notify`: the Tower looks for a newer release once per `check_every`, and the [dashboard](./dashboard.md#a-newer-layover), [`doctor`](./cli.md#doctor) and [`layover update check`](./cli.md#update) say what it found and what it changes. Nothing is downloaded and nothing changes. `stage`: as `notify`, and it also gets the release ready to install — see [staging](#staging-a-release). `off`: the Tower never looks; a person can still run `layover update check`. |
+| `mode` | `"notify"` | `notify`: the Tower looks for a newer release once per `check_every`, and the [dashboard](./dashboard.md#a-newer-layover), [`doctor`](./cli.md#doctor) and [`layover update check`](./cli.md#update) say what it found and what it changes. Nothing is downloaded and nothing changes. `stage`: as `notify`, and it also gets the release ready to install — see [staging](#staging-a-release). `auto`: as `stage`, and it also [installs it unattended](#installing-unattended), within the limits below. `off`: the Tower never looks; a person can still run `layover update check`. |
 | `channel` | `"stable"` | `prerelease` considers pre-releases too, such as `1.15.0-rc.1`, for trying one before stable factories do. |
 | `check_every` | `"24h"` | How often the Tower looks, give or take a twelfth so machines that started together do not ask in the same minute. `validate` refuses less than an hour. A look that fails is retried after an hour, then two, four and so on up to this. |
 | `max_drain` | `"4h"` | How long [installing a release](#installing-a-release) waits for what is running to finish before cutting it off. `validate` warns when it is shorter than a run's `timeout`, because then the deadline can cut a run off. |
 | `keep_previous` | `"7d"` | How long the binary an update replaced is kept beside the new one, for [`layover update rollback`](./cli.md#update). Removed at a start after that. |
+| `window` | none | Under `auto`, when an install may begin, in the machine's local time: `"Sat 02:00-06:00"`, `"Mon-Fri 22:00-06:00"`, `"Sat,Sun 01:00-05:00"`, or `"02:00-04:00"` for every day. One that ends before it starts runs past midnight. Without one, an install begins when the factory is idle. |
+| `idle_for` | `"10m"` | Under `auto` with no `window`, how long nothing must have run, started, been parked or been queued. |
+| `min_age` | `{ patch = "24h", minor = "48h" }` | Under `auto`, how old a release must be — counted from when it was published — before it is installed: the time in which a bad release can be withdrawn. |
+| `allow` | `"minor"` | Under `auto`, the largest move: `"patch"` holds a minor release for a person too. A major release always waits for a person. |
+| `require_provenance` | `true` | Under `auto`, install only what `gh` verified Layover's release workflow built. `validate` warns when it is `false`. |
 
 A look is one request for a public file on github.com — the newest release's
 `dist-manifest.json` — which sends nothing about the factory: only the address it comes from and
@@ -280,6 +291,24 @@ flowchart LR
 5. **The new Tower proves itself**: it loads the factory, goes once round its loop and answers its
    own `/health` as the new version. It keeps the old Tower's dashboard token, so a page already
    open keeps working, and writes what it prints to `.layover/serve.log`.
+
+### Installing unattended
+
+Under `mode = "auto"` the Tower does what `layover update apply` would, by itself, when all of these
+hold — and says once, in its output, why not while one does not:
+
+- the release is a patch, or a minor under the default `allow = "minor"` — **never a major**;
+- it reads the **same state-directory layout**;
+- it is **`min_age` old**: a day for a patch, two days for a minor, by default;
+- it is **staged and verified** — unless `require_provenance = false` — and **validates the factory
+  with no warning the running version does not give**;
+- it is **in the `window`**, or, with none, the factory has been **idle for `idle_for`**.
+
+Then it drains and installs exactly as above. An install begun in a window that closes before what
+is running has finished is **postponed** to the next window, rather than cut off; one that does not
+happen for any other reason is tried again an hour later. A release unattended installs would not
+take — a major one, a layout change, a new warning — is still offered, and `layover update apply`
+installs it. `LAYOVER_UPDATE=off` stops all of it on a machine.
 
 With no Tower serving the factory, `apply` replaces the binary at once; the next Tower to start
 runs the new version. One a package manager installed — Homebrew, npm — is left to it, with the

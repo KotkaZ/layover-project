@@ -59,7 +59,12 @@ pub fn stage_and_gate(
 /// `[update] mode = "stage"`: staged, unless it already is — perhaps by another factory's Tower on
 /// this machine — and gated against this factory, unless it already was. A release that stopped
 /// short last time is tried again: a download can break off, and `gh` can be signed in since.
-pub fn ready(settings: &Settings, release: &Release, factory: &Path) -> Option<(Staged, Gate)> {
+pub fn ready(
+    settings: &Settings,
+    release: &Release,
+    factory: &Path,
+    trust_checksum_only: bool,
+) -> Option<(Staged, Gate)> {
     let staged = layover_update::staged(settings, &release.version);
     match staged {
         Some(staged) if staged.is_ready() => {
@@ -72,7 +77,12 @@ pub fn ready(settings: &Settings, release: &Release, factory: &Path) -> Option<(
             let _ = layover_update::gate::record(&gate);
             Some((staged, gate))
         }
-        _ => Some(stage_and_gate(settings, release, factory, false)),
+        _ => Some(stage_and_gate(
+            settings,
+            release,
+            factory,
+            trust_checksum_only,
+        )),
     }
 }
 
