@@ -251,3 +251,23 @@ Check the configuration without releasing anything:
 ```sh
 dist plan
 ```
+
+Installed Layovers read each release, so three things now matter to every one:
+
+- **Its CHANGELOG section has a `**Compatibility.**` paragraph**, which the updater shows as what
+  the release changes for an existing factory; `cargo xtask verify` refuses a section without one.
+  It says whether the state directory's layout changed: if it did, no factory installs it
+  unattended, and the paragraph should say what the person installing it is deciding.
+- **`layover about --json` stays**, and `MIN_UPGRADE_FROM` in `layover-update` is raised only by a
+  release that cannot be reached from an older one directly.
+- **A `dist` upgrade refreshes the pinned manifest** in `crates/layover-update/tests/fixtures/`
+  from `dist manifest --artifacts=all --output-format=json --no-local-paths`; a test fails until it
+  is, so a manifest the updater would misread is caught before a release carries it.
+
+Try the updater against a real release before stable factories do: tag a pre-release,
+`vX.Y.Z-rc.1`, which `dist` marks as one, and update a throwaway install of the previous release
+with `[update] channel = "prerelease"` in a throwaway factory. After a stable release, run `layover
+update check` from the previous version: it must see the new one within minutes. A bad release is
+withdrawn by marking it a pre-release on GitHub, which moves `releases/latest` back to the one
+before — unattended installs wait a day or two before taking a release, for exactly this — and a
+fixed patch follows.

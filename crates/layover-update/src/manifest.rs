@@ -175,6 +175,35 @@ mod tests {
         );
     }
 
+    /// A canary for a `dist` upgrade. The pinned manifest is what the parser above is proved
+    /// against; a newer `dist` may write the manifest differently, and the first sign would be a
+    /// release every installed Layover misreads. So upgrading `dist` fails here until the pinned
+    /// copy is replaced by one the new `dist` wrote — `dist manifest --artifacts=all
+    /// --output-format=json --no-local-paths` — and this test still passes against it.
+    #[test]
+    fn the_pinned_manifest_was_written_by_the_dist_this_repository_releases_with() {
+        let workspace = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("dist-workspace.toml");
+        // Outside this repository — the crate as published — there is nothing to compare.
+        let Ok(text) = std::fs::read_to_string(workspace) else {
+            return;
+        };
+        let pinned: serde_json::Value = serde_json::from_str(PINNED).expect("parses");
+        let releasing = text
+            .lines()
+            .find_map(|line| line.trim().strip_prefix("cargo-dist-version"))
+            .and_then(|rest| rest.split('"').nth(1))
+            .expect("dist-workspace.toml names its dist version");
+        assert_eq!(
+            pinned["dist_version"].as_str(),
+            Some(releasing),
+            "dist was upgraded: replace tests/fixtures/dist-manifest-*.json with a manifest the \
+             new dist writes, and check the parser still reads it"
+        );
+    }
+
     #[test]
     fn fields_it_does_not_read_or_does_not_find_change_nothing() {
         let manifest =

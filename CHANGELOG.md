@@ -87,6 +87,9 @@ notice:
   and **`POST /update/rollback`** do from the dashboard what the commands do.
 - `LAYOVER_UPDATE`, `LAYOVER_UPDATE_SOURCE` (a mirror laid out as GitHub's releases) and
   `LAYOVER_GITHUB_TOKEN` (for the API, on the `prerelease` channel).
+- `cargo xtask verify` refuses a CHANGELOG release section without a `**Compatibility.**`
+  paragraph, which the updater shows before an install, and a `dist` upgrade until the pinned
+  release manifest the updater is tested against is refreshed.
 
 ## [1.14.0] — 2026-10-14
 

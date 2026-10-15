@@ -7,6 +7,7 @@
 //! from `api/openapi.yaml`, and the documentation is checked for links that no longer resolve.
 //! Both run inside `verify`, which is what makes them binding rather than advisory.
 
+mod changelog;
 mod docs;
 mod openapi;
 mod verify;

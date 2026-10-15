@@ -168,6 +168,11 @@ at a time rather than all at once:
 3. `version:` in `api/openapi.yaml`.
 4. `cargo xtask generate-api`, because (3) changes the generated file.
 
+Its `CHANGELOG.md` section needs a `**Compatibility.**` paragraph — `verify` refuses one without —
+because installed Layovers show it as what the release changes before they install it. Upgrading
+`dist` needs the pinned manifest in `crates/layover-update/tests/fixtures/` refreshed; a test says
+how.
+
 **Never hand-edit `.github/workflows/release.yml`.** It is generated, and `dist host` checks it
 against what dist would produce and refuses a release that disagrees. Change `dist-workspace.toml`
 and run `dist init --yes` instead. Hand-editing it has already cost one failed release.
