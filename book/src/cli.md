@@ -146,8 +146,9 @@ longer reach Layover — written to history as `interrupted`, and restarted wher
 [`recovery`](./recovery.md) policy allows. A run another living Tower is watching is left alone.
 
 `--watch-only` leaves out the first three and serves the dashboard alone. That is what you want
-when pointing a second window at a factory another process is already running: **two Towers over
-one factory directory would race for its queue.**
+when pointing a second window at a factory another process is already running. **One Tower serves
+a factory:** a second `serve` on a factory another is serving refuses to start, because two would
+race for its queue.
 
 A Ground Stop is a pause. Engage it and nothing new starts; release it and the next tick fires as
 usual.
@@ -289,6 +290,11 @@ history and see none.
 ```sh
 layover update check              # look now, and say what a newer release changes
 layover update stage              # get it ready to install: downloaded, verified, checked here
+layover update apply              # install it: the Tower drains, swaps and restarts on it
+layover update apply --now        # cut what is running off rather than waiting
+layover update rollback           # back to the version the last update replaced
+layover update status             # where things stand, asking nothing
+layover update log                # what was installed and rolled back here
 layover update skip 1.15.0        # stop offering 1.15.0 on this machine
 layover update skip --clear       # offer every skipped version again
 ```
@@ -329,6 +335,41 @@ downloaded and checked against its SHA-256, and not run; `--trust-checksum-only`
 your say-so. It exits non-zero when the release is refused, or refuses the factory. A Tower whose
 factory has `[update] mode = "stage"` stages each new release after its daily look, and prints what
 it found.
+
+`apply` installs the newest release, staging it first if it is not, once it is verified and
+validates the factory — the whole of it is in
+[installing a release](./configuration.md#installing-a-release). With a Tower serving the factory
+it asks that Tower and follows it:
+
+```text
+The Tower serving this factory will drain and install 1.15.0. Ctrl+C here stops watching, not the install.
+  Installing 1.15.0: nothing new starts until it is in.
+  Waiting for 2 run(s) to finish (bob, wolf).
+  Nothing is running or parked.
+  Installed 1.15.0; 1.14.0 is kept at Q:\.tools\.cargo\bin\layover-1.14.0.exe.old.
+  Started 1.15.0 (pid 24220); waiting for it to answer on 127.0.0.1:7879.
+  Updated 1.14.0 → 1.15.0. The new Tower writes to C:\factory\.layover\serve.log.
+```
+
+`--now` cuts what is running off rather than waiting `[update] max_drain` for it; an agent whose
+`recovery` is `manual` still postpones the install, unless `--including-manual` is given too.
+`--trust-checksum-only` installs a release whose provenance could not be checked. With no Tower
+serving the factory, the binary is replaced at once.
+
+`rollback` goes back to the version the last update replaced, while it is kept, and stops offering
+the one it leaves. `status` says where things stand — the version and how it was installed, what
+is staged, an install under way, the last update and whether it proved healthy — from what is on
+disk, asking nothing. `log` prints `.layover/updates.jsonl`.
+
+`apply` and `rollback` say how it went in their exit code:
+
+| Code | Meaning |
+|---|---|
+| `0` | Installed, or already the newest |
+| `2` | Nothing to install, or nothing kept to go back to |
+| `3` | Refused: not verified, refuses the factory, changes the state layout, installed by a package manager, or failed and rolled back by the Tower |
+| `4` | Postponed: a `manual` agent was still running at the deadline |
+| `5` | Rolled back |
 
 `skip` is for a release you have decided against. It is kept per machine, like what was found, and
 a newer release is offered as usual.

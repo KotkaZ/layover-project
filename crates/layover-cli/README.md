@@ -38,6 +38,7 @@ layover serve                              # run the factory and serve the dashb
 layover stop                               # stop it once what it is running has finished
 layover doctor                             # report anything a person should look at
 layover update check                       # is there a newer Layover, and what does it change
+layover update apply                       # install it between runs, and restart on it
 layover autostart --show                   # the file that starts Layover at logon
 ```
 

@@ -23,6 +23,10 @@
 //!         })
 //!     }
 //!     # async fn get_update(&self) -> Result<layover_http::UpdateStatus, Problem> { todo!() }
+//!     # async fn apply_update(&self, _: layover_http::ApplyUpdateRequest) -> Result<layover_http::UpdateStatus, Problem> { todo!() }
+//!     # async fn cancel_update(&self) -> Result<layover_http::UpdateStatus, Problem> { todo!() }
+//!     # async fn skip_update(&self, _: layover_http::SkipUpdateRequest) -> Result<layover_http::UpdateStatus, Problem> { todo!() }
+//!     # async fn roll_back_update(&self) -> Result<layover_http::UpdateStatus, Problem> { todo!() }
 //!     # async fn list_agents(&self) -> Result<layover_http::AgentList, Problem> { todo!() }
 //!     # async fn list_pipelines(&self) -> Result<layover_http::PipelineList, Problem> { todo!() }
 //!     # async fn get_graph(&self, _: layover_http::GetGraphQuery) -> Result<layover_http::RouteMap, Problem> { todo!() }

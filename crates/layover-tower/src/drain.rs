@@ -44,9 +44,37 @@ impl Factory {
         self.draining.store(true, Ordering::SeqCst);
     }
 
-    /// Stops draining: queued work starts again as slots free.
+    /// Stops draining, and cutting off: queued work starts again as slots free.
     pub fn stop_draining(&self) {
+        self.cutting_off.store(false, Ordering::SeqCst);
         self.draining.store(false, Ordering::SeqCst);
+    }
+
+    /// Settles the runs this Tower cut off, as the next Tower would have: each is recorded as
+    /// `interrupted` and restarted through `queue` where its agent's `recovery` allows. For a Tower
+    /// that cut runs off to install a release and then, the install having failed, carries on.
+    pub fn settle_cut_off(
+        &self,
+        queue: &mut dyn FnMut(Queued) -> Result<(), String>,
+    ) -> Vec<crate::recovery::Settled> {
+        let Some(owner) = self.owner_id().map(str::to_owned) else {
+            return Vec::new();
+        };
+        let alive: std::collections::BTreeSet<_> = self
+            .inflight
+            .lock()
+            .map(|inflight| inflight.keys().cloned().collect())
+            .unwrap_or_default();
+        let Ok(recorded) = self.live.live() else {
+            return Vec::new();
+        };
+        recorded
+            .into_iter()
+            .filter(|live| {
+                live.owner.as_deref() == Some(owner.as_str()) && !alive.contains(&live.run)
+            })
+            .map(|live| self.settle_left_behind(&live, queue))
+            .collect()
     }
 
     /// Whether the factory is draining.

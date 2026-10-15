@@ -675,7 +675,7 @@ share its Hangar's `memory.md`, the factory's learnings and logbook, and the jou
 and queue. Each read-modify-write takes a lock keyed by the file's path from one process-wide
 registry, so two handles on the same journal share it, and each appended line is one write of the
 whole line. Across processes nothing is shared, which is why two Towers over one factory remain
-unsupported: see risk 23.
+unsupported — and, since 1.15, refused: see risk 23.
 
 **Why a run is also ended without asking `kill`.** On Unix the Tower ended a run by running
 `kill -KILL -<pid>`, and on Ubuntu 24.04 that never worked: procps 4.0.4 reads a negative number as
@@ -1246,6 +1246,64 @@ a manual one. The comparison is by the warning's text, so a reworded warning rea
 errs toward asking. Free space is not checked before downloading, though the plan proposed it: the
 archive is a few megabytes, standard Rust has no portable way to ask, and a write that fails for
 want of space fails the staging cleanly and leaves nothing behind.
+
+**Why an install drains, and cuts off only at a deadline.** Installing a release means restarting
+the Tower, and restarting it while runs are alive is what draining was built to avoid. So an install
+waits — nothing new starts, what is running finishes — for as long as `[update] max_drain` says,
+four hours by default because that is as long as the reference factory lets a run take: with the
+deadline at least the longest `timeout`, nothing alive when the drain began is still alive at it.
+Waiting for ever would let one long run hold every update back (Karl chose a deadline that cuts runs
+off, 15 October 2026); a run cut off is recorded `interrupted` and restarted on the new version by
+the recovery that already exists for a Tower that went away. The exception is an agent whose
+`recovery` is `manual`: that setting says its work must not happen twice — a run cut off halfway
+through opening a pull request would open a second — so while one runs at the deadline the install
+is postponed, and the Tower carries on, rather than cutting it off. `--now` reaches the deadline at
+once and keeps the exception; `--including-manual` drops it, for a person who means it.
+
+**Why Windows hands over in place, and systemd and launchd restart.** A Tower must not run two
+versions at once, and must not be left down. Under systemd and launchd the service manager ends
+every process in the service when its main one exits, so a successor the old Tower started would be
+killed with it; there the old Tower exits 75 — `EX_TEMPFAIL`, which both restart — and the manager
+starts the new binary. A spike on Karl's machine showed the Windows Task Scheduler does not restart
+a task that exits non-zero, and its five-minute watchdog is slow; but a child started with
+`DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP` outlives the task's command (and adding
+`CREATE_BREAKAWAY_FROM_JOB` is refused). So on Windows, and anywhere without a service manager, the
+old Tower closes its dashboard, starts the new binary at the same address, and waits for it to
+answer as the new version before it exits. That has a property the restart path lacks: the old
+process supervises the new one, so a release that cannot start at all is rolled back by the Tower it
+was meant to replace. `LAYOVER_SUPERVISOR`, which the service files `autostart` writes now set,
+selects the restart path; a systemd service written before that is recognised by the
+`INVOCATION_ID` systemd gives every service.
+
+**Why the new Tower keeps the old one's token.** A dashboard token is minted when `serve` starts,
+and a page holds it in a cookie. A Tower restarted by an update would mint a new one, and every
+open page would answer 401 until someone found the new address in a log — on every update. So the
+old Tower writes its token into the handover record (readable by its user only), and the new one
+adopts it and removes it from the record. The token never leaves the factory's own directory, which
+its user already owns.
+
+**Why one Tower serves a factory.** Two Towers over one factory race for its queue, which risk 23
+has always described; nothing stopped it. An update makes it sharper: the request to install is a
+file, and two Towers would both answer it. So `serve` now takes a lock on `.layover/serving.lock`
+for as long as it lives, and a second `serve` on the same factory refuses to start. The lock is how
+`layover update apply` tells whether a Tower is there to ask, and the one thing a Tower gives up
+during a handover, for the new Tower to take. `layover run` takes no such lock: it is the one-shot
+command, and its old freedom to run beside a `serve` is unchanged.
+
+**Why healthy means once round the loop and an answer.** A new version has to show it can do the
+job, not only that it started: it opened the state directory, loaded and validated the factory —
+both refuse to start otherwise — went once round its loop, which reads the queue and settles what it
+finds, and answered its own `/health` as the new version, within ten minutes of the handover. Then
+the update is logged and the old binary kept for `keep_previous`. Under a service manager, a new
+version that has started twice without that, or run out of time, puts the old binary back itself and
+exits 75 for the manager to start it.
+
+**Why a package manager's Layover is left to it, and a layout change to a person.** The plan was to
+drain and then run `brew upgrade` or `npm install -g` as the swap. A package manager owns its files
+and its records; replacing its binary under it leaves both wrong, and running it from inside a Tower
+is a path no test here can exercise. So Layover says the command and installs nothing. A release
+that reads a different state-directory layout is refused by `apply` for now too: going back from it
+needs a snapshot of what the migration touched, which is not built.
 
 ---
 

@@ -139,7 +139,7 @@ impl Factory {
         settled
     }
 
-    fn settle_left_behind(
+    pub(crate) fn settle_left_behind(
         &self,
         live: &Live,
         queue: &mut dyn FnMut(Queued) -> Result<(), String>,

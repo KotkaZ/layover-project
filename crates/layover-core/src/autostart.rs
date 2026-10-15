@@ -217,6 +217,11 @@ impl Autostart {
   </array>
   <key>RunAtLoad</key>
   <true/>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>LAYOVER_SUPERVISOR</key>
+    <string>launchd</string>
+  </dict>
   <key>KeepAlive</key>
   <dict>
     <key>SuccessfulExit</key>
@@ -234,6 +239,12 @@ impl Autostart {
     ///
     /// `default.target` rather than `multi-user.target`, because this is a user service: it starts
     /// with the session that owns the credentials, not with the machine.
+    ///
+    /// `LAYOVER_SUPERVISOR` tells a Tower installing a release that it runs under a service
+    /// manager, which ends every process in the service when the main one exits: so it exits 75 for
+    /// the manager to start the new binary, rather than starting it itself. The launchd agent says
+    /// the same; the Scheduled Task does not, because the Task Scheduler does not restart a task
+    /// that exits non-zero.
     fn systemd_unit(&self) -> String {
         format!(
             "[Unit]\n\
@@ -244,6 +255,7 @@ impl Autostart {
              [Service]\n\
              Type=simple\n\
              ExecStart={binary} {command} --config {config}\n\
+             Environment=LAYOVER_SUPERVISOR=systemd\n\
              Restart=on-failure\n\
              RestartSec=60\n\
              \n\
@@ -328,6 +340,23 @@ mod tests {
             "a user unit starts with the session that owns the credentials"
         );
         assert!(unit.contains("Restart=on-failure"));
+        assert!(
+            unit.contains("Environment=LAYOVER_SUPERVISOR=systemd"),
+            "a Tower installing a release exits 75 for systemd to start the new one"
+        );
+    }
+
+    #[test]
+    fn the_launch_agent_tells_the_tower_launchd_restarts_it() {
+        let plist = entry().render(Platform::MacOs);
+
+        assert!(plist.contains("<key>LAYOVER_SUPERVISOR</key>\n    <string>launchd</string>"));
+        assert!(
+            !entry()
+                .render(Platform::Windows)
+                .contains("LAYOVER_SUPERVISOR"),
+            "a Windows Tower hands over in place"
+        );
     }
 
     #[test]

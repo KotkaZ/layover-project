@@ -14,12 +14,16 @@
 pub mod check;
 pub mod download;
 pub mod gate;
+pub mod handover;
+pub mod log;
 pub mod manifest;
+pub mod method;
 pub mod probe;
 pub mod provenance;
 pub mod source;
 pub mod stage;
 pub mod state;
+pub mod swap;
 pub mod unpack;
 pub mod version;
 
@@ -28,7 +32,9 @@ pub use check::{
     status,
 };
 pub use gate::{Gate, gate};
+pub use handover::{Handover, Request};
 pub use layover_core::config::{UpdateChannel as Channel, UpdateConfig, UpdateMode as Mode};
+pub use method::Method;
 pub use probe::About;
 pub use provenance::{Attestation, Gh, Verifier};
 pub use source::{Source, SourceError};

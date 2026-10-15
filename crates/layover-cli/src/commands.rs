@@ -270,9 +270,17 @@ pub fn serve(
         watch_only,
     )?;
 
+    // The factory's own state directory, where `layover stop` and `layover update apply` write:
+    // beside the configuration, whatever `--history` says.
+    let factory_root = path.parent().unwrap_or_else(|| Path::new("."));
+    let state_dir = factory_root.join(".layover");
+
+    // One Tower serves a factory, and it reads what the Tower before it left if that was an update.
+    let (serving, arrival) =
+        crate::arriving::claim(&state_dir, path, watch_only, config.update.keep_previous())?;
+
     // Held for the lifetime of the command. Dropping either stops it: the endpoint frees its port,
     // and the Tower finishes whatever run it is watching before the thread joins.
-    let factory_root = path.parent().unwrap_or_else(|| Path::new("."));
     let running = if watch_only {
         None
     } else {
@@ -301,30 +309,19 @@ pub fn serve(
         running.as_ref().map(|(_, tower)| tower.timetable()),
     );
 
-    // Minted before anything binds, so the address that gets printed is the address that works.
-    let guard = if no_auth {
-        layover_dashboard::Guard::Open
-    } else {
-        layover_dashboard::Guard::minted()
+    // Minted before anything binds, so the address that gets printed is the address that works —
+    // or kept from the Tower this one replaced, so a page already open keeps working.
+    let guard = match (no_auth, arrival.token) {
+        (true, _) => layover_dashboard::Guard::Open,
+        (false, Some(token)) => layover_dashboard::Guard::Token(Arc::new(token)),
+        (false, None) => layover_dashboard::Guard::minted(),
     };
-    let announced = guard.clone();
-
-    // Copied out before the async block, which would otherwise take ownership of the pair and
-    // stop it being dropped — and therefore stopped — after the server returns.
-    let endpoint = running.as_ref().map(|(served, _)| served.endpoint.clone());
 
     // How this process will be stopped: drained when it runs the factory, at once when it only
     // watches. A request to stop left by a Tower that went away is not this one's to honour.
     let control = running.as_ref().map(|(_, tower)| tower.control());
-    // The factory's own state directory, where `layover stop` writes: beside the configuration,
-    // whatever `--history` says.
-    let state_dir = path
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .join(".layover");
-    let state = state_dir.clone();
     if control.is_some()
-        && let Some(said) = crate::stopping::clear_stale(&state)
+        && let Some(said) = crate::stopping::clear_stale(&state_dir)
     {
         println!("{said}");
     }
@@ -333,78 +330,26 @@ pub fn serve(
         .build()
         .map_err(|error| error.to_string())?;
 
-    let stopped = runtime.block_on(async move {
-        // Bind before announcing, so the address printed is a fact rather than a hope.
-        let listener = tokio::net::TcpListener::bind(addr)
-            .await
-            .map_err(|error| format!("could not listen on {addr}: {error}"))?;
-        let bound = listener.local_addr().map_err(|error| error.to_string())?;
-
-        announce(
-            &announced,
-            bound,
-            path,
-            &history_dir,
-            endpoint.as_deref(),
-            control.is_some(),
-        );
-
-        let router = layover_dashboard::router(dashboard, guard);
-        crate::stopping::serve_until_stopped(listener, router, control, state)
-            .await
-            .map_err(|error| error.to_string())
-    })?;
+    let served = crate::serving::Served {
+        addr: addr.to_owned(),
+        path: path.to_path_buf(),
+        history_dir,
+        guard,
+        // Copied out, so the pair is dropped — and therefore stopped — after the server returns.
+        endpoint: running.as_ref().map(|(served, _)| served.endpoint.clone()),
+        control,
+        state: state_dir.clone(),
+        dashboard,
+        max_drain: config.update.max_drain(),
+        serving,
+        proving: arrival.proving,
+    };
+    let stopped = runtime.block_on(crate::serving::run(served))?;
 
     crate::stopping::finish(stopped, running.is_some().then_some(state_dir.as_path()));
     drop(running);
 
     Ok(String::new())
-}
-
-/// What `serve` says once it is listening: where, what it reads, and how to stop it.
-fn announce(
-    guard: &layover_dashboard::Guard,
-    bound: std::net::SocketAddr,
-    path: &Path,
-    history_dir: &Path,
-    endpoint: Option<&str>,
-    drains: bool,
-) {
-    println!("Layover dashboard on {}", guard.address(&bound));
-    println!("Reading {}", path.display());
-    println!("History in {}", history_dir.display());
-
-    if guard.token().is_some() {
-        println!("The token is in that address; the page keeps it in a cookie afterwards.");
-    } else {
-        println!("Open to anything that can reach the port (--no-auth).");
-    }
-
-    match endpoint {
-        Some(url) => {
-            println!("Agents reach Layover at {url}");
-            println!("Running the factory: scheduled pipelines fire, queued work starts.");
-        }
-        // Said plainly, because a dashboard showing a queue that nothing will drain is the
-        // failure this whole surface is meant to avoid.
-        None => println!("Watching only: nothing here will start work (--watch-only)."),
-    }
-
-    // A token makes an off-loopback bind defensible; without one it is an open control plane
-    // on a network. The warning is about the combination, not the address.
-    if !bound.ip().is_loopback() && guard.token().is_none() {
-        eprintln!();
-        eprintln!("warning: {bound} is not loopback, and --no-auth is set.");
-        eprintln!("         Anyone who can reach it can read run history, reports and help");
-        eprintln!("         requests, and queue work this process will run. Drop --no-auth,");
-        eprintln!("         or put something in front of it.");
-    }
-
-    if drains {
-        println!("Press Ctrl+C, or run `layover stop`, to stop once what is running finishes.");
-    } else {
-        println!("Press Ctrl+C to stop.");
-    }
 }
 
 pub fn explain(path: &Path) -> Result<String, Failure> {
@@ -725,7 +670,11 @@ pub fn doctor(path: &Path, window: &str) -> Result<(String, bool), Failure> {
 
     let root = path.parent().unwrap_or(Path::new("."));
     let report = crate::doctor::check(&config, root, window)?;
-    let version = crate::update::doctor_line(&config.update, jiff::Timestamp::now());
+    let version = crate::update::doctor_line(
+        &config.update,
+        &root.join(".layover"),
+        jiff::Timestamp::now(),
+    );
 
     Ok((format!("{version}\n{}", report.render()), report.healthy()))
 }

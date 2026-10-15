@@ -224,3 +224,38 @@ fn a_run_cut_off_is_killed_and_left_for_the_next_tower_to_settle() {
     let seen = results(&tower, vec![human("eagle")]);
     assert!(seen.is_empty(), "{seen:?}");
 }
+
+#[test]
+fn a_tower_that_cut_runs_off_and_carries_on_settles_them_itself() {
+    let temp = Temp::new("drain-carry-on");
+    let tower = factory(&temp, &text(&sleeps(30)));
+
+    std::thread::scope(|scope| {
+        let runner = scope.spawn(|| results(&tower, vec![human("slow")]));
+        let began = Instant::now();
+        while tower.alive_runs() == 0 && began.elapsed() < Duration::from_secs(10) {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        tower.cut_off();
+        runner.join().expect("the drain ends");
+    });
+    assert!(history(&temp.0).is_empty());
+
+    tower.stop_draining();
+    let mut restarts = Vec::new();
+    let settled = tower.settle_cut_off(&mut |queued| {
+        restarts.push(queued);
+        Ok(())
+    });
+
+    assert_eq!(settled.len(), 1, "{settled:?}");
+    let runs = history(&temp.0);
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].outcome, layover_core::run::Outcome::Interrupted);
+    assert_eq!(restarts.len(), 1, "restarted where its recovery allows");
+    assert!(!tower.is_cutting_off() && !tower.is_draining());
+    assert!(
+        tower.settle_cut_off(&mut |_| Ok(())).is_empty(),
+        "settled once"
+    );
+}

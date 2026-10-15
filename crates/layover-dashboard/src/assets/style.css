@@ -84,6 +84,7 @@ nav { display: flex; gap: 4px; }
   padding: 3px 10px;
   border: 1px solid var(--line);
   border-radius: 999px;
+  white-space: nowrap;
 }
 .pill.down { color: var(--bad); border-color: var(--bad); }
 .pill.stopping { color: var(--warn); border-color: var(--warn); }
@@ -440,6 +441,9 @@ dialog menu { display: flex; justify-content: flex-end; gap: 10px; padding: 0; m
 dialog button { font: inherit; font-size: 13px; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
 dialog button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 #report-body { white-space: pre-wrap; font: inherit; font-size: 13px; line-height: 1.6; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; max-height: 48vh; overflow: auto; }
+/* Above every view while the Tower installs a release. */
+.update-banner[hidden] { display: none; }
+.update-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 16px; padding: 10px 14px; border: 1px solid var(--warn); border-radius: 10px; color: var(--ink); background: color-mix(in srgb, var(--warn) 10%, var(--panel)); font-size: 13px; }
 #update-staged { font-size: 13px; border-left: 3px solid var(--accent); padding: 4px 10px; margin: 10px 0; }
 #update-compatibility, #update-notes { white-space: pre-wrap; font: inherit; font-size: 13px; line-height: 1.6; }
 #update-notes { background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; max-height: 40vh; overflow: auto; }

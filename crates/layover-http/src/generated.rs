@@ -88,6 +88,15 @@ pub struct AgentList {
     pub routes: Vec<Route>,
 }
 
+/// How to install.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ApplyUpdateRequest {
+    /// Cut off what is running rather than waiting for it; recovery restarts it on the new
+    /// version. An agent whose `recovery` is `manual` still postpones the install.
+    #[serde(default)]
+    pub now: Option<bool>,
+}
+
 /// A newer release, and what it says an existing factory will notice.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AvailableUpdate {
@@ -1137,6 +1146,13 @@ pub enum SkipReason {
     StillWorking,
 }
 
+/// The version not to offer.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SkipUpdateRequest {
+    /// Such as `1.15.0`.
+    pub version: String,
+}
+
 /// A scheduled tick that came due and did not start.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SkippedTick {
@@ -1335,6 +1351,42 @@ pub enum UpdateProvenance {
     Unchecked,
 }
 
+/// One update of this factory's Tower.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UpdateRecord {
+    /// The version it replaced.
+    pub from: String,
+    /// When the new version proved itself.
+    #[serde(default)]
+    pub healthy_at: Option<String>,
+    /// When it was rolled back, if it was.
+    #[serde(default)]
+    pub rolled_back_at: Option<String>,
+    /// When the handover began.
+    pub started: String,
+    /// The version it installed.
+    pub to: String,
+}
+
+/// An install or rollback asked of the Tower.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UpdateRequestState {
+    /// When.
+    pub at: String,
+    /// Who asked.
+    pub by: String,
+    /// `applied`, `rolled_back`, `postponed`, `failed` or `cancelled` once it has ended; null
+    /// while it is under way.
+    #[serde(default)]
+    pub outcome: Option<String>,
+    /// What has happened since, oldest first.
+    pub progress: Vec<String>,
+    /// True when it goes back to the kept previous binary.
+    pub rollback: bool,
+    /// The version it installs.
+    pub version: String,
+}
+
 /// Where updates stand for this factory on this machine: the version running, the factory's
 /// `[update]` settings, the last check and what it found.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1356,11 +1408,20 @@ pub struct UpdateStatus {
     /// What the staged release made of this factory's definition. Absent until it was asked.
     #[serde(default)]
     pub gate: Option<UpdateGate>,
+    /// The last update this factory's Tower made, and whether it proved healthy.
+    #[serde(default)]
+    pub last_update: Option<UpdateRecord>,
     /// The newest release the last look that worked found, which may be the one running.
     #[serde(default)]
     pub latest: Option<String>,
     /// The factory's `[update] mode`.
     pub mode: UpdateMode,
+    /// The version kept to roll back to, while it is kept.
+    #[serde(default)]
+    pub previous: Option<String>,
+    /// The last install or rollback asked of this factory's Tower, and how it went.
+    #[serde(default)]
+    pub request: Option<UpdateRequestState>,
     /// Versions a person said not to offer on this machine.
     pub skipped: Vec<String>,
     /// The available release as staged on this machine, when it has been: by `[update] mode =
@@ -1945,6 +2006,39 @@ pub trait Api: Send + Sync + 'static {
     fn get_update(
         &self,
     ) -> impl core::future::Future<Output = Result<UpdateStatus, Problem>> + Send;
+    /// Install the staged release into the Tower serving this factory.
+    ///
+    /// The Tower drains — nothing new starts, what is running finishes, up to `[update]
+    /// max_drain` — then swaps its binary and hands over to the new version. Follow it in
+    /// `GET /update`'s `request`. The release must be staged, verified and pass this factory's gate.
+    ///
+    /// `POST /update/apply`
+    fn apply_update(
+        &self,
+        body: ApplyUpdateRequest,
+    ) -> impl core::future::Future<Output = Result<UpdateStatus, Problem>> + Send;
+    /// Cancel an install that has not happened yet; held work starts again.
+    ///
+    /// `DELETE /update/apply`
+    fn cancel_update(
+        &self,
+    ) -> impl core::future::Future<Output = Result<UpdateStatus, Problem>> + Send;
+    /// Go back to the version the last update replaced.
+    ///
+    /// The Tower drains and hands over to the kept previous binary, and the version it leaves is
+    /// not offered again on this machine.
+    ///
+    /// `POST /update/rollback`
+    fn roll_back_update(
+        &self,
+    ) -> impl core::future::Future<Output = Result<UpdateStatus, Problem>> + Send;
+    /// Stop offering a version on this machine.
+    ///
+    /// `POST /update/skip`
+    fn skip_update(
+        &self,
+        body: SkipUpdateRequest,
+    ) -> impl core::future::Future<Output = Result<UpdateStatus, Problem>> + Send;
 }
 
 /// Builds the axum router for this API.
@@ -2007,6 +2101,15 @@ pub fn router<A: Api>(api: std::sync::Arc<A>) -> axum::Router {
         )
         .route("/upcoming", axum::routing::get(handle_get_upcoming::<A>))
         .route("/update", axum::routing::get(handle_get_update::<A>))
+        .route(
+            "/update/apply",
+            axum::routing::post(handle_apply_update::<A>).delete(handle_cancel_update::<A>),
+        )
+        .route(
+            "/update/rollback",
+            axum::routing::post(handle_roll_back_update::<A>),
+        )
+        .route("/update/skip", axum::routing::post(handle_skip_update::<A>))
         .with_state(api)
 }
 
@@ -2255,10 +2358,48 @@ async fn handle_get_update<A: Api>(
     }
 }
 
+async fn handle_apply_update<A: Api>(
+    axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
+    axum::Json(body): axum::Json<ApplyUpdateRequest>,
+) -> axum::response::Response {
+    match api.apply_update(body).await {
+        Ok(value) => (axum::http::StatusCode::ACCEPTED, axum::Json(value)).into_response(),
+        Err(problem) => problem.into_response(),
+    }
+}
+
+async fn handle_cancel_update<A: Api>(
+    axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
+) -> axum::response::Response {
+    match api.cancel_update().await {
+        Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
+        Err(problem) => problem.into_response(),
+    }
+}
+
+async fn handle_roll_back_update<A: Api>(
+    axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
+) -> axum::response::Response {
+    match api.roll_back_update().await {
+        Ok(value) => (axum::http::StatusCode::ACCEPTED, axum::Json(value)).into_response(),
+        Err(problem) => problem.into_response(),
+    }
+}
+
+async fn handle_skip_update<A: Api>(
+    axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
+    axum::Json(body): axum::Json<SkipUpdateRequest>,
+) -> axum::response::Response {
+    match api.skip_update(body).await {
+        Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
+        Err(problem) => problem.into_response(),
+    }
+}
+
 /// Every operation the specification declares, as (method, path, operationId).
 ///
 /// Exposed so tests can assert the router and the specification agree.
-pub const OPERATIONS: [(&str, &str, &str); 25] = [
+pub const OPERATIONS: [(&str, &str, &str); 29] = [
     ("GET", "/agents", "listAgents"),
     ("GET", "/costs", "getCosts"),
     ("GET", "/flights", "listPending"),
@@ -2292,4 +2433,8 @@ pub const OPERATIONS: [(&str, &str, &str); 25] = [
     ("GET", "/runs/{run_id}/stream", "streamRun"),
     ("GET", "/upcoming", "getUpcoming"),
     ("GET", "/update", "getUpdate"),
+    ("POST", "/update/apply", "applyUpdate"),
+    ("DELETE", "/update/apply", "cancelUpdate"),
+    ("POST", "/update/rollback", "rollBackUpdate"),
+    ("POST", "/update/skip", "skipUpdate"),
 ];

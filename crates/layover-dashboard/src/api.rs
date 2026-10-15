@@ -111,6 +111,11 @@ impl Dashboard {
         self
     }
 
+    /// Whether a Tower runs in this process, rather than this being a `--watch-only` dashboard.
+    pub(crate) fn runs_a_tower(&self) -> bool {
+        self.1.is_some()
+    }
+
     /// The clock of the Tower in this process, if there is one.
     pub(crate) fn clock(&self) -> Option<&crate::upcoming::Clocked> {
         self.2.as_ref()
@@ -249,6 +254,28 @@ impl Api for Dashboard {
 
     async fn get_update(&self) -> Result<UpdateStatus, Problem> {
         self.update_status()
+    }
+
+    async fn apply_update(
+        &self,
+        body: layover_http::ApplyUpdateRequest,
+    ) -> Result<UpdateStatus, Problem> {
+        self.ask_to_install(body.now.unwrap_or(false))
+    }
+
+    async fn cancel_update(&self) -> Result<UpdateStatus, Problem> {
+        self.cancel_install()
+    }
+
+    async fn skip_update(
+        &self,
+        body: layover_http::SkipUpdateRequest,
+    ) -> Result<UpdateStatus, Problem> {
+        self.skip_version(&body.version)
+    }
+
+    async fn roll_back_update(&self) -> Result<UpdateStatus, Problem> {
+        self.ask_to_roll_back()
     }
 
     async fn list_agents(&self) -> Result<AgentList, Problem> {

@@ -144,17 +144,32 @@ cargo install --path crates/layover-cli
 layover --version
 ```
 
-## Hearing about a new release
+## Updating
 
 A running factory asks github.com once a day whether a newer Layover has been released. When one
 has, the dashboard's version pill reads `v1.14.0 → 1.15.0` and opens what it changes, `layover
-doctor` says so, and `layover update check` asks at once. Nothing is downloaded: install a new
-release the way you installed this one — or set `[update] mode = "stage"` to have each one
-downloaded, verified with [`gh`](https://cli.github.com) and checked against your factory first,
-ready for you. One request a day for a public file is all `notify` does; it sends nothing about your
-factory. To stop it, set `[update] mode = "off"` in a factory, or
-`LAYOVER_UPDATE=off` for the whole machine — see
+doctor` says so, and `layover update check` asks at once. One request a day for a public file is
+all that does; it sends nothing about your factory. To stop it, set `[update] mode = "off"` in a
+factory, or `LAYOVER_UPDATE=off` for the whole machine — see
 [configuration](./configuration.md#update--hearing-about-a-newer-layover).
+
+To install it, run `layover update apply`, or press **Update now** in that window. The release is
+downloaded, verified with [`gh`](https://cli.github.com) — install it and sign it in — and checked
+against your factory, and then the running Tower lets what it is running finish, swaps its own
+binary and restarts on the new version, keeping the old one for a week in case you want
+`layover update rollback`. Set `[update] mode = "stage"` to have each release made ready as soon as
+it is found. The whole of it is in [installing a release](./configuration.md#installing-a-release).
+
+How Layover was installed decides who replaces it. A binary from the shell or PowerShell installer,
+from `cargo install`, or from a manual download is replaced by Layover itself, with the prebuilt
+binary of the release — so a Cargo install becomes a prebuilt one. One from Homebrew or npm is left
+to them: Layover says to run `brew upgrade KotkaZ/tap/layover` or `npm install -g
+@layover/layover-cli@<version>`. One in a directory you cannot write is never elevated into.
+
+Started by the logon task on Windows, a Tower hands over to the new version in place, and keeps
+running after the task's own command has ended. Under systemd or launchd it exits 75 for the service
+to start the new version: regenerate an older service file with `layover autostart` so it says so
+(`LAYOVER_SUPERVISOR`), though a systemd service is recognised without it.
 
 ## Agent CLIs
 

@@ -103,7 +103,32 @@ impl Api for Stub {
             skipped: Vec::new(),
             staged: None,
             gate: None,
+            request: None,
+            last_update: None,
+            previous: None,
         })
+    }
+
+    async fn apply_update(
+        &self,
+        _: layover_http::ApplyUpdateRequest,
+    ) -> Result<layover_http::UpdateStatus, Problem> {
+        self.get_update().await
+    }
+
+    async fn cancel_update(&self) -> Result<layover_http::UpdateStatus, Problem> {
+        self.get_update().await
+    }
+
+    async fn skip_update(
+        &self,
+        _: layover_http::SkipUpdateRequest,
+    ) -> Result<layover_http::UpdateStatus, Problem> {
+        self.get_update().await
+    }
+
+    async fn roll_back_update(&self) -> Result<layover_http::UpdateStatus, Problem> {
+        self.get_update().await
     }
 
     async fn list_agents(&self) -> Result<AgentList, Problem> {
@@ -539,7 +564,7 @@ fn json(body: &str) -> serde_json::Value {
 
 #[test]
 fn every_specified_operation_is_routed() {
-    assert_eq!(OPERATIONS.len(), 25);
+    assert_eq!(OPERATIONS.len(), 29);
 
     for (method, path, operation) in OPERATIONS {
         assert!(path.starts_with('/'), "`{operation}` has an odd path");

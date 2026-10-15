@@ -8,8 +8,9 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
-A Tower that is asked to stop now lets what it is running finish, and a factory hears when a newer
-Layover is released.
+A Tower that is asked to stop now lets what it is running finish, and Layover can update itself: it
+hears of a new release, gets it ready, verified and checked against the factory, and — asked —
+installs it between runs and restarts on it, rolling back one that cannot prove itself.
 
 **Compatibility.** Additive for `layover.toml` and the HTTP API: every factory that loaded under
 1.14 loads unchanged, and the one new table, `[update]`, is optional. What an existing factory will
@@ -21,6 +22,13 @@ notice:
   for a factory and `LAYOVER_UPDATE=off` for a machine.
 - **`layover doctor` begins with a line** saying which Layover runs and what this machine last
   learned about releases.
+- **One Tower serves a factory.** A second `serve` on a factory another is serving refuses to start,
+  where it used to race the first for its queue.
+- **The service files `layover autostart` writes for systemd and launchd set
+  `LAYOVER_SUPERVISOR`**, so a Tower installing a release exits 75 for the service to restart it.
+  Regenerate an older one; a systemd service is recognised without it.
+- **`validate` warns when `[update] max_drain` is shorter than a run's `timeout`**, which the
+  defaults never are.
 - **The HTTP API**: `GET /health` gains `stopping`, and `GET /update` is new.
 
 ### Added
@@ -54,8 +62,22 @@ notice:
   asked what it is with `layover about --json`, and the factory validated by it. Nothing downloaded
   runs before it is verified; without `gh`, `--trust-checksum-only` runs it on a person's say-so.
   Nothing is installed.
+- **Installing a release**: **`layover update apply`**, or **Update now** in the dashboard. The
+  Tower drains — up to `[update] max_drain` (`"4h"`), then cuts off what is still running for
+  recovery to restart on the new version, unless an agent with `recovery = "manual"` is running,
+  which postpones it — swaps its binary, keeping the old one for `[update] keep_previous` (`"7d"`),
+  and hands over: on Windows it starts the new version at its own address and waits for it to
+  answer, putting its own binary back if it does not; under systemd or launchd it exits 75. The new
+  Tower keeps the dashboard's token, proves itself healthy, and writes to `.layover/serve.log`.
+  With no Tower serving, the binary is replaced at once. A Homebrew or npm install is left to its
+  package manager, with the command to run. Exit codes say how it went.
+- **`layover update rollback`** goes back to the version the last update replaced; **`status`**
+  says where things stand; **`log`** prints `.layover/updates.jsonl`.
 - **`GET /update`**: what this machine last learned about releases, for this factory, and — once a
-  release is staged — how far staging got (`staged`) and what it made of this factory (`gate`).
+  release is staged — how far staging got (`staged`), what it made of this factory (`gate`), the
+  install under way (`request`), the last update (`last_update`) and the version kept to go back
+  to (`previous`). **`POST /update/apply`**, **`DELETE /update/apply`**, **`POST /update/skip`**
+  and **`POST /update/rollback`** do from the dashboard what the commands do.
 - `LAYOVER_UPDATE`, `LAYOVER_UPDATE_SOURCE` (a mirror laid out as GitHub's releases) and
   `LAYOVER_GITHUB_TOKEN` (for the API, on the `prerelease` channel).
 

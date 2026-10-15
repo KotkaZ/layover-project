@@ -56,7 +56,7 @@ carries budget across a causal chain, and *Ground Stop* says exactly what a kill
 | Workspace | One shared working directory; contention not yet mediated — worktrees are designed and not built (risk 2) |
 | Outside surface | HTTP API with SSE, **generated from `api/openapi.yaml`**, behind a token minted at start; the UI is purely a client |
 | Distribution | `dist`-generated installers: shell, PowerShell, npm and prebuilt archives, each attested; a Homebrew tap; `cargo install layover-cli` for those who have it; documentation on GitHub Pages |
-| Updates | The Tower looks for a newer release daily and says so (`[update]`); it may update itself only once nothing is running and no rendezvous holds work — see `docs/decisions.md` |
+| Updates | The Tower looks for a newer release daily and says so (`[update]`); asked, it installs a verified one into itself once nothing is running and no rendezvous holds work, and hands over to it — in place, or through its service manager — rolling back one that cannot prove itself. See `docs/decisions.md` |
 | Safety rails | Hops (TTL), Fuel (chain budget), Reserve (factory budget), Ground Stop |
 | Hops semantics | One hop per flight; branches inherit the remaining count, so Hops bounds **depth** only |
 | Breadth bound | Fuel, on every chain; the run cap is the deterministic fallback when a runner cannot report cost |
@@ -289,8 +289,13 @@ Everything a factory accumulates lives in `.layover/`, beside its `layover.toml`
 ├── version.json                 # the layout version: a newer one is refused, an older one migrated
 ├── ground-stop                  # presence of this file means everything is halted
 ├── stop-request.json            # `layover stop` or a Ctrl+C: the Tower drains, exits, removes it
+├── serving.lock                 # held by the one Tower serving this factory
+├── serve.log                    # what a Tower started by an update prints
+├── updates.jsonl                # every install, refusal, postponement and rollback
 ├── update/
-│   └── gate.json                # what the staged release made of this layover.toml
+│   ├── gate.json                # what the staged release made of this layover.toml
+│   ├── request.json             # `layover update apply`: the Tower drains, swaps and hands over
+│   └── handover.json            # from what, to what, and whether the new Tower proved itself
 ├── logbook.md                   # shared memory (the default path); Tower-serialized writes
 ├── history/
 │   └── runs-2026-09-23.jsonl    # one record per run, segmented by UTC day
@@ -398,6 +403,7 @@ exists in the specification but is not implemented is a compile error.
 |---|---|---|
 | `GET` | `/health` | Liveness, version, whether a Ground Stop is engaged, and whether the Tower is stopping |
 | `GET` | `/update` | Whether a newer Layover has been released, what it changes, and the factory's `[update]` |
+| `POST` · `DELETE` | `/update/apply` · `/update/skip` · `/update/rollback` | Install the staged release, or call it off; skip a version; go back to the last one |
 | `GET` | `/agents` · `/pipelines` · `/graph` | What the factory is made of, and its route map drawn |
 | `POST` · `DELETE` | `/pipelines/:name/switch-off` | Switch one workflow off — its ways in close, its chains under way finish — or back on |
 | `POST` · `GET` · `DELETE` | `/flights` · `/flights/:id` | Queue work, see what is waiting, cancel what has not started |

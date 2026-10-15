@@ -32,16 +32,26 @@ impl Temp {
         }
     }
 
-    fn router(&self, factory: &str) -> Router {
+    fn dashboard(&self, factory: &str) -> Dashboard {
         fs::write(self.0.join("layover.toml"), factory).expect("writes");
+        Dashboard::new(DashboardState {
+            config_path: self.0.join("layover.toml"),
+            history: History::open(self.0.join("history")).expect("opens"),
+            journal: std::sync::Arc::new(Journal::open(self.0.join("journal")).expect("opens")),
+            ground_stop: self.0.join("ground-stop"),
+        })
+        .updates(self.settings())
+    }
+
+    /// A dashboard with no Tower behind it, as `serve --watch-only` serves.
+    fn router(&self, factory: &str) -> Router {
+        router(self.dashboard(factory), Guard::Open)
+    }
+
+    /// A dashboard in the same process as the factory's Tower.
+    fn towered(&self, factory: &str) -> Router {
         router(
-            Dashboard::new(DashboardState {
-                config_path: self.0.join("layover.toml"),
-                history: History::open(self.0.join("history")).expect("opens"),
-                journal: std::sync::Arc::new(Journal::open(self.0.join("journal")).expect("opens")),
-                ground_stop: self.0.join("ground-stop"),
-            })
-            .updates(self.settings()),
+            self.dashboard(factory).dispatched_by("the test's Tower"),
             Guard::Open,
         )
     }
@@ -205,4 +215,167 @@ async fn a_staged_release_says_how_far_it_got_and_what_it_made_of_this_factory()
     assert_eq!(said["gate"]["passes"], true);
     assert_eq!(said["gate"]["passes_unattended"], false);
     assert_eq!(said["gate"]["new_warnings"][0], "something new");
+}
+
+async fn send(
+    app: Router,
+    method: &str,
+    path: &str,
+    body: &str,
+) -> (StatusCode, serde_json::Value) {
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(method)
+                .uri(path)
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_owned()))
+                .expect("request"),
+        )
+        .await
+        .expect("answered");
+    let status = response.status();
+    let bytes = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body")
+        .to_bytes();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
+}
+
+fn stage_ready(temp: &Temp, next: &Version, passes: bool) {
+    let staged = layover_update::Staged {
+        version: next.clone(),
+        tag: format!("v{next}"),
+        at: "2026-10-18T10:00:00Z".parse().expect("valid"),
+        archive: "layover-cli.zip".to_owned(),
+        sha256: Some("a".repeat(64)),
+        attestation: Some(layover_update::Attestation::Verified {
+            signer: "release.yml".to_owned(),
+        }),
+        trusted_checksum_only: false,
+        binary: Some(temp.0.join("layover")),
+        about: Some(layover_update::About::of_this_binary(1, "x")),
+        crosses_layout: false,
+        refused: None,
+    };
+    let dir = layover_update::stage::dir_for(&temp.settings(), next);
+    fs::create_dir_all(&dir).expect("creates");
+    fs::write(
+        dir.join("staged.json"),
+        serde_json::to_string(&staged).expect("serialises"),
+    )
+    .expect("writes");
+    layover_update::gate::record(&layover_update::Gate {
+        version: next.clone(),
+        factory: temp.0.join("layover.toml"),
+        at: "2026-10-18T10:01:00Z".parse().expect("valid"),
+        not_run: None,
+        errors: if passes {
+            Vec::new()
+        } else {
+            vec!["no".to_owned()]
+        },
+        new_warnings: Vec::new(),
+    })
+    .expect("records");
+}
+
+#[tokio::test]
+async fn a_dashboard_with_no_tower_behind_it_does_not_pretend_to_install() {
+    let temp = Temp::new("watching");
+    let next = next_minor();
+    found(&temp, &next);
+    stage_ready(&temp, &next, true);
+
+    let (status, said) = send(temp.router(FACTORY), "POST", "/update/apply", "{}").await;
+
+    assert_eq!(status, StatusCode::CONFLICT, "{said}");
+    assert!(said.to_string().contains("no Tower runs here"), "{said}");
+    assert!(
+        !temp
+            .0
+            .join(".layover")
+            .join("update")
+            .join("request.json")
+            .exists()
+    );
+}
+
+#[tokio::test]
+async fn the_tower_is_asked_to_install_a_staged_release_and_the_ask_can_be_withdrawn() {
+    let temp = Temp::new("ask");
+    let next = next_minor();
+    found(&temp, &next);
+
+    let (refused, said) = send(temp.towered(FACTORY), "POST", "/update/apply", "{}").await;
+    assert_eq!(refused, StatusCode::CONFLICT, "nothing staged yet: {said}");
+
+    stage_ready(&temp, &next, true);
+    let (asked, said) = send(
+        temp.towered(FACTORY),
+        "POST",
+        "/update/apply",
+        r#"{"now":true}"#,
+    )
+    .await;
+    assert_eq!(asked, StatusCode::ACCEPTED, "{said}");
+    assert_eq!(said["request"]["version"], next.to_string());
+    assert_eq!(said["request"]["by"], "the dashboard");
+    assert!(said["request"]["outcome"].is_null());
+    let request = layover_update::handover::request(&temp.0.join(".layover")).expect("written");
+    assert!(request.now);
+
+    let (again, _) = send(temp.towered(FACTORY), "POST", "/update/apply", "{}").await;
+    assert_eq!(again, StatusCode::CONFLICT, "one at a time");
+
+    let (cancelled, said) = send(temp.towered(FACTORY), "DELETE", "/update/apply", "").await;
+    assert_eq!(cancelled, StatusCode::OK);
+    assert_eq!(said["request"]["outcome"], "cancelled");
+}
+
+#[tokio::test]
+async fn a_release_that_refuses_this_factory_is_not_installed() {
+    let temp = Temp::new("refuses");
+    let next = next_minor();
+    found(&temp, &next);
+    stage_ready(&temp, &next, false);
+
+    let (status, said) = send(temp.towered(FACTORY), "POST", "/update/apply", "{}").await;
+
+    assert_eq!(status, StatusCode::CONFLICT, "{said}");
+    assert!(said.to_string().contains("refuses this factory"), "{said}");
+}
+
+#[tokio::test]
+async fn a_version_is_skipped_from_the_dashboard_and_a_rollback_needs_one_kept() {
+    let temp = Temp::new("skip-roll");
+    let next = next_minor();
+    found(&temp, &next);
+
+    let (bad, _) = send(
+        temp.router(FACTORY),
+        "POST",
+        "/update/skip",
+        r#"{"version":"soon"}"#,
+    )
+    .await;
+    assert_eq!(bad, StatusCode::BAD_REQUEST);
+    let (skipped, said) = send(
+        temp.router(FACTORY),
+        "POST",
+        "/update/skip",
+        &format!(r#"{{"version":"{next}"}}"#),
+    )
+    .await;
+    assert_eq!(skipped, StatusCode::OK);
+    assert!(said["available"].is_null());
+    assert_eq!(said["skipped"][0], next.to_string());
+
+    let (nothing, said) = send(temp.towered(FACTORY), "POST", "/update/rollback", "").await;
+    assert_eq!(nothing, StatusCode::CONFLICT, "{said}");
 }

@@ -27,6 +27,10 @@
 </header>
 
 <main>
+  <div id="update-banner" class="update-banner" hidden>
+    <span id="update-banner-text"></span>
+    <button id="update-cancel" class="btn" type="button">Cancel</button>
+  </div>
   <section id="map" class="view">
     <div class="bar">
       <p class="hint">
@@ -444,18 +448,23 @@
     <p class="hint" id="update-meta"></p>
     <p id="update-staged" class="staged" hidden></p>
     <p id="update-compatibility"></p>
-    <details>
+    <details id="update-details">
       <summary>Everything in the release notes</summary>
       <pre id="update-notes"></pre>
     </details>
-    <p class="hint">
-      Install it the way you installed Layover — see the
+    <p class="hint" id="update-how">
+      Staged and verified, it installs from here: the Tower lets what is running finish, starts
+      nothing new, and restarts on the new version. Otherwise install it the way you installed
+      Layover — see the
       <a href="https://kotkaz.github.io/layover-project/install.html" target="_blank" rel="noopener">install guide</a>.
-      To stop being offered it on this machine: <code id="update-skip"></code>
+      From a terminal: <code id="update-skip"></code> stops it being offered.
     </p>
     <menu>
+      <button id="update-rollback" type="button" hidden></button>
+      <button id="update-skip-button" type="button">Skip this version</button>
       <a id="update-page" class="btn" target="_blank" rel="noopener">Release notes</a>
       <button value="close">Close</button>
+      <button id="update-apply" type="button" class="primary" hidden></button>
     </menu>
   </form>
 </dialog>

@@ -5,13 +5,17 @@
 //! absent rather than stubbed, because a command that pretends to start a factory is worse than
 //! one that says it cannot.
 
+mod applying;
+mod arriving;
 mod commands;
 mod doctor;
 mod mcp;
+mod serving;
 mod staging;
 mod stopping;
 mod tower;
 mod update;
+mod updating;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -90,8 +94,8 @@ enum Command {
     /// puts a dashboard over all of it.
     ///
     /// `--watch-only` leaves the running out and serves the dashboard alone, which is what you
-    /// want when looking at a factory another process is already running. Two Towers over one
-    /// factory directory would race for its queue.
+    /// want when looking at a factory another process is already running. One Tower serves a
+    /// factory: a second `serve` on it refuses to start, since two would race for its queue.
     Serve {
         /// Address to listen on. Defaults to `[layover] http_addr`, which is 127.0.0.1:7878 unless
         /// the factory says otherwise.
@@ -203,6 +207,39 @@ enum UpdateAction {
         trust_checksum_only: bool,
     },
 
+    /// Install the newest release, staging it first if it is not yet.
+    ///
+    /// With a Tower serving the factory, the Tower drains — nothing new starts, what is running
+    /// finishes, up to `[update] max_drain` — then swaps its binary and hands over to the new
+    /// version, and this follows it. With none, the binary is replaced here and now. Exits 0
+    /// installed, 2 nothing to install, 3 refused, 4 postponed.
+    Apply {
+        /// Cut off what is running rather than waiting for it; recovery restarts it on the new
+        /// version. An agent with `recovery = "manual"` still postpones the install.
+        #[arg(long)]
+        now: bool,
+
+        /// With --now, cut off even an agent whose `recovery` is `manual`.
+        #[arg(long, requires = "now")]
+        including_manual: bool,
+
+        /// Install a release whose provenance could not be checked, on its checksum alone.
+        #[arg(long)]
+        trust_checksum_only: bool,
+    },
+
+    /// Go back to the version the last update replaced, and stop offering the one it installed.
+    ///
+    /// Exits 5 rolled back, 2 nothing kept to go back to, 3 refused.
+    Rollback,
+
+    /// Where updates stand here: the version, how it was installed, what is staged, what is under
+    /// way, and the last update. Asks nothing of GitHub.
+    Status,
+
+    /// What has been installed and rolled back in this factory, oldest first.
+    Log,
+
     /// Stop offering a version on this machine. A newer one is still offered.
     Skip {
         /// The version, such as 1.15.0.
@@ -221,6 +258,23 @@ fn main() -> ExitCode {
     // Handled apart from the rest because its exit code carries the verdict rather than merely
     // whether the command worked. A check that always exits zero cannot be the thing a soak is
     // judged by.
+    // Their exit codes say how an install went, as `doctor`'s says how a factory is.
+    if let Command::Update {
+        action: action @ (UpdateAction::Apply { .. } | UpdateAction::Rollback),
+    } = &cli.command
+    {
+        let (said, code) = match action {
+            UpdateAction::Apply {
+                now,
+                including_manual,
+                trust_checksum_only,
+            } => applying::apply(&cli.config, *now, *including_manual, *trust_checksum_only),
+            _ => applying::rollback(&cli.config),
+        };
+        print!("{said}");
+        return ExitCode::from(code);
+    }
+
     if let Command::Doctor { window } = &cli.command {
         return match commands::doctor(&cli.config, window) {
             Ok((output, healthy)) => {
@@ -276,6 +330,9 @@ fn main() -> ExitCode {
                 trust_checksum_only,
             } => staging::stage_now(&cli.config, trust_checksum_only),
             UpdateAction::Skip { version, clear } => update::skip(version.as_deref(), clear),
+            UpdateAction::Status => applying::status(&cli.config),
+            UpdateAction::Log => applying::history(&cli.config),
+            UpdateAction::Apply { .. } | UpdateAction::Rollback => unreachable!("handled above"),
         },
         Command::Doctor { .. } => unreachable!("handled above"),
     };

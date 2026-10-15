@@ -70,6 +70,95 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateStatus"
 
+  /update/apply:
+    post:
+      operationId: applyUpdate
+      summary: Install the staged release into the Tower serving this factory.
+      description: |
+        The Tower drains — nothing new starts, what is running finishes, up to `[update]
+        max_drain` — then swaps its binary and hands over to the new version. Follow it in
+        `GET /update`'s `request`. The release must be staged, verified and pass this factory's gate.
+      tags: [control]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApplyUpdateRequest"
+      responses:
+        "202":
+          description: Asked; the Tower is draining for it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateStatus"
+        "409":
+          description: |
+            No Tower runs in this process (a `--watch-only` dashboard), nothing is staged and
+            verified, the release refuses this factory, or an install is already under way.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    delete:
+      operationId: cancelUpdate
+      summary: Cancel an install that has not happened yet; held work starts again.
+      tags: [control]
+      responses:
+        "200":
+          description: Cancelled, or nothing was under way.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateStatus"
+
+  /update/skip:
+    post:
+      operationId: skipUpdate
+      summary: Stop offering a version on this machine.
+      tags: [control]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SkipUpdateRequest"
+      responses:
+        "200":
+          description: Skipped.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateStatus"
+        "400":
+          description: That is not a version.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /update/rollback:
+    post:
+      operationId: rollBackUpdate
+      summary: Go back to the version the last update replaced.
+      description: |
+        The Tower drains and hands over to the kept previous binary, and the version it leaves is
+        not offered again on this machine.
+      tags: [control]
+      responses:
+        "202":
+          description: Asked; the Tower is draining for it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateStatus"
+        "409":
+          description: No Tower runs in this process, or no earlier version is kept.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
   /agents:
     get:
       operationId: listAgents
@@ -918,6 +1007,87 @@ components:
           $ref: "#/components/schemas/UpdateGate"
           description: |
             What the staged release made of this factory's definition. Absent until it was asked.
+        request:
+          $ref: "#/components/schemas/UpdateRequestState"
+          description: The last install or rollback asked of this factory's Tower, and how it went.
+        last_update:
+          $ref: "#/components/schemas/UpdateRecord"
+          description: The last update this factory's Tower made, and whether it proved healthy.
+        previous:
+          type: [string, "null"]
+          description: The version kept to roll back to, while it is kept.
+
+    ApplyUpdateRequest:
+      type: object
+      description: How to install.
+      properties:
+        now:
+          type: boolean
+          description: |
+            Cut off what is running rather than waiting for it; recovery restarts it on the new
+            version. An agent whose `recovery` is `manual` still postpones the install.
+
+    SkipUpdateRequest:
+      type: object
+      description: The version not to offer.
+      required: [version]
+      properties:
+        version:
+          type: string
+          description: Such as `1.15.0`.
+
+    UpdateRequestState:
+      type: object
+      description: An install or rollback asked of the Tower.
+      required: [version, rollback, by, at, progress]
+      properties:
+        version:
+          type: string
+          description: The version it installs.
+        rollback:
+          type: boolean
+          description: True when it goes back to the kept previous binary.
+        by:
+          type: string
+          description: Who asked.
+        at:
+          type: string
+          format: date-time
+          description: When.
+        progress:
+          type: array
+          description: What has happened since, oldest first.
+          items:
+            type: string
+        outcome:
+          type: [string, "null"]
+          description: |
+            `applied`, `rolled_back`, `postponed`, `failed` or `cancelled` once it has ended; null
+            while it is under way.
+
+    UpdateRecord:
+      type: object
+      description: One update of this factory's Tower.
+      required: [from, to, started]
+      properties:
+        from:
+          type: string
+          description: The version it replaced.
+        to:
+          type: string
+          description: The version it installed.
+        started:
+          type: string
+          format: date-time
+          description: When the handover began.
+        healthy_at:
+          type: [string, "null"]
+          format: date-time
+          description: When the new version proved itself.
+        rolled_back_at:
+          type: [string, "null"]
+          format: date-time
+          description: When it was rolled back, if it was.
 
     StagedUpdate:
       type: object

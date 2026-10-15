@@ -180,9 +180,11 @@ learning may not say — see [learnings](./learning.md). The whole table is opti
 
 ```toml
 [update]
-mode        = "notify"   # off | notify | stage
-channel     = "stable"   # stable | prerelease
-check_every = "24h"
+mode          = "notify"   # off | notify | stage
+channel       = "stable"   # stable | prerelease
+check_every   = "24h"
+max_drain     = "4h"       # how long an install waits for what is running
+keep_previous = "7d"       # how long the binary an update replaced is kept for a rollback
 ```
 
 | Key | Default | Meaning |
@@ -190,6 +192,8 @@ check_every = "24h"
 | `mode` | `"notify"` | `notify`: the Tower looks for a newer release once per `check_every`, and the [dashboard](./dashboard.md#a-newer-layover), [`doctor`](./cli.md#doctor) and [`layover update check`](./cli.md#update) say what it found and what it changes. Nothing is downloaded and nothing changes. `stage`: as `notify`, and it also gets the release ready to install — see [staging](#staging-a-release). `off`: the Tower never looks; a person can still run `layover update check`. |
 | `channel` | `"stable"` | `prerelease` considers pre-releases too, such as `1.15.0-rc.1`, for trying one before stable factories do. |
 | `check_every` | `"24h"` | How often the Tower looks, give or take a twelfth so machines that started together do not ask in the same minute. `validate` refuses less than an hour. A look that fails is retried after an hour, then two, four and so on up to this. |
+| `max_drain` | `"4h"` | How long [installing a release](#installing-a-release) waits for what is running to finish before cutting it off. `validate` warns when it is shorter than a run's `timeout`, because then the deadline can cut a run off. |
+| `keep_previous` | `"7d"` | How long the binary an update replaced is kept beside the new one, for [`layover update rollback`](./cli.md#update). Removed at a start after that. |
 
 A look is one request for a public file on github.com — the newest release's
 `dist-manifest.json` — which sends nothing about the factory: only the address it comes from and
@@ -236,8 +240,52 @@ attestation `gh` refuses goes no further, whatever is said.
 
 A staged release is kept per machine — one at a time, in `staging/<version>/` under the update
 directory above — and what it made of each factory in that factory's `.layover/update/gate.json`.
-A refused one is tried again at the next check. Staging installs nothing: installing is still
-yours to do.
+A refused one is tried again at the next check. Staging installs nothing.
+
+### Installing a release
+
+[`layover update apply`](./cli.md#update), or **Update now** in the dashboard's
+[update window](./dashboard.md#a-newer-layover), installs the staged release — staging it first if
+it is not — once it is verified and validates the factory. Nothing installs on its own.
+
+With a Tower serving the factory, the Tower does it, between runs:
+
+```mermaid
+flowchart LR
+  A["Asked"] --> D["Drain: nothing new starts"]
+  D -- "nothing running or parked" --> S["Swap the binary,<br/>keep the old one"]
+  D -- "max_drain: a manual agent<br/>still running" --> P["Postponed:<br/>work starts again"]
+  D -- "max_drain: cut runs off;<br/>recovery restarts them" --> S
+  S --> H["Start the new Tower"]
+  H -- "answers within 2 min" --> OK["Updated"]
+  H -- "does not" --> R["Put the old binary back,<br/>skip the version, carry on"]
+```
+
+1. **It drains**, as for [`layover stop`](./cli.md#stop): nothing new starts, what is running
+   finishes, a scheduled tick that comes due is held.
+2. **At `max_drain`**, a run still going is cut off — killed, recorded `interrupted`, and restarted
+   on the new version where its agent's [`recovery`](./recovery.md) allows. Except: when an agent
+   whose `recovery` is `manual` is still running — work that must not happen twice — the install
+   is **postponed** instead, and the Tower carries on. `--now` reaches the deadline at once.
+3. **It swaps** the binary in its own directory: the new one in, the old one renamed beside it as
+   `layover-<version>.exe.old` (or `layover-<version>.old`), kept for `keep_previous`. A tick held
+   while draining is queued for the new Tower.
+4. **It hands over.** On Windows, and anywhere not run by a service manager, the old Tower closes
+   its dashboard, starts the new binary with the same arguments at the same address, and waits up
+   to two minutes for it to answer as the new version — then exits. If it does not answer, or
+   exits, the old Tower stops it, puts its own binary back, stops offering that version, and
+   carries on serving. Under systemd or launchd the old Tower exits 75 instead, and the service
+   manager starts the new binary; the new Tower that cannot prove itself within ten minutes, or
+   by its second start, puts the old binary back itself and exits 75 again.
+5. **The new Tower proves itself**: it loads the factory, goes once round its loop and answers its
+   own `/health` as the new version. It keeps the old Tower's dashboard token, so a page already
+   open keeps working, and writes what it prints to `.layover/serve.log`.
+
+With no Tower serving the factory, `apply` replaces the binary at once; the next Tower to start
+runs the new version. One a package manager installed — Homebrew, npm — is left to it, with the
+command to run; one in a directory you cannot write is never elevated into. Every install, refusal,
+postponement and rollback is written to `.layover/updates.jsonl`, which
+[`layover update log`](./cli.md#update) prints.
 
 ## `[runners.*]` — how to invoke a CLI
 

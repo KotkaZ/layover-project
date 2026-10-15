@@ -424,9 +424,11 @@ it runs twice.
 the one runs in parallel needed, and running one factory from two processes is not a supported
 shape: `layover serve --watch-only` is the way to point a second window at a factory.
 
-**Mitigation until then.** Each Tower's claim on its live runs is a lock the operating system holds
-across processes, so a second Tower never stops or restarts the first one's runs. It does not stop
-them racing for queued work. Run one Tower per factory.
+**Mitigation until then.** A second `serve` on a factory another is serving refuses to start: each
+holds `.layover/serving.lock` for as long as it lives. `layover run` takes no such lock, and beside a
+`serve` can still race it for queued work. Each Tower's claim on its live runs is a lock the
+operating system holds across processes, so a second Tower never stops or restarts the first one's
+runs. Do not run `layover run` on a factory a Tower is serving.
 
 ### 24. On Linux and macOS, ending a run ends the agent CLI, not what it started
 
@@ -502,4 +504,25 @@ issuer and predicate. The archive must also match the manifest's SHA-256 and the
 the binary must then say it is the version and platform it should be. A release whose provenance
 could not be checked is downloaded but never run, never installed unattended, and installed by hand
 only with `--trust-checksum-only`, which is said in the record.
+
+### 28. Installing a release restarts the Tower, and a release can fail in ways a test does not
+
+**What could happen.** An install cuts off any run still alive at `[update] max_drain`, and a run
+cut off halfway through an external effect repeats it when recovery restarts it — the hazard of
+risk 17, at a moment a person chose rather than a crash. A release can pass every check and still
+be wrong: healthy by the Tower's measure, and failing runs that used to pass. Under systemd or
+launchd, a new binary that dies before it reads the handover never counts a start, so it is never
+rolled back automatically; the service manager restarts it until it gives up. And a Tower started by
+an update writes what it prints to `.layover/serve.log`, not to the terminal or log the old one
+wrote to, which a person looking in the old place will not find.
+
+**Why it is accepted.** Not updating is the larger hazard for a factory nobody watches, and every
+one of these is bounded: the deadline waits out the longest `timeout` by default, `recovery =
+"manual"` agents postpone it rather than being cut off, nothing installs without a person asking,
+and nothing is installed that was not verified and did not validate the factory.
+
+**Mitigation.** The replaced binary is kept for `keep_previous` (a week), and `layover update
+rollback` puts it back. On Windows the old Tower supervises the new one and rolls back a release
+that does not answer within two minutes, at once. `doctor` says when a rollback happened in the last
+thirty days, and `layover update log` keeps every install, refusal, postponement and rollback.
 

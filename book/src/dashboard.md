@@ -240,8 +240,15 @@ release, when it was released, its Compatibility note — what an existing facto
 all its release notes. Once it is [staged](./configuration.md#staging-a-release), the window also
 says how far staging got — downloaded and matched, who built it, or why it stopped — and what the
 release made of this factory: validated with no new warnings, validated with warnings this version
-does not give, or refused. Installing it is still yours to do; the window links the
-[install guide](./install.md) and gives the command that stops it being offered.
+does not give, or refused.
+
+Staged, verified and validating the factory, it can be installed from here: **Update now** asks the
+Tower to [install it](./configuration.md#installing-a-release) — let what is running finish, start
+nothing new, swap its binary and restart on the new version. While it does, the pill reads
+`· updating` and a line above every view says what it is waiting for, with **Cancel** to call it
+off before the swap. **Skip this version** stops it being offered on this machine, and after an
+update **Roll back to …** goes back to the version it replaced, while that is kept. A `--watch-only`
+dashboard has no Tower to ask, and says so.
 
 The pill reads what the Tower last found, on [its schedule](./configuration.md#update--hearing-about-a-newer-layover):
 opening the page asks GitHub nothing, and a `--watch-only` dashboard says the same as the Tower's.

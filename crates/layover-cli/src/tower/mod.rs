@@ -31,6 +31,7 @@
 //! alive, which is a file read; the alternative is a channel that has to be right in the presence
 //! of a Ground Stop, a restart and a dashboard in another task.
 
+mod control;
 #[cfg(test)]
 mod entryless;
 mod resume;
@@ -51,6 +52,8 @@ use layover_core::queue::Queued;
 use layover_store::Journal;
 use layover_tower::{Clock, Factory};
 
+pub use control::TowerControl;
+
 /// How long the loop rests when nothing is running and nothing is scheduled sooner.
 ///
 /// Short enough that work triggered from the dashboard starts while the person who triggered it is
@@ -66,44 +69,7 @@ pub struct Tower {
     stop: Arc<AtomicBool>,
     thread: Option<std::thread::JoinHandle<()>>,
     timetable: Arc<timetable::TowerTimetable>,
-    factory: Arc<Factory>,
-}
-
-/// What `serve` needs of a running Tower to stop it well: to start draining it, and to know when
-/// it has gone quiet. Cheap to clone and shareable across threads, unlike the Tower itself.
-#[derive(Clone)]
-pub struct TowerControl(Arc<Factory>);
-
-impl TowerControl {
-    /// Starts draining: nothing new starts except work that completes a parked rendezvous.
-    pub fn start_draining(&self) {
-        self.0.start_draining();
-    }
-
-    /// Cuts off what is running, leaving it for the next Tower to settle.
-    pub fn cut_off(&self) {
-        self.0.cut_off();
-    }
-
-    /// Whether nothing is running, starting, or parked at a rendezvous.
-    pub fn is_quiescent(&self) -> bool {
-        self.0.is_quiescent()
-    }
-
-    /// Whether nothing is running or starting.
-    pub fn is_idle(&self) -> bool {
-        self.0.is_idle()
-    }
-
-    /// The agents with a run alive.
-    pub fn alive_agents(&self) -> Vec<layover_core::agent::AgentName> {
-        self.0.alive_agent_names()
-    }
-
-    /// How many rendezvous hold an arrival.
-    pub fn parked_rendezvous(&self) -> usize {
-        self.0.parked_rendezvous()
-    }
+    control: TowerControl,
 }
 
 impl Tower {
@@ -122,7 +88,7 @@ impl Tower {
 
     /// A handle `serve` stops the Tower through.
     pub fn control(&self) -> TowerControl {
-        TowerControl(Arc::clone(&self.factory))
+        self.control.clone()
     }
 
     /// The Tower's clock and what it counts as still working, for the dashboard in this process.
@@ -158,17 +124,26 @@ impl Tower {
 
         let stop = Arc::new(AtomicBool::new(false));
         let stopping = Arc::clone(&stop);
-        let control = Arc::clone(&factory);
+        let control = TowerControl::new(
+            Arc::clone(&factory),
+            Arc::clone(&clock),
+            Arc::clone(&journal),
+        );
+        let passes = control.passes();
 
         let thread = std::thread::Builder::new()
             .name("layover-tower".to_owned())
-            .spawn(move || run_loop(&factory, &clock, &journal, &stopping, &announce, &*now))?;
+            .spawn(move || {
+                run_loop(
+                    &factory, &clock, &journal, &stopping, &announce, &*now, &passes,
+                );
+            })?;
 
         Ok(Self {
             stop,
             thread: Some(thread),
             timetable,
-            factory: control,
+            control,
         })
     }
 }
@@ -193,10 +168,13 @@ fn run_loop(
     stop: &AtomicBool,
     announce: &dyn Fn(String),
     now: &dyn Fn() -> Timestamp,
+    passes: &std::sync::atomic::AtomicU64,
 ) {
     let config = factory.config().clone();
 
     while !stop.load(Ordering::Relaxed) {
+        // Counted, so a Tower started by an update can tell when it has been round once.
+        passes.fetch_add(1, Ordering::Relaxed);
         // Read from disk every pass rather than cached: a kill switch whose state was sampled at
         // startup is a kill switch that does not work while the thing is running.
         if factory.ground_stop_engaged() {
@@ -229,7 +207,19 @@ fn fire_due(
     if factory.is_draining() {
         return;
     }
+    fire_due_now(factory, journal, clock, config, now, announce);
+}
 
+/// Queues whatever the clock says is due, draining or not, and says which workflows fired: what
+/// a Tower about to hand over to a new release leaves in the queue for it.
+pub(crate) fn fire_due_now(
+    factory: &Factory,
+    journal: &Journal,
+    clock: &Clock,
+    config: &Config,
+    now: Timestamp,
+    announce: &dyn Fn(String),
+) -> Vec<PipelineName> {
     // What is running, then what is queued. A run that finishes between the two reads queued
     // whatever it sent before it finished, and nothing moves a flight from the queue to a slot
     // while this looks, because the same thread does both.
@@ -246,6 +236,7 @@ fn fire_due(
         |pipeline| off.contains(pipeline),
     );
 
+    let fired_names = due.fire.clone();
     for name in due.fire {
         // A resuming pipeline does not open fresh work on its tick; it goes looking for work
         // that was set down and is now due. Its schedule is how often the operator wants that
@@ -276,6 +267,7 @@ fn fire_due(
         }
         announce(format!("skipped: {skipped}"));
     }
+    fired_names
 }
 
 /// Runs whatever is waiting, up to the factory's limit at once, until nothing is running and

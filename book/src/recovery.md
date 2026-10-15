@@ -228,6 +228,18 @@ which the operating system releases however the Tower ends, and every run's reco
 A chain's Fuel and run count live in the Tower's memory, so a chain continuing after a restart
 starts from its configured budget again — less what the interrupted run spent.
 
+## Installing a release
+
+[Installing a release](./configuration.md#installing-a-release) into a running Tower waits for what
+is running to finish, up to `[update] max_drain`. A run still going at that deadline is cut off and
+settled exactly as above: recorded `interrupted`, and restarted where its agent's `recovery` allows —
+on the new version. An agent whose `recovery` is `manual` is the exception: its work must not happen
+twice, so while one is running at the deadline the install is postponed instead, and the Tower
+carries on. With `max_drain` at least as long as the longest `timeout`, the default, nothing alive
+when the drain began is still alive at the deadline; `validate` warns when it is shorter.
+
+If the install then fails and the Tower carries on, it settles the runs it cut off itself, at once.
+
 ## A chain that ends on a failure
 
 Whatever the cause, a chain whose last run failed, timed out or was interrupted — with nothing queued

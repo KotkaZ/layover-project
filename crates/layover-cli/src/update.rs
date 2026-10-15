@@ -209,9 +209,10 @@ pub fn watch(
     }
 }
 
-/// One line for `doctor`: what runs, and what this machine last learned about releases.
+/// One line for `doctor`: what runs, what this machine last learned about releases, and a rollback
+/// in the factory whose `.layover` is `state` within the last thirty days.
 #[must_use]
-pub fn doctor_line(config: &UpdateConfig, now: Timestamp) -> String {
+pub fn doctor_line(config: &UpdateConfig, state: &Path, now: Timestamp) -> String {
     let settings = Settings::from_env();
     let status = status(&settings, config, &Version::running());
     let mut line = format!("Layover {}", status.running);
@@ -242,6 +243,17 @@ pub fn doctor_line(config: &UpdateConfig, now: Timestamp) -> String {
         _ => {}
     }
     let _ = write!(line, " {}", last_checked(status.last.as_ref(), now));
+    if let Some(record) = layover_update::handover::handover(state)
+        && let Some(at) = record.rolled_back_at
+        && now.duration_since(at).as_hours() < 30 * 24
+    {
+        let _ = write!(
+            line,
+            " {} was rolled back here on {}; `layover update log` says why.",
+            record.to,
+            at.strftime("%Y-%m-%d")
+        );
+    }
     if config.mode == Mode::Off {
         line.push_str(" This factory does not look by itself (`[update] mode = \"off\"`).");
     }

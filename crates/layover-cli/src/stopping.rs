@@ -17,6 +17,7 @@ use std::time::Duration;
 
 use layover_core::agent::AgentName;
 use layover_store::stop::{self, StopRequest};
+use layover_update::handover::{self, Request};
 
 use crate::tower::TowerControl;
 
@@ -38,6 +39,10 @@ pub enum Stopped {
     CutOff(Vec<AgentName>),
     /// A dashboard with no Tower behind it, which has nothing to drain.
     Watching,
+    /// Quiet, for a release to be installed and the Tower handed over.
+    ForUpdate(Request),
+    /// Handed over to a new release; the process ends with this code.
+    HandedOver(i32),
 }
 
 /// Serves `router` on `listener` until the Tower has stopped, and says how it stopped.
@@ -54,13 +59,14 @@ pub async fn serve_until_stopped(
     router: axum::Router,
     control: Option<TowerControl>,
     state: PathBuf,
+    max_drain: Duration,
 ) -> std::io::Result<Option<Stopped>> {
     let stopped = Arc::new(Mutex::new(None));
     let noted = Arc::clone(&stopped);
     let finished = Arc::new(tokio::sync::Notify::new());
     let finishing = Arc::clone(&finished);
     let signal = async move {
-        let how = until_stopped(control, state).await;
+        let how = until_stopped(control, state, max_drain).await;
         *noted.lock().unwrap_or_else(PoisonError::into_inner) = Some(how);
         finishing.notify_one();
     };
@@ -83,15 +89,40 @@ pub async fn serve_until_stopped(
 /// `control` is `None` for `--watch-only`, which honours only its own Ctrl+C: the request file
 /// belongs to the Tower, and a watching dashboard must neither act on it nor write one, or
 /// stopping the dashboard would stop the factory it is watching.
-pub async fn until_stopped(control: Option<TowerControl>, state: PathBuf) -> Stopped {
+///
+/// A request to install a release drains the Tower the same way, and ends it ready for the install
+/// — unless the install is postponed or cancelled, when the Tower carries on serving and waits for
+/// the next request.
+pub async fn until_stopped(
+    control: Option<TowerControl>,
+    state: PathBuf,
+    max_drain: Duration,
+) -> Stopped {
     let Some(control) = control else {
         let _ = tokio::signal::ctrl_c().await;
         return Stopped::Watching;
     };
 
-    let asked = first_request(&state).await;
+    loop {
+        match first_request(&state).await {
+            Asked::Stop(asked) => return stopping(&control, &state, &asked).await,
+            Asked::Update(request) => {
+                match crate::updating::drain_for(&control, &state, request, max_drain).await {
+                    crate::updating::Drain::Ready(request) => return Stopped::ForUpdate(request),
+                    crate::updating::Drain::Stop(asked) => {
+                        return stopping(&control, &state, &asked).await;
+                    }
+                    crate::updating::Drain::Abandoned => {}
+                }
+            }
+        }
+    }
+}
+
+/// Drains to stop, or cuts off when asked to stop now.
+async fn stopping(control: &TowerControl, state: &Path, asked: &StopRequest) -> Stopped {
     if asked.now {
-        return cut_off(&control).await;
+        return Stopped::CutOff(cut_off(control).await);
     }
 
     control.start_draining();
@@ -100,11 +131,11 @@ pub async fn until_stopped(control: Option<TowerControl>, state: PathBuf) -> Sto
         if control.is_quiescent() {
             return Stopped::Drained;
         }
-        if stop::pending(&state).is_some_and(|request| request.now) {
-            return cut_off(&control).await;
+        if stop::pending(state).is_some_and(|request| request.now) {
+            return Stopped::CutOff(cut_off(control).await);
         }
 
-        let waiting = waiting_for(&control);
+        let waiting = waiting_for(control);
         if waiting != said {
             println!("  Stopping: nothing new starts. Waiting for {waiting}.");
             println!("  Press Ctrl+C again, or run `layover stop --now`, to cut it off.");
@@ -113,8 +144,8 @@ pub async fn until_stopped(control: Option<TowerControl>, state: PathBuf) -> Sto
 
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {
-                let _ = stop::request(&state, &StopRequest::now("a second Ctrl+C"));
-                return cut_off(&control).await;
+                let _ = stop::request(state, &StopRequest::now("a second Ctrl+C"));
+                return Stopped::CutOff(cut_off(control).await);
             }
             () = tokio::time::sleep(LOOK) => {}
         }
@@ -122,22 +153,34 @@ pub async fn until_stopped(control: Option<TowerControl>, state: PathBuf) -> Sto
 }
 
 /// Kills what is running and waits for each run to be left for the next Tower, so nothing the
-/// factory started outlives the Tower that could hear from it.
-async fn cut_off(control: &TowerControl) -> Stopped {
+/// factory started outlives the Tower that could hear from it. Says which agents were cut off.
+pub(crate) async fn cut_off(control: &TowerControl) -> Vec<AgentName> {
     let agents = control.alive_agents();
     control.cut_off();
     let began = std::time::Instant::now();
     while !control.is_idle() && began.elapsed() < CUTTING {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    Stopped::CutOff(agents)
+    agents
 }
 
-/// The first request to stop: a Ctrl+C here, or a request file another process wrote.
-async fn first_request(state: &Path) -> StopRequest {
+/// What the Tower was first asked.
+enum Asked {
+    Stop(StopRequest),
+    Update(Request),
+}
+
+/// The first request: to stop — a Ctrl+C here, or a file another process wrote — or to install a
+/// release.
+async fn first_request(state: &Path) -> Asked {
     loop {
         if let Some(request) = stop::pending(state) {
-            return request;
+            return Asked::Stop(request);
+        }
+        if let Some(request) = handover::request(state)
+            && request.outcome.is_none()
+        {
+            return Asked::Update(request);
         }
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {
@@ -145,7 +188,7 @@ async fn first_request(state: &Path) -> StopRequest {
                 // Written so a dashboard watching from another process can say the Tower is
                 // stopping. Best-effort: the drain does not depend on it.
                 let _ = stop::request(state, &request);
-                return request;
+                return Asked::Stop(request);
             }
             () = tokio::time::sleep(LOOK) => {}
         }
@@ -153,7 +196,7 @@ async fn first_request(state: &Path) -> StopRequest {
 }
 
 /// What a drain is waiting for, as a person reads it: "2 run(s) (wolf, bob) and 1 rendezvous".
-fn waiting_for(control: &TowerControl) -> String {
+pub(crate) fn waiting_for(control: &TowerControl) -> String {
     let mut agents: Vec<String> = control
         .alive_agents()
         .iter()
@@ -183,6 +226,11 @@ pub fn report(stopped: &Stopped) -> String {
                 .to_owned()
         }
         Stopped::Watching => "Stopped watching.".to_owned(),
+        Stopped::ForUpdate(request) => format!("Stopped to install {}.", request.version),
+        Stopped::HandedOver(0) => "Handed over to the new Tower.".to_owned(),
+        Stopped::HandedOver(_) => {
+            "Stopped for the service to start the new release.".to_owned()
+        }
         Stopped::CutOff(agents) if agents.is_empty() => {
             "Stopped now. Nothing was running.".to_owned()
         }
@@ -214,8 +262,10 @@ pub fn finish(stopped: Option<Stopped>, state: Option<&Path>) {
     if let Some(state) = state {
         stop::clear(state);
     }
-    if matches!(stopped, Stopped::CutOff(_)) {
-        std::process::exit(0);
+    match stopped {
+        Stopped::CutOff(_) => std::process::exit(0),
+        Stopped::HandedOver(code) => std::process::exit(code),
+        _ => {}
     }
 }
 
