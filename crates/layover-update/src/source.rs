@@ -283,9 +283,20 @@ fn agent() -> Agent {
 
 /// The same, given `limit` for a whole request: longer for an archive than for a manifest.
 pub(crate) fn agent_for(limit: Duration) -> Agent {
+    built(limit, ureq::Proxy::try_from_env())
+}
+
+/// A client for this machine's own loopback, which never goes through a proxy: a corporate
+/// `HTTPS_PROXY` without `127.0.0.1` in `NO_PROXY` would otherwise send a Tower's question about
+/// itself to the proxy.
+pub(crate) fn local_agent(limit: Duration) -> Agent {
+    built(limit, None)
+}
+
+fn built(limit: Duration, proxy: Option<ureq::Proxy>) -> Agent {
     Agent::config_builder()
         .timeout_global(Some(limit))
-        .proxy(ureq::Proxy::try_from_env())
+        .proxy(proxy)
         .tls_config(
             TlsConfig::builder()
                 .root_certs(RootCerts::PlatformVerifier)

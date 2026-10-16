@@ -464,7 +464,7 @@ fn successor(binary: &Path, address: SocketAddr, state: &Path) -> std::io::Resul
         use std::os::unix::process::CommandExt as _;
         command.process_group(0);
     }
-    command.spawn()
+    layover_update::probe::spawn_retrying(&mut command)
 }
 
 /// This process's arguments, with `--addr` set to where it was actually bound — so a Tower

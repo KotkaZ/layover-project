@@ -38,11 +38,13 @@ fn running_at(path: &Path) -> Child {
         use std::os::unix::fs::PermissionsExt as _;
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).expect("chmods");
     }
-    Command::new(path)
-        .args(args)
-        .stdout(std::process::Stdio::null())
-        .spawn()
-        .expect("starts")
+    // Retried: on Linux a program this test just copied can read as busy for a moment.
+    layover_update::probe::spawn_retrying(
+        Command::new(path)
+            .args(args)
+            .stdout(std::process::Stdio::null()),
+    )
+    .expect("starts")
 }
 
 #[test]

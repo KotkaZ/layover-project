@@ -8,7 +8,7 @@
 
 use std::io::Read as _;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -99,6 +99,31 @@ pub enum Environment {
     Inherited,
 }
 
+/// Starts `command`, trying again for up to two seconds while its program is "busy".
+///
+/// On Linux a binary just written cannot be executed while any process still holds it open for
+/// writing, and every process forked in the instant it was being written — an agent run starting
+/// on another thread, say — briefly does. The write is long finished; the fork's copy of the
+/// handle goes when that process execs. So it is waited out rather than reported.
+///
+/// # Errors
+///
+/// Returns the spawn error once it is not "busy", or still is after two seconds.
+pub fn spawn_retrying(command: &mut Command) -> std::io::Result<Child> {
+    let began = Instant::now();
+    loop {
+        match command.spawn() {
+            Err(error)
+                if error.kind() == std::io::ErrorKind::ExecutableFileBusy
+                    && began.elapsed() < Duration::from_secs(2) =>
+            {
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            spawned => return spawned,
+        }
+    }
+}
+
 /// Runs `program` with `args` in `dir`, and waits up to `limit` for it to finish.
 ///
 /// # Errors
@@ -128,7 +153,7 @@ pub fn run(
         }
         command.env("LAYOVER_UPDATE", "off");
     }
-    let mut child = command.spawn().map_err(|error| {
+    let mut child = spawn_retrying(&mut command).map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
             RunError::NotFound(name.clone())
         } else {

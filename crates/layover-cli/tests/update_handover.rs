@@ -12,6 +12,7 @@ use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 use layover_update::handover::{self, Request};
+use layover_update::probe::spawn_retrying;
 use layover_update::{About, Attestation, Staged, Version};
 
 struct Temp(PathBuf);
@@ -172,11 +173,9 @@ fn serve_under(temp: &Temp, supervisor: Option<&str>) -> (Child, String) {
     if let Some(supervisor) = supervisor {
         command.env("LAYOVER_SUPERVISOR", supervisor);
     }
-    let mut child = command
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .expect("serve starts");
+    // Retried: on Linux the binary this test just copied can read as busy for a moment.
+    let mut child =
+        spawn_retrying(command.stdout(Stdio::piped()).stderr(Stdio::null())).expect("serve starts");
     let stdout = child.stdout.take().expect("piped");
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
@@ -248,10 +247,11 @@ fn until<T>(what: &str, within: Duration, mut found: impl FnMut() -> Option<T>) 
 
 /// Stops whatever Tower serves the factory now, and waits for its address to fall silent.
 fn stop(temp: &Temp, address: &str) {
-    let _ = temp
-        .command(&["stop", "--config", "layover.toml"])
-        .stdout(Stdio::null())
-        .status();
+    let _ = spawn_retrying(
+        temp.command(&["stop", "--config", "layover.toml"])
+            .stdout(Stdio::null()),
+    )
+    .and_then(|mut child| child.wait());
     until("the Tower stopping", Duration::from_secs(30), || {
         health(address).is_none().then_some(())
     });
@@ -388,7 +388,9 @@ fn with_no_tower_serving_a_rollback_puts_the_kept_binary_back_at_once() {
     let runner = temp.0.join("staged").join(name());
     std::fs::copy(temp.binary(), &runner).expect("copies");
     let mut command = temp.command(&["update", "rollback", "--config", "layover.toml"]);
-    let output = command.output().expect("runs");
+    let output = spawn_retrying(command.stdout(Stdio::piped()).stderr(Stdio::piped()))
+        .and_then(Child::wait_with_output)
+        .expect("runs");
     let said = String::from_utf8_lossy(&output.stdout).into_owned();
 
     assert_eq!(output.status.code(), Some(5), "{said}");
@@ -399,11 +401,14 @@ fn with_no_tower_serving_a_rollback_puts_the_kept_binary_back_at_once() {
     );
     assert!(layover_update::state::skipped(&temp.updates()).contains(&version()));
 
-    let log = Command::new(&runner)
-        .args(["update", "log", "--config", "layover.toml"])
-        .current_dir(temp.0.join("factory"))
-        .output()
-        .expect("runs");
+    let log = spawn_retrying(
+        Command::new(&runner)
+            .args(["update", "log", "--config", "layover.toml"])
+            .current_dir(temp.0.join("factory"))
+            .stdout(Stdio::piped()),
+    )
+    .and_then(Child::wait_with_output)
+    .expect("runs");
     let text = String::from_utf8_lossy(&log.stdout);
     assert!(
         text.contains(&format!("rolled_back {} → 1.0.0", version())),

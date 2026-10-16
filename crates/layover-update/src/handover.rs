@@ -213,7 +213,7 @@ pub fn answers_as(address: &str, token: Option<&str>, version: &Version, limit: 
     let url = format!("http://{address}/health");
     let began = Instant::now();
     while began.elapsed() < limit {
-        let mut request = crate::source::agent_for(Duration::from_secs(5)).get(&url);
+        let mut request = crate::source::local_agent(Duration::from_secs(5)).get(&url);
         if let Some(token) = token {
             request = request.header("Authorization", format!("Bearer {token}"));
         }
