@@ -8,6 +8,12 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+## [1.15.0-rc.1] — 2026-10-16
+
+A release candidate, for trying the updater against a real release before stable factories do. It
+is published as a GitHub pre-release: only `[update] channel = "prerelease"` sees it, and it is not
+on Homebrew, npm or crates.io.
+
 A Tower that is asked to stop now lets what it is running finish, and Layover can update itself: it
 hears of a new release, gets it ready, verified and checked against the factory, and — asked —
 installs it between runs and restarts on it, rolling back one that cannot prove itself.
@@ -1733,7 +1739,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.14.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.15.0-rc.1...HEAD
+[1.15.0-rc.1]: https://github.com/KotkaZ/layover-project/compare/v1.14.0...v1.15.0-rc.1
 [1.14.0]: https://github.com/KotkaZ/layover-project/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/KotkaZ/layover-project/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/KotkaZ/layover-project/compare/v1.11.0...v1.12.0

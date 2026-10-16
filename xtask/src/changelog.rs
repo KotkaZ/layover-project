@@ -39,8 +39,10 @@ pub fn problems(changelog: &str) -> Vec<String> {
     found
 }
 
+/// The numbers of a release's version, a pre-release's included: `1.15.0-rc.1` is a 1.15.0.
 fn version(text: &str) -> Option<(u64, u64, u64)> {
-    let mut parts = text.split('.').map(|part| part.parse::<u64>().ok());
+    let core = text.split_once('-').map_or(text, |(core, _)| core);
+    let mut parts = core.split('.').map(|part| part.parse::<u64>().ok());
     Some((parts.next()??, parts.next()??, parts.next()??))
 }
 
@@ -52,12 +54,17 @@ mod tests {
     fn a_release_without_a_compatibility_paragraph_is_named() {
         let changelog = "# Changelog\n\n## [Unreleased]\n\nNew things.\n\n\
                          ## [1.15.0] — 2026-10-17\n\nSummary.\n\n**Compatibility.** Additive.\n\n\
+                         ## [1.15.0-rc.1] — 2026-10-16\n\nA candidate, saying nothing.\n\n\
                          ## [1.14.0] — 2026-10-14\n\nSummary only.\n\n\
                          ## [1.0.0] — 2026-09-23\n\nBefore the convention.\n";
         let found = problems(changelog);
-        assert_eq!(found.len(), 2, "{found:?}");
+        assert_eq!(found.len(), 3, "{found:?}");
         assert!(found[0].contains("[Unreleased]"));
-        assert!(found[1].contains("[1.14.0]"));
+        assert!(
+            found[1].contains("[1.15.0-rc.1]"),
+            "a pre-release is a release"
+        );
+        assert!(found[2].contains("[1.14.0]"));
     }
 
     #[test]
