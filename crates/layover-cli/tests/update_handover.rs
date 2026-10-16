@@ -554,3 +554,68 @@ fn an_unattended_install_whose_window_closes_while_a_run_goes_on_is_postponed() 
     stop(&temp, &address);
     let _ = old.wait();
 }
+
+/// The Tower a handover started finds the request still open — under a service manager the old
+/// Tower has exited without seeing it answer. It ends the request once it is healthy, and does not
+/// take the request for its own version as one to install.
+#[test]
+fn a_tower_started_for_an_install_ends_it_when_healthy_and_does_not_install_itself_again() {
+    let temp = Temp::new("arrived");
+    factory(&temp);
+    // As a handover leaves them: the request, then the record of the handover it began.
+    ask(&temp);
+    let now = jiff::Timestamp::now();
+    handover::put_handover(
+        &temp.state(),
+        &layover_update::Handover {
+            from: "1.0.0".parse().expect("valid"),
+            to: version(),
+            binary: temp.binary(),
+            previous: temp.0.join("bin").join("layover-1.0.0.old"),
+            started: now,
+            healthy_by: now
+                .checked_add(jiff::SignedDuration::from_mins(10))
+                .expect("in range"),
+            boots: 0,
+            healthy_at: None,
+            rolled_back_at: None,
+            token: None,
+            held: Vec::new(),
+        },
+    )
+    .expect("writes");
+
+    let (mut tower, address) = serve(&temp);
+    let request = until("the request ending", Duration::from_secs(60), || {
+        handover::request(&temp.state()).filter(|request| request.outcome.is_some())
+    });
+
+    assert_eq!(
+        request.outcome.as_deref(),
+        Some("applied"),
+        "{:?}",
+        request.progress
+    );
+    assert!(
+        request
+            .progress
+            .iter()
+            .any(|line| line.contains("it is healthy")),
+        "{:?}",
+        request.progress
+    );
+    assert!(
+        !request
+            .progress
+            .iter()
+            .any(|line| line.starts_with("Installing")),
+        "it did not drain to install itself: {:?}",
+        request.progress
+    );
+    assert!(handover::handover(&temp.state()).is_some_and(|record| record.healthy_at.is_some()));
+    assert!(tower.try_wait().expect("asks").is_none());
+    assert_eq!(health(&address).as_deref(), Some(env!("CARGO_PKG_VERSION")));
+
+    stop(&temp, &address);
+    let _ = tower.wait();
+}

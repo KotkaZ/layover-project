@@ -123,10 +123,18 @@ fn describe(available: &Available, out: &mut String) {
         }
     }
     let _ = writeln!(out, "Release notes: {}", release.page);
-    out.push_str(
-        "Install it the way you installed Layover: \
-         https://kotkaz.github.io/layover-project/install.html\n",
-    );
+    let binary = std::env::current_exe().unwrap_or_default();
+    let how =
+        layover_update::method::detect(&binary, layover_update::method::cargo_home().as_deref());
+    match how.instead(&release.version.to_string()) {
+        None => out.push_str(
+            "`layover update apply` installs it; a Tower serving the factory lets what it is \
+             running finish first.\n",
+        ),
+        Some(instead) => {
+            let _ = writeln!(out, "This Layover is installed by {how}: {instead}.");
+        }
+    }
 }
 
 /// `layover update skip`: stops offering `version`, or with `clear`, every skipped version again.

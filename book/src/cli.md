@@ -307,7 +307,7 @@ Layover 1.14.0 (x86_64-pc-windows-msvc), stable channel.
 1.15.0 is available — released 2026-10-17, minor.
   **Compatibility.** Additive for `layover.toml`: every factory that loaded under 1.14 loads unchanged…
 Release notes: https://github.com/KotkaZ/layover-project/releases/tag/v1.15.0
-Install it the way you installed Layover: https://kotkaz.github.io/layover-project/install.html
+`layover update apply` installs it; a Tower serving the factory lets what it is running finish first.
 ```
 
 The indented paragraph is the release's own Compatibility note: what an existing factory will

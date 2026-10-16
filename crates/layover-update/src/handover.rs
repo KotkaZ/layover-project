@@ -151,6 +151,15 @@ pub fn handover(state: &Path) -> Option<Handover> {
     read(&handover_path(state))
 }
 
+/// Whether `request` has already been acted on: a handover to its version began after it was
+/// made. The Tower that handover started finds the request still open, and must not take it as one
+/// to install.
+#[must_use]
+pub fn handed_over(state: &Path, request: &Request) -> bool {
+    handover(state)
+        .is_some_and(|record| record.to == request.version && record.started >= request.at)
+}
+
 /// Writes `handover`.
 ///
 /// # Errors

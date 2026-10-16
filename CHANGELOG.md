@@ -8,6 +8,20 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+What trying 1.15.0-rc.1 on a real install turned up.
+
+**Compatibility.** Nothing changes for a factory from 1.15.0-rc.1.
+
+### Fixed
+
+- **An install is done when the new Tower answers as itself.** The new Tower used to mark the
+  install applied as it started, so `layover update apply` stopped following one line before the old
+  Tower said it was done — and, under a service manager, before the new Tower had proved anything.
+  Now the old Tower says so when the new one answers, or, under a service manager, the new Tower
+  once it is healthy; one that rolls itself back marks the install failed.
+- **`layover update check` says how to install what it found**: `layover update apply`, or for a
+  Homebrew or npm install the command to run, rather than "the way you installed Layover".
+
 ## [1.15.0-rc.1] — 2026-10-16
 
 A release candidate, for trying the updater against a real release before stable factories do. It

@@ -177,8 +177,11 @@ async fn first_request(state: &Path) -> Asked {
         if let Some(request) = stop::pending(state) {
             return Asked::Stop(request);
         }
+        // A request already handed over is the one that started this Tower, still waiting for it
+        // to answer; there is nothing to install.
         if let Some(request) = handover::request(state)
             && request.outcome.is_none()
+            && !handover::handed_over(state, &request)
         {
             return Asked::Update(request);
         }

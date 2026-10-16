@@ -62,13 +62,10 @@ pub fn arrive(state: &Path, settings: &Settings, keep_previous: Duration) -> Arr
     if let Some(request) = handover::request(state)
         && request.outcome.is_none()
     {
-        if request.version == running {
-            let what = if request.rollback {
-                "rolled_back"
-            } else {
-                "applied"
-            };
-            handover::progress(state, &format!("Layover {running} started."), Some(what));
+        if request.version == running && handover::handed_over(state, &request) {
+            // Not yet done: done is when this Tower answers as itself, which the Tower that
+            // started it, or this one proving itself, says.
+            handover::progress(state, &format!("Layover {running} started."), None);
         } else {
             handover::progress(
                 state,
@@ -136,6 +133,16 @@ fn roll_back_self(state: &Path, settings: &Settings, record: &mut Handover) -> !
         previous: record.previous.clone(),
     };
     let restored = restore(&swapped);
+    if handover::request(state).is_some_and(|request| request.outcome.is_none()) {
+        handover::progress(
+            state,
+            &format!(
+                "Layover {running} did not prove itself healthy; {} is being started again.",
+                record.from
+            ),
+            Some("failed"),
+        );
+    }
     record.rolled_back_at = Some(Timestamp::now());
     record.token = None;
     let _ = handover::put_handover(state, record);
@@ -194,6 +201,28 @@ pub fn prove(state: PathBuf, address: SocketAddr, token: Option<String>, control
             };
             if record.to != running || record.rolled_back_at.is_some() {
                 return;
+            }
+            // Ends the request, when the Tower that started this one has not: under a service
+            // manager it exited before this one could answer.
+            if let Some(request) = handover::request(&state)
+                && request.outcome.is_none()
+                && request.version == running
+            {
+                let what = if request.rollback {
+                    "rolled_back"
+                } else {
+                    "applied"
+                };
+                let line = format!(
+                    "{} {} → {running}; it is healthy.",
+                    if request.rollback {
+                        "Rolled back"
+                    } else {
+                        "Updated"
+                    },
+                    record.from
+                );
+                handover::progress(&state, &line, Some(what));
             }
             let now = Timestamp::now();
             record.healthy_at = Some(now);
