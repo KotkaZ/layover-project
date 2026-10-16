@@ -8,7 +8,10 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
-What trying 1.15.0-rc.1 on a real install turned up.
+## [1.15.0-rc.2] — 2026-10-16
+
+A second release candidate, published as a GitHub pre-release like the first: what trying
+1.15.0-rc.1 on a real install turned up.
 
 **Compatibility.** Nothing changes for a factory from 1.15.0-rc.1.
 
@@ -1753,7 +1756,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.15.0-rc.1...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.15.0-rc.2...HEAD
+[1.15.0-rc.2]: https://github.com/KotkaZ/layover-project/compare/v1.15.0-rc.1...v1.15.0-rc.2
 [1.15.0-rc.1]: https://github.com/KotkaZ/layover-project/compare/v1.14.0...v1.15.0-rc.1
 [1.14.0]: https://github.com/KotkaZ/layover-project/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/KotkaZ/layover-project/compare/v1.12.0...v1.13.0

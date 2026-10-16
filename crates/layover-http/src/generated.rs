@@ -4,7 +4,7 @@
 //! regenerates this file and fails if the result differs, so an edit here is reverted
 //! rather than kept. Change the specification instead.
 //!
-//! Source: Layover Tower API v1.15.0-rc.1
+//! Source: Layover Tower API v1.15.0-rc.2
 
 #![allow(clippy::too_many_lines)]
 
@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use crate::EventStream;
 
 /// The version of `api/openapi.yaml` this was generated from: the API this server serves.
-pub const API_VERSION: &str = "1.15.0-rc.1";
+pub const API_VERSION: &str = "1.15.0-rc.2";
 
 /// Whether an agent is declared to write to the shared workspace or only to read it. Declared,
 /// not yet enforced: every agent runs in its working directory whatever this says.
