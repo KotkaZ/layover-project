@@ -15,6 +15,10 @@ prompt_dir = "prompts"
 runner      = "claude"
 # Only the *name* goes here; the Tower reads the value from its own environment at spawn time, so
 # this file stays committable. Name whichever your runner wants.
+#
+# Recommended: a CLI home of the factory's own, so its runs neither fill your session history nor
+# load your personal plugins and MCP servers. Set CLAUDE_CONFIG_DIR (COPILOT_HOME, CODEX_HOME) for
+# the Tower, sign in once with it set, and add its name below. See book/src/configuration.md.
 env_from    = ["ANTHROPIC_API_KEY"]
 max_hops    = 8
 fuel_usd    = 5.00

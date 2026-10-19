@@ -14,7 +14,10 @@ file, so a factory can be run from anywhere.
 
 **`[defaults]`** sets the safety rails. `max_hops` bounds how *deep* a chain of flights can go;
 `fuel_usd` and `max_runs` bound how *wide* it can spread. They are not interchangeable — see
-[Pipelines and triggers](./pipelines.md#sizing-the-rails).
+[Pipelines and triggers](./pipelines.md#sizing-the-rails). `env_from` names what each run is given
+from the Tower's environment: the CLI's credential and — recommended before a factory runs for real
+— a [CLI home of its own](./configuration.md#a-cli-home-of-the-factorys-own), so its sessions stay
+out of yours.
 
 **`[runners.*]`** says how to invoke each CLI. For one Layover knows — Copilot CLI or Claude Code —
 `cli` is the whole runner, and Layover supplies everything an unattended run of it needs. Any other

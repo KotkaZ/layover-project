@@ -1326,6 +1326,21 @@ begins only once nothing has run, started, been parked or been queued for `idle_
 follows makes it safe whatever happens in between, so the idle reckoning, sampled once a minute,
 needs only to pick a quiet moment, not to prove one.
 
+**Why a separate CLI home is recommended rather than made.** A run keeps `HOME` and `USERPROFILE`
+because without them an agent CLI cannot find the sign-in it already has — so by default every run
+also writes its session into the user's own CLI home and loads the user's own plugins and MCP
+servers. On Karl's machine, by 20 October 2026, the factory's separate home held 1,711 sessions and
+2.4 GB that would otherwise sit in the list he resumes from; and a personal MCP server that posts as
+him is a tool `layover.toml` never granted. His own factory already runs Copilot CLI
+under `COPILOT_HOME`, set up with only the sign-in copied across, no plugins, and no global MCP
+servers. Layover does not create such a home itself: one it made would start signed out, and how
+each CLI signs in, where it keeps its token and which of its settings are safe to copy are the CLI's
+business, change between its releases, and are not something a supervisor can check. Nor does a
+preset set the variable, which would sign every existing factory out at once. So it is a
+recommendation, in the configuration reference, the install guide and both starting examples, with
+`env_from` as the enforcement: a factory that names the variable refuses a run when it is missing,
+rather than falling back to the user's home without saying so.
+
 ---
 
 ## Still open

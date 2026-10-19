@@ -550,7 +550,7 @@ Each carries the rails that bound a chain started there:
 |---|---|
 | **next** | Not a bound: when a scheduled workflow next fires, by the Tower's clock. See [What starts next](#what-starts-next). |
 | **hops** | **Depth.** Flights before the chain is cut. Branches inherit the count rather than splitting it, so it says nothing about width. |
-| **fuel** | **Breadth.** The shared budget, honouring the entry agent''s own `fuel_usd` where it sets one. |
+| **fuel** | **Breadth.** The shared budget, honouring the entry agent's own `fuel_usd` where it sets one. |
 | **workspace** | Whether two instances share a working directory or get one each. |
 
 Both rails are shown together deliberately. Seeing Hops alone invites the assumption that it caps

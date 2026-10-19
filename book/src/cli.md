@@ -175,8 +175,8 @@ agent's [`recovery`](./recovery.md) allows, as if this Tower had gone away mid-r
 exits.
 
 Either way it exits 0, because it stopped as asked: a service manager that restarts a Tower which
-fails — the systemd unit and launchd agent [`autostart`](#autostart) writes both do — leaves one
-somebody stopped stopped.
+fails — the systemd unit and launchd agent [`autostart`](#autostart) writes both do — leaves a
+Tower somebody stopped alone.
 
 The dashboard's version pill reads `· stopping` while a Tower drains. A Tower killed from outside —
 Task Manager, `kill -9`, a task ended by the scheduler — cuts everything off and leaves its runs
@@ -385,7 +385,7 @@ layover about --json    # the same, for a program
 ```
 
 ```json
-{"version":"1.14.0","target":"x86_64-pc-windows-msvc","layout":1,"api":"1.14.0","min_upgrade_from":"1.0.0"}
+{"version":"1.15.0","target":"x86_64-pc-windows-msvc","layout":1,"api":"1.15.0","min_upgrade_from":"1.0.0"}
 ```
 
 The version; the platform it was built for; the version of the

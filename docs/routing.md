@@ -295,9 +295,9 @@ still reach — an upstream only another workflow's route leads to cannot delive
 
 ### What validation checks per workflow
 
-Each check that asks "what can a chain reach" asks it of each way in over that way in's own graph:
-a pipeline from its entry over its scoped routes, a direct trigger from its agent over the global
-ones.
+Each check that asks "what can a chain reach" asks it once for every way in, over the graph that
+way in sees: a pipeline from its entry over its scoped routes, a direct trigger from its agent over
+the global ones.
 
 - An agent no way in reaches is reported unreachable, and hop depth is the best any way in manages
   — the same best case the checks have always taken.

@@ -8,6 +8,19 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+### Changed
+
+- **The documentation recommends a CLI home of the factory's own.** A run uses the user's own
+  `~/.copilot`, `~/.claude` or `~/.codex` unless told otherwise, so a factory's sessions fill the
+  user's history and its agents load the user's personal plugins and MCP servers. Configuration
+  gains *A CLI home of the factory's own* — `COPILOT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`,
+  forwarded with `env_from` — and the install guide says how a variable reaches a Tower that
+  `autostart` starts. Risk 30 records the hazard.
+- Stale and garbled passages across the book and the docs are corrected: the README's status, crate
+  list and what works today now include 1.15's updates, `stop` and `about`.
+
+**Compatibility.** Documentation only: nothing a factory does changes.
+
 ## [1.15.0] — 2026-10-19
 
 A Tower that is asked to stop now lets what it is running finish, and Layover can update itself: it

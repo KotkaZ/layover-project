@@ -339,7 +339,7 @@ cli = "claude"
 | `mcp` | How the CLI is told where Layover's MCP server is. A preset supplies it; given here, it replaces the preset's. |
 | `provider_errors` | How a failed run's output tells the model service's failure from the run's own. Copilot CLI is read without it; see [below](#telling-the-model-services-failure-from-the-runs). |
 
-Exactly one of `cli` and `command` is given; `validate` refuses neither and both.
+Exactly one of `cli` and `command` is given; `validate` refuses a runner with neither, or with both.
 
 ### What a preset supplies
 
@@ -488,9 +488,11 @@ The two lists are combined, not overridden: the publisher above gets both. A nam
 in the Tower's environment **refuses the run**, rather than starting a CLI that fails to
 authenticate several seconds later and reports it as the agent's failure.
 
-The child otherwise gets a scrubbed environment — `PATH`, `TEMP`, and the handful of variables a
-process needs to start at all. That is what makes `env_from` meaningful: the telemetry agent does
-not hold the publishing token because it never receives it.
+The child otherwise gets a scrubbed environment — `PATH`, `TEMP`, your home directory, and the
+handful of variables a process needs to start at all. That is what makes `env_from` meaningful: the
+telemetry agent does not hold the publishing token because it never receives it. The home directory
+is why a run finds the sign-in you made — and why, unless you
+[give it a home of its own](#a-cli-home-of-the-factorys-own), it also writes into yours.
 
 The prompt goes to the process's **stdin**, never onto its command line, and this is not a style
 preference. Windows caps a command line at 32,767 characters. Real agent prompts go well past it:
@@ -501,6 +503,47 @@ and then fails on the first agent worth running.
 `{prompt}` is therefore a **path**, not the text — the file the Tower writes the composed
 instructions to before spawning. Include it only for CLIs that accept a file of instructions as a
 flag; runners without it have the instructions prepended to the stdin payload instead.
+
+### A CLI home of the factory's own
+
+**Recommended for every factory.** Each agent CLI keeps its sign-in, its settings, its plugins and
+the history of every session in one directory, and a run started by the Tower finds yours there —
+the same `~/.copilot` you use at the keyboard. Two things follow:
+
+- **The factory's sessions bury yours.** Every run is a session, kept like one you started: a
+  factory that runs a few hundred times a day fills your session list, and your disk, with
+  transcripts you will never resume.
+- **Its agents load what you installed for yourself** — your plugins and skills, the MCP servers in
+  your own configuration — tools nobody granted them in `layover.toml`, where everything an agent
+  may do is meant to be written down and reviewed. A personal MCP server that posts as you is then
+  one an unattended agent can call.
+
+Every supported CLI reads its home from one variable:
+
+| CLI | Variable | Default |
+|---|---|---|
+| Copilot CLI | `COPILOT_HOME` | `~/.copilot` |
+| Claude Code | `CLAUDE_CONFIG_DIR` | `~/.claude` |
+| Codex | `CODEX_HOME` | `~/.codex` |
+
+Set it where the Tower starts — the script that runs `layover serve`, or the environment of the
+service [`autostart`](./install.md#starting-with-the-computer) registers — and pass it on, because a
+run receives only the names it is given:
+
+```toml
+[defaults]
+env_from = ["COPILOT_HOME"]     # e.g. ~/.copilot-factory, set for the Tower
+```
+
+Then sign in once with it set — `copilot login`, `codex login`, or `claude` and its `/login` — and
+put in it only what the factory needs: no plugins, no global MCP servers, since the ones an agent
+needs are [declared for it](#mcp-servers). A CLI that reads a token from the environment, such as
+Copilot CLI's `GH_TOKEN`, can be given one through `env_from` instead of a sign-in. Because a name
+`env_from` lists that is not set refuses the run — it is recorded as failed, naming the variable — a
+Tower started without it stops at its first run rather than quietly writing into your home again.
+
+Layover does not set this itself; see
+[decisions](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md) for why.
 
 ### Placeholders
 

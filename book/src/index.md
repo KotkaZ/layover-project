@@ -60,7 +60,8 @@ flowchart LR
 
 **Released, and proven unattended.** 1.0 shipped on 23 September 2026 after a 48-hour soak driving
 the real Copilot CLI — one process, no intervention, 1,501 runs, all succeeded — and semantic
-versioning applies from there.
+versioning applies from there. What each release since has added is in the
+[changelog](https://github.com/KotkaZ/layover-project/blob/main/CHANGELOG.md).
 
 **`layover serve` runs the factory.** It fires scheduled pipelines, runs agent CLIs — up to
 `max_concurrent_runs` at once — watches them, times them out if they wedge, reads what they cost

@@ -93,6 +93,7 @@ repository is meant to be worked on by agents.
 | Anything listed as open in `docs/decisions.md` | Answer it in the decision log above it, with the reasoning, and delete the question |
 | A new known hazard | `docs/risks.md` |
 | MCP servers, workspaces or autostart | `book/src/configuration.md`, `book/src/pipelines.md`, `book/src/install.md` |
+| What a run's environment carries: `env_from`, the scrubbed variables, a CLI's home | `book/src/configuration.md` (*A CLI home of the factory's own*), `book/src/install.md`, `docs/risks.md` risk 30 |
 | Any diagram | Use Mermaid, not ASCII — GitHub and the book both render it |
 | Recovery, steering or the handover | `book/src/recovery.md`, `docs/decisions.md` |
 | The dashboard, history or cost windows | `book/src/dashboard.md`, `book/src/cost.md` |

@@ -20,11 +20,11 @@
 
 </div>
 
-> **Status: 1.0.** Layover runs a factory unattended. `layover serve` fires scheduled pipelines,
-> runs what is queued, and serves each agent an MCP endpoint it can call back into — so a chain
-> starts on a clock, hands work from agent to agent, waits at a rendezvous for several verdicts at
-> once, and finishes with nobody watching. Every hop is bounded by the Hops, Fuel and run cap of
-> the one chain that began it. Detail in [what works today](#what-works-today).
+> **Status: stable since 1.0.** Layover runs a factory unattended. `layover serve` fires scheduled
+> pipelines, runs what is queued, and serves each agent an MCP endpoint it can call back into — so a
+> chain starts on a clock, hands work from agent to agent, waits at a rendezvous for several
+> verdicts at once, and finishes with nobody watching. Every hop is bounded by the Hops, Fuel and
+> run cap of the one chain that began it. Detail in [what works today](#what-works-today).
 >
 > The claim on the tin has been **tested rather than asserted**: a 48-hour soak driving the real
 > Copilot CLI, one process, no intervention — **1,501 runs, all succeeded**, 12.6 MB of memory at
@@ -87,6 +87,11 @@ layover validate --config layover.toml --strict   # check a factory before it ru
 layover explain                                   # what can trigger what, and what talks to what
 layover prompt tester --flag run_e2e=true         # what an agent would actually be told
 ```
+
+> **Give a factory a CLI home of its own.** Its runs otherwise use yours — `~/.copilot`,
+> `~/.claude`, `~/.codex` — filling your session history and loading your personal plugins and MCP
+> servers. Set `COPILOT_HOME`, `CLAUDE_CONFIG_DIR` or `CODEX_HOME` for the Tower and forward it with
+> `env_from`; see [the CLI's home](https://kotkaz.github.io/layover-project/configuration.html#a-cli-home-of-the-factorys-own).
 
 ## The idea
 
@@ -207,6 +212,7 @@ test and doc build, with warnings denied. CI runs the same command, unchanged.
 | `layover-dashboard` | The monitoring page and the API implementation behind it |
 | `layover-tower` | The supervisor — the only crate that starts a process |
 | `layover-mcp` | The MCP surface agents talk to Layover through |
+| `layover-update` | Finding newer releases and staging them: the manifest, the download, its checksum and `gh`-verified provenance, the gate against a factory |
 | `layover-cli` | The `layover` binary |
 
 ## What works today
@@ -233,6 +239,9 @@ test and doc build, with warnings denied. CI runs the same command, unchanged.
 | **`doctor`: reads a factory's history and reports the quiet failures** | |
 | Run history, costs, the Reserve, help requests, learnings, reports | |
 | `autostart`, which registers `layover serve` at login | |
+| **`stop`: a Tower asked to stop lets what it is running finish** | |
+| **Updates: a new release is verified, checked against the factory, installed between runs, and rolled back if it cannot prove itself** | |
+| `about`, which says what a binary is, for an updater to ask | |
 
 **A factory runs itself, the loop with you is closed, work can wait, and runs remember.** A
 schedule fires, an agent starts, it hands work on through the MCP endpoint, a joined agent waits

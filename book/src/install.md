@@ -147,7 +147,7 @@ layover --version
 ## Updating
 
 A running factory asks github.com once a day whether a newer Layover has been released. When one
-has, the dashboard's version pill reads `v1.14.0 → 1.15.0` and opens what it changes, `layover
+has, the dashboard's version pill reads, say, `v1.15.0 → 1.16.0` and opens what it changes, `layover
 doctor` says so, and `layover update check` asks at once. One request a day for a public file is
 all that does; it sends nothing about your factory. To stop it, set `[update] mode = "off"` in a
 factory, or `LAYOVER_UPDATE=off` for the whole machine — see
@@ -192,6 +192,14 @@ build, or write that runner's `command` out naming the shim: `command = ["copilo
 Credentials reach child CLIs through the environment. **Never put an API key in `layover.toml`** —
 it is a file people commit.
 
+**Give the factory a CLI home of its own.** Each of these CLIs keeps its sign-in, plugins and the
+history of every session in one directory (`~/.copilot`, `~/.claude`, `~/.codex`), and a factory's
+runs use yours unless told otherwise: hundreds of one-off sessions a day in the list you resume
+from, and your personal plugins and MCP servers loaded into agents that were never granted them.
+Point `COPILOT_HOME`, `CLAUDE_CONFIG_DIR` or `CODEX_HOME` at a directory for the factory, sign in
+once there, and forward it with `env_from` — see
+[Configuration](./configuration.md#a-cli-home-of-the-factorys-own).
+
 ## Starting with the computer
 
 A lights-out factory that stops at every reboot is not lights-out.
@@ -214,6 +222,14 @@ schedules and runs its queue, and the dashboard beside it.
 All three run as **you**, never elevated and never machine-wide. Layover spawns agents that use
 your provider credentials, your git identity and your workspace; a system service would have none
 of them, or would run as root with all of them.
+
+A service started at logon does not have your shell's environment, so a variable the factory names
+in `env_from` — a token, or the [CLI home](./configuration.md#a-cli-home-of-the-factorys-own) — has
+to be set where the service looks: a user environment variable on Windows (`setx COPILOT_HOME …`),
+read when the task starts; a drop-in with an `Environment=` line (`systemctl --user edit layover`)
+or a file in `~/.config/environment.d/` under systemd; the `EnvironmentVariables` of the launchd
+agent, which `autostart` writes afresh each time it is run. One that is missing refuses the run
+that needs it, so the gap shows at the first run.
 
 ## Verify your setup
 

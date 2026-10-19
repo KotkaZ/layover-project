@@ -1,8 +1,9 @@
 # The tools an agent has
 
 Layover speaks [MCP](https://modelcontextprotocol.io/), which all three supported CLIs understand
-natively. An agent reaches Layover the same way it reaches any other tool server, and the tools
-below are what it finds there.
+natively — though Codex cannot yet be told where Layover's endpoint is; see
+[How a run reaches them](#how-a-run-reaches-them). An agent reaches Layover the same way it reaches
+any other tool server, and the tools below are what it finds there.
 
 ## Why the list is short
 

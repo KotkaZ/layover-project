@@ -341,8 +341,9 @@ the thing an attacker wanted in the factory's memory, waiting for the filter to 
 **What is still open.** This is a filter on obvious attempts. An attacker who phrases an
 instruction as an observation gets through, and no wordlist fixes that. The remaining mitigations
 are structural and unchanged: expiry bounds the blast radius to twenty runs, an echo cannot
-confirm a learning, it is presented as a claim, and a person can drop one in a press. Those numbers
-are now the factory's (`[learnings]`): raising `provisional_runs` or `max_chars` widens the foothold,
+confirm a learning, it is presented as a claim, and a person can drop one from the dashboard.
+Those numbers are now the factory's (`[learnings]`): raising `provisional_runs` or `max_chars`
+widens the foothold,
 and lowering `confirm_after` shortens the way to permanence — for a wrong learning as much as a
 right one. The defaults are the ones this risk was assessed against.
 
@@ -541,4 +542,21 @@ A major release, a layout change, an unverified release and one that gives a new
 for a person. Installs happen only in the `window` chosen, or when the factory has been idle. Every
 one is logged, the bell rings for it, the previous binary is kept a week, and `layover update
 rollback` puts it back.
+
+### 30. An agent CLI run in your own home has your own tools
+
+**What could happen.** A run keeps the home directory, so its CLI reads the user's own
+configuration: the plugins, skills and MCP servers installed for working at the keyboard. An
+unattended agent can then call a tool `layover.toml` never granted it — one that posts to a chat or
+a tracker as that person — and nothing in the factory's definition says so. Every run also lands in
+the user's session history, where hundreds a day bury the user's own.
+
+**Why it is accepted.** The home directory is how a CLI finds its sign-in; taking it away breaks
+every run. Making a home of the factory's own would need Layover to sign each CLI in, which it
+cannot do or check.
+
+**Mitigation.** The documentation recommends a CLI home of the factory's own — `COPILOT_HOME`,
+`CLAUDE_CONFIG_DIR`, `CODEX_HOME` — with no plugins and no global MCP servers, forwarded with
+`env_from`, which refuses a run when it is not set. An agent's MCP servers are then exactly the
+ones declared for it.
 
