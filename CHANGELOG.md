@@ -8,28 +8,7 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
-## [1.15.0-rc.2] — 2026-10-16
-
-A second release candidate, published as a GitHub pre-release like the first: what trying
-1.15.0-rc.1 on a real install turned up.
-
-**Compatibility.** Nothing changes for a factory from 1.15.0-rc.1.
-
-### Fixed
-
-- **An install is done when the new Tower answers as itself.** The new Tower used to mark the
-  install applied as it started, so `layover update apply` stopped following one line before the old
-  Tower said it was done — and, under a service manager, before the new Tower had proved anything.
-  Now the old Tower says so when the new one answers, or, under a service manager, the new Tower
-  once it is healthy; one that rolls itself back marks the install failed.
-- **`layover update check` says how to install what it found**: `layover update apply`, or for a
-  Homebrew or npm install the command to run, rather than "the way you installed Layover".
-
-## [1.15.0-rc.1] — 2026-10-16
-
-A release candidate, for trying the updater against a real release before stable factories do. It
-is published as a GitHub pre-release: only `[update] channel = "prerelease"` sees it, and it is not
-on Homebrew, npm or crates.io.
+## [1.15.0] — 2026-10-19
 
 A Tower that is asked to stop now lets what it is running finish, and Layover can update itself: it
 hears of a new release, gets it ready, verified and checked against the factory, and — asked —
@@ -52,7 +31,8 @@ notice:
   Regenerate an older one; a systemd service is recognised without it.
 - **`validate` warns when `[update] max_drain` is shorter than a run's `timeout`**, which the
   defaults never are.
-- **The HTTP API**: `GET /health` gains `stopping`, and `GET /update` is new.
+- **The HTTP API**: `GET /health` gains `stopping`, and `/update` is new, with `apply`, `skip` and
+  `rollback` beneath it.
 
 ### Added
 
@@ -113,6 +93,15 @@ notice:
 - `cargo xtask verify` refuses a CHANGELOG release section without a `**Compatibility.**`
   paragraph, which the updater shows before an install, and a `dist` upgrade until the pinned
   release manifest the updater is tested against is refreshed.
+
+### Tried
+
+Released first as two candidates, 1.15.0-rc.1 and rc.2, on GitHub only. A throwaway 1.14.0 install
+found rc.1, verified it with `gh`, waited for a live run, installed it in place and rolled it back.
+A factory on rc.1 in `mode = "auto"` then found rc.2, staged and verified it, waited out its day,
+and installed it by itself once idle, keeping its dashboard's token. What the candidates turned
+up — an install marked done before the new Tower had answered, and `layover update check` not
+mentioning `apply` — is fixed here.
 
 ## [1.14.0] — 2026-10-14
 
@@ -1756,9 +1745,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.15.0-rc.2...HEAD
-[1.15.0-rc.2]: https://github.com/KotkaZ/layover-project/compare/v1.15.0-rc.1...v1.15.0-rc.2
-[1.15.0-rc.1]: https://github.com/KotkaZ/layover-project/compare/v1.14.0...v1.15.0-rc.1
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.15.0...HEAD
+[1.15.0]: https://github.com/KotkaZ/layover-project/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/KotkaZ/layover-project/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/KotkaZ/layover-project/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/KotkaZ/layover-project/compare/v1.11.0...v1.12.0
