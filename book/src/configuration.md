@@ -64,6 +64,7 @@ layout must be interchangeable, or the layout number means nothing.
 | `runner` | — | Runner used by agents that do not name one. |
 | `effort` | — | Reasoning effort for agents that set none; an agent's own wins. Reaches only runners with an `{effort}` placeholder. |
 | `context` | — | Context-window tier for agents that set none; an agent's own wins. Reaches only runners with a `{context}` placeholder. |
+| `env_from` | `[]` | Names of environment variables forwarded to every agent's CLI: the credential it authenticates with. An agent's own `env_from` adds to this rather than replacing it. See [credentials for the CLI itself](./runners.md#credentials-for-the-cli-itself). |
 | `max_hops` | `8` | Maximum flights in one chain. Bounds **depth**. |
 | `fuel_usd` | `5.00` | Shared cost budget for an itinerary. Bounds **breadth**. |
 | `max_runs` | `64` | Deterministic run cap; holds when a runner reports no cost. |
@@ -118,6 +119,13 @@ cache_read_usd  = 0.50
 cache_write_usd = 6.25
 ```
 
+| Key | Default | Meaning |
+|---|---|---|
+| `input_usd` | `0` | Dollars per million prompt tokens. |
+| `output_usd` | `0` | Dollars per million generated tokens. |
+| `cache_read_usd` | `0` | Dollars per million tokens served from the prompt cache. |
+| `cache_write_usd` | `0` | Dollars per million tokens written to the prompt cache. |
+
 Optional and always a fallback. Keyed by the model a run's command line selects, and applied only
 to a run that printed token counts and no dollar figure at all. Anything derived from it is
 labelled an estimate and never folded in as a measurement: it debits no Fuel and draws on no
@@ -161,7 +169,7 @@ keep_lapsed_days = 14   # how long a lapsed one is kept before it is deleted
 
 Each is a trade-off. A longer `provisional_runs` lets a learning help for longer, and lets a wrong
 one do damage for longer; a lower `confirm_after` makes true insights permanent sooner, and wrong
-ones too — see [risk 19](https://github.com/KotkaZ/layover-project/blob/main/docs/risks.md). A
+ones too — see [risk 19](./design/risks.md). A
 change applies to learnings from then on: one already provisional keeps the runs it was given.
 
 Kept, a lapsed learning is what lets a later proposal of the same insight count as a rediscovery.
@@ -195,10 +203,10 @@ require_provenance = true       # install only what `gh` verified
 
 | Key | Default | Meaning |
 |---|---|---|
-| `mode` | `"notify"` | `notify`: the Tower looks for a newer release once per `check_every`, and the [dashboard](./dashboard.md#a-newer-layover), [`doctor`](./cli.md#doctor) and [`layover update check`](./cli.md#update) say what it found and what it changes. Nothing is downloaded and nothing changes. `stage`: as `notify`, and it also gets the release ready to install — see [staging](#staging-a-release). `auto`: as `stage`, and it also [installs it unattended](#installing-unattended), within the limits below. `off`: the Tower never looks; a person can still run `layover update check`. |
+| `mode` | `"notify"` | `notify`: the Tower looks for a newer release once per `check_every`, and the [dashboard](./dashboard.md#a-newer-layover), [`doctor`](./cli.md#doctor) and [`layover update check`](./cli.md#update) say what it found and what it changes. Nothing is downloaded and nothing changes. `stage`: as `notify`, and it also gets the release ready to install — see [staging](./updating.md#staging-a-release). `auto`: as `stage`, and it also [installs it unattended](./updating.md#installing-unattended), within the limits below. `off`: the Tower never looks; a person can still run `layover update check`. |
 | `channel` | `"stable"` | `prerelease` considers pre-releases too, such as `1.15.0-rc.1`, for trying one before stable factories do. |
 | `check_every` | `"24h"` | How often the Tower looks, give or take a twelfth so machines that started together do not ask in the same minute. `validate` refuses less than an hour. A look that fails is retried after an hour, then two, four and so on up to this. |
-| `max_drain` | `"4h"` | How long [installing a release](#installing-a-release) waits for what is running to finish before cutting it off. `validate` warns when it is shorter than a run's `timeout`, because then the deadline can cut a run off. |
+| `max_drain` | `"4h"` | How long [installing a release](./updating.md#installing-a-release) waits for what is running to finish before cutting it off. `validate` warns when it is shorter than a run's `timeout`, because then the deadline can cut a run off. |
 | `keep_previous` | `"7d"` | How long the binary an update replaced is kept beside the new one, for [`layover update rollback`](./cli.md#update). Removed at a start after that. |
 | `window` | none | Under `auto`, when an install may begin, in the machine's local time: `"Sat 02:00-06:00"`, `"Mon-Fri 22:00-06:00"`, `"Sat,Sun 01:00-05:00"`, or `"02:00-04:00"` for every day. One that ends before it starts runs past midnight. Without one, an install begins when the factory is idle. |
 | `idle_for` | `"10m"` | Under `auto` with no `window`, how long nothing must have run, started, been parked or been queued. |
@@ -206,115 +214,9 @@ require_provenance = true       # install only what `gh` verified
 | `allow` | `"minor"` | Under `auto`, the largest move: `"patch"` holds a minor release for a person too. A major release always waits for a person. |
 | `require_provenance` | `true` | Under `auto`, install only what `gh` verified Layover's release workflow built. `validate` warns when it is `false`. |
 
-A look is one request for a public file on github.com — the newest release's
-`dist-manifest.json` — which sends nothing about the factory: only the address it comes from and
-a `User-Agent` of `layover/<version>`. The `prerelease` channel also asks GitHub's API for the list
-of releases. What was found is kept per machine, not per factory, so two factories served by one
-installation ask once between them: in `%LOCALAPPDATA%\layover\updates` on Windows,
-`~/Library/Application Support/layover/updates` on macOS, and `$XDG_STATE_HOME/layover/updates`
-(by default `~/.local/state/layover/updates`) elsewhere.
-
-Three environment variables apply to every factory on a machine, whatever `[update]` says:
-
-| Variable | Effect |
-|---|---|
-| `LAYOVER_UPDATE=off` | No request is made at all — not by the Tower, not by `layover update check`. Set it in CI and on a machine that must not reach out. |
-| `LAYOVER_UPDATE_SOURCE` | Fetch releases from a mirror laid out as GitHub's releases are: `<url>/latest/download/dist-manifest.json`, `<url>/download/<tag>/<file>`, and the API's release list at `<url>/releases.json`. For sites that cannot reach GitHub, and for tests. |
-| `LAYOVER_GITHUB_TOKEN` | A token for GitHub's API, for the `prerelease` channel behind a NAT whose sixty unauthenticated requests an hour are spent. Never `GITHUB_TOKEN`, which is usually a token meant for something else. |
-
-None of the three reaches an agent: a child's environment is [scrubbed](#credentials-for-the-cli-itself)
-as it always was. The whole table is optional.
-
-### Staging a release
-
-Under `mode = "stage"`, or when a person runs [`layover update stage`](./cli.md#update), a newer
-release is made ready to install, one step at a time, each only if the one before it passed:
-
-1. The release's manifest names an archive for this platform.
-2. The archive, downloaded with a 64 MB cap, has the SHA-256 the manifest lists, and the `.sha256`
-   file beside it agrees.
-3. Its GitHub attestation says Layover's release workflow built it from the release's own tag,
-   checked by [`gh attestation verify`](https://cli.github.com/manual/gh_attestation_verify) — so
-   `gh` must be installed and signed in.
-4. The archive holds the binary, and nothing that would unpack outside where it is put.
-5. The binary, run for the first time — with no credentials in its environment and twenty seconds
-   to answer — says it is the version and platform it should be, and that it can be reached from
-   the version running.
-6. It validates this factory. Errors refuse it; a warning the running version does not give holds
-   back an unattended install and is shown before a manual one; a warning the factory always had
-   holds nothing back.
-
-**Nothing downloaded runs before step 3 has verified it.** Without `gh`, or with `gh` signed out,
-a release is downloaded and checked against its SHA-256 and stops there; `layover update stage
---trust-checksum-only` runs it on its checksum alone, for a person who chooses that. A release whose
-attestation `gh` refuses goes no further, whatever is said.
-
-A staged release is kept per machine — one at a time, in `staging/<version>/` under the update
-directory above — and what it made of each factory in that factory's `.layover/update/gate.json`.
-A refused one is tried again at the next check. Staging installs nothing.
-
-### Installing a release
-
-[`layover update apply`](./cli.md#update), or **Update now** in the dashboard's
-[update window](./dashboard.md#a-newer-layover), installs the staged release — staging it first if
-it is not — once it is verified and validates the factory. Nothing installs on its own.
-
-With a Tower serving the factory, the Tower does it, between runs:
-
-```mermaid
-flowchart LR
-  A["Asked"] --> D["Drain: nothing new starts"]
-  D -- "nothing running or parked" --> S["Swap the binary,<br/>keep the old one"]
-  D -- "max_drain: a manual agent<br/>still running" --> P["Postponed:<br/>work starts again"]
-  D -- "max_drain: cut runs off;<br/>recovery restarts them" --> S
-  S --> H["Start the new Tower"]
-  H -- "answers within 2 min" --> OK["Updated"]
-  H -- "does not" --> R["Put the old binary back,<br/>skip the version, carry on"]
-```
-
-1. **It drains**, as for [`layover stop`](./cli.md#stop): nothing new starts, what is running
-   finishes, a scheduled tick that comes due is held.
-2. **At `max_drain`**, a run still going is cut off — killed, recorded `interrupted`, and restarted
-   on the new version where its agent's [`recovery`](./recovery.md) allows. Except: when an agent
-   whose `recovery` is `manual` is still running — work that must not happen twice — the install
-   is **postponed** instead, and the Tower carries on. `--now` reaches the deadline at once.
-3. **It swaps** the binary in its own directory: the new one in, the old one renamed beside it as
-   `layover-<version>.exe.old` (or `layover-<version>.old`), kept for `keep_previous`. A tick held
-   while draining is queued for the new Tower.
-4. **It hands over.** On Windows, and anywhere not run by a service manager, the old Tower closes
-   its dashboard, starts the new binary with the same arguments at the same address, and waits up
-   to two minutes for it to answer as the new version — then exits. If it does not answer, or
-   exits, the old Tower stops it, puts its own binary back, stops offering that version, and
-   carries on serving. Under systemd or launchd the old Tower exits 75 instead, and the service
-   manager starts the new binary; the new Tower that cannot prove itself within ten minutes, or
-   by its second start, puts the old binary back itself and exits 75 again.
-5. **The new Tower proves itself**: it loads the factory, goes once round its loop and answers its
-   own `/health` as the new version. It keeps the old Tower's dashboard token, so a page already
-   open keeps working, and writes what it prints to `.layover/serve.log`.
-
-### Installing unattended
-
-Under `mode = "auto"` the Tower does what `layover update apply` would, by itself, when all of these
-hold — and says once, in its output, why not while one does not:
-
-- the release is a patch, or a minor under the default `allow = "minor"` — **never a major**;
-- it reads the **same state-directory layout**;
-- it is **`min_age` old**: a day for a patch, two days for a minor, by default;
-- it is **staged and verified** — unless `require_provenance = false` — and **validates the factory
-  with no warning the running version does not give**;
-- it is **in the `window`**, or, with none, the factory has been **idle for `idle_for`**.
-
-Then it drains and installs exactly as above. An install begun in a window that closes before what
-is running has finished is **postponed** to the next window, rather than cut off; one that does not
-happen for any other reason is tried again an hour later. A release unattended installs would not
-take — a major one, a layout change, a new warning — is still offered, and `layover update apply`
-installs it. `LAYOVER_UPDATE=off` stops all of it on a machine.
-
-With no Tower serving the factory, `apply` replaces the binary at once; the next Tower to start
-runs the new version. One a package manager installed — Homebrew, npm — is left to it, with the
-command to run; one in a directory you cannot write is never elevated into. Every install, refusal,
-postponement and rollback is written to `.layover/updates.jsonl`, which
-[`layover update log`](./cli.md#update) prints.
+What each setting does in practice — how a release is found, staged, installed and rolled
+back, and the environment variables that override all of it on a machine — is in
+[Updating Layover](./updating.md). The whole table is optional.
 
 ## `[runners.*]` — how to invoke a CLI
 
@@ -337,307 +239,13 @@ cli = "claude"
 | `args` | Arguments after what the preset supplies: the runner's own permission set. Only with `cli`. |
 | `command` | The whole command, written out, instead of `cli`. For a CLI with no preset (Codex, a script), or a runner that wants none of a preset's defaults. |
 | `mcp` | How the CLI is told where Layover's MCP server is. A preset supplies it; given here, it replaces the preset's. |
-| `provider_errors` | How a failed run's output tells the model service's failure from the run's own. Copilot CLI is read without it; see [below](#telling-the-model-services-failure-from-the-runs). |
+| `provider_errors` | How a failed run's output tells the model service's failure from the run's own. Copilot CLI is read without it; see [Runners](./runners.md#telling-the-model-services-failure-from-the-runs). |
 
 Exactly one of `cli` and `command` is given; `validate` refuses a runner with neither, or with both.
 
-### What a preset supplies
-
-| `cli` | Layover runs |
-|---|---|
-| `copilot` | `copilot --model={model} --reasoning-effort={effort} --context={context} --name={name} --allow-all-tools --allow-all-paths --allow-all-urls --no-ask-user --output-format json` then the runner's `args`, the agent's `args`, and `--additional-mcp-config @<hangar>/mcp.json` |
-| `claude` | `claude -p --model={model} --output-format stream-json --verbose` then the runner's `args`, the agent's `args`, and `--mcp-config <hangar>/mcp.json` |
-
-That is what an unattended run *requires*: the agent's model, effort and context; nobody to answer
-a question (`--no-ask-user`); the one output a cost is read from (`json`, `stream-json` — Claude Code
-refuses `stream-json` in print mode without `--verbose`); and Layover's MCP wiring. For Copilot it
-also grants what an unattended run could never be asked for — its tools, paths and URLs — so a
-runner lists only what it **denies**. Copilot CLI's `--deny-tool` and `--deny-url` rules take
-precedence over the `--allow-all-*` flags. A runner that wants a narrower allow-list instead writes
-its `command` out.
-
-A model, effort, context or name that is not set is left out whole, so the CLI uses its own
-default; on a preset that is not warned about, because nobody wrote those placeholders to be
-filled. A run triggered without a name has no `--name`.
-
-A preset starts the CLI by its plain name. On Windows that finds only an `.exe` — WinGet's Copilot
-CLI, Claude Code's native build — and not the `.cmd` shim an npm install provides; for that, write
-the runner's `command` out naming it, `copilot.cmd`. See [Install](./install.md#agent-clis).
-
-Nothing a preset supplies takes anything away: every restriction an agent runs under is written in
-`layover.toml`, where it can be reviewed. Claude Code's permission mode is left to the runner's
-`args` — `--permission-mode`, `--allowedTools`, `--disallowedTools` — because what a bypass grants
-has not been confirmed against a real Claude Code here.
-
-Repeating something the preset already supplies — a runner migrated from a `command` that kept its
-`--no-ask-user` — is warned about, because the CLI would receive it twice; `--model` and its kin in
-an agent's `args` are warned about with the key to set instead.
-
-### `command`, written out
-
-```toml
-[runners.codex]
-command = ["codex", "exec", "--json", "--model", "{model}", "-c", "model_reasoning_effort={effort}",
-           "{args}", "{mcp}", "-"]
-mcp     = { flag = "-c", format = "codex_toml" }
-```
-
-`mcp` says how this CLI is told where Layover's endpoint is: `flag` is the option, `format` the
-dialect of the file written into the run's Hangar, and `prefix` anything that must precede the
-path. Copilot CLI needs `prefix = "@"` because `--additional-mcp-config` accepts a JSON string
-*or* a path and distinguishes them by that character; most CLIs take a plain path and want no
-prefix. See [Agent tools](./tools.md). Codex is not given MCP servers yet; see
-[decisions](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md#still-open).
-
-### An agent's own arguments
-
-An agent that differs from the rest of its runner by a rule or two says so itself, rather than
-needing a runner of its own:
-
-```toml
-[agents.builder]
-runner = "analysis"
-args   = ["--deny-tool=shell(orient reviews:*)"]   # everything `analysis` denies, and this
-```
-
-An agent's `args` go where the runner's command has `{args}` — a preset puts it last — or at the
-end. A [workflow can add more](./pipelines.md#an-agent-in-one-workflow), and change the agent's
-model, effort or context for its own chains. They only ever *add*: nothing an agent or workflow
-writes removes what its runner says.
-
-### The output that says what a run cost
-
-Layover reads what a run cost from what its CLI prints, and each CLI prints it in one output mode
-only. Leave it out and nothing fails: the work is done, every run is recorded as reporting nothing,
-its spend reads **not reported**, and Fuel and the Reserve never bind it.
-
-| CLI | Add | What it then prints |
-|---|---|---|
-| Copilot CLI | `--output-format json` | The AI credits a run used, which Layover prices |
-| Claude Code | `--output-format stream-json` (or `json`) | Dollars |
-| Codex | `--json` | Token counts and no price; a [rate card](./cost.md#rate-cards) can estimate them |
-
-`layover validate` warns about a runner an agent uses that runs Copilot CLI or Claude Code without
-it, and about a Codex runner without `--json` when a rate card has a row for one of its agents'
-models — the cases a change to the command would fix. A `cli` preset supplies it. The CLI is
-recognised by name anywhere in a written-out command, so `cmd /c copilot` counts; a command that
-names none of them is not judged.
-
-### Telling the model service's failure from the run's
-
-A run the model service ended — a call rejected with `400 internal server error`, retries
-exhausted — is restarted like an interrupted one, where its agent's `recovery` allows; a run that
-failed its own work never is. Layover tells them apart from the CLI's JSON events, never from its
-text. See [Recovery](./recovery.md#when-the-model-service-fails).
-
-Copilot CLI is read without being asked: the `copilot` preset, and a `command` that runs it by name
-with `--output-format json`. Claude Code and Codex are not read yet. `provider_errors` says
-otherwise:
-
-```toml
-[runners.wrapped]
-command         = ["node", "copilot-wrapper.mjs"]
-provider_errors = { read = "copilot" }   # Copilot CLI under another name
-
-[runners.quiet]
-cli             = "copilot"
-provider_errors = { read = "none" }      # never restart a failed run of this runner
-
-[runners.mine]
-command = ["my-cli", "--json"]
-
-[runners.mine.provider_errors]           # a CLI Layover has no reader for
-failed     = [{ type = "error", error.kind = "provider" }]
-carried_on = [{ type = "tool_call" }, { type = "message" }]
-request_id = "error.request_id"
-```
-
-| Key | Meaning |
-|---|---|
-| `read` | `copilot` or `none`. A reader Layover has, instead of `failed`. |
-| `failed` | Events that say the model service failed a call. Each is the fields an event must have, with these values; a table matches the object at that field the same way, so `error.kind = "provider"` matches `{"error": {"kind": "provider"}}`. |
-| `carried_on` | Events that say the run went on after such a failure: a tool starting, a call that succeeded. |
-| `request_id` | Where in a `failed` event the provider's request id is, as a dotted path. Recorded on the run. |
-
-A failed run is the service's when the last event matching `failed` comes after the last one
-matching `carried_on`. Only the top-level fields of each line of JSON are matched, so an agent
-quoting an error inside a tool result or a message never counts. `validate` refuses a declaration
-with both `read` and `failed` or neither, and an empty table, which would match every event; it
-warns about `failed` with no `carried_on`, under which a failure the CLI recovered from would still
-end the run as the service's.
-
-### Credentials for the CLI itself
-
-An agent CLI needs a credential before it can do anything, and it is not the same credential its
-MCP servers need. Name it in `env_from` — under `[defaults]` when every agent uses the same one,
-under an agent when only that agent should hold it:
-
-```toml
-[defaults]
-env_from = ["GH_TOKEN"]          # every agent's CLI can authenticate
-
-[agents.publisher]
-env_from = ["RELEASE_TOKEN"]     # and this one alone can publish
-```
-
-Only **names** appear here. The Tower reads each value from its own environment when it spawns the
-run, so `layover.toml` stays a file you can commit — putting a secret in it is refused at load
-time, not discovered in your git history later.
-
-The two lists are combined, not overridden: the publisher above gets both. A name that is not set
-in the Tower's environment **refuses the run**, rather than starting a CLI that fails to
-authenticate several seconds later and reports it as the agent's failure.
-
-The child otherwise gets a scrubbed environment — `PATH`, `TEMP`, your home directory, and the
-handful of variables a process needs to start at all. That is what makes `env_from` meaningful: the
-telemetry agent does not hold the publishing token because it never receives it. The home directory
-is why a run finds the sign-in you made — and why, unless you
-[give it a home of its own](#a-cli-home-of-the-factorys-own), it also writes into yours.
-
-The prompt goes to the process's **stdin**, never onto its command line, and this is not a style
-preference. Windows caps a command line at 32,767 characters. Real agent prompts go well past it:
-in a sibling project the review agent's prompt tree composes to roughly 98 KB and its ordinary
-developer agent to 34 KB. Inlining the prompt passes every test written against a small fixture
-and then fails on the first agent worth running.
-
-`{prompt}` is therefore a **path**, not the text — the file the Tower writes the composed
-instructions to before spawning. Include it only for CLIs that accept a file of instructions as a
-flag; runners without it have the instructions prepended to the stdin payload instead.
-
-### A CLI home of the factory's own
-
-**Recommended for every factory.** Each agent CLI keeps its sign-in, its settings, its plugins and
-the history of every session in one directory, and a run started by the Tower finds yours there —
-the same `~/.copilot` you use at the keyboard. Two things follow:
-
-- **The factory's sessions bury yours.** Every run is a session, kept like one you started: a
-  factory that runs a few hundred times a day fills your session list, and your disk, with
-  transcripts you will never resume.
-- **Its agents load what you installed for yourself** — your plugins and skills, the MCP servers in
-  your own configuration — tools nobody granted them in `layover.toml`, where everything an agent
-  may do is meant to be written down and reviewed. A personal MCP server that posts as you is then
-  one an unattended agent can call.
-
-Every supported CLI reads its home from one variable:
-
-| CLI | Variable | Default |
-|---|---|---|
-| Copilot CLI | `COPILOT_HOME` | `~/.copilot` |
-| Claude Code | `CLAUDE_CONFIG_DIR` | `~/.claude` |
-| Codex | `CODEX_HOME` | `~/.codex` |
-
-Set it where the Tower starts — the script that runs `layover serve`, or the environment of the
-service [`autostart`](./install.md#starting-with-the-computer) registers — and pass it on, because a
-run receives only the names it is given:
-
-```toml
-[defaults]
-env_from = ["COPILOT_HOME"]     # e.g. ~/.copilot-factory, set for the Tower
-```
-
-Then sign in once with it set — `copilot login`, `codex login`, or `claude` and its `/login` — and
-put in it only what the factory needs: no plugins, no global MCP servers, since the ones an agent
-needs are [declared for it](#mcp-servers). A CLI that reads a token from the environment, such as
-Copilot CLI's `GH_TOKEN`, can be given one through `env_from` instead of a sign-in. Because a name
-`env_from` lists that is not set refuses the run — it is recorded as failed, naming the variable — a
-Tower started without it stops at its first run rather than quietly writing into your home again.
-
-Layover does not set this itself; see
-[decisions](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md) for why.
-
-### Placeholders
-
-A runner's command may name these, and each is filled in per run:
-
-| Placeholder | Filled with |
-|---|---|
-| `{model}` | The agent's `model`. |
-| `{effort}` | The agent's `effort`, or `[defaults] effort`. |
-| `{context}` | The agent's `context`, or `[defaults] context`. |
-| `{name}` | What the run's session is called: the name its chain was given when it was triggered, and the agent. A preset passes it as Copilot CLI's `--name`; left out for a chain nobody named. |
-| `{args}` | The agent's own `args`, and any its workflow adds — none, one or several arguments. Optional: without it they are appended at the end. |
-| `{prompt}` | The **path** to the composed instructions, for a CLI that takes a file. |
-| `{mcp}` | The `mcp` flag and the path to the run's MCP configuration — two arguments. Optional: without it they are appended at the end, which is what `claude` and `copilot` want; `codex exec … -` needs them before its final `-`. |
-
-`{model}`, `{effort}` and `{context}` exist so that **a runner describes a CLI and a permission
-set, and nothing about how hard an agent thinks or how much it can read**. A preset carries all
-three; a written-out `command` places them where its CLI wants them, since every CLI spells these
-flags differently. Either way the value comes from the agent:
-
-```toml
-[runners.copilot-analysis]
-cli  = "copilot"
-args = ["--deny-tool=shell(git push)"]
-
-[agents.eagle]
-runner  = "copilot-analysis"
-model   = "claude-opus-5.5"
-effort  = "xhigh"
-context = "long_context"
-
-[agents.tars]
-runner  = "copilot-analysis"     # the same permissions, so the same runner
-model   = "claude-opus-5.5"
-effort  = "high"                 # a different effort needs no second runner
-context = "long_context"
-```
-
-Codex takes effort as a configuration key, and the placeholder works there too:
-`"-c", "model_reasoning_effort={effort}"`.
-
-Values are passed through **exactly as written**. Layover keeps no catalog of models or of the
-efforts and context tiers each accepts — Copilot CLI refuses an effort a model does not support,
-with a message naming both, and only the CLI knows which those are.
-
-#### A value that is not set
-
-An agent may leave any of the three unset, and then it runs on whatever its CLI defaults to. No
-empty argument and no flag without its value ever reaches the CLI — every CLI that takes a value
-refuses a flag without one, and some read the next flag as the value instead:
-
-- An argument that **contains** an unset placeholder is left out whole: `--reasoning-effort={effort}`
-  disappears entirely, never as `--reasoning-effort=` or as the literal text.
-- When that argument is the **value of the option before it** — `"--reasoning-effort", "{effort}"`,
-  or Codex's `"-c", "model_reasoning_effort={effort}"` — the option goes with it.
-
-"The option before it" is the argument immediately before, when it starts with `-` and carries no
-`=` and no placeholder of its own. That is how every supported CLI pairs a separate value with its
-flag, but **prefer the joined form**, `--flag={effort}`: it needs no pairing at all. A CLI that
-takes a placeholder positionally right after a boolean flag should put the placeholder first.
-
-This applies to `{model}` too. A separate `"--model", "{model}"` with no model used to leave a
-bare `--model` in front of the next flag, and a joined `--model={model}` used to reach the CLI as
-that literal text; both now disappear. A factory where every agent sets a model is unchanged.
-
-`layover validate` warns about every way these go wrong quietly:
-
-| Warning | Because |
-|---|---|
-| An agent sets `effort` or `context` and its runner has no placeholder for it | The value never reaches the CLI. Also said for `model`. |
-| A runner whose `command` you wrote has `{effort}` or `{context}` and an agent on it sets none, with no default | The flag is left out, and the CLI's default applies — say so if you mean it. A [preset](#what-a-preset-supplies)'s placeholders are Layover's, there so an agent *may* set a value, so leaving one unset is not warned about. |
-| A runner fixes a value beside its placeholder (`--reasoning-effort high` and `{effort}`) | The CLI gets two, and keeps whichever comes last. |
-| A `[defaults]` effort or context reaches no runner | Every agent relying on it runs on a runner without the placeholder. |
-| An `effort` or `context` is empty | It counts as unset. |
-
-A runner may still **fix** these itself, as every runner had to before the placeholders existed;
-every agent on it then runs at the runner's values, and nothing warns:
-
-```toml
-[runners.copilot-deep]
-command = ["copilot", "--model", "claude-opus-5.5", "--reasoning-effort", "xhigh",
-           "--context", "long_context", "--output-format", "json"]
-```
-
-#### What is reported
-
-The dashboard, `GET /agents`, the route map, `layover explain` and `layover prompt` report what
-each agent runs on by reading its command line **with its own values filled in**, so a value the
-runner fixes is reported as readily as one the agent declares, and a value its runner cannot carry
-is not reported at all. Only flags whose meaning is certain are read back — `--model`, and Copilot
-CLI's `--reasoning-effort` and `--context`, separate or joined. A value carried by a flag this does
-not read, such as Codex's `-c`, is reported as the agent declares it. Every run's record keeps the
-model, effort and context it ran with; see [Runs](./dashboard.md#runs).
-
+What each preset supplies, the output a cost is read from, how a failed run is told from the
+service's failure, credentials, the CLI's own home and placeholders are on their own page:
+[Runners](./runners.md).
 
 ## `[agents.*]` — who exists
 
@@ -662,13 +270,15 @@ prompt_file = "tester.md"
 | `model` | optional | Model identifier, passed to the runner's `{model}`. |
 | `effort` | optional | Reasoning effort, passed to the runner's `{effort}`: `high`, `xhigh`, whatever the CLI accepts for the model. Falls back to `[defaults] effort`. |
 | `context` | optional | Context-window tier, passed to the runner's `{context}`: Copilot CLI's `default` or `long_context`. Falls back to `[defaults] context`. |
-| `args` | — | Arguments added to its runner's command for this agent alone. See [an agent's own arguments](#an-agents-own-arguments). |
+| `args` | — | Arguments added to its runner's command for this agent alone. See [an agent's own arguments](./runners.md#an-agents-own-arguments). |
 | `prompt` | one of | Instructions, written inline. |
 | `prompt_file` | one of | Instructions from a file, which may [compose others](./prompts.md). |
 | `access` | `read-write` | `read-only` is meant to give the agent a git worktree snapshot. **Declared, not yet enforced** — see below. |
 | `entry` | `false` | Whether a human may send flights straight here. |
 | `resident` | `false` | Pin the agent resident rather than transient. Not built. |
 | `fuel_usd` | — | Fuel for itineraries that *start* at this agent: a trigger or tick entering here, or a chain spawned here. A workflow's own `fuel_usd` wins over it. |
+| `env_from` | — | Names of environment variables forwarded to this agent's CLI on top of `[defaults] env_from`: a credential only this agent should hold. A name that is not set refuses the run. See [credentials for the CLI itself](./runners.md#credentials-for-the-cli-itself). |
+| `mcp` | — | The other MCP servers this agent may reach, keyed by name. See [MCP servers](#mcp-servers). |
 | `work_dir` | — | Work somewhere other than the shared `work_dir`. Relative to this file; an absolute path is used as written. |
 | `recovery` | `automatic` | `manual` if repeating this agent's work would do damage. Applies to a run interrupted by the Tower going away and to one the [model service ended](./recovery.md#when-the-model-service-fails). See [Recovery](./recovery.md). |
 | `max_concurrent` | — | At most this many runs of this agent alive at once, within `max_concurrent_runs`. `1` for an agent that must never overlap itself. |
@@ -719,7 +329,7 @@ which is why they are named.
 
 For a `url` server `env_from` only puts the variable in the agent CLI's environment. A remote server
 cannot read that, and there is not yet a way to turn it into a request header — see the open
-questions in [`decisions.md`](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md#still-open).
+questions in [`decisions.md`](./design/decisions.md#still-open).
 
 **`env` is for values that are safe in a committed file** — a cluster name, a region. Anything
 that authenticates goes in `env_from`, which names variables the Tower forwards from *its own*
@@ -754,7 +364,7 @@ could still build and run the suite inside its own checkout. Before that can be 
 things have to be settled that the design does not yet say — above all, that a snapshot at the
 current commit would not contain a developer's *uncommitted* change, which is exactly what the
 tester and reviewer are asked to judge. They are recorded as open questions in
-[`decisions.md`](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md#still-open).
+[`decisions.md`](./design/decisions.md#still-open).
 
 Until then, treat `access` as a statement of intent that prompts should repeat ("do not edit
 product code"), not as a guarantee.
@@ -801,12 +411,20 @@ one level up.
 
 See [Pipelines and triggers](./pipelines.md).
 
+A pipeline's `description` is one line saying what it is for. `layover explain` prints it under the
+pipeline, the route map shows it when the pipeline is hovered, and `GET /pipelines` returns it.
+
 ## `[flags]` — flags every workflow accepts
 
 ```toml
 [flags]
 run_e2e = { default = false, description = "Also run the remote end-to-end suite" }
 ```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `default` | `false` | The flag's value when whoever triggers the work does not set it, and always on a scheduled tick. |
+| `description` | — | What turning the flag on does. `layover explain` prints it beside the flag, and `GET /pipelines` returns it with the flag. |
 
 The same shape as a pipeline's `[pipelines.<name>.flags]`, declared once for every workflow and for
 a flight sent straight to an `entry = true` agent. Optional. See
@@ -837,123 +455,8 @@ timeout_sec = 3600
 
 Direction is explicit. An edge absent from `[[routes]]` means the flight is refused.
 
-### Scoping a route to workflows
-
-A factory with several pipelines is several workflows, and they usually share agents. Without a
-scope every chain may use every route, so a review sweep can reach anything the build workflow
-can — held back only by what its prompts say, while it reads untrusted pull request text.
-
-```toml
-# DevForge may hand bob work from eagle; Eagle Eye spawns an eagle per pull request and may not.
-[[routes]]
-from      = "eagle"
-to        = ["bob", "sherlock"]
-pipelines = ["devforge", "devforge-follow-up"]
-
-[[routes]]
-from      = "azurix"
-to        = "eagle"
-mode      = "spawn"
-pipelines = "eagle-eye"
-
-[[routes]]
-from      = "eagle"
-to        = ["azurix", "sherlock"]
-pipelines = "eagle-eye"
-```
-
-- **Absent** `pipelines` makes a route **global**: every chain may use it, exactly as before scopes
-  existed. A factory that scopes nothing behaves and validates exactly as it did.
-- **Scoped**, only chains belonging to one of the named pipelines may use it. A chain started by
-  `eagle-eye` that asks to send `eagle -> bob` is refused like any edge the map does not draw, and
-  `layover_peers` does not list it.
-- A pipeline with **`routes_from = "devforge"`** may use every route scoped to `devforge` too, so
-  a follow-up need not be named on each of them: `pipelines = "devforge"` above would then serve
-  `devforge-follow-up` as well. See [Pipelines](./pipelines.md#which-routes-a-pipelines-chains-may-use).
-- The same pair may appear in several routes; the union applies. Two routes one chain could use
-  together must agree about `mode` and `join` for any pair they share, and `validate` says so when
-  they do not.
-- `pipelines = []` and an unknown pipeline name are errors.
-
-A spawned chain keeps its pipeline, a resumed layover belongs to the resuming pipeline but may use
-only what the chain that booked it could, and a flight sent straight to an `entry = true` agent
-belongs to no pipeline and may use global routes only. The rules, and why, are in
-[`routing.md`](https://github.com/KotkaZ/layover-project/blob/main/docs/routing.md#8-scoping-routes-to-workflows).
-
-### What a join does while the factory runs
-
-A barrier holds **flights**, not processes. The obvious implementation — start the joined agent and
-let it block until the rest arrive — costs a live agent CLI per waiting branch, each with a context
-window and, under some pricing, a meter running. Parking the flight costs a map entry, and makes
-the wait durable: a parked flight is data, a blocked process is not.
-
-| What arrives | What happens |
-|---|---|
-| The first declared upstream | Parked. `layover run` says who it is still waiting for. |
-| The last declared upstream | The agent wakes **once**, with every parked flight, each body labelled with who sent it. |
-| A second delivery from an upstream that already reported | A new wave. Partial state is discarded and every upstream must deliver again. |
-| An upstream after an `any` join has fired | Dropped, and reported as superseded. |
-| Anyone the join does not name — including a human | Straight through. The barrier is untouched. |
-
-The agent wakes **once** because two edges into one agent without a join fire it twice, and for a
-publisher that is two pull requests for one piece of work.
-
-A new wave on a second delivery is what makes the develop → test → review loop correct. The
-reviewer's approval of the *previous* revision must not combine with a fresh test result for the
-one after it, so the moment the tester reports again, the reviewer has to look again too.
-
-### When a rendezvous is given up
-
-A barrier waiting for an upstream nothing can still produce would hold that work forever. Silent
-permanent stalling is the worst outcome in this system — worse than a failure, which at least says
-something happened — so when a drain goes quiet with a barrier still holding flights, it is
-abandoned and named:
-
-```text
-Gave up on 1 rendezvous:
-  `publisher` will never wake: nothing live can still deliver reviewer (1 flight(s) stranded)
-```
-
-`layover validate` catches the version of this that is visible before anything runs — a `join =
-"all"` upstream that `max_hops` could never afford the flight into.
-
-### Spawning
-
-`mode = "spawn"` makes an edge open a **new itinerary** per flight instead of continuing the
-current one. The receiver gets its own Fuel, its own hop budget and its own workspace.
-
-That is what makes per-item work affordable. An ordinary `async` edge puts every receiver on one
-Fuel budget, so a sweep over twelve pull requests stops partway and *which* ones got done is
-whichever finished first.
-
-It is a route rather than a free-standing capability because the route map is the single source of
-truth for who may reach whom — a spawn outside it would be an unchecked edge into a fresh, fully
-funded chain. A route may not both spawn and join: a barrier waits for upstreams within one
-itinerary, so each spawned chain would arrive alone and park forever. Validation rejects it.
-
-The spawned chain keeps the pipeline of the chain that spawned it, and with it that pipeline's
-scoped routes: a spawn gives a chain a fresh budget, not a fresh set of permissions.
-
-### Rendezvous joins
-
-A join is a property of the **receiving** node. It says *which inputs this agent needs together* —
-not *when this agent is allowed to run*. A flight from any sender the barrier does not name
-bypasses it entirely and wakes the agent on its own, which is what lets a joined agent also be an
-entry point.
-
-A scoped join applies only in its scope: a chain in another pipeline that may reach the same agent
-goes straight through.
-
-Two rules fall out of failure handling:
-
-1. **A barrier resets when any upstream delivers a second time.** Otherwise a verdict about the
-   *previous* version of the code could satisfy the barrier alongside a fresh one.
-2. **Therefore a loop-back must re-dispatch the whole fan-out**, not only the branch that failed.
-   Re-sending to one upstream leaves the barrier waiting for a sibling that was never asked.
-
-`join = "all"` waits for **every declared** upstream. There is no such thing as an optional one,
-so an agent that consults a specialist only sometimes must dispatch it anyway and let it reply
-"nothing to add". See [Prompts](./prompts.md) for the usual way to make that cheap.
+Scoping a route to workflows, what a join does while the factory runs, when a rendezvous is
+given up, and spawning are on their own page: [Routes and joins](./routes.md).
 
 ## Checking it
 

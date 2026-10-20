@@ -150,7 +150,7 @@ You are a new process and remember none of it. Before repeating anything that ch
 
 **Only a provider error is restarted.** A run that failed its own work — a test that failed, a
 command its runner denied, an exit for any reason the CLI's events do not attribute to the service —
-would fail the same way again, so it is recorded and left; see [why](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md).
+would fail the same way again, so it is recorded and left; see [why](./design/decisions.md).
 A run that outlived `timeout_sec` is `timed_out`, never a provider error.
 
 **It is read from events, never from text.** Only the top-level fields of each JSON event the CLI
@@ -182,7 +182,7 @@ request_id = "error.request_id"                             # where the provider
 
 Each entry is the fields an event must have, with these values; a table matches the object at that
 field the same way. A failed run is the service's when the last event matching `failed` comes after
-the last matching `carried_on`. See [Configuration](./configuration.md#telling-the-model-services-failure-from-the-runs).
+the last matching `carried_on`. See [Configuration](./runners.md#telling-the-model-services-failure-from-the-runs).
 
 **On by default.** An agent's `recovery` already says whether repeating its work is safe, and it
 defaults to `automatic`, so a factory that never mentioned recovery now restarts a run the service
@@ -230,7 +230,7 @@ starts from its configured budget again — less what the interrupted run spent.
 
 ## Installing a release
 
-[Installing a release](./configuration.md#installing-a-release) into a running Tower waits for what
+[Installing a release](./updating.md#installing-a-release) into a running Tower waits for what
 is running to finish, up to `[update] max_drain`. A run still going at that deadline is cut off and
 settled exactly as above: recorded `interrupted`, and restarted where its agent's `recovery` allows —
 on the new version. An agent whose `recovery` is `manual` is the exception: its work must not happen
@@ -246,7 +246,7 @@ Whatever the cause, a chain whose last run failed, timed out or was interrupted 
 or running after it, and nobody having continued it — is `failed` on the dashboard: in the Chains
 list's *needs attention*, in the count on the tab and in the page's title, and in the bell's
 notifications. It used to read as `finished`. Restarting a provider error removes the most common
-cause; this is what makes the rest visible. See [Chains](./dashboard.md#chains).
+cause; this is what makes the rest visible. See [Chains](./dashboard-chains.md#chains).
 
 ## Status
 

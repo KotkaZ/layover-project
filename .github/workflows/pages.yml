@@ -1,8 +1,15 @@
 name: Pages
 
+# The site's root is the latest release's book, so what a reader is told matches the Layover they
+# can install; main is published beside it at /dev/, marked as unreleased on every page. A release
+# is published by the Release workflow with the workflow's own token, which starts no other
+# workflow, so that workflow finishing is what rebuilds the root.
 on:
   push:
     branches: [main]
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
   workflow_dispatch:
 
 # The build job only needs to read the repository. Deploying is what needs `pages: write` and
@@ -20,11 +27,15 @@ concurrency:
 jobs:
   build:
     name: Build the book
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
-      # Pinned to a commit: a version tag is mutable.
+      # Pinned to a commit: a version tag is mutable. Always main, whatever started the run, with
+      # its tags, so the latest release can be checked out beside it.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: main
+          fetch-depth: 0
           persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
@@ -36,21 +47,41 @@ jobs:
           cargo install mdbook --version =0.4.52 --locked
           cargo install mdbook-mermaid --version =0.15.0 --locked
 
-      # Drops mermaid.min.js and mermaid-init.js into book/, which book.toml references.
-      - name: Install Mermaid assets
-        run: mdbook-mermaid install book
+      - name: Check out the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)
+          echo "Latest release: $tag"
+          echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
+          git worktree add --detach release "$tag"
 
-      # The book includes example configurations by path. If one is renamed, the
-      # build fails here rather than publishing a page with a dangling include.
+      # The release's book at the root, then main's at /dev/ — in that order, because mdBook empties
+      # the directory it builds into. A book that lists design pages has them written from docs/
+      # first, by main's xtask, linking code at the commit being published. The book includes
+      # example configurations by path, so a renamed one fails here rather than publishing a page
+      # with a dangling include.
       - name: Build
-        run: mdbook build book
+        run: |
+          build() {
+            tree=$1; ref=$2; out=$3; url=$4; js=$5
+            if grep -q '](./design/' "$tree/book/src/SUMMARY.md"; then
+              cargo run --quiet -p xtask -- book --root "$tree" --ref "$ref"
+            fi
+            mdbook-mermaid install "$tree/book"
+            env "MDBOOK_OUTPUT__HTML__SITE_URL=$url" \
+              ${js:+"MDBOOK_OUTPUT__HTML__ADDITIONAL_JS=$js"} \
+              mdbook build "$tree/book" --dest-dir "$out"
+          }
+          build "$GITHUB_WORKSPACE/release" "$RELEASE_TAG" "$GITHUB_WORKSPACE/site" /layover-project/ ""
+          build "$GITHUB_WORKSPACE" main "$GITHUB_WORKSPACE/site/dev" /layover-project/dev/ \
+            '["mermaid.min.js","mermaid-init.js","design-edit-links.js","dev-banner.js"]'
 
       # Since v4 this leaves out dotfiles, which drops mdBook's `.nojekyll`. That is harmless:
       # a site deployed from a workflow is served as built and never goes through Jekyll.
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          path: book/book
-
+          path: site
   deploy:
     name: Deploy to GitHub Pages
     needs: build

@@ -7,8 +7,12 @@
 //!
 //! What is checked:
 //!
-//! - every relative Markdown link resolves to a file that exists
+//! - every relative Markdown link resolves to a file that exists, and its `#anchor` to a heading
+//!   in it; a link into `book/src/design/`, which is generated, is checked against `docs/`
+//! - every absolute link to this repository's files on GitHub, or to a page of its published book,
+//!   names a file and heading that exist on this branch
 //! - every fenced `toml` block tagged as a factory definition is named by a real example
+//! - every design document in `docs/` is a page of the book, listed in `book/src/SUMMARY.md`
 //! - the version in `api/openapi.yaml` matches the workspace version
 //! - every release section of `CHANGELOG.md` says what it changes for an existing factory, in a
 //!   `**Compatibility.**` paragraph — see [`crate::changelog`]
@@ -16,8 +20,15 @@
 //! What is deliberately not checked: prose. No tool can tell whether a paragraph is still true.
 //! That is what the standing instruction in `AGENTS.md` is for.
 
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
+
+/// The published book, whose pages are `book/src/<page>.md`.
+const SITE: &str = "https://kotkaz.github.io/layover-project/";
+
+/// Anchors already read, by file.
+type Anchors = HashMap<PathBuf, HashSet<String>>;
 
 /// A documentation problem.
 #[derive(Debug)]
@@ -40,10 +51,12 @@ impl std::error::Error for Failure {}
 pub fn check(root: &Path) -> Result<String, Failure> {
     let files = markdown_files(root);
     let mut problems = Vec::new();
+    let mut anchors = Anchors::new();
 
     for file in &files {
-        check_links(root, file, &mut problems);
+        check_links(root, file, &mut anchors, &mut problems);
     }
+    check_design_listed(root, &mut problems);
     check_spec_version(root, &mut problems);
     match std::fs::read_to_string(root.join("CHANGELOG.md")) {
         Ok(changelog) => problems.extend(crate::changelog::problems(&changelog)),
@@ -52,7 +65,7 @@ pub fn check(root: &Path) -> Result<String, Failure> {
 
     if problems.is_empty() {
         return Ok(format!(
-            "{} markdown files checked, all links resolve",
+            "{} markdown files checked, all links and anchors resolve",
             files.len()
         ));
     }
@@ -64,10 +77,13 @@ pub fn check(root: &Path) -> Result<String, Failure> {
     Err(Failure(message))
 }
 
-/// Collects every tracked Markdown file, skipping build output and the git directory.
+/// Collects every tracked Markdown file, skipping build output, the git directory, and the design
+/// pages `cargo xtask book` writes from `docs/`, which are checked as `docs/` itself.
 fn markdown_files(root: &Path) -> Vec<PathBuf> {
     let mut found = Vec::new();
     collect(root, &mut found);
+    let generated = root.join(crate::book::MIRROR);
+    found.retain(|file| !file.starts_with(&generated));
     found.sort();
     found
 }
@@ -94,8 +110,8 @@ fn collect(dir: &Path, found: &mut Vec<PathBuf>) {
     }
 }
 
-/// Checks that every relative link in `file` points at something that exists.
-fn check_links(root: &Path, file: &Path, problems: &mut Vec<String>) {
+/// Checks that every link in `file` to this repository points at something that exists.
+fn check_links(root: &Path, file: &Path, anchors: &mut Anchors, problems: &mut Vec<String>) {
     let Ok(text) = std::fs::read_to_string(file) else {
         problems.push(format!("could not read {}", show(root, file)));
         return;
@@ -105,27 +121,84 @@ fn check_links(root: &Path, file: &Path, problems: &mut Vec<String>) {
 
     for (number, line) in text.lines().enumerate() {
         for target in links(line) {
-            // Anchors, external links and mail links are somebody else's problem.
-            if target.starts_with('#') || target.contains("://") || target.starts_with("mailto:") {
+            let Some((path, anchor)) = resolve(root, parent, file, &target) else {
+                continue;
+            };
+            let at = format!("{}:{}", show(root, file), number + 1);
+
+            if !path.exists() {
+                problems.push(format!("{at} links to `{target}`, which does not exist"));
                 continue;
             }
-
-            let (path, _anchor) = target.split_once('#').unwrap_or((target.as_str(), ""));
-            if path.is_empty() {
+            if anchor.is_empty() || path.extension().is_none_or(|ext| ext != "md") {
                 continue;
             }
-
-            if !parent.join(path).exists() {
+            let known = anchors.entry(path.clone()).or_insert_with(|| {
+                std::fs::read_to_string(&path)
+                    .map(|text| crate::anchors::of(&text))
+                    .unwrap_or_default()
+            });
+            if !known.contains(anchor.as_str()) {
                 problems.push(format!(
-                    "{}:{} links to `{path}`, which does not exist",
-                    show(root, file),
-                    number + 1
+                    "{at} links to `{target}`, but {} has no heading `#{anchor}`",
+                    show(root, &path)
                 ));
             }
         }
     }
 }
 
+/// The file a link names and the anchor in it, or `None` for a link that is not this repository's.
+fn resolve(root: &Path, parent: &Path, file: &Path, target: &str) -> Option<(PathBuf, String)> {
+    if target.starts_with("mailto:") {
+        return None;
+    }
+    let (path, anchor) = target.split_once('#').unwrap_or((target, ""));
+    let anchor = anchor.to_owned();
+
+    let named = if let Some(page) = path.strip_prefix(SITE) {
+        // The development build is published beside the release one, from this same tree.
+        let page = page.strip_prefix("dev/").unwrap_or(page);
+        let page = if page.is_empty() { "index.html" } else { page };
+        root.join("book/src")
+            .join(page.strip_suffix(".html")?.to_owned() + ".md")
+    } else if let Some(rest) = path.strip_prefix(crate::book::REPOSITORY) {
+        let rest = rest
+            .strip_prefix("/blob/main/")
+            .or_else(|| rest.strip_prefix("/tree/main/"))?;
+        root.join(rest)
+    } else if path.contains("://") {
+        return None;
+    } else if path.is_empty() {
+        file.to_path_buf()
+    } else {
+        parent.join(path)
+    };
+
+    let named = normalise(&named);
+    // `book/src/design/` is generated from `docs/` when the book is built.
+    let design = normalise(&root.join(crate::book::MIRROR));
+    let named = match named.strip_prefix(&design) {
+        Ok(rest) => root.join("docs").join(rest),
+        Err(_) => named,
+    };
+    Some((named, anchor))
+}
+
+/// `path` with `.` and `..` resolved without touching the file system.
+fn normalise(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for part in path.components() {
+        match part {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                out.pop();
+            }
+            other => out.push(other),
+        }
+    }
+    out
+}
 /// Extracts the targets of Markdown inline links on one line.
 fn links(line: &str) -> Vec<String> {
     let bytes: Vec<char> = line.chars().collect();
@@ -170,6 +243,22 @@ fn links(line: &str) -> Vec<String> {
     }
 
     found
+}
+
+/// Every file in `docs/` has to be a page of the book, or the published design silently lacks it.
+fn check_design_listed(root: &Path, problems: &mut Vec<String>) {
+    let Ok(summary) = std::fs::read_to_string(root.join("book/src/SUMMARY.md")) else {
+        problems.push("could not read book/src/SUMMARY.md".to_owned());
+        return;
+    };
+    for file in markdown_files(&root.join("docs")) {
+        let relative = show(&root.join("docs"), &file);
+        if !summary.contains(&format!("](./design/{relative})")) {
+            problems.push(format!(
+                "docs/{relative} is not in book/src/SUMMARY.md; add it as `./design/{relative}`"
+            ));
+        }
+    }
 }
 
 /// The API version in the specification has to track the workspace version.
@@ -255,8 +344,9 @@ mod tests {
         // so a broken link fails fast rather than only at the end of a long run.
         let root = crate::repository_root();
         let mut problems = Vec::new();
+        let mut anchors = Anchors::new();
         for file in markdown_files(&root) {
-            check_links(&root, &file, &mut problems);
+            check_links(&root, &file, &mut anchors, &mut problems);
         }
 
         assert!(problems.is_empty(), "{problems:#?}");

@@ -37,7 +37,7 @@ Nothing about this is special — it is two ordinary flights.
 count rather than splitting it, so Hops bounds *depth* only. With `max_hops = 8` and a branching
 factor of 3, one trigger permits up to 3⁸ ≈ 6,500 runs. **Fuel is what bounds breadth**, which is
 why it is a requirement rather than a later refinement — see the decision log in
-[`decisions.md`](decisions.md#13-decision-log), *Why Fuel is required from the first runnable
+[`decisions.md`](decisions.md#decision-log), *Why Fuel is required from the first runnable
 release rather than deferred*.
 
 ## 3. Rendezvous joins

@@ -52,7 +52,7 @@ Agents
 A workflow that [runs an agent differently](./pipelines.md#an-agent-in-one-workflow) says so under
 the pipeline: `here reviewer runs on claude-opus-5.5 · effort high · long context`.
 
-A route [scoped to workflows](./configuration.md#scoping-a-route-to-workflows) carries its scope
+A route [scoped to workflows](./routes.md#scoping-a-route-to-workflows) carries its scope
 on its line, and once any route is scoped each pipeline also says which agents its chains can
 reach over the routes they may use:
 
@@ -320,7 +320,7 @@ and prints one line when it finds something; the [dashboard](./dashboard.md#a-ne
 still yours to do, the way you [installed](./install.md) Layover.
 
 `stage` goes further and gets the newest release ready, without installing it — every step is in
-[staging a release](./configuration.md#staging-a-release):
+[staging a release](./updating.md#staging-a-release):
 
 ```text
 Layover 1.15.0 for x86_64-pc-windows-msvc:
@@ -338,7 +338,7 @@ it found.
 
 `apply` installs the newest release, staging it first if it is not, once it is verified and
 validates the factory — the whole of it is in
-[installing a release](./configuration.md#installing-a-release). With a Tower serving the factory
+[installing a release](./updating.md#installing-a-release). With a Tower serving the factory
 it asks that Tower and follows it:
 
 ```text
@@ -362,7 +362,7 @@ is staged, an install under way, the last update and whether it proved healthy �
 disk, asking nothing. `log` prints `.layover/updates.jsonl`.
 
 A factory with `[update] mode = "auto"` does what `apply` does by itself, within the limits in
-[installing unattended](./configuration.md#installing-unattended).
+[installing unattended](./updating.md#installing-unattended).
 
 `apply` and `rollback` say how it went in their exit code:
 

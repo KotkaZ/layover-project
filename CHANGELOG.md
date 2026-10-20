@@ -8,19 +8,40 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+The documentation is reorganised around what a person looks for: a first factory that runs on one
+CLI, pages for updating and troubleshooting, the design inside the book, and a site that describes
+the release you can install.
+
+**Compatibility.** Documentation and tooling only: nothing a factory does changes. The first
+factory, `examples/planner.toml`, now runs every agent on Copilot CLI instead of Claude Code,
+Copilot CLI and Codex; a factory copied from it before is unaffected. Links to sections of
+`configuration.html` about runners, routes and updating, and of `dashboard.html` about chains,
+runs and cost, now land at the top of the page that held them: those sections have pages of their
+own.
+
 ### Changed
 
-- **The documentation recommends a CLI home of the factory's own.** A run uses the user's own
-  `~/.copilot`, `~/.claude` or `~/.codex` unless told otherwise, so a factory's sessions fill the
-  user's history and its agents load the user's personal plugins and MCP servers. Configuration
-  gains *A CLI home of the factory's own* — `COPILOT_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`,
-  forwarded with `env_from` — and the install guide says how a variable reaches a Tower that
-  `autostart` starts. Risk 30 records the hazard.
-- Stale and garbled passages across the book and the docs are corrected: the README's status, crate
-  list and what works today now include 1.15's updates, `stop` and `about`.
-
-**Compatibility.** Documentation only: nothing a factory does changes.
-
+- **The documentation recommends a CLI home of the factory's own** — `COPILOT_HOME`,
+  `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, forwarded with `env_from` — so a factory's sessions stay out of
+  the user's history and its agents never load the user's personal plugins and MCP servers. The
+  install guide says how a variable reaches a Tower `autostart` starts; risk 30 records the hazard.
+- **The first factory needs one CLI.** `examples/planner.toml` asked for three CLIs and an
+  `ANTHROPIC_API_KEY`, and its Codex reviewer could not reach Layover, so the loop broke at its
+  third agent. Every agent now uses the `copilot` preset.
+- **The site's root is the latest release's book**, rebuilt when a release is published; `main`'s
+  is at `/dev/`, with a banner on every page saying it may describe what no release does yet.
+- **New pages:** Updating Layover, Troubleshooting (by the message you see), Glossary, Runners,
+  Routes and joins, and the dashboard's Chains and Runs views, each split from a page that had grown
+  past 500 lines. The design documents — architecture, routing, the decision log and the risks —
+  are pages of the book, written from `docs/` when it is built.
+- The decision log is split by topic into `docs/decisions/`, and the risks of releasing and updating
+  into `docs/risks-releases.md`. Cutting a release moved from the install guide to `RELEASING.md`.
+- The README is shorter, and the book's Status is the one list of what is and is not built. The
+  CHANGELOG's older sections are cut to bullets, their Compatibility paragraphs unchanged.
+- `cargo xtask verify` checks `#anchors` as well as links, absolute links to the repository and the
+  site, that every `docs/` file is a page of the book, and that every CLI command and flag,
+  `layover.toml` key and HTTP endpoint is in its reference page. `cargo xtask book` writes the
+  design pages.
 ## [1.15.0] — 2026-10-19
 
 A Tower that is asked to stop now lets what it is running finish, and Layover can update itself: it

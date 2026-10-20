@@ -10,8 +10,15 @@ cargo xtask verify
 ```
 
 That is the only definition of done. It checks generated-code freshness, formatting, Clippy with
-warnings denied, the documentation links, the tests, and the doc build. **CI runs this exact
-command and nothing else**, so a local pass really is a CI pass.
+warnings denied, the documentation, the tests, and the doc build. **CI runs this exact command and
+nothing else**, so a local pass really is a CI pass.
+
+It matters more than any process around it. A lights-out factory does not stall because an agent
+cannot write code; it stalls because nobody — agent or human — can tell whether the code is
+correct without asking someone else. One command with a binary verdict means a first-time
+contributor knows a change is acceptable before opening a pull request, rather than from a review
+comment three days later — and it is what lets this repository be worked on unattended, which it
+is.
 
 `xtask` is not a tool you install — it is a crate in this repository (`xtask/`), so
 `cargo xtask <task>` just builds and runs it. `cargo xtask` on its own lists the tasks.
@@ -21,7 +28,7 @@ If it fails, the output names the step. The two that surprise people:
 | Step | What it means |
 |---|---|
 | `generated` | `api/openapi.yaml` changed and `crates/layover-http/src/generated.rs` did not. Run `cargo xtask generate-api`. |
-| `docs` | A link in a markdown file no longer resolves, or an example path moved. |
+| `docs` | A link or `#anchor` in a Markdown file no longer resolves; a file in `docs/` is missing from `book/src/SUMMARY.md`; or a command, flag, `layover.toml` key or endpoint is missing from its reference page. The message names which. |
 
 ## Getting set up
 
@@ -38,6 +45,37 @@ cargo xtask verify
 
 Development happens on Windows and CI runs Linux, so both are exercised. If you hit something
 platform-specific, say so in the issue — that is useful information rather than noise.
+
+## The crates
+
+| Crate | What it is |
+|---|---|
+| `layover-core` | Config, agents, routes, pipelines, prompts, the route graph, validation, itinerary accounting, barriers |
+| `layover-http` | The HTTP surface, **generated** from [`api/openapi.yaml`](api/openapi.yaml) |
+| `layover-store` | On-disk history and journal: day-segmented JSON Lines, 90-day retention |
+| `layover-dashboard` | The monitoring page and the API implementation behind it |
+| `layover-tower` | The supervisor — the only crate that starts a process |
+| `layover-mcp` | The MCP surface agents talk to Layover through |
+| `layover-update` | Finding newer releases and staging them: the manifest, the download, its checksum and `gh`-verified provenance, the gate against a factory |
+| `layover-cli` | The `layover` binary |
+
+`AGENTS.md` says more about each, under *Where things live*.
+
+## The documentation site
+
+The book in `book/` is published to GitHub Pages: the latest release's at the root, `main`'s at
+`/dev/`. Its design pages are written from `docs/` rather than kept twice, so building it locally
+takes one step first:
+
+```sh
+cargo install mdbook --version =0.4.52 --locked
+cargo install mdbook-mermaid --version =0.15.0 --locked
+mdbook-mermaid install book
+cargo xtask book          # writes book/src/design/ from docs/; never commit it
+mdbook serve book --open
+```
+
+Edit `docs/`, not `book/src/design/`. Releasing is described in [`RELEASING.md`](RELEASING.md).
 
 ## What will get a change rejected
 
@@ -65,7 +103,7 @@ and carries its tests and its documentation will move quickly.
 
 ## Where to start
 
-- **`docs/decisions.md`** ends with the questions still open. They need a maintainer decision
+- **[`docs/decisions.md`](docs/decisions.md)** ends with the questions still open. They need a maintainer decision
   rather than a patch — but they are open to argument, and a well-reasoned case in an issue is a
   real contribution.
 - **`docs/risks.md`** records known hazards, and says which are mitigated and which nobody has

@@ -28,7 +28,7 @@ Point any OpenAPI tool at the file to get a client, a mock server or rendered do
 |---|---|---|---|
 | `GET` | `/health` | | Liveness, version, whether a Ground Stop is engaged, and `stopping` while the Tower drains to stop. |
 | `GET` | `/update` | | What this machine last learned about releases: the version running (`current`), the factory's `[update]` `mode` and `channel`, whether `LAYOVER_UPDATE=off` has `switched_off` checks, when it last looked (`checked_at`, `succeeded_at`, `error`), the newest release seen (`latest`), and `available` — a newer one on the channel that is not `skipped`, with its `kind`, `notes`, `compatibility` paragraph and `url`. Once that release is staged, `staged` says how far it got — its `sha256`, its `provenance` (`verified`, `unavailable`, `refused` or `unchecked`) and why, whether it is `ready` and `crosses_layout` — and `gate` what it made of this factory: `passes`, `passes_unattended`, its `errors` and `new_warnings`. Reading it never asks GitHub. `request` is the last install or rollback asked of the Tower — `version`, `rollback`, `by`, `at`, its `progress` lines and its `outcome` (`applied`, `rolled_back`, `postponed`, `failed`, `cancelled`, or null while under way); `last_update` is the last handover, with when it proved `healthy_at` or was `rolled_back_at`; `previous` the version kept to roll back to. |
-| `POST` | `/update/apply` | | Ask the Tower in this process to [install](./configuration.md#installing-a-release) the staged release; `{"now": true}` cuts what is running off rather than waiting. A `202` with the status; a `409` from a `--watch-only` dashboard, when nothing is staged and verified, when the release refuses the factory or changes the state layout, or when an install is already under way. |
+| `POST` | `/update/apply` | | Ask the Tower in this process to [install](./updating.md#installing-a-release) the staged release; `{"now": true}` cuts what is running off rather than waiting. A `202` with the status; a `409` from a `--watch-only` dashboard, when nothing is staged and verified, when the release refuses the factory or changes the state layout, or when an install is already under way. |
 | `DELETE` | `/update/apply` | | Cancel an install the Tower has not made yet; held work starts again. |
 | `POST` | `/update/skip` | | `{"version": "1.15.0"}`: stop offering it on this machine. A `400` for something that is not a version. |
 | `POST` | `/update/rollback` | | Ask the Tower to go back to the version the last update replaced; the one it leaves is skipped. A `409` from a `--watch-only` dashboard, or when nothing is kept. |
@@ -258,7 +258,7 @@ belongs to the chain, and `GET /itineraries` carries it.
 
 ```json
 POST /help/reply
-{ "run_id": "run_01M3…", "body": "1. Exponential.\n2. The platform team.", "by": "Karl" }
+{ "run_id": "run_01M3…", "body": "1. Exponential.\n2. The platform team.", "by": "Alex" }
 ```
 
 `202 Accepted` answers every open request that run filed and queues a flight to the agent that

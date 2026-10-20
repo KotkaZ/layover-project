@@ -44,7 +44,8 @@ flowchart LR
 ```
 
 - **Sending a message is what starts an agent.** There is no separate spawn step.
-- **Agents talk over MCP.** Claude Code, Copilot CLI and Codex CLI reach Layover natively.
+- **Agents talk over MCP.** Claude Code and Copilot CLI reach Layover natively; Codex cannot yet be
+  told where it is.
 - **Every run is a clean slate.** Nothing carries over implicitly between runs, which makes an
   agent's memory exactly what it chose to write down.
 - **The route map is a directed graph.** No edge means the flight is refused.
@@ -79,18 +80,29 @@ conversation rather than each message in it. The route map is enforced against t
 verdict it was waiting for. A barrier nothing can complete is given up and named rather than left
 to hang.
 
-**What is not built is isolation between agents**: `access` and `workspace` are declared, and every
-agent still runs in the same `work_dir`.
+**It keeps itself current.** A running factory hears of a newer Layover and says what it changes;
+asked, it installs it between runs, and rolls back a release that cannot prove itself. A factory
+can also be left to do that unattended, within limits. See [Updating Layover](./updating.md).
 
-The [README](https://github.com/KotkaZ/layover-project#what-works-today) carries the built and
-not-built list, kept in one place so the two cannot disagree.
+**What is not built:**
 
+- **isolation between agents** — `access` and `workspace` are declared, and every agent still runs
+  in the same `work_dir`;
+- **Codex on the MCP endpoint** — Codex cannot yet be told where Layover is, so a Codex agent cannot
+  hand work on;
+- **telling a model-service failure apart for Claude Code and Codex** — only Copilot CLI's events
+  are read, unless a runner declares [`provider_errors`](./runners.md#telling-the-model-services-failure-from-the-runs).
+
+This is the one place that says what is and is not built; the README and `AGENTS.md` point here.
+What is still undecided is in the [decision log](./design/decisions.md#still-open).
 ## Where to start
 
 - [Install](./install.md) — a single binary, no toolchain needed
 - [Your first factory](./first-factory.md) — three agents, and the commands that run them
 - [The dashboard](./dashboard.md) — `layover serve`, and what it shows while a factory works
 - [The reference factory](./reference-factory.md) — everything awkward at once, with the arithmetic that sizes its rails
+- [Troubleshooting](./troubleshooting.md) — find the message you are looking at
+- [Glossary](./glossary.md) — the airport vocabulary, one sentence each
 
 ## Download
 

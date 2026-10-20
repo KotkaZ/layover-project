@@ -483,6 +483,6 @@ distinction between *policy* and *findings*.
 ## 13. Where the reasoning lives
 
 Rationale for every decision that was not self-evident, and every question still open, is in
-[`decisions.md`](decisions.md). It is kept separate because it grows with every change while
-this document describes a system that is meant to settle down.
+[`decisions.md`](decisions.md) and the topic files it lists. It is kept separate because it grows
+with every change while this document describes a system that is meant to settle down.
 

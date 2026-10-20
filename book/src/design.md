@@ -1,16 +1,17 @@
 # How it works
 
-This page is a map. The design documents themselves live in the repository, beside the code they
-describe, so that a change and its rationale land in the same commit.
+This page is a map. The design documents live in the repository's `docs/`, beside the code they
+describe, so that a change and its rationale land in the same commit — and are published here as
+the pages that follow.
 
 | Document | What it covers |
 |---|---|
-| [Architecture](https://github.com/KotkaZ/layover-project/blob/main/docs/architecture.md) | The system design, the locked decisions, and a log of *why* each one was taken. |
-| [Routing](https://github.com/KotkaZ/layover-project/blob/main/docs/routing.md) | Route map semantics, fan-out, rendezvous joins, failure paths. |
-| [Decisions](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md) | Why each choice was made, and the open questions nobody should guess at. |
-| [Risks](https://github.com/KotkaZ/layover-project/blob/main/docs/risks.md) | Known hazards and what we intend to do about them. |
+| [Architecture](./design/architecture.md) | The system design: the metaphor, the locked decisions, the runtime flow, configuration, the disk layout, and the MCP and HTTP surfaces. |
+| [Routing](./design/routing.md) | Route map semantics, fan-out, rendezvous joins, failure paths. |
+| [Decisions](./design/decisions.md) | Why each choice was made, by topic, and the open questions nobody should guess at. |
+| [Risks](./design/risks.md) | Known hazards and what we intend to do about them; [releases and updating](./design/risks-releases.md) have their own. |
+| [Before 1.0](./design/first-release.md) | The fifty questions answered before the first release, with their reasoning. |
 | [AGENTS.md](https://github.com/KotkaZ/layover-project/blob/main/AGENTS.md) | The contributor contract, for humans and agents alike. |
-
 ## The two ideas worth knowing
 
 ### Fresh runs make memory explicit

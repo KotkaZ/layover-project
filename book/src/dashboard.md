@@ -7,6 +7,9 @@ answers.
 - **What has it been doing?** Run history, for as long as retention keeps it.
 - **What is that costing?** Totals over periods you can actually reason about.
 
+The [Chains and the route map](./dashboard-chains.md) and [Runs, cost and retention](./dashboard-runs.md)
+views have pages of their own.
+
 ```console
 $ layover --config layover.toml serve
 Layover dashboard on http://127.0.0.1:7878
@@ -90,7 +93,7 @@ the CLI's, typed as it takes them; the suggestions are only values already used 
 
 **The work is queued, and the Tower starts it.** Under `layover serve` it starts as soon as a slot
 is free, and the window names the Tower that will pick it up. Once it is queued the page opens
-[the chain it started](#one-chain-whole), so you watch that run of the workflow rather than the
+[the chain it started](./dashboard-chains.md#one-chain-whole), so you watch that run of the workflow rather than the
 workflow. Above the workflows a line reads
 `2 of 4 run(s) alive · 3 flight(s) queued`, kept current every few seconds — the difference between
 a busy factory and a stuck one. A dashboard started with `--watch-only` runs nothing and says so:
@@ -99,6 +102,8 @@ when nothing here is moving it. A Ground Stop refuses the trigger outright — a
 letting more be booked is not a kill switch.
 
 ## Watching agents work
+
+![The Sessions tab: three running sessions and the ones that ended listed on the left, and a coder's session as its CLI prints it — its prompt, reasoning, each tool call with what came back, and the AI credits so far](./assets/dashboard-sessions.png)
 
 **Sessions** shows every run that is going now, and the ones that ended in the last day, each as
 its CLI would show it in a terminal: the first lines of what it was asked, its reasoning, every
@@ -128,6 +133,8 @@ run's failure detail. Copilot CLI's JSON events and Claude Code's `stream-json` 
 anything else — Codex, a script — is shown as it was printed.
 
 ## What starts next
+
+![The Upcoming tab: two flights waiting for a slot while three runs are alive, each with Cancel, and below them the scheduled ticks of the triage and nightly-review workflows, grouped by day](./assets/dashboard-upcoming.png)
 
 **Upcoming** answers what will happen without anybody pressing anything, in the order it will
 happen, over the next 6 hours to 7 days:
@@ -237,13 +244,13 @@ want to know what it did. `layover serve --watch-only` serves that half alone.
 When this machine has learned of a newer release, the version pill in the header says so —
 `v1.14.0 → 1.15.0` — and opens a window with what it changes: whether it is a patch, minor or major
 release, when it was released, its Compatibility note — what an existing factory will notice — and
-all its release notes. Once it is [staged](./configuration.md#staging-a-release), the window also
+all its release notes. Once it is [staged](./updating.md#staging-a-release), the window also
 says how far staging got — downloaded and matched, who built it, or why it stopped — and what the
 release made of this factory: validated with no new warnings, validated with warnings this version
 does not give, or refused.
 
 Staged, verified and validating the factory, it can be installed from here: **Update now** asks the
-Tower to [install it](./configuration.md#installing-a-release) — let what is running finish, start
+Tower to [install it](./updating.md#installing-a-release) — let what is running finish, start
 nothing new, swap its binary and restart on the new version. While it does, the pill reads
 `· updating` and a line above every view says what it is waiting for, with **Cancel** to call it
 off before the swap. **Skip this version** stops it being offered on this machine, and after an
@@ -282,7 +289,7 @@ pull request still is, and the window says which flags it carries. The agent is 
 a line naming the request it answers, then your words exactly as you wrote them:
 
 ```text
-In reply to your help request run_01M3… (spec needs 3 decisions from Karl)
+In reply to your help request run_01M3… (spec needs 3 decisions from the product owner)
 
 > 1. Exponential or linear back-off?
 Exponential.
@@ -309,455 +316,6 @@ unless an agent rediscovers it first.
 The list opens on the learnings **in use** — provisional and confirmed — since those are the ones
 runs are being given. **Standing** shows the others, with how many of each there are; **Agent** and
 **Find** narrow it to one agent, or to the learnings that mention something.
-
-## Chains
-
-A run is one agent doing one thing. A **chain** is everything one trigger caused, and the budget
-they share — Hops, Fuel and the run cap are per chain, so "what did this cost" and "did this
-finish" are questions about a chain rather than a run. A chain somebody named when they triggered
-it is listed by its name, above its workflow.
-
-| State | Meaning |
-|---|---|
-| `working` | Something is running, or waiting to |
-| `finished` | It ran and stopped, and nothing is outstanding |
-| `stalled` | It stopped and nothing will ever happen again |
-| `waiting for you` | Its last run stopped to ask you something, and nothing will run until you answer (`awaiting_human`) |
-| `failed` | Its last run failed, timed out or was interrupted, and nothing is queued or running after it |
-| `halted` | A Ground Stop caught it, or the Reserve refused to start its run |
-
-**`waiting for you` looks finished too.** Every run in it ended cleanly and nothing is queued —
-because its last run filed a fatal help request and stopped. It has a **Reply…** beside it and an
-amber count on the tab — the only button a row in the list carries, because it is the only thing
-there that needs a person. Resolving the request without replying makes it `finished`; replying makes
-it `finished`, continued by the chain the reply started.
-
-**`failed` is a chain that simply stopped.** The run that would have sent the work on did not
-finish — its tests failed, the model service dropped it and it was not restarted, it ran out of
-time — so nothing is queued, nothing is stalled at a barrier, and no rail refused anything. It used
-to read as `finished`, which is how three chains once sat dead overnight until somebody asked why a
-pull request never appeared. Its detail says which run ended it and why:
-
-```text
-`wolf` failed, and nothing came after it: exited with code 1: the model service failed (http_400):
-… ; not restarted: this agent's `recovery` policy is `manual`; a human decides
-```
-
-"Last" is the run that finished last, so a fan-out branch that failed while another went on to the
-end does not make the chain `failed`. A chain whose run the model service ended and whose restart
-is waiting out its back-off is `working`, and says so. A chain somebody has [continued](#chains) —
-**Continue…** on its page — has been dealt with and is `finished`.
-
-**Continue…**, on a chain's own page and in a run's report, opens the trigger window with that
-workflow chosen and its flags set as that chain had them, saying where they came from. Change them
-if you need to. A chain from before runs recorded their flags opens with the workflow's defaults,
-and a warning that they are only that.
-
-**`stalled` is the one worth looking for**, and the reason this view exists. A joined agent never
-woke because the barrier it was waiting behind could no longer be completed — the tester reported,
-the reviewer never did, and the publisher is still waiting for a verdict that is not coming.
-
-Read as a list of runs, that chain looks perfect. Every run says `succeeded`. There is no failed
-run to point at and nothing saying the last step never happened. So the Tower writes down the
-moment it gives up on a rendezvous, and this is where that shows up:
-
-```text
-`publisher` never woke: nothing live could still deliver reviewer
-```
-
-A cost with a `+` after it is a floor rather than a figure: some run in the chain reported nothing,
-so the real total is at least that much.
-
-A chain is listed from the moment its first flight is queued. Trigger a workflow while every slot
-is taken and it reads `working · queued`, with no runs yet, rather than not appearing until a slot
-frees; one that is going says where it is — `working · at coder`. Click a chain — anywhere on its
-row; the `›` at its end says so — to see it whole.
-
-### Finding a chain
-
-A factory with a few schedules starts hundreds of chains a week, almost all of them routine work
-that finished. So the list **opens on what needs attention** — `working`, `waiting for you`,
-`stalled`, `failed` and `halted` — and says how many it is not showing: `864 chain(s) · 3 need
-attention · 1 failed`. The red count on the tab is the stalled and failed chains together: the ones
-nothing will move again by itself.
-When nothing does, it says so, with a link to show every chain.
-
-| Filter | Narrows to |
-|---|---|
-| **Window** | Chains started in it |
-| **State** | *needs attention* (the default), *any*, or one state |
-| **Find** | Chains whose name, workflow, agents or identifier contain the words |
-| **Hide finished scheduled chains** | Leaves out a schedule's chains that nobody named and that finished: the routine ticks |
-
-The list is drawn fifty at a time, with **Show more** below it; a refresh keeps however many pages
-were open.
-
-## One chain, whole
-
-Trigger a development workflow three times and its route map is still one drawing. It colours the
-coder while *any* of the three runs it, so it says that the coder is running and not which of the
-three is where. Opening a chain — from **Chains**, from a run's chain in **Runs**, from the buttons
-under its workflow's map, or straight after triggering it — shows that chain on its own:
-
-- **Its workflow's map, drawn for it alone.** The same drawing, so the two can be compared at a
-  glance, coloured by what happened *in this chain*, with the routes its work actually took drawn
-  in green and the rest faded. Each box says what its agent ran at *in this chain*: what its runs
-  were recorded running at, or what was chosen when the chain was triggered — which can differ from
-  the workflow's own map.
-- **The flags it ran with**, as chips: those on, and any off that its workflow has on by default.
-  A flag set otherwise than its workflow's default is marked `•` — that is what somebody chose
-  when they triggered it — and the rest, off as by default, are counted rather than listed.
-- **Against the clock**: a row per agent, each run a bar on one time axis from the chain's start —
-  green, red for a failure, pulsing while it runs, a dashed outline for work waiting for a slot.
-  What the list cannot show is plain here: which runs overlapped, how long work waited, and which
-  pass took three times as long as the one before. Click a bar for its report, or to watch it.
-- **Every run, in the order it happened**, with who sent it, how it ended, how long it took and
-  what it cost, and **Watch** or **Transcript** and **Report** beside each.
-- **What it is waiting for**: flights it has queued, at the end of the list.
-
-| Drawn as | Means, in this chain |
-|---|---|
-| Pale green box | It ran here, and its last run here went well |
-| Green box | It is running now |
-| Red box | Its last run here failed, timed out, was interrupted or was halted |
-| Dashed amber outline | Work for it is queued, waiting for a free slot |
-| Faded box | Nothing in this chain reached it |
-| Green line | A route this chain's work took |
-| `×2` in a corner | It ran twice here — the coder on its second pass after a review, say |
-
-The view keeps itself current every few seconds while the chain works, and stops asking once it
-has stopped. Its address ends `#chain=itn_…`, so it survives a reload and can be sent to somebody.
-
-**Sent by** says where each run's work came from: an agent, the `way in` (a trigger, a schedule or a
-resumed layover), or `—` when that was not recorded. Runs from before this release, a join restarted
-after the Tower that released it went away, and a run the Reserve refused do not know, and they
-light no route rather than a guessed one — a route drawn from who happened to run before would look
-exactly like one that was taken.
-
-What it cannot show is a flight parked at a barrier: that lives only in the Tower's memory. The
-upstreams that have reported show as done, and the joined agent wakes when the last arrives.
-
-## The route map
-
-```mermaid
-flowchart LR
-  p["pipeline"] ==> a["analyst"]
-  a --> b["investigator"]
-  b -- all --> c{{"developer"}}
-  a -. bypasses .-> c
-```
-
-Read it as: pipelines on the left, work flowing right, one column per hop.
-
-| Drawn as | Means |
-|---|---|
-| Rounded box | An agent |
-| Hexagon | An agent guarded by a rendezvous barrier |
-| Thick indigo arrow | A pipeline feeding its entry agent |
-| Blue arrow labelled `all` or `any` | An upstream the barrier waits for |
-| Dashed violet arrow | A permitted sender the barrier *does not* name |
-| Line with an arrowhead at each end | A route each way: either agent may send to the other |
-| Short line or arc beside a column | A route between two agents in the same column |
-| Line under the whole map | A route back towards the way in: out to the right of its column, along a lane of its own, and up into the agent it returns to |
-| Arrow labelled with pipeline names | A route only those workflows' chains may use — on the whole-factory map only |
-| Green, amber, red fill | Running, waiting at a barrier, last run failed |
-| `×2` in a box's corner | Two runs of it alive at once — the workflow triggered twice, say |
-
-Amber needs the supervisor: nothing records a parked barrier yet, so today the map shows running
-and recently-failed agents only.
-
-A workflow's map is coloured by that workflow's runs. An agent it shares with another workflow is
-not shown running here because the other workflow is running it; a run whose chain no workflow
-opened — a review spawned by a sweep, say — could be anybody's, so it counts on every map its agent
-is drawn on. Under the map, one button per chain the workflow has going says where each is —
-`46TNEG at coder`, `GDTHVD queued for analyst` — and opens [that chain](#one-chain-whole).
-
-That dashed arrow is the one worth dwelling on. A barrier constrains only the upstreams it names;
-any other permitted sender wakes the agent directly and leaves the parked flights untouched. In
-the reference factory the analyst's work item reaches the developer that way, while the tester's
-and the reviewer's verdicts queue at the barrier — which is what lets one agent be both a join
-target and an ordinary destination.
-
-Most routes in a real factory come in pairs — an analyst asks an investigator and hears back — so
-a pair of plain routes is drawn as **one line with an arrowhead at each end**. Only plain routes
-are paired: a join, a spawn, or a scope that differs between the two directions says something the
-other direction does not, so each keeps its own arrow. The review loop into a barrier, for
-instance, is still drawn out and back.
-
-### What each box says
-
-Under an agent's name is the **model it runs on** and the **reasoning effort** it runs it at, and
-under that its **context tier** and whether it is `read-only`:
-
-```text
-             bob
-claude-opus-5.5 · effort xhigh
-        long context
-```
-
-The model and its effort share a line because they are one choice: how hard *that* model is asked
-to reason. A model name too long to share its line puts the effort at the start of the next, and a
-box grows a third small line rather than cut anything off.
-
-All of it is read from the command line Layover will run for that agent — its runner's `command`,
-with the agent's own `model`, `effort` and `context` filled in — so two agents sharing one runner
-each show their own, and a value fixed in the runner is shown as readily as one the agent
-declares. See [what is reported](./configuration.md#what-is-reported) for which flags are read. An
-agent whose command line names no model or effort is drawn as it always was.
-
-Hover over a box for the rest: its description, runner and access. `GET /agents` reports the same
-`model`, `reasoning_effort` and `context` for each agent.
-
-### Tracing one agent
-
-A busy map is easiest to read one agent at a time. **Hover** over an agent — or tab to it — and its
-routes and the agents at their other ends stay lit while everything else fades. **Click** it to
-keep them lit; a panel opens under that workflow's map with what the agent runs on (model,
-effort, context tier, runner, access) and who it **sends to** and **hears from** in this
-workflow, with a link to its runs. Click it again, click empty space, or press Escape to let go.
-Hovering a single route lights just that route and its two ends, and its tooltip says what it is:
-`analyst ⇄ sherlock`, or `azurix → eagle · spawns a new itinerary · only in eagle-eye`.
-
-"In this workflow" is exact: the panel reads the routes drawn on that workflow's map, which are
-the routes its chains may use, so an agent shared by two workflows shows different neighbours in
-each.
-
-### One diagram per workflow
-
-A factory usually holds several pipelines, and they are genuinely separate workflows. Drawn
-together they read as one very confused process, so each gets its own diagram, stacked down the
-page — or just the selected one, when the header narrows the page to it. Every diagram is drawn
-at the same scale, its natural size, so a workflow of three agents is not blown up to look more
-important than one of twelve; a diagram wider than the page shrinks to fit, and past a point the
-page scrolls it rather than shrinking its text out of reading.
-
-The busiest workflows come first — chains under way, then runs in the last week, with the order
-of `layover.toml` breaking ties — and the order holds while the page refreshes itself, so a card
-does not move while you read it. A factory of five workflows is five drawings tall, so a drawing
-**folds away** (`▸`) to its card: the header, the week's numbers and the chains under way stay.
-On a page of three or more workflows, one starts folded when nothing in it needs looking at —
-nothing under way, nothing failed, nobody asked anything — and **Show every drawing** and **Fold
-them all** do what they say. A drawing you fold or open stays that way in this browser.
-
-Above each diagram is what that workflow has actually been doing: runs and spend over the last
-seven days, failures, open help requests and, for a scheduled workflow, the ticks it skipped. The
-diagram says what *may* happen; the strip says what did, and both questions get asked at the same
-moment by someone who has just opened the page wondering whether anything is wrong.
-
-Each carries the rails that bound a chain started there:
-
-| Rail | What it bounds |
-|---|---|
-| **next** | Not a bound: when a scheduled workflow next fires, by the Tower's clock. See [What starts next](#what-starts-next). |
-| **hops** | **Depth.** Flights before the chain is cut. Branches inherit the count rather than splitting it, so it says nothing about width. |
-| **fuel** | **Breadth.** The shared budget, honouring the entry agent's own `fuel_usd` where it sets one. |
-| **workspace** | Whether two instances share a working directory or get one each. |
-
-Both rails are shown together deliberately. Seeing Hops alone invites the assumption that it caps
-spending, and it does not — a branching factor of three at `max_hops = 8` permits thousands of
-paid invocations while every hop count stays legal.
-
-An agent belonging to two workflows appears in both. That is the honest answer: the developer
-really is in the triage pipeline and the follow-up pipeline, and hiding it from one would
-misrepresent the factory to make a tidier picture.
-
-Each diagram is drawn over the routes **that workflow's chains may use**: every global route, and
-every route [scoped](./configuration.md#scoping-a-route-to-workflows) to it. A route scoped to
-another workflow is not drawn, and an agent only another workflow's routes reach does not appear.
-So a shared agent appears in each workflow with only that workflow's edges — the review sweep's
-map does not show the reviewer handing work to the builder when only the build workflow may. In a
-factory with no scoped route, every diagram is exactly what it was.
-
-The whole factory in one picture is `GET /graph` without a `pipeline`, or `layover graph`. There
-every route is drawn, and an edge only some workflows may use is labelled with their names — in
-the SVG it carries a `scoped` class and an "only in …" tooltip. The page itself keeps to one
-diagram per workflow, for the reason above.
-
-Cost gains a **By workflow** table for the same reason. Per-agent totals cannot answer "what does
-the nightly sweep cost me" once an agent belongs to more than one.
-
-The diagram is generated per request, so an edit to `layover.toml` shows on the map within fifteen
-seconds, or at once on **Refresh**. `layover graph` prints the same graph without a server: Mermaid by default for
-pasting into a README, `--svg` for the version the dashboard draws, and `--pipeline` for one
-workflow's diagram.
-
-## Runs
-
-Every supervised execution, newest first, filterable by window, outcome and agent, a hundred at a
-time with **Show 100 more** below. A running run says `running · started 4 min ago` rather than
-when it finished. Each says which **chain** it belongs to — the end of its identifier, where
-identifiers differ, with the chain's name in the tooltip — and clicking that opens the chain.
-**Ran on** is the model and effort the run's command line gave it; hover it for the context too.
-
-Each run keeps the **model, effort and context** its command line gave it, so history answers
-"which effort did that run use?" without opening a transcript; a session's header shows them, and
-`GET /runs` returns them as `model`, `reasoning_effort` and `context`. Runs recorded before Layover
-kept effort and context have neither.
-
-| Outcome | Means |
-|---|---|
-| `running` | Still going |
-| `succeeded` | Exited cleanly |
-| `failed` | Exited non-zero |
-| `timed_out` | Hit `timeout_sec` and was killed |
-| `halted` | A rail refused it: Hops, Fuel, the run cap or the Reserve |
-| `interrupted` | Alive when the Tower went away — see [Recovery](./recovery.md) |
-
-A failure that was not the run's own says whose it was. A run the model service ended — its last
-call rejected or never answered, and nothing after it — is `failed` **· model service**, never
-`succeeded`; `GET /runs` gives it `cause: provider_error` and the provider's `request_id`, and its
-detail says what the service said and whether it is being
-[restarted](./recovery.md#when-the-model-service-fails):
-
-```text
-exited with code 1: the model service failed (http_400): Execution failed: 400 internal server
-error (Request ID: 00000-7a12…); restarting as attempt 2 after a 1-minute wait
-```
-
-`halted` is deliberately not coloured like a crash. A rail stopping work is the system doing its
-job, and colouring it red teaches people to ignore red.
-
-A run that exited on its own carries its **exit code**. A `failed` one also carries a one-line
-`detail`: how the process exited and the line of its output most likely to be the reason —
-the last line that says *error* or *failed*, or failing that the last thing it printed:
-
-```text
-exited with code 1: Error: Failed to read MCP config file "…\mcp.json": The system cannot find
-the path specified.
-```
-
-The line is picked, not summarised — Layover calls no model — and it is redacted and capped at
-300 characters before it is written, because a transcript is where a CLI that failed to
-authenticate prints what it tried. The whole transcript stays in the run's Hangar. Hover a row to
-read the detail.
-
-A run whose cost the runner never reported shows **not reported**, never `$0.00`. The two are
-different facts, and the difference decides whether the budget rail is working.
-
-## Cost
-
-Seven windows, of two kinds, and the distinction is part of the answer rather than a detail.
-
-| Window | Kind |
-|---|---|
-| Today, Month to date | **Calendar** — begins at local midnight |
-| Last 24 hours, 7 days, 30 days, 90 days | **Rolling** — a fixed number of hours ending now |
-| All time | Everything still kept |
-
-A rolling window is the same length everywhere on earth. A calendar window is not: "this month"
-begins at midnight *somewhere*, and the page names the zone it used. Rolling windows say they used
-none, and that absence is deliberate — nobody should have to wonder which zone "last 7 days" meant.
-
-Conflating the two is not a theoretical hazard. Gating spend on a UTC day boundary while reporting
-the ledger in local time lets a factory spend one day's money twice, and the bug is invisible
-until it matters.
-
-Every total carries its provenance, shown next to the figure rather than tucked away:
-
-- *"all measured"* — every run's cost was measured: dollars the runner printed.
-- *"n of m runs priced from Copilot credits"* — also measured: Copilot reported the AI credits those
-  runs used, and they are priced at `[copilot] usd_per_credit`. Named so that the arithmetic stays
-  visible.
-- *"n of m runs priced from a rate card"* — part of this is an estimate.
-- *"n of m runs reported nothing"* — part of this is a hole, and the total is a lower bound.
-
-A total with a hole in it is never shown as a plain figure. It carries a `+` — `$12.40+` — and one
-where *every* run reported nothing reads **not reported** rather than `$0.00`, here, in the
-breakdowns and in each workflow's **spend, 7d** on the route map. A plain `$0.00` beside runs that
-did work is how a factory whose runner prints no cost comes to look free; `layover doctor` says
-which runner it is and what to add to its command.
-
-The weakest source wins. A figure that is 90% measured is still not measured, and saying so is the
-entire point of tracking where a number came from. The page says once, under the cards, what a `+`
-means whenever one is showing.
-
-Click a card to look at that window; its address keeps it, `#cost?window=last_7d`. Below the
-Reserve, for any window longer than a couple of days, **Day by day** draws a bar per day — the
-days nothing ran on included, so a gap reads as a gap — with the peak and the daily average. Days
-begin and end at midnight where the Tower is, and the page names the zone. A day with a run that
-reported nothing has a dashed top, because its bar is a floor; the first and last days of a rolling
-window are partial, and today's bar is lighter for being unfinished.
-
-Beside **By workflow**, **Most expensive chains** names the ten pieces of work that cost the most
-in the window — one level below the agent, so "the reviewer is expensive" becomes "this review of
-this PR was". Click one to open it.
-
-### The Reserve
-
-Below the window cards is the Reserve: the factory's own ceiling, over its own rolling window.
-
-It is drawn apart from those cards because it answers a different question over a different
-period and a different scope. The cards say what something *cost*, over the window you picked,
-for the workflow you picked. The Reserve says what may *still be spent*, over the hours
-`[reserve] window_hours` names, across every workflow at once.
-
-Putting it among figures that narrow would invite reading it as one of them — and a spending rail
-misread as covering less than it does is worse than one not shown at all. It says on its face that
-it is not narrowed.
-
-A factory whose `[reserve] fuel_usd` is `0` has no ceiling, and the meter is hidden rather than
-drawn empty. One that writes no `[reserve]` at all has the default, $100 in any rolling 24 hours.
-
-Under the meter is its **pace**: the last three hours' spend, as it would be over the Reserve's
-whole window — `At the pace of the last 3 hours — $36.41 — a full 24h would spend about $291.31,
-3% of the cap.` A factory spending faster than the cap allows is told roughly when it would run
-out. Read from every workflow's runs, as the Reserve is.
-
-The meter is the same figure the Tower checks before every run. When it is full, new runs are
-refused and their chains show as `halted`, with the reason and the time the window frees room — see
-[Cost](./cost.md#what-happens-when-the-reserve-runs-out).
-
-## Retention
-
-History is kept for **90 days**, in `.layover/history`, as one JSON Lines file per UTC day.
-
-Retention is applied when `layover serve` starts, not on a timer. A process left running for
-months therefore keeps more than ninety days until it is next restarted — the horizon is a floor
-on what is kept, not a ceiling.
-
-Deleting is therefore deleting whole files — no rewriting, no compaction, and no window where
-history is half-pruned because the process died in the middle of it. A window reaching further
-back than 90 days reports a lower bound and says so.
-
-### What else the horizon reaches
-
-| Path | Holds | Pruned? |
-|---|---|---|
-| `.layover/history/runs-*.jsonl` | One record per run | Yes, whole files |
-| `.layover/journal/help-*.jsonl` | Help requests | Yes, whole files |
-| `.layover/journal/skips-*.jsonl` | Scheduled ticks that were skipped | Yes, whole files |
-| `.layover/hangars/<agent>/run_*/` | A run's prompt and transcript | Yes, whole directories |
-| `.layover/hangars/<agent>/memory.md` | What the agent wrote for itself | **No** |
-| `.layover/journal/learnings.jsonl` | Every learning | **No** — but a lapsed one is deleted after `[learnings] keep_lapsed_days` |
-
-Hangars are pruned by the age encoded in the run's own identifier rather than by the file's
-modification time. A run id is a ULID, so it carries the millisecond it was minted; asking the
-name is exact, where asking the filesystem is a guess that a copy, a restore or a backup tool
-would get wrong.
-
-A directory in a Hangar that Layover did not mint is **left alone**, whatever its age — its age is
-unknown, and deleting on a guess is how somebody's own notes disappear.
-
-`memory.md` sits beside those run directories and is never pruned, for the same reason learnings
-are not: an agent's accumulated knowledge should not get worse for being old.
-
-> This gap was found by the 48-hour soak, not by a test. Hangars grew without bound while
-> everything around them was pruned — and after ninety days a factory held transcripts for runs
-> whose records had been deleted, which is evidence attached to nothing.
-
-The files are plain text, one JSON object per line, and are meant to be read:
-
-```console
-$ tail -1 .layover/history/runs-2026-09-16.jsonl
-{"run":"run_01K...","itinerary":"itn_01K...","agent":"developer","pipeline":"development",
- "outcome":"succeeded","started_at":"2026-09-16T10:00:00Z","finished_at":"2026-09-16T10:04:30Z",
- "usd":1.25,"source":"reported","usage":{"input":18402,"output":3100,...},"exit_code":0,
- "sent_by":["analyst"]}
-```
-
-`sent_by` names the agents whose flights started the run — every arrival, for a released join — and
-is `[]` for work from outside the mesh. It is absent from records written before it was kept.
-
 ## Why it looks like this
 
 No npm, no framework, no build step. The page is HTML, CSS and a little vanilla JavaScript,

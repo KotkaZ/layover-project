@@ -5,7 +5,7 @@ under `--strict`, so none can quietly rot.
 
 | | Factory | Agents | What it introduces |
 |---|---|---|---|
-| 1 | [`planner.toml`](planner.toml) | 3 | The whole file format in one screen: runners, agents, a pipeline, a route map. Walked through in [Your first factory](https://kotkaz.github.io/layover-project/first-factory.html). |
+| 1 | [`planner.toml`](planner.toml) | 3 | The whole file format in one screen, on one CLI: a runner, agents, a pipeline, a route map. Needs only Copilot CLI, signed in. Walked through in [Your first factory](https://kotkaz.github.io/layover-project/first-factory.html). |
 | 2 | [`news-digest/`](news-digest/) | 2 | A **schedule**, and the read-only/read-write split. The smallest thing worth actually running. |
 | 3 | [`pr-review/`](pr-review/) | 2 | **Spawn fan-out** — one itinerary per pull request, each with its own Fuel, over a count nobody knows in advance. |
 | 4 | [`build-and-review/`](build-and-review/) | 5 | **Routes scoped to workflows** — two workflows share a reviewer, and only one of them may hand the builder work. |

@@ -24,7 +24,8 @@ fn the_documented_example_parses_and_validates() {
         "the documented example must validate cleanly"
     );
     assert_eq!(config.agents.len(), 3);
-    assert_eq!(config.runners.len(), 3);
+    // One CLI is all the first factory asks of a newcomer.
+    assert_eq!(config.runners.len(), 1);
     assert_eq!(config.entry_agents().count(), 1);
 }
 

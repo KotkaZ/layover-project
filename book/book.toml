@@ -5,6 +5,11 @@ authors = ["The Layover contributors"]
 language = "en"
 src = "src"
 
+# The design pages under `src/design/` are written from `docs/` by `cargo xtask book`. Without
+# this, building before that step would quietly create them empty and publish blank pages.
+[build]
+create-missing = false
+
 # Renders the `mermaid` blocks in the sources. Without it mdBook prints them as code, while
 # GitHub renders them natively — so the same file would look right in one place and wrong in the
 # other. `mdbook-mermaid install book` drops the two JS assets the theme needs.
@@ -19,4 +24,7 @@ preferred-dark-theme = "ayu"
 site-url = "/layover-project/"
 git-repository-url = "https://github.com/KotkaZ/layover-project"
 edit-url-template = "https://github.com/KotkaZ/layover-project/edit/main/book/{path}"
-additional-js = ["mermaid.min.js", "mermaid-init.js"]
+# `design-edit-links.js` points a design page's edit link at its source in `docs/`. The
+# development build, published from main at `/dev/`, adds `dev-banner.js` through
+# MDBOOK_OUTPUT__HTML__ADDITIONAL_JS; see the Pages workflow.
+additional-js = ["mermaid.min.js", "mermaid-init.js", "design-edit-links.js"]

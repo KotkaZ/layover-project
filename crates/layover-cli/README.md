@@ -39,6 +39,8 @@ layover stop                               # stop it once what it is running has
 layover doctor                             # report anything a person should look at
 layover update check                       # is there a newer Layover, and what does it change
 layover update apply                       # install it between runs, and restart on it
+layover update rollback                    # put the previous version back
+layover about                              # what this binary is
 layover autostart --show                   # the file that starts Layover at logon
 ```
 
@@ -50,13 +52,16 @@ spent money to find out.
 fail an unattended run — a stalled chain, a schedule that never fired, a Ground Stop left engaged,
 or a quarter of its runs reporting no cost, with the runner to fix and what to add.
 
+Give a factory a CLI home of its own — `COPILOT_HOME`, `CLAUDE_CONFIG_DIR` or `CODEX_HOME`,
+forwarded with `env_from` — or its runs fill your own session history and load your personal
+plugins and MCP servers. See
+[the CLI's home](https://kotkaz.github.io/layover-project/runners.html#a-cli-home-of-the-factorys-own).
+
 ## Status
 
-`layover serve` runs a factory unattended: it fires scheduled pipelines, runs agent CLIs — up to
-`max_concurrent_runs` at once — hosts the MCP endpoint they call back into, enforces the safety
-rails, settles the runs a previous Tower left behind, and serves a dashboard over all of it.
-
-See [the decision log](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md).
+What Layover does today, and what it does not do yet, is in the book's
+[Status](https://kotkaz.github.io/layover-project/#status); why it is built as it is, in
+[the decision log](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md).
 
 ## License
 

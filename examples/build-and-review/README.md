@@ -80,6 +80,6 @@ $ layover --config examples/build-and-review/layover.toml explain
 $ layover --config examples/build-and-review/layover.toml graph --pipeline review-sweep
 ```
 
-See [Scoping a route to workflows](https://kotkaz.github.io/layover-project/configuration.html#scoping-a-route-to-workflows)
+See [Scoping a route to workflows](https://kotkaz.github.io/layover-project/routes.html#scoping-a-route-to-workflows)
 for the whole of the syntax, and [`docs/routing.md`](../../docs/routing.md) for how a chain's
 pipeline is decided.
