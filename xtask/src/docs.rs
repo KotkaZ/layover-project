@@ -14,6 +14,9 @@
 //! - every fenced `toml` block tagged as a factory definition is named by a real example
 //! - every design document in `docs/` is a page of the book, listed in `book/src/SUMMARY.md`
 //! - the version in `api/openapi.yaml` matches the workspace version
+//! - every operation in `api/openapi.yaml` is a row of the endpoint table in
+//!   `book/src/http-api.md`, with its query parameters, and every row is an operation — see
+//!   [`crate::api_docs`]
 //! - every release section of `CHANGELOG.md` says what it changes for an existing factory, in a
 //!   `**Compatibility.**` paragraph — see [`crate::changelog`]
 //!
@@ -58,6 +61,7 @@ pub fn check(root: &Path) -> Result<String, Failure> {
     }
     check_design_listed(root, &mut problems);
     check_spec_version(root, &mut problems);
+    problems.extend(crate::api_docs::problems(root));
     match std::fs::read_to_string(root.join("CHANGELOG.md")) {
         Ok(changelog) => problems.extend(crate::changelog::problems(&changelog)),
         Err(error) => problems.push(format!("could not read CHANGELOG.md: {error}")),

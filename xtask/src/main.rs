@@ -8,6 +8,7 @@
 //! Both run inside `verify`, which is what makes them binding rather than advisory.
 
 mod anchors;
+mod api_docs;
 mod book;
 mod changelog;
 mod docs;
