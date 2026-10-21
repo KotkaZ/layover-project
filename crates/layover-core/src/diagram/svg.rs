@@ -213,7 +213,7 @@ fn render_edge(out: &mut String, layout: &Layout, edge: &Edge) {
     } else if edge.back {
         return_path(from, to, edge)
     } else {
-        forward_path(from, to, edge.from_y, edge.to_y)
+        forward_path(from, to, edge)
     };
 
     // A two-way line carries the same arrowhead at its start, which `auto-start-reverse` turns to
@@ -267,20 +267,46 @@ fn render_edge(out: &mut String, layout: &Layout, edge: &Edge) {
 /// A cubic curve rightwards, flattening into a straight line when the ends are level.
 ///
 /// The y of each end comes from the layout rather than the node centre, so several edges sharing
-/// a node leave and arrive at different points along its side instead of bunching.
-fn forward_path(from: &Node, to: &Node, from_y: f64, to_y: f64) -> (String, (f64, f64)) {
-    let (x1, y1) = (from.exit().0, from_y);
-    let (x2, y2) = (to.entry().0, to_y);
-    let bend = ((x2 - x1) * 0.45).max(24.0);
+/// a node leave and arrive at different points along its side instead of bunching. An edge that
+/// skips columns runs straight across each one it crosses, at the height the layout kept clear for
+/// it there, and curves only in the gaps between columns — so it never passes through a box.
+fn forward_path(from: &Node, to: &Node, edge: &Edge) -> (String, (f64, f64)) {
+    let mut at = (from.exit().0, edge.from_y);
+    let end = (to.entry().0, edge.to_y);
+    let mut path = format!("M {:.1} {:.1}", at.0, at.1);
+
+    let mut crossings = edge.via.chunks(2);
+    for pair in crossings.by_ref() {
+        let [enter, leave] = [pair[0], pair.get(1).copied().unwrap_or(pair[0])];
+        curve(&mut path, at, enter);
+        let _ = write!(path, " L {:.1} {:.1}", leave.0, leave.1);
+        at = leave;
+    }
+    let start = at;
+    curve(&mut path, at, end);
 
     (
-        format!(
-            "M {x1:.1} {y1:.1} C {:.1} {y1:.1} {:.1} {y2:.1} {x2:.1} {y2:.1}",
-            x1 + bend,
-            x2 - bend
+        path,
+        (
+            f64::midpoint(start.0, end.0),
+            f64::midpoint(start.1, end.1) - 8.0,
         ),
-        (f64::midpoint(x1, x2), f64::midpoint(y1, y2) - 8.0),
     )
+}
+
+/// Appends a cubic from `from` to `to` that leaves and arrives horizontally.
+fn curve(path: &mut String, from: (f64, f64), to: (f64, f64)) {
+    let bend = ((to.0 - from.0) * 0.45).max(24.0);
+    let _ = write!(
+        path,
+        " C {:.1} {:.1} {:.1} {:.1} {:.1} {:.1}",
+        from.0 + bend,
+        from.1,
+        to.0 - bend,
+        to.1,
+        to.0,
+        to.1
+    );
 }
 
 /// An edge between two agents in the same column, drawn beside it.
@@ -322,9 +348,10 @@ fn beside_path(from: &Node, to: &Node, edge: &Edge) -> (String, (f64, f64)) {
 /// A return path: out of the bottom, back leftwards through its own lane, and up into the
 /// target's underside.
 ///
-/// Drawn below everything rather than straight through the columns it crosses. A review loop is
-/// the most important structure on a diagram like this, and routing it through the middle of the
-/// forward flow is what makes these graphs unreadable.
+/// Drawn below the columns it spans rather than straight through them. A review loop is the most
+/// important structure on a diagram like this, and routing it through the middle of the forward
+/// flow is what makes these graphs unreadable; routing every one under the whole drawing made the
+/// least important loops the largest shapes on it.
 ///
 /// The lane depth comes from the layout, which is what guarantees the curve stays inside the
 /// reported extent instead of being clipped off the bottom.

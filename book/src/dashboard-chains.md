@@ -146,7 +146,23 @@ flowchart LR
   a -. bypasses .-> c
 ```
 
-Read it as: pipelines on the left, work flowing right, one column per hop.
+Read it as: pipelines on the left, work flowing right, each agent in the column where it comes in
+the work.
+
+**Columns follow reading order, and the order you declare routes in shapes them.** Layover walks
+the route map depth-first from the way in, visiting each agent's routes in the order `layover.toml`
+lists them — routes as written, each route's `to` in order. A route back to an agent the walk has
+not finished with closes a loop and is drawn as a route back; each agent then sits one column
+right of the furthest thing that wakes it. A factory lists its routes roughly in the order its work
+flows, so a workflow with shortcuts and loops still reads along its main path: an analyst allowed
+to send straight to the operator for a rare message does not pull the operator into the analyst's
+next column. Reorder the routes and the map changes; nothing the factory does changes with it.
+
+Columns are therefore not hops. Hover an agent for its hop depth, measured exactly as
+`layover validate` measures it: `1 hop from devforge's entry: woken by flight 2 at the earliest`.
+On the whole-factory map every pipeline's entry starts the walk, by pipeline name, then every agent
+triggered directly; an agent two workflows reach at different depths takes the deeper column, and
+a spawn that closes a loop with another workflow's routes is drawn as a route back like any other.
 
 | Drawn as | Means |
 |---|---|
@@ -156,8 +172,9 @@ Read it as: pipelines on the left, work flowing right, one column per hop.
 | Blue arrow labelled `all` or `any` | An upstream the barrier waits for |
 | Dashed violet arrow | A permitted sender the barrier *does not* name |
 | Line with an arrowhead at each end | A route each way: either agent may send to the other |
+| Line running across a column, between its boxes | A route that skips columns: it crosses each one at a height kept clear for it, and never through a box |
 | Short line or arc beside a column | A route between two agents in the same column |
-| Line under the whole map | A route back towards the way in: out to the right of its column, along a lane of its own, and up into the agent it returns to |
+| Line under the columns it spans | A route back towards the way in: out to the right of its column, along a lane of its own just below the columns it spans, and up into the agent it returns to |
 | Arrow labelled with pipeline names | A route only those workflows' chains may use — on the whole-factory map only |
 | Green, amber, red fill | Running, waiting at a barrier, last run failed |
 | `×2` in a box's corner | Two runs of it alive at once — the workflow triggered twice, say |

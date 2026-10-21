@@ -258,6 +258,7 @@ fn an_edge_to_a_node_that_is_not_there_is_skipped_rather_than_drawn_wrong() {
         hook_x: None,
         exit_x: None,
         floor: None,
+        via: Vec::new(),
     });
 
     let svg = render(&layout);

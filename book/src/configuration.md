@@ -455,6 +455,10 @@ timeout_sec = 3600
 
 Direction is explicit. An edge absent from `[[routes]]` means the flight is refused.
 
+The order routes are listed in decides how the route map is drawn, and nothing else: the map is
+laid out along routes in the order they are declared, so listing them roughly in the order work
+flows keeps it readable. See [the route map](./dashboard-chains.md#the-route-map).
+
 Scoping a route to workflows, what a join does while the factory runs, when a rendezvous is
 given up, and spawning are on their own page: [Routes and joins](./routes.md).
 

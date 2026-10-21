@@ -31,11 +31,9 @@ name.
 was rejected for the dashboard on weight: the runtime is 2.5 MB of JavaScript that would have to
 be vendored into the repository and embedded in the binary to keep the page working offline. A
 layered layout for twenty nodes is a few hundred lines that can be unit-tested, where asserting
-on a JavaScript library's rendering could not be. Layers come from breadth-first distance rather
-than longest path, because route maps are routinely cyclic — the review loop is the point of the
-reference factory — and longest-path layering does not terminate on a cycle. Reusing the distance
-the validator already computes also means the diagram's columns and the hop arithmetic can never
-disagree.
+on a JavaScript library's rendering could not be. Its columns were at first breadth-first
+distance — the number the hop check computes, so the picture could never imply a depth the
+validator disagreed with — and now follow reading order; the entry on reading order below says why.
 
 **Why the dashboard refuses control operations instead of hiding them.** Sending a flight,
 streaming a run and engaging a Ground Stop all needed a supervisor that did not exist yet, and
@@ -124,3 +122,29 @@ The chain's whole picture is one endpoint rather than four because the page refr
 seconds, and four answers read at four moments can disagree about whether a run has ended. Parked
 barrier flights are not drawn: they live only in the Tower's memory, and a dashboard that guessed
 at them would misreport the one wait somebody is most likely to be watching.
+
+**Why the route map's columns follow reading order rather than hop distance.** Breadth-first
+columns kept the picture and the hop check on one number, and that held until a production workflow
+gained shortcuts. On 21 October 2026 its developer stopped relaying every message and each agent
+began sending straight to the one that acts on it: eighteen directed routes, every one carrying real
+messages. The analyst may now reach the reviewer, the developer and the operator directly for rare
+messages, which made all three one hop in. They shared a column with the analyst's two consults, so
+the phase order the work follows — spec, review, build, test, pull request, announcement —
+disappeared, and the tester's two one-way sends back to that column became loops under the whole
+drawing, the largest shapes on the map and the least important. The maintainer's verdict was that
+the new flow looked ugly, and the factory was right not to change its routes for a picture. So a
+column now says where an agent comes in the work: a depth-first walk from the way in visits each
+agent's successors in declaration order, sets aside every route into an agent still on the walk,
+and gives each agent its longest path over the rest. On that workflow it reproduces the phase order
+exactly. Declaration order is a documented property, not an accident: the same routes listed in
+another order give other columns, and a test pins that. A greedy feedback-arc heuristic
+(Eades–Lin–Smyth) was tried and put the tester in the first column, so it was not used, and no
+`draw_order` key was added because declaration order already says what one would (decided with the
+maintainer, 2026-10-21). An edge that now skips columns crosses each at a height kept clear of its
+boxes, and a route back runs just below the columns it spans. Hop depth is still worth seeing, so
+each agent's tooltip says it, measured exactly as `validate` measures it; the hop check itself is
+unchanged. Two narrower rules were settled at the same time. The whole-factory map seeds the walk
+from each pipeline's entry by name, since the configuration keeps pipelines by name and recording
+their written order would change a public type for no difference on any factory that exists. And a
+spawn is walked like any route, so it stays right of its spawner unless it closes a loop with
+another workflow's routes on the whole-factory map, where it is drawn back like any route that does.

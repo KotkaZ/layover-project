@@ -12,9 +12,13 @@
 //! and a box grows a third small line rather than lose a fact. An agent whose command line names
 //! no model or effort is drawn exactly as it was before either was shown.
 
+use std::collections::BTreeMap;
+
 use crate::agent::{Access, Agent, AgentName};
 use crate::config::Config;
+use crate::diagram::Scope;
 use crate::diagram::layout::{Edge, EdgeStyle};
+use crate::graph::RouteGraph;
 use crate::model::ModelChoice;
 use crate::pipeline::{Pipeline, PipelineName};
 
@@ -95,6 +99,105 @@ pub(crate) fn agent(
         caption: lines.next(),
         footnote: lines.next(),
         tooltip: tooltip.join("\n"),
+    }
+}
+
+/// How deep into its chain each agent is, by the hop check's own arithmetic, for its tooltip.
+///
+/// A column says where an agent comes in the work, which is not how few routes separate it from
+/// the way in: an analyst's shortcut to an operator puts the operator one hop in, four columns
+/// along. So the hop depth is said in words, where it cannot be misread for the column — measured
+/// exactly as `layover validate` measures it, from each way in over the routes its chains may use,
+/// with a spawned agent starting a chain of its own.
+pub(crate) struct Depths {
+    /// From each way in: what it is called, and how far each agent is from it.
+    ways: Vec<(String, BTreeMap<AgentName, u32>)>,
+    /// From each agent a spawn reaches: how far each agent is into the chain it starts.
+    spawned: Vec<(AgentName, BTreeMap<AgentName, u32>)>,
+}
+
+impl Depths {
+    /// Measures from the ways into what is being drawn: one workflow's entry, or every pipeline's
+    /// and every agent triggered directly. A resuming pipeline with no entry wakes whoever set the
+    /// work down, so it has no depth to give.
+    pub(crate) fn of(config: &Config, scope: &Scope) -> Self {
+        let mut starts: Vec<(Option<&PipelineName>, &AgentName, String)> = Vec::new();
+        for (name, pipeline) in &config.pipelines {
+            if scope.pipeline().is_some_and(|wanted| wanted != name) {
+                continue;
+            }
+            if let Some(entry) = &pipeline.entry {
+                starts.push((Some(name), entry, format!("{name}'s entry")));
+            }
+        }
+        if scope.pipeline().is_none() {
+            for (name, agent) in &config.agents {
+                if agent.entry {
+                    starts.push((None, name, format!("{name}, which is triggered directly")));
+                }
+            }
+        }
+
+        let mut ways = Vec::new();
+        let mut spawned = Vec::new();
+        for (pipeline, start, label) in starts {
+            let graph = RouteGraph::for_pipeline(config, pipeline);
+            ways.push((label, graph.distances_from([start])));
+            let mut targets: Vec<&AgentName> = graph.spawn_targets().collect();
+            targets.sort();
+            targets.dedup();
+            for target in targets {
+                spawned.push((target.clone(), graph.distances_from([target])));
+            }
+        }
+        Self { ways, spawned }
+    }
+
+    /// The tooltip's line for `agent`: the nearest way in, and the flight that wakes it at the
+    /// earliest — the number `max_hops` is compared with.
+    pub(crate) fn line(&self, agent: &AgentName) -> Option<String> {
+        let nearest = |found: &mut dyn Iterator<Item = (u32, String)>| {
+            found.min_by_key(|(distance, _)| *distance)
+        };
+        let from_way = nearest(&mut self.ways.iter().filter_map(|(label, distances)| {
+            distances
+                .get(agent)
+                .map(|distance| (*distance, label.clone()))
+        }));
+        if let Some((distance, from)) = from_way {
+            return Some(match distance {
+                0 => format!("{from}: woken by its first flight"),
+                hops => format!(
+                    "{hops} {} from {from}: woken by flight {} at the earliest",
+                    plural(hops, "hop"),
+                    hops + 1
+                ),
+            });
+        }
+        let from_spawn = nearest(&mut self.spawned.iter().filter_map(|(target, distances)| {
+            distances
+                .get(agent)
+                .map(|distance| (*distance, target.to_string()))
+        }));
+        Some(match from_spawn {
+            Some((0, _)) => "starts a chain of its own: it is spawned".to_owned(),
+            Some((hops, target)) => format!(
+                "{hops} {} into a chain spawned at {target}: woken by its flight {} at the earliest",
+                plural(hops, "hop"),
+                hops + 1
+            ),
+            None if self.ways.is_empty() => return None,
+            None => "no way in reaches it".to_owned(),
+        })
+    }
+}
+
+/// `hop` or `hops`.
+fn plural(count: u32, word: &str) -> String {
+    if count == 1 {
+        word.to_owned()
+    } else {
+        format!("{word}s")
     }
 }
 

@@ -8,19 +8,31 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
-The documentation is reorganised around what a person looks for: a first factory that runs on one
-CLI, pages for updating and troubleshooting, the design inside the book, and a site that describes
-the release you can install.
+The route map is laid out in reading order, so a workflow with shortcuts and loops reads along its
+main path; and the documentation is reorganised around what a person looks for: a first factory
+that runs on one CLI, pages for updating and troubleshooting, the design inside the book, and a site
+that describes the release you can install.
 
-**Compatibility.** Documentation and tooling only: nothing a factory does changes. The first
-factory, `examples/planner.toml`, now runs every agent on Copilot CLI instead of Claude Code,
-Copilot CLI and Codex; a factory copied from it before is unaffected. Links to sections of
-`configuration.html` about runners, routes and updating, and of `dashboard.html` about chains,
-runs and cost, now land at the top of the page that held them: those sections have pages of their
-own.
+**Compatibility.** Nothing a factory does changes. Its route map — on the dashboard and from
+`layover graph --svg` — may look different: columns follow the order its routes are declared in
+rather than hop distance, so listing routes roughly in the order work flows keeps the map readable.
+`layover validate` and `layover explain` say exactly what they said. The first factory,
+`examples/planner.toml`, now runs every agent on Copilot CLI instead of Claude Code, Copilot CLI
+and Codex; a factory copied from it before is unaffected. Links to sections of `configuration.html`
+about runners, routes and updating, and of `dashboard.html` about chains, runs and cost, now land at
+the top of the page that held them: those sections have pages of their own. For code that uses
+`layover-core` as a library, `diagram::Edge` gains a `via` field.
 
 ### Changed
 
+- **The route map is laid out in reading order, not hop distance.** Columns come from a depth-first
+  walk from the way in, visiting routes in the order `layover.toml` declares them; a route that
+  closes a loop is drawn back. A production workflow whose analyst may send straight to agents
+  several phases on had five agents in one column; it now reads analyst, consults, reviewer,
+  developer, tester, operator, messenger. An edge that skips columns crosses each one clear of its
+  boxes, a route back runs just below the columns it spans rather than under the whole map, and
+  each agent's tooltip gives its hop depth as `layover validate` measures it. A sweep that spawns
+  its reviewer now draws the reviewer's consults after it rather than beside the sweep's entry.
 - **The documentation recommends a CLI home of the factory's own** — `COPILOT_HOME`,
   `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, forwarded with `env_from` — so a factory's sessions stay out of
   the user's history and its agents never load the user's personal plugins and MCP servers. The

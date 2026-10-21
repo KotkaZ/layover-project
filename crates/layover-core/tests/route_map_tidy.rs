@@ -153,7 +153,36 @@ fn the_map_is_no_deeper_than_its_columns_and_one_lane() {
 
 #[test]
 fn an_arc_beside_a_column_stays_inside_the_drawing_and_out_of_the_next_column() {
-    let layout = devforge();
+    // Columns follow reading order, so every route between two agents a way in reaches points
+    // to another column, and this workflow no longer has a route within one. Agents nothing
+    // reaches still share the first column, and a route between two of them with a third between
+    // is the arc this guards.
+    let config = Config::from_toml(
+        r#"
+        [layover]
+        work_dir = "work"
+        [defaults]
+        runner = "copilot"
+        [runners.copilot]
+        command = ["copilot"]
+        [agents.lead]
+        prompt = "l"
+        [agents.able]
+        prompt = "a"
+        [agents.baker]
+        prompt = "b"
+        [agents.charlie]
+        prompt = "c"
+        [pipelines.go]
+        entry = "lead"
+        [[routes]]
+        from = "able"
+        to = "charlie"
+        "#,
+        "beside.toml",
+    )
+    .expect("parses");
+    let layout = Layout::build(&config, &Live::default());
 
     for edge in layout.edges.iter().filter(|edge| edge.beside) {
         let node = layout.node(&edge.from).expect("drawn");
@@ -169,8 +198,11 @@ fn an_arc_beside_a_column_stays_inside_the_drawing_and_out_of_the_next_column() 
         }
     }
     assert!(
-        layout.edges.iter().any(|edge| edge.beside),
-        "the fixture has routes within a column"
+        layout
+            .edges
+            .iter()
+            .any(|edge| edge.beside && edge.bulge.is_some()),
+        "the fixture has an arc beside a column"
     );
 }
 

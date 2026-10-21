@@ -1,33 +1,48 @@
 //! Deciding where each node goes.
 //!
 //! A layered layout, which is the right shape for a route map: work flows from an entry point
-//! towards a terminal agent, and putting each node one column further right than the thing that
-//! wakes it makes that flow the diagram's primary axis.
+//! towards a terminal agent, and putting each node right of the thing that wakes it makes that
+//! flow the diagram's primary axis.
 //!
-//! # Layers come from breadth-first distance, not longest path
+//! # Columns follow reading order, not hop distance
 //!
-//! The textbook layered algorithm assigns layers by longest path from a source, which does not
-//! terminate on a cyclic graph. Route maps are routinely cyclic — a developer sends to a tester
-//! and the tester sends back, which is the review loop that makes the reference factory work —
-//! so longest path is not available.
+//! Columns used to be breadth-first distance from the way in, the number the hop check computes,
+//! so that a diagram could never imply a depth validation disagreed with. That held until a real
+//! workflow had shortcuts. The reference factory's analyst may send straight to the reviewer, the
+//! developer and the operator for rare messages, which made all three one hop in: they shared a
+//! column with the analyst's two consults, the phase order the work follows disappeared, and the
+//! tester's one-way sends back became loops under the whole drawing. The map stopped being
+//! readable, so a column now says where an agent comes in the work:
 //!
-//! Breadth-first distance is, and [`crate::graph::RouteGraph`] already computes it for the
-//! load-time hop check. Reusing it means the diagram's columns and the validator's hop arithmetic
-//! are derived from the same number, so a diagram can never imply a depth that validation
-//! disagrees with.
+//! - `layers` walks depth-first from the way in, each agent's successors in the order
+//!   `layover.toml` declares them, sets aside every route that closes a loop, and gives each agent
+//!   its longest path over the rest. That terminates on cyclic maps, which longest path alone does
+//!   not, and declaration order is what lays a mesh out along its main path.
+//! - `stack` gives an edge that skips columns a row of its own in each column it crosses, ordered
+//!   with the boxes, so no line passes through a box it does not connect.
+//! - `returns` runs each route back just below the columns it spans rather than under the whole
+//!   drawing.
 //!
-//! Edges that point backwards or sideways are then drawn as return paths, which is what they are.
+//! Hop depth is still worth seeing, so each agent's tooltip says it in words, measured exactly as
+//! `layover validate` measures it (`caption::Depths`). The hop check's own numbers are
+//! untouched: they never came from here.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::agent::AgentName;
 use crate::config::Config;
-use crate::diagram::{Activity, Live, Scope, caption};
+use crate::diagram::{Live, Scope, caption};
 use crate::graph::RouteGraph;
 use crate::pipeline::PipelineName;
 use crate::route::Join;
 
+mod layers;
+mod model;
+mod returns;
+mod stack;
 mod tidy;
+
+pub use model::{Edge, EdgeStyle, Layout, Node, NodeKind, Shape};
 
 /// Width of a node box.
 const NODE_W: f64 = 168.0;
@@ -48,202 +63,20 @@ const ROW_GAP: f64 = 32.0;
 const MARGIN: f64 = 32.0;
 /// Vertical spacing between the lanes that return paths are routed through.
 const RETURN_GAP: f64 = 34.0;
-/// How far left of a node''s column the first return path climbs.
+/// How far left of a node's column the first return path climbs.
 const GUTTER_INSET: f64 = 44.0;
 /// How much further left each additional return to the same node climbs.
 const GUTTER_STEP: f64 = 18.0;
 /// Closest to the left edge of the canvas a gutter may be.
 const GUTTER_MIN: f64 = 12.0;
-/// Closest to a node''s right edge that a return path may hook in.
+/// Closest to a node's right edge that a return path may hook in.
 const CORNER_MARGIN: f64 = 20.0;
 /// How far right of its column a return path drops.
 const EXIT_INSET: f64 = 20.0;
 /// How much further right each additional return leaving the same column drops.
 const EXIT_STEP: f64 = 12.0;
 
-/// What a node represents.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NodeKind {
-    /// A way into the mesh.
-    Pipeline,
-    /// A configured agent.
-    Agent,
-}
-
-/// How a node is drawn.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Shape {
-    /// An ordinary agent or pipeline.
-    Box,
-    /// An agent guarded by a rendezvous barrier. Drawn as a gate, because that is what it is.
-    Gate,
-}
-
-/// A positioned node.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Node {
-    /// Stable identifier, used to join edges to nodes and for DOM ids.
-    pub id: String,
-    /// The name shown on the node.
-    pub label: String,
-    /// A second line: a trigger for a pipeline; for an agent, the model its command line names
-    /// and the effort it runs it at, or failing both its context tier and `read-only`.
-    pub subtitle: Option<String>,
-    /// A third line, for an agent whose model took the second: its context tier and `read-only`.
-    pub caption: Option<String>,
-    /// A third small line, for an agent whose model name is too long to share its line with the
-    /// effort, so that nothing is cut off to make room.
-    pub footnote: Option<String>,
-    /// Everything worth knowing about the node, one fact per line, for hovering over it.
-    pub tooltip: Option<String>,
-    /// What this node represents.
-    pub kind: NodeKind,
-    /// How to draw it.
-    pub shape: Shape,
-    /// What it is doing, if anything.
-    pub activity: Option<Activity>,
-    /// A count drawn in its corner, such as `×2` for an agent that ran twice in a chain.
-    pub badge: Option<String>,
-    /// Which column it sits in.
-    pub layer: usize,
-    /// Left edge.
-    pub x: f64,
-    /// Top edge.
-    pub y: f64,
-    /// Width.
-    pub w: f64,
-    /// Height.
-    pub h: f64,
-}
-
-impl Node {
-    /// The point an edge should leave from.
-    #[must_use]
-    pub fn exit(&self) -> (f64, f64) {
-        (self.x + self.w, self.y + self.h / 2.0)
-    }
-
-    /// The point an edge should arrive at.
-    #[must_use]
-    pub fn entry(&self) -> (f64, f64) {
-        (self.x, self.y + self.h / 2.0)
-    }
-
-    /// The centre.
-    #[must_use]
-    pub fn centre(&self) -> (f64, f64) {
-        (self.x + self.w / 2.0, self.y + self.h / 2.0)
-    }
-}
-
-/// How an edge is drawn.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EdgeStyle {
-    /// An ordinary permitted edge.
-    Plain,
-    /// A pipeline feeding its entry agent.
-    Entry,
-    /// One of the upstreams a barrier names.
-    Joined,
-    /// A permitted sender that the barrier does *not* name, and which therefore wakes the agent
-    /// directly rather than parking at it.
-    Bypass,
-    /// Opens a new itinerary per flight rather than continuing this one.
-    Spawn,
-}
-
-/// A positioned edge.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Edge {
-    /// Identifier of the node it leaves.
-    pub from: String,
-    /// Identifier of the node it arrives at.
-    pub to: String,
-    /// `all` or `any`, for an edge into a barrier.
-    pub label: Option<String>,
-    /// How to draw it.
-    pub style: EdgeStyle,
-    /// True when the edge points back towards the entry, which makes it a return path.
-    ///
-    /// Strictly backwards: an edge between two agents in the same column is [`Self::beside`]
-    /// instead, because a loop under the whole drawing is a long way round for two neighbours.
-    pub back: bool,
-    /// True when one line stands for a route in each direction, drawn with an arrowhead at both
-    /// ends. Only two plain routes are merged: a join or a spawn says something the other
-    /// direction does not, and so does a scope that differs.
-    pub both: bool,
-    /// True when both ends sit in the same column.
-    pub beside: bool,
-    /// For an edge [`Self::beside`] its column between agents that are not next to each other,
-    /// how far right of the column it swings out. `None` for neighbours, which are joined by a
-    /// straight connector through the gap between them.
-    pub bulge: Option<f64>,
-    /// Where on the source''s right edge this leaves, as an absolute y.
-    ///
-    /// Edges all left from the node''s centre, so several going to different places overlapped
-    /// for their first stretch and only separated once they had already crossed each other.
-    /// Spreading them down the edge, ordered by where they are going, means they never cross at
-    /// the node they share.
-    pub from_y: f64,
-    /// Where on the target''s left edge this arrives, as an absolute y.
-    pub to_y: f64,
-    /// For a return path, the x it climbs at; for a connector between neighbours in one column,
-    /// the x it runs at. `None` for a forward edge.
-    ///
-    /// Distinct per edge even when several return to the same agent. Sharing one gutter put four
-    /// curves on the same vertical line with their labels stacked on top of each other.
-    pub gutter: Option<f64>,
-    /// For a return path, where it hooks into the target''s underside.
-    pub hook_x: Option<f64>,
-    /// For a return path, the x it drops at, in the gap right of the column it leaves.
-    ///
-    /// Dropping straight down from the source ran through every box below it in the same column,
-    /// and between the boxes the line looked like a route between neighbours.
-    pub exit_x: Option<f64>,
-    /// For a return path, the depth it dips to. `None` for a forward edge.
-    ///
-    /// Computed here rather than in the renderer because it decides how tall the drawing is, and
-    /// a renderer that invented its own geometry would draw outside the reported extent — which
-    /// is exactly how a review loop ends up clipped off the bottom of the diagram.
-    pub floor: Option<f64>,
-    /// The pipelines this edge is scoped to, sorted, on the whole-factory map.
-    ///
-    /// Empty when a global route permits it, because every workflow may use it — and always empty
-    /// on one workflow's map, where every edge drawn is that workflow's by construction.
-    pub scopes: Vec<String>,
-}
-
-/// A laid-out diagram.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct Layout {
-    /// Every node, in reading order.
-    pub nodes: Vec<Node>,
-    /// Every edge.
-    pub edges: Vec<Edge>,
-    /// Total width, including margins.
-    pub width: f64,
-    /// Total height, including margins.
-    pub height: f64,
-    /// On one chain's map, the drawn edges its work took, by the identifiers of their two ends as
-    /// drawn. Empty on a workflow's map.
-    pub travelled: BTreeSet<(String, String)>,
-}
-
 impl Layout {
-    /// Finds a node by identifier.
-    #[must_use]
-    pub fn node(&self, id: &str) -> Option<&Node> {
-        self.nodes.iter().find(|node| node.id == id)
-    }
-
-    /// Whether the chain this map is drawn for took `edge`.
-    #[must_use]
-    pub fn took(&self, edge: &Edge) -> bool {
-        self.travelled
-            .iter()
-            .any(|(from, to)| *from == edge.from && *to == edge.to)
-    }
-
     /// Lays out a whole factory.
     #[must_use]
     pub fn build(config: &Config, live: &Live) -> Self {
@@ -267,13 +100,13 @@ impl Layout {
                 .get(name)
                 .map(|pipeline| graph.workflow_of(pipeline))
         });
-        let layers = assign_layers(config, &graph, scope);
+        let layers = layers::assign(config, scope, members.as_ref());
 
         let mut layout = Self::default();
         layout.place(config, live, &graph, &layers, scope, members.as_ref());
         layout.connect(config, &graph, scope, members.as_ref());
         tidy::pair_up(&mut layout.edges);
-        layout.order_by_barycentre();
+        layout.stack();
         layout.size();
         super::overlay::apply(&mut layout, live);
         layout
@@ -290,6 +123,7 @@ impl Layout {
         members: Option<&BTreeSet<AgentName>>,
     ) {
         let mut columns: BTreeMap<usize, Vec<Node>> = BTreeMap::new();
+        let depths = caption::Depths::of(config, scope);
 
         for (name, pipeline) in &config.pipelines {
             if scope.pipeline().is_some_and(|wanted| wanted != name) {
@@ -322,7 +156,11 @@ impl Layout {
             // Agents no pipeline can reach still have to appear — an unreachable agent is
             // precisely the thing somebody opened the diagram to find.
             let layer = layers.get(name).copied().unwrap_or(0) + 1;
-            let words = caption::agent(config, name, agent, scope.pipeline(), &live.chosen);
+            let mut words = caption::agent(config, name, agent, scope.pipeline(), &live.chosen);
+            if let Some(line) = depths.line(name) {
+                words.tooltip.push('\n');
+                words.tooltip.push_str(&line);
+            }
             columns.entry(layer).or_default().push(Node {
                 id: agent_id(name),
                 label: name.as_str().to_owned(),
@@ -355,11 +193,10 @@ impl Layout {
             NODE_H
         };
 
+        // Rows are decided by `stack`, once the edges are known.
         for (layer, mut nodes) in columns {
-            let x = MARGIN + precise(layer) * (NODE_W + COL_GAP);
-            for (row, node) in nodes.iter_mut().enumerate() {
-                node.x = x;
-                node.y = MARGIN + precise(row) * (height + ROW_GAP);
+            for node in &mut nodes {
+                node.x = column_x(layer);
                 node.h = height;
             }
             self.nodes.append(&mut nodes);
@@ -403,6 +240,7 @@ impl Layout {
                 hook_x: None,
                 exit_x: None,
                 floor: None,
+                via: Vec::new(),
                 scopes: Vec::new(),
             });
         }
@@ -471,6 +309,7 @@ impl Layout {
                         hook_x: None,
                         exit_x: None,
                         floor: None,
+                        via: Vec::new(),
                         scopes: scopes
                             .get(&(from.clone(), to.clone()))
                             .cloned()
@@ -486,75 +325,20 @@ impl Layout {
         self.node(id).map_or(0, |node| node.layer)
     }
 
-    /// Reorders each column to sit near the things that point at it.
-    ///
-    /// One pass of the barycentre heuristic. It is not optimal — crossing minimisation is
-    /// NP-hard — but on a graph of this size one pass removes most of the obvious tangles, and a
-    /// second pass tends to shuffle nodes without improving anything a human would notice.
-    fn order_by_barycentre(&mut self) {
-        let positions: BTreeMap<String, f64> = self
-            .nodes
-            .iter()
-            .map(|node| (node.id.clone(), node.centre().1))
-            .collect();
-
-        let mut keys: BTreeMap<String, (f64, String)> = BTreeMap::new();
-        for node in &self.nodes {
-            let incoming: Vec<f64> = self
-                .edges
-                .iter()
-                .filter(|edge| edge.to == node.id && !edge.back && !edge.beside)
-                .filter_map(|edge| positions.get(&edge.from).copied())
-                .collect();
-
-            // No incoming edges leaves the node where it was: its own position is the only
-            // information available, and inventing an order would be churn.
-            let bary = if incoming.is_empty() {
-                node.centre().1
-            } else {
-                incoming.iter().sum::<f64>() / precise(incoming.len())
-            };
-            keys.insert(node.id.clone(), (bary, node.label.clone()));
-        }
-
-        let mut by_layer: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-        for (index, node) in self.nodes.iter().enumerate() {
-            by_layer.entry(node.layer).or_default().push(index);
-        }
-
-        for indices in by_layer.into_values() {
-            let mut ordered = indices.clone();
-            ordered.sort_by(|left, right| {
-                let a = &keys[&self.nodes[*left].id];
-                let b = &keys[&self.nodes[*right].id];
-                a.0.total_cmp(&b.0).then_with(|| a.1.cmp(&b.1))
-            });
-
-            let ys: Vec<f64> = indices.iter().map(|i| self.nodes[*i].y).collect();
-            for (slot, index) in ordered.into_iter().enumerate() {
-                self.nodes[index].y = ys[slot];
-            }
-        }
-    }
-
-    /// Computes the overall extent, centres each column vertically, and routes the return paths.
+    /// Routes the return paths, meets every edge to its nodes, and computes the overall extent.
     fn size(&mut self) {
         let tallest = self
             .nodes
             .iter()
             .map(|node| node.y + node.h)
+            .chain(
+                self.edges
+                    .iter()
+                    .flat_map(|edge| edge.via.iter().map(|(_, y)| y + stack::THROUGH_H / 2.0)),
+            )
             .fold(0.0_f64, f64::max);
 
-        let mut bottoms: BTreeMap<usize, f64> = BTreeMap::new();
-        for node in &self.nodes {
-            let bottom = bottoms.entry(node.layer).or_insert(0.0);
-            *bottom = bottom.max(node.y + node.h);
-        }
-        for node in &mut self.nodes {
-            node.y += (tallest - bottoms[&node.layer]) / 2.0;
-        }
-
-        let (deepest, exits) = self.route_returns(tallest);
+        let (deepest, exits) = self.route_returns();
         self.assign_ports();
         let beside = tidy::route_beside(&self.nodes, &mut self.edges);
 
@@ -565,142 +349,6 @@ impl Layout {
             .fold(beside.max(exits), f64::max)
             + MARGIN;
         self.height = tallest.max(deepest) + MARGIN;
-    }
-
-    /// Spreads each node''s edges along its sides instead of bunching them at the centre.
-    ///
-    /// Ordered by where the other end sits, so two edges leaving the same node never cross each
-    /// other before they have gone anywhere. Only forward edges: a return path leaves from the
-    /// underside and is routed through its own lane already.
-    fn assign_ports(&mut self) {
-        let centres: BTreeMap<String, f64> = self
-            .nodes
-            .iter()
-            .map(|node| (node.id.clone(), node.centre().1))
-            .collect();
-        let boxes: BTreeMap<String, (f64, f64)> = self
-            .nodes
-            .iter()
-            .map(|node| (node.id.clone(), (node.y, node.h)))
-            .collect();
-
-        let mut leaving: BTreeMap<String, Vec<usize>> = BTreeMap::new();
-        let mut arriving: BTreeMap<String, Vec<usize>> = BTreeMap::new();
-        for (index, edge) in self.edges.iter().enumerate() {
-            if edge.back || edge.beside {
-                continue;
-            }
-            leaving.entry(edge.from.clone()).or_default().push(index);
-            arriving.entry(edge.to.clone()).or_default().push(index);
-        }
-
-        for (id, mut indices) in leaving {
-            indices.sort_by(|left, right| {
-                let a = centres.get(&self.edges[*left].to).copied().unwrap_or(0.0);
-                let b = centres.get(&self.edges[*right].to).copied().unwrap_or(0.0);
-                a.total_cmp(&b)
-            });
-            let Some(&(top, height)) = boxes.get(&id) else {
-                continue;
-            };
-            let count = indices.len();
-            for (slot, index) in indices.into_iter().enumerate() {
-                self.edges[index].from_y = port(top, height, slot, count);
-            }
-        }
-
-        for (id, mut indices) in arriving {
-            indices.sort_by(|left, right| {
-                let a = centres.get(&self.edges[*left].from).copied().unwrap_or(0.0);
-                let b = centres
-                    .get(&self.edges[*right].from)
-                    .copied()
-                    .unwrap_or(0.0);
-                a.total_cmp(&b)
-            });
-            let Some(&(top, height)) = boxes.get(&id) else {
-                continue;
-            };
-            let count = indices.len();
-            for (slot, index) in indices.into_iter().enumerate() {
-                self.edges[index].to_y = port(top, height, slot, count);
-            }
-        }
-    }
-
-    /// Gives each return path its own lane below the drawing, and reports the deepest one and
-    /// the rightmost point any of them drops at.
-    ///
-    /// Lanes rather than one shared depth: two loops at the same height would be drawn on top of
-    /// each other, and a review loop is the structure on a route map most worth being able to
-    /// follow with a finger.
-    fn route_returns(&mut self, floor_start: f64) -> (f64, f64) {
-        let mut lanes: Vec<(String, String)> = self
-            .edges
-            .iter()
-            .filter(|edge| edge.back)
-            .map(|edge| (edge.from.clone(), edge.to.clone()))
-            .collect();
-        // Shortest loops innermost, so a long return path never has to cross a short one.
-        lanes.sort_by_key(|(from, to)| {
-            let span = self
-                .node(from)
-                .zip(self.node(to))
-                .map_or(0, |(f, t)| f.layer.abs_diff(t.layer));
-            (span, from.clone(), to.clone())
-        });
-
-        let boxes: BTreeMap<String, (f64, f64)> = self
-            .nodes
-            .iter()
-            .map(|node| (node.id.clone(), (node.x, node.w)))
-            .collect();
-
-        // How many returns already aim at each target, so edges sharing one can be fanned apart
-        // rather than stacked on a single vertical line.
-        let mut per_target: BTreeMap<String, usize> = BTreeMap::new();
-        // How many returns already leave each column, so their drops do not share a line either.
-        let mut per_column: BTreeMap<usize, usize> = BTreeMap::new();
-        let columns: BTreeMap<String, (usize, f64)> = self
-            .nodes
-            .iter()
-            .map(|node| (node.id.clone(), (node.layer, node.x + node.w)))
-            .collect();
-
-        let mut deepest = floor_start;
-        let mut widest = 0.0_f64;
-        for (index, key) in lanes.iter().enumerate() {
-            let depth = floor_start + RETURN_GAP * (precise(index) + 1.0);
-            deepest = deepest.max(depth);
-
-            let seen = per_target.entry(key.1.clone()).or_insert(0);
-            let nth = *seen;
-            *seen += 1;
-
-            let (left, width) = boxes.get(&key.1).copied().unwrap_or((0.0, NODE_W));
-            let gutter = (left - GUTTER_INSET - GUTTER_STEP * precise(nth)).max(GUTTER_MIN);
-            let hook = left + width * 0.25 + width * 0.2 * precise(nth);
-
-            let (layer, right) = columns.get(&key.0).copied().unwrap_or((0, 0.0));
-            let leaving = per_column.entry(layer).or_insert(0);
-            // Capped short of the next column, whose boxes a drop must not run through.
-            let exit = (right + EXIT_INSET + EXIT_STEP * precise(*leaving))
-                .min(right + COL_GAP - EXIT_INSET / 2.0);
-            *leaving += 1;
-            widest = widest.max(exit);
-
-            if let Some(edge) = self
-                .edges
-                .iter_mut()
-                .find(|edge| edge.back && (edge.from.clone(), edge.to.clone()) == *key)
-            {
-                edge.floor = Some(depth);
-                edge.gutter = Some(gutter);
-                edge.hook_x = Some(hook.min(left + width - CORNER_MARGIN));
-                edge.exit_x = Some(exit);
-            }
-        }
-        (deepest, widest)
     }
 }
 
@@ -739,69 +387,12 @@ pub(crate) fn edge_scopes(config: &Config) -> BTreeMap<(AgentName, AgentName), V
         .collect()
 }
 
-/// Assigns each agent a column by breadth-first distance from the ways in.
-///
-/// Agents nothing can reach are absent from the result, and the caller places them in the first
-/// column rather than dropping them: an unreachable agent is exactly what somebody opened the
-/// diagram to find, so hiding it would defeat the purpose.
-///
-/// When one workflow is being drawn, distance is measured from *that* pipeline's entry and no
-/// other. Seeding every entry regardless of scope put agents that happen to be another pipeline's
-/// way in near the left edge of a diagram they are late in — the reference factory''s follower is
-/// reached through the publisher, but is also the follow-up pipeline''s entry, so it landed in
-/// column two with an edge sweeping back across the whole drawing.
-fn assign_layers(config: &Config, graph: &RouteGraph, scope: &Scope) -> BTreeMap<AgentName, usize> {
-    let sources: Vec<AgentName> = match scope.pipeline() {
-        Some(name) => match config.pipelines.get(name).map(|pipeline| &pipeline.entry) {
-            Some(Some(entry)) => vec![entry.clone()],
-            // A resuming pipeline with no entry is laid out from wherever the factory's other ways
-            // in are, so the agents it shares with them sit where they do in theirs.
-            Some(None) => config
-                .pipelines
-                .values()
-                .filter_map(|pipeline| pipeline.entry.clone())
-                .collect(),
-            None => Vec::new(),
-        },
-        None => config
-            .pipelines
-            .values()
-            .filter_map(|pipeline| pipeline.entry.clone())
-            .chain(
-                config
-                    .agents
-                    .iter()
-                    .filter(|(_, agent)| agent.entry)
-                    .map(|(name, _)| name.clone()),
-            )
-            .collect(),
-    };
-
-    let mut layers: BTreeMap<AgentName, usize> = graph
-        .distances_from(sources.iter())
-        .into_iter()
-        .map(|(name, distance)| (name, distance as usize))
-        .collect();
-
-    // Spawn targets are absent from the distances above, because breadth-first traversal stops at
-    // a spawn edge — correctly, since the receiver starts a fresh chain with fresh Hops and hop
-    // depth across chains is not a real distance.
-    //
-    // For *drawing*, though, that leaves them at column zero, sitting beside the agent that
-    // spawns them, and the edge between becomes a same-column loop that reads as a stray squiggle
-    // rather than a hand-off. Placing each one right of its spawner keeps the left-to-right flow
-    // that makes the diagram legible. Only the picture is affected: the hop check does its own
-    // seeding and still treats them as entry points.
-    for (from, to) in graph.spawn_edges() {
-        let placed = layers.get(from).copied().unwrap_or(0) + 1;
-        let entry = layers.entry(to.clone()).or_insert(placed);
-        *entry = (*entry).max(placed);
-    }
-
-    layers
+/// The left edge of a column.
+fn column_x(layer: usize) -> f64 {
+    MARGIN + precise(layer) * (NODE_W + COL_GAP)
 }
 
-/// Where the `slot`-th of `count` edges should meet a node''s side.
+/// Where the `slot`-th of `count` edges should meet a node's side.
 ///
 /// Evenly spaced across the middle 70% of the height, so a single edge still meets the centre and
 /// several never reach the rounded corners.
@@ -834,654 +425,4 @@ pub(super) fn pipeline_id(name: &PipelineName) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn config(body: &str) -> Config {
-        Config::from_toml(body, "layout-test.toml").expect("config parses")
-    }
-
-    fn factory() -> Config {
-        config(
-            r#"
-            [layover]
-            work_dir = "work"
-
-            [defaults]
-            runner = "claude"
-
-            [runners.claude]
-            command = ["claude", "-p"]
-
-            [agents.analyst]
-            prompt = "analyse"
-
-            [agents.developer]
-            prompt = "develop"
-
-            [agents.tester]
-            prompt = "test"
-            access = "read-only"
-
-            [agents.publisher]
-            prompt = "publish"
-
-            [pipelines.triage]
-            entry = "analyst"
-
-            [[routes]]
-            from = "analyst"
-            to = "developer"
-
-            [[routes]]
-            from = "developer"
-            to = "tester"
-
-            [[routes]]
-            from = "tester"
-            to = "developer"
-            join = "all"
-
-            [[routes]]
-            from = "developer"
-            to = "publisher"
-            "#,
-        )
-    }
-
-    #[test]
-    fn work_flows_left_to_right_one_column_per_hop() {
-        let layout = Layout::build(&factory(), &Live::default());
-
-        assert_eq!(layout.node("p_triage").expect("pipeline").layer, 0);
-        assert_eq!(layout.node("a_analyst").expect("analyst").layer, 1);
-        assert_eq!(layout.node("a_developer").expect("developer").layer, 2);
-        assert_eq!(layout.node("a_tester").expect("tester").layer, 3);
-    }
-
-    #[test]
-    fn a_loop_does_not_hang_the_layout() {
-        // Longest-path layering, the textbook approach, does not terminate here: the developer
-        // and the tester point at each other, which is the review loop the reference factory is
-        // built around. Breadth-first distance is what makes cyclic route maps drawable at all.
-        let layout = Layout::build(&factory(), &Live::default());
-
-        assert_eq!(layout.nodes.len(), 5);
-        assert!(layout.width > 0.0 && layout.height > 0.0);
-    }
-
-    #[test]
-    fn an_edge_pointing_back_towards_the_entry_is_marked_as_a_return_path() {
-        let layout = Layout::build(&factory(), &Live::default());
-
-        let back = layout
-            .edges
-            .iter()
-            .find(|edge| edge.from == "a_tester" && edge.to == "a_developer")
-            .expect("the review loop exists");
-
-        assert!(back.back, "tester sits right of developer, so this returns");
-        assert_eq!(back.style, EdgeStyle::Joined);
-        assert_eq!(back.label.as_deref(), Some("all"));
-    }
-
-    #[test]
-    fn a_sender_the_barrier_does_not_name_is_marked_as_bypassing_it() {
-        let config = config(
-            r#"
-            [layover]
-            work_dir = "work"
-
-            [defaults]
-            runner = "claude"
-
-            [runners.claude]
-            command = ["claude", "-p"]
-
-            [agents.scanner]
-            prompt = "scan"
-
-            [agents.left]
-            prompt = "left"
-
-            [agents.right]
-            prompt = "right"
-
-            [agents.collector]
-            prompt = "collect"
-
-            [pipelines.go]
-            entry = "scanner"
-
-            [[routes]]
-            from = ["left", "right"]
-            to = "collector"
-            join = "all"
-
-            [[routes]]
-            from = "scanner"
-            to = "collector"
-            "#,
-        );
-
-        let layout = Layout::build(&config, &Live::default());
-        let bypass = layout
-            .edges
-            .iter()
-            .find(|edge| edge.from == "a_scanner" && edge.to == "a_collector")
-            .expect("scanner may send to collector");
-
-        assert_eq!(bypass.style, EdgeStyle::Bypass);
-        assert_eq!(
-            bypass.label, None,
-            "it does not wait, so it has no condition"
-        );
-    }
-
-    #[test]
-    fn a_joined_agent_is_drawn_as_a_gate() {
-        let layout = Layout::build(&factory(), &Live::default());
-
-        assert_eq!(
-            layout.node("a_developer").expect("developer").shape,
-            Shape::Gate
-        );
-        assert_eq!(layout.node("a_analyst").expect("analyst").shape, Shape::Box);
-    }
-
-    #[test]
-    fn nodes_in_a_column_never_overlap() {
-        let layout = Layout::build(&factory(), &Live::default());
-
-        for layer in 0..4 {
-            let mut boxes: Vec<(f64, f64)> = layout
-                .nodes
-                .iter()
-                .filter(|node| node.layer == layer)
-                .map(|node| (node.y, node.y + node.h))
-                .collect();
-            boxes.sort_by(|a, b| a.0.total_cmp(&b.0));
-
-            for pair in boxes.windows(2) {
-                assert!(
-                    pair[1].0 >= pair[0].1,
-                    "layer {layer} has overlapping nodes: {pair:?}"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn every_node_sits_inside_the_reported_extent() {
-        // The extent becomes the SVG viewBox. A node outside it is a node nobody can see.
-        let layout = Layout::build(&factory(), &Live::default());
-
-        for node in &layout.nodes {
-            assert!(node.x >= 0.0 && node.y >= 0.0, "{} is off-canvas", node.id);
-            assert!(node.x + node.w <= layout.width, "{} overflows", node.id);
-            assert!(node.y + node.h <= layout.height, "{} overflows", node.id);
-        }
-    }
-
-    #[test]
-    fn return_paths_sit_inside_the_reported_extent_too() {
-        // The first version of this reserved height for nodes only, and every review loop in the
-        // reference factory was drawn below the viewBox and clipped away. Found by rendering it
-        // and looking, which is the only way that class of bug ever shows up.
-        let layout = Layout::build(&factory(), &Live::default());
-
-        let returns: Vec<&Edge> = layout.edges.iter().filter(|edge| edge.back).collect();
-        assert!(!returns.is_empty(), "the factory has a review loop to test");
-
-        for edge in returns {
-            let floor = edge.floor.expect("a return path is given a lane");
-            assert!(
-                floor <= layout.height,
-                "{} -> {} dips to {floor} but the drawing is only {} tall",
-                edge.from,
-                edge.to,
-                layout.height
-            );
-        }
-    }
-
-    #[test]
-    fn several_returns_to_one_agent_climb_at_different_points() {
-        // The normal shape of a review loop: a tester and a reviewer both report back to the
-        // developer. Sharing one gutter put both curves on the same vertical line and stacked
-        // their labels on top of each other, which is what the whole diagram looked like.
-        let layout = Layout::build(&review_loop(), &Live::default());
-        let returns: Vec<f64> = layout
-            .edges
-            .iter()
-            .filter(|edge| edge.back && edge.to == "a_dev")
-            .filter_map(|edge| edge.gutter)
-            .collect();
-
-        assert!(returns.len() >= 2, "the factory has a review loop");
-        for pair in returns.windows(2) {
-            assert!(
-                (pair[0] - pair[1]).abs() > 1.0,
-                "two returns share a gutter: {returns:?}"
-            );
-        }
-
-        let hooks: Vec<f64> = layout
-            .edges
-            .iter()
-            .filter(|edge| edge.back && edge.to == "a_dev")
-            .filter_map(|edge| edge.hook_x)
-            .collect();
-        for pair in hooks.windows(2) {
-            assert!(
-                (pair[0] - pair[1]).abs() > 1.0,
-                "two returns hook in at the same point: {hooks:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_return_path_hooks_inside_the_agent_it_returns_to() {
-        let layout = Layout::build(&review_loop(), &Live::default());
-        let developer = layout.node("a_dev").expect("dev");
-
-        for edge in layout.edges.iter().filter(|edge| edge.back) {
-            let hook = edge.hook_x.expect("a return path is given a hook");
-            assert!(
-                hook > developer.x && hook < developer.x + developer.w,
-                "the hook must land on the node, not beside it: {hook}"
-            );
-        }
-    }
-
-    /// A developer fanning out to a tester and a reviewer, both reporting back. The commonest
-    /// shape in a real factory and the one that exposed the shared-gutter problem.
-    fn review_loop() -> Config {
-        config(
-            r#"
-            [layover]
-            work_dir = "work"
-
-            [defaults]
-            runner = "claude"
-
-            [runners.claude]
-            command = ["claude", "-p"]
-
-            [agents.dev]
-            prompt = "develop"
-
-            [agents.tester]
-            prompt = "test"
-
-            [agents.reviewer]
-            prompt = "review"
-
-            [pipelines.go]
-            entry = "dev"
-
-            [[routes]]
-            from = "dev"
-            to = ["tester", "reviewer"]
-
-            [[routes]]
-            from = ["tester", "reviewer"]
-            to = "dev"
-            join = "all"
-            "#,
-        )
-    }
-
-    #[test]
-    fn two_return_paths_are_given_lanes_of_their_own() {
-        // Drawn at the same depth they would overlap, and a review loop is the structure on a
-        // route map most worth being able to follow with a finger.
-        let config = config(
-            r#"
-            [layover]
-            work_dir = "work"
-
-            [defaults]
-            runner = "claude"
-
-            [runners.claude]
-            command = ["claude", "-p"]
-
-            [agents.dev]
-            prompt = "develop"
-
-            [agents.tester]
-            prompt = "test"
-
-            [agents.reviewer]
-            prompt = "review"
-
-            [pipelines.go]
-            entry = "dev"
-
-            [[routes]]
-            from = "dev"
-            to = ["tester", "reviewer"]
-
-            [[routes]]
-            from = ["tester", "reviewer"]
-            to = "dev"
-            join = "all"
-            "#,
-        );
-
-        let layout = Layout::build(&config, &Live::default());
-        let mut floors: Vec<f64> = layout
-            .edges
-            .iter()
-            .filter(|edge| edge.back)
-            .filter_map(|edge| edge.floor)
-            .collect();
-        floors.sort_by(f64::total_cmp);
-
-        assert_eq!(floors.len(), 2);
-        assert!(
-            (floors[1] - floors[0]).abs() > 1.0,
-            "the two loops share a lane: {floors:?}"
-        );
-    }
-
-    #[test]
-    fn a_workflow_is_laid_out_from_its_own_entry_only() {
-        // Seeding every pipeline entry regardless of scope put agents that happen to be another
-        // pipeline's way in near the left edge of a diagram they are late in. In the reference
-        // factory the follower is reached through the publisher but is also the follow-up
-        // pipeline's entry, so it landed in column two with an edge sweeping back across the
-        // whole drawing.
-        let config = config(
-            r#"
-            [layover]
-            work_dir = "work"
-
-            [defaults]
-            runner = "claude"
-
-            [runners.claude]
-            command = ["claude", "-p"]
-
-            [agents.analyst]
-            prompt = "analyse"
-
-            [agents.publisher]
-            prompt = "publish"
-
-            [agents.follower]
-            prompt = "follow"
-
-            [pipelines.triage]
-            entry = "analyst"
-
-            [pipelines.follow_up]
-            entry = "follower"
-
-            [[routes]]
-            from = "analyst"
-            to = "publisher"
-
-            [[routes]]
-            from = "publisher"
-            to = "follower"
-            "#,
-        );
-
-        let triage = Layout::scoped(&config, &Live::default(), &Scope::Pipeline("triage".into()));
-        let publisher = triage.node("a_publisher").expect("publisher");
-        let follower = triage.node("a_follower").expect("follower");
-
-        assert!(
-            follower.layer > publisher.layer,
-            "the follower is reached through the publisher here, so it must come after it: \
-             publisher at {}, follower at {}",
-            publisher.layer,
-            follower.layer
-        );
-    }
-
-    #[test]
-    fn edges_leaving_one_node_meet_it_at_different_points() {
-        // They all left from the centre, so several going to different places overlapped for
-        // their first stretch and only separated after they had already crossed.
-        let layout = Layout::build(&factory(), &Live::default());
-        let leaving: Vec<f64> = layout
-            .edges
-            .iter()
-            .filter(|edge| edge.from == "a_developer" && !edge.back)
-            .map(|edge| edge.from_y)
-            .collect();
-
-        assert!(leaving.len() >= 2, "the developer fans out");
-        for pair in leaving.windows(2) {
-            assert!(
-                (pair[0] - pair[1]).abs() > 1.0,
-                "two edges share an exit point: {leaving:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_node_with_one_edge_still_meets_it_in_the_middle() {
-        let layout = Layout::build(&factory(), &Live::default());
-        let analyst = layout.node("a_analyst").expect("analyst");
-        let only = layout
-            .edges
-            .iter()
-            .find(|edge| edge.from == "a_analyst" && !edge.back)
-            .expect("analyst sends somewhere");
-
-        assert!((only.from_y - analyst.centre().1).abs() < 0.001);
-    }
-
-    #[test]
-    fn a_workflow_can_be_drawn_on_its_own() {
-        // A factory holds several pipelines and they are genuinely separate workflows. Drawing
-        // them together produces one tangle that reads as a single very confused process, which
-        // is exactly what a reader concludes from it.
-        let config = two_workflows();
-        let sweep = Layout::scoped(&config, &Live::default(), &Scope::Pipeline("sweep".into()));
-
-        assert!(sweep.node("p_sweep").is_some());
-        assert!(sweep.node("a_sweeper").is_some());
-        assert!(
-            sweep.node("a_pr_reviewer").is_some(),
-            "a spawned reviewer is part of the sweep"
-        );
-        assert!(sweep.node("p_build").is_none(), "the other way in is not");
-        assert!(sweep.node("a_developer").is_none());
-    }
-
-    #[test]
-    fn an_agent_in_two_workflows_appears_in_both() {
-        // The honest answer. The developer really is in both pipelines, and hiding it from one
-        // would misrepresent the factory to make a tidier picture.
-        let config = two_workflows();
-
-        for pipeline in ["build", "release"] {
-            let drawn =
-                Layout::scoped(&config, &Live::default(), &Scope::Pipeline(pipeline.into()));
-            assert!(
-                drawn.node("a_developer").is_some(),
-                "developer missing from {pipeline}"
-            );
-        }
-    }
-
-    #[test]
-    fn drawing_everything_is_still_the_default() {
-        let config = two_workflows();
-        let all = Layout::build(&config, &Live::default());
-
-        assert!(all.node("p_sweep").is_some());
-        assert!(all.node("p_build").is_some());
-        assert!(all.node("a_pr_reviewer").is_some());
-    }
-
-    fn two_workflows() -> Config {
-        config(
-            r#"
-            [layover]
-            work_dir = "work"
-
-            [defaults]
-            runner = "claude"
-
-            [runners.claude]
-            command = ["claude", "-p"]
-
-            [agents.sweeper]
-            prompt = "sweep"
-
-            [agents.pr_reviewer]
-            prompt = "review one"
-
-            [agents.developer]
-            prompt = "develop"
-
-            [agents.publisher]
-            prompt = "publish"
-
-            [pipelines.sweep]
-            entry = "sweeper"
-
-            [pipelines.build]
-            entry = "developer"
-
-            [pipelines.release]
-            entry = "developer"
-
-            [[routes]]
-            from = "sweeper"
-            to = "pr_reviewer"
-            mode = "spawn"
-
-            [[routes]]
-            from = "developer"
-            to = "publisher"
-            "#,
-        )
-    }
-
-    #[test]
-    fn a_spawn_target_is_drawn_right_of_the_agent_that_spawns_it() {
-        // Breadth-first distance stops at a spawn edge, which is right for hop arithmetic and
-        // wrong for a picture: it left the target at column zero beside its spawner, and the edge
-        // between them became a same-column loop that read as a stray squiggle. Found by standing
-        // up a real factory and looking at the dashboard.
-        let config = config(
-            r#"
-            [layover]
-            work_dir = "work"
-
-            [defaults]
-            runner = "claude"
-
-            [runners.claude]
-            command = ["claude", "-p"]
-
-            [agents.sweeper]
-            prompt = "sweep"
-
-            [agents.pr_reviewer]
-            prompt = "review one"
-
-            [pipelines.sweep]
-            entry = "sweeper"
-
-            [[routes]]
-            from = "sweeper"
-            to = "pr_reviewer"
-            mode = "spawn"
-            "#,
-        );
-
-        let layout = Layout::build(&config, &Live::default());
-        let sweeper = layout.node("a_sweeper").expect("sweeper");
-        let reviewer = layout.node("a_pr_reviewer").expect("reviewer");
-
-        assert!(
-            reviewer.layer > sweeper.layer,
-            "a spawn should still flow rightwards: sweeper at {}, reviewer at {}",
-            sweeper.layer,
-            reviewer.layer
-        );
-
-        let edge = layout
-            .edges
-            .iter()
-            .find(|edge| edge.to == "a_pr_reviewer")
-            .expect("the spawn edge exists");
-        assert!(!edge.back, "and must not be drawn as a return path");
-    }
-
-    #[test]
-    fn an_agent_no_pipeline_can_reach_is_still_drawn() {
-        // An unreachable agent is exactly what somebody opens the diagram to find, so dropping
-        // it would defeat the purpose of drawing one.
-        let config = config(
-            r#"
-            [layover]
-            work_dir = "work"
-
-            [defaults]
-            runner = "claude"
-
-            [runners.claude]
-            command = ["claude", "-p"]
-
-            [agents.reachable]
-            prompt = "work"
-
-            [agents.orphan]
-            prompt = "nobody routes here"
-
-            [pipelines.go]
-            entry = "reachable"
-            "#,
-        );
-
-        let layout = Layout::build(&config, &Live::default());
-
-        assert!(layout.node("a_orphan").is_some());
-    }
-
-    #[test]
-    fn live_state_lands_on_the_right_node() {
-        let live = Live::default().with("developer", Activity::Running);
-        let layout = Layout::build(&factory(), &live);
-
-        assert_eq!(
-            layout.node("a_developer").expect("developer").activity,
-            Some(Activity::Running)
-        );
-        assert_eq!(layout.node("a_analyst").expect("analyst").activity, None);
-    }
-
-    #[test]
-    fn an_empty_factory_lays_out_without_panicking() {
-        let config = config(
-            r#"
-            [layover]
-            work_dir = "work"
-
-            [defaults]
-            runner = "claude"
-
-            [runners.claude]
-            command = ["claude", "-p"]
-
-            [agents.only]
-            prompt = "think"
-            entry = true
-            "#,
-        );
-
-        let layout = Layout::build(&config, &Live::default());
-
-        assert_eq!(layout.nodes.len(), 1);
-        assert!(layout.edges.is_empty());
-    }
-}
+mod tests;

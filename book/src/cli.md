@@ -75,8 +75,10 @@ layover graph --svg > factory.svg            # a drawing
 layover graph --pipeline eagle-eye           # one workflow
 ```
 
-The route map as a diagram. The SVG is the same renderer the dashboard uses, so it needs no
-browser and no JavaScript.
+The route map as a diagram. The SVG is the same renderer and layout the dashboard uses, so it
+needs no browser and no JavaScript: columns in reading order, as
+[the route map](./dashboard-chains.md#the-route-map) explains. The text is Mermaid source, which
+whatever renders it lays out by its own rules.
 
 `--pipeline` draws one workflow over the routes its chains may use — global routes and those
 scoped to it — which is the diagram the dashboard shows for that workflow. Without it the whole
