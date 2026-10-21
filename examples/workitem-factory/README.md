@@ -2,7 +2,8 @@
 
 A request arrives. It is investigated, built, tested, reviewed until two independent agents agree,
 and then published as a pull request in Azure DevOps — unattended. A second pipeline does the same
-for pull requests that already exist, once an hour, with nobody starting it.
+for pull requests that already exist, once an hour, with nobody starting it, and a third brings back
+published work whose pull request has comments waiting.
 
 This is the reference factory. It is the shape the design is sized against, and it is
 parsed, validated and exercised by
@@ -228,9 +229,10 @@ intermediary gate agent, and the developer decides for itself whether to loop or
 
 `developer` and `publisher` are `read-write`; everything else is `read-only`.
 
-**That is a declaration, not yet enforcement.** The design gives read-only agents a git worktree
-instead of the live tree; nothing builds one yet, so every agent here runs in the one `workspace`
-and the prompts carry the rule instead — the tester and investigator are told to change nothing.
+**That is a declaration, not yet enforcement.** The design would give read-only agents a git
+worktree instead of the live tree; nothing builds one yet, so every agent here runs in the one
+`workspace` and the prompts carry the rule instead — the tester and investigator are told to
+change nothing.
 The two `workspace = "per-itinerary"` pipelines likewise still share that directory, so do not run
 two development instances at once. What a worktree has to settle first, starting with the fact
 that one taken at the current commit would not contain the developer's uncommitted change, is

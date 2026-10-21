@@ -1,47 +1,38 @@
-# The minimal factory shape documented in docs/architecture.md.
+# Your first factory: three agents, one loop, one manual pipeline.
 #
-# Start here: three agents, one loop, one manual pipeline. For the reference scenario — scheduled
-# triggers, conditional prompts and a rendezvous on both ends — see workitem-factory/.
+# Every agent runs on GitHub Copilot CLI, the CLI Layover is proven against end to end, so trying it
+# needs that one CLI, installed and signed in (`copilot login`), and nothing else. Copy this file
+# into an empty directory as `layover.toml` and run `layover serve` there; the agents work in
+# `workspace/` beside it, which the Tower creates. Claude Code and Codex runners are shown in
+# workitem-factory/ and in the configuration reference.
 #
 # This file is parsed and validated by crates/layover-core/tests/examples.rs, so the documented
 # configuration cannot quietly stop being loadable.
 
 [layover]
-work_dir   = "workspace"
-logbook    = ".layover/logbook.md"
-prompt_dir = "prompts"
+work_dir = "workspace"
+logbook  = ".layover/logbook.md"
 
 [defaults]
-runner      = "claude"
-# Only the *name* goes here; the Tower reads the value from its own environment at spawn time, so
-# this file stays committable. Name whichever your runner wants.
-env_from    = ["ANTHROPIC_API_KEY"]
+runner      = "copilot"
 max_hops    = 8
 fuel_usd    = 5.00
 max_runs    = 64
 timeout_sec = 900
+# Recommended before a factory runs for real: a CLI home of its own, so its runs neither fill your
+# session history nor load your personal plugins and MCP servers. Set COPILOT_HOME for the Tower,
+# sign in once with it set, and uncomment this line. Only the *name* goes here: the Tower reads the
+# value from its own environment, so this file stays committable.
+# env_from = ["COPILOT_HOME"]
 
-# ── How to invoke each supported CLI ───────────────────────────────
-# The composed instructions go to the process on **stdin**, never on the command line: Windows
-# caps one at 32,767 characters and real prompts run to tens of kilobytes. A `{prompt}` placeholder
-# would be a *path* to that text, for CLIs that take a file — none of these three do.
-#
-# For a CLI Layover knows, `cli` is the whole runner: Layover supplies the program, print mode, the
-# agent's model, the output a cost is read from and the MCP wiring. `args` would add the rest.
-[runners.claude]
-cli = "claude"
-
-# A runner may also write its command out, for a CLI with no preset or to fix a value itself rather
-# than carry an agent's: every agent on this one reasons at `high`, whatever it declares.
-# multi-workflow/ shows the other way, with the agent's own `effort`.
+# ── How to invoke the CLI ──────────────────────────────────────────
+# For a CLI Layover knows, `cli` is the whole runner: Layover supplies the program, everything an
+# unattended run needs, the agent's model and effort, the output a cost is read from and the MCP
+# wiring. `args` adds the rest — what every agent on this runner is denied. The composed
+# instructions reach the process on stdin, never on the command line.
 [runners.copilot]
-command = ["copilot", "--model", "{model}", "--reasoning-effort", "high", "--allow-all-tools",
-           "--output-format", "json"]
-mcp     = { flag = "--additional-mcp-config", format = "claude_json", prefix = "@" }
-
-[runners.codex]
-command = ["codex", "exec", "--model", "{model}", "-"]
-mcp     = { flag = "-c", format = "codex_toml" }
+cli  = "copilot"
+args = ["--deny-tool=shell(git push)"]
 
 # ── Agents ─────────────────────────────────────────────────────────
 [agents.planner]
@@ -50,22 +41,18 @@ purpose     = """
 Route here when a goal still needs decomposing. The planner is also where rejected work comes
 back to, so it decides whether to retry, re-scope or stop.
 """
-runner   = "claude"
-model    = "claude-opus-4"
-resident = false
-prompt   = """
+effort      = "high"     # its own; the others take the CLI's default, as they take its model
+prompt      = """
 You break incoming goals into concrete tasks and dispatch them.
 Record durable conclusions with layover_memory_write.
 """
 
 [agents.coder]
 description = "Implements the task described in the incoming flight"
-runner      = "copilot"
 prompt      = "You implement the task described in the incoming flight."
 
 [agents.reviewer]
 description = "Approves work or returns concrete defects"
-runner      = "codex"
 access      = "read-only"
 prompt      = "You review work and either approve it or return concrete defects."
 

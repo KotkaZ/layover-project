@@ -15,30 +15,22 @@
 
 [Documentation](https://kotkaz.github.io/layover-project/) ·
 [Install](#install) ·
-[Design](docs/architecture.md) ·
-[Decisions and open questions](docs/decisions.md)
+[Your first factory](#your-first-factory) ·
+[Troubleshooting](https://kotkaz.github.io/layover-project/troubleshooting.html) ·
+[Decisions](docs/decisions.md)
 
 </div>
 
-> **Status: 1.0.** Layover runs a factory unattended. `layover serve` fires scheduled pipelines,
-> runs what is queued, and serves each agent an MCP endpoint it can call back into — so a chain
-> starts on a clock, hands work from agent to agent, waits at a rendezvous for several verdicts at
-> once, and finishes with nobody watching. Every hop is bounded by the Hops, Fuel and run cap of
-> the one chain that began it. Detail in [what works today](#what-works-today).
->
-> The claim on the tin has been **tested rather than asserted**: a 48-hour soak driving the real
-> Copilot CLI, one process, no intervention — **1,501 runs, all succeeded**, 12.6 MB of memory at
-> the end. See [the 1.0 notes](CHANGELOG.md#100--2026-09-23).
->
-> Semantic versioning from 1.0, and maintained by one person. See
-> [project status](#project-status).
-
-Layover does not call LLMs. It is a *supervisor*: it spawns headless agent CLIs, gives them a way
-to talk to one another, persists what they learn, and stops them from running away.
+Layover does not call LLMs. It is a *supervisor*: it spawns headless agent CLIs — GitHub Copilot
+CLI, Claude Code — gives them a way to talk to one another, persists what they learn, and stops them
+from running away.
 
 You describe a factory in a single `layover.toml` — which agents exist, what each one is for,
-which agents may trigger which others, and how work gets in. Layover then runs it unattended.
-
+which agents may trigger which others, and how work gets in — and `layover serve` runs it
+unattended: schedules fire, agents hand work to each other over MCP, a joined agent waits for every
+verdict it needs, and every chain is bounded by the Hops, Fuel and run cap it started with. That
+has been tested rather than asserted: a 48-hour soak driving the real Copilot CLI, one process, no
+intervention — **1,501 runs, all succeeded** ([the 1.0 notes](CHANGELOG.md#100--2026-09-23)).
 ## Install
 
 Layover is a single binary. No Rust toolchain needed.
@@ -65,28 +57,33 @@ cargo install layover-cli
 > whose binary is *also* called `layover`. Install `layover-cli`; the binary it gives you is
 > `layover`.
 
-### Download a build
+Archives for all five targets, with a `sha256.sum` covering them, are on the
+[releases page](https://github.com/KotkaZ/layover-project/releases/latest). The
+[install guide](https://kotkaz.github.io/layover-project/install.html) covers checking them, building from
+source, installing the agent CLIs and starting a factory with the computer. A running factory tells
+you when a newer Layover is out, and [updates itself](https://kotkaz.github.io/layover-project/updating.html)
+when you ask.
 
-Every release publishes all five targets, plus a `sha256.sum` covering every artifact.
+## Your first factory
 
-| Platform | Archive |
-|---|---|
-| Linux x86-64 | [`layover-cli-x86_64-unknown-linux-gnu.tar.xz`](https://github.com/KotkaZ/layover-project/releases/latest/download/layover-cli-x86_64-unknown-linux-gnu.tar.xz) |
-| Linux ARM64 | [`layover-cli-aarch64-unknown-linux-gnu.tar.xz`](https://github.com/KotkaZ/layover-project/releases/latest/download/layover-cli-aarch64-unknown-linux-gnu.tar.xz) |
-| macOS Apple silicon | [`layover-cli-aarch64-apple-darwin.tar.xz`](https://github.com/KotkaZ/layover-project/releases/latest/download/layover-cli-aarch64-apple-darwin.tar.xz) |
-| macOS Intel | [`layover-cli-x86_64-apple-darwin.tar.xz`](https://github.com/KotkaZ/layover-project/releases/latest/download/layover-cli-x86_64-apple-darwin.tar.xz) |
-| Windows x86-64 | [`layover-cli-x86_64-pc-windows-msvc.zip`](https://github.com/KotkaZ/layover-project/releases/latest/download/layover-cli-x86_64-pc-windows-msvc.zip) |
-
-All releases: [github.com/KotkaZ/layover-project/releases](https://github.com/KotkaZ/layover-project/releases)
-
-Other options — building from source — are in
-[the install guide](https://kotkaz.github.io/layover-project/install.html).
+You need GitHub Copilot CLI, installed and signed in. Copy
+[`examples/planner.toml`](examples/planner.toml) — three agents in a loop — into an empty
+directory as `layover.toml`, and from there:
 
 ```sh
-layover validate --config layover.toml --strict   # check a factory before it runs
-layover explain                                   # what can trigger what, and what talks to what
-layover prompt tester --flag run_e2e=true         # what an agent would actually be told
+layover validate --strict   # check it before anything runs
+layover serve               # run it; open the dashboard address it prints
 ```
+
+On the dashboard, start the `build` workflow and give it a goal.
+[Your first factory](https://kotkaz.github.io/layover-project/first-factory.html) walks through the file,
+and [`examples/`](examples/README.md) has five more, up to the reference factory: nine agents, two
+rendezvous joins and a review loop, with the arithmetic that sizes its rails.
+
+> **Give a factory a CLI home of its own.** Its runs otherwise use yours — `~/.copilot`,
+> `~/.claude`, `~/.codex` — filling your session history and loading your personal plugins and MCP
+> servers. Set `COPILOT_HOME`, `CLAUDE_CONFIG_DIR` or `CODEX_HOME` for the Tower and forward it with
+> `env_from`; see [the CLI's home](https://kotkaz.github.io/layover-project/runners.html#a-cli-home-of-the-factorys-own).
 
 ## The idea
 
@@ -112,189 +109,34 @@ flowchart LR
     class tower t
 ```
 
-- **Sending a message is what starts an agent.** There is no separate spawn step — a flight's
-  arrival is what brings an agent to life.
-- **Agents talk over MCP.** Layover exposes an MCP server, so Claude Code, Copilot CLI and Codex
-  CLI reach it natively with no adapter code.
-- **Every run is a clean slate.** Nothing carries over implicitly between runs.
-- **Which makes memory explicit.** An agent's continuity is exactly what it chose to write down.
-  This is the most opinionated idea in the project, and it is deliberate.
-- **The route map is a directed graph.** No edge means the flight is refused.
-- **Work enters through pipelines.** Named, triggerable entry points — manual, or on a clock.
-  Workflows share agents, and each may use only its own routes and run a shared agent at its own
-  model, effort or context. A person triggering one can name the run and choose those for it, and
-  can switch any workflow off — its schedule included — while the rest of the factory runs.
-- **A runner is a CLI and a permission set.** For Copilot CLI and Claude Code, Layover supplies
-  everything an unattended run needs; a runner lists what its agents are denied, and an agent or a
-  workflow adds its own — never removes.
-- **Prompts compose.** An agent's instructions can pull in extra sections depending on the flags a
-  run was triggered with.
-- **Runaway swarms are bounded by construction** — every itinerary burns Hops and Fuel, and the
-  Tower, not the agent, holds the counters.
+The [glossary](https://kotkaz.github.io/layover-project/glossary.html) has the rest of the vocabulary,
+and [the book](https://kotkaz.github.io/layover-project/) how each part works.
+
+## What it does not do yet
+
+Agents are not isolated from one another — every agent shares one working directory — and Codex
+cannot yet be told where Layover's MCP endpoint is. The book's
+[Status](https://kotkaz.github.io/layover-project/#status) is the one place that lists what is and is not built; what is still undecided is in
+[`docs/decisions.md`](docs/decisions.md#still-open).
 
 ## Project status
 
-Maintained by [@KotkaZ](https://github.com/KotkaZ). Contributions welcome — see
-[`CONTRIBUTING.md`](CONTRIBUTING.md); vulnerabilities go through
-[`SECURITY.md`](SECURITY.md), not the issue tracker.
+Maintained by [@KotkaZ](https://github.com/KotkaZ).
 
 | | |
 |---|---|
 | **Stability** | [Semantic versioning](https://semver.org/) from 1.0: a breaking change to the configuration format, the HTTP API, the MCP tools or the on-disk layout needs a major version. The changelog flags anything an existing factory will notice, even in a minor release. |
-| **Versions** | One version for every crate, the binary and the API. 1.0 was the first runnable release — the milestone where a factory runs unattended — and shipped after the 48-hour soak below. |
+| **Versions** | One version for every crate, the binary and the API. 1.0 was the first runnable release — the milestone where a factory runs unattended — and shipped after the 48-hour soak above. |
 | **MSRV** | Whatever [`rust-toolchain.toml`](rust-toolchain.toml) pins, currently 1.98. It is the only toolchain tested, so claiming an older one would be a guess. Raised in a minor release. |
 | **Platforms** | Developed on Windows, CI on Linux, released for both plus macOS. |
 | **Changes** | [`CHANGELOG.md`](CHANGELOG.md) |
 
-## Scope
-
-Layover targets Claude Code, GitHub Copilot CLI and OpenAI Codex CLI, on a single machine. Copilot
-CLI is the one proven end to end, by the soak; Codex cannot yet be told where Layover's MCP
-endpoint is (see [Agent tools](https://kotkaz.github.io/layover-project/tools.html)). See
-[`docs/decisions.md`](docs/decisions.md) for the reasoning, what is still open, and what is
-explicitly out of scope.
-
-## Examples
-
-Six factories, smallest first — start at [`examples/`](examples/README.md). `planner.toml` is
-three agents in one screen; `multi-workflow/` is a team's factory, four workflows sharing their
-agents and one runner; `workitem-factory/` is the reference scenario, with the arithmetic that
-sizes its rails.
-
-## The reference factory
-
-[`examples/workitem-factory/`](examples/workitem-factory/README.md) is the largest of them, and
-the one worth reading once the format is familiar:
-
-```mermaid
-flowchart LR
-    human([human]) --> analyst
-    clock([clock · hourly]) --> scanner[pr_scanner] --> analyst
-    analyst --> investigator & kusto --> joinA{{join = all}} --> analyst
-    analyst -->|work item| developer
-    developer --> tester & reviewer --> joinB{{join = all}} --> developer
-    developer -->|both approved| publisher
-    publisher -.->|books a Layover| later[["due later"]] -.-> follower
-    clock2([clock · 45m]) --> follower --> developer
-
-    classDef jn fill:#f2e9fd,stroke:#7a44b0,color:#2a1240
-    classDef lay fill:#e8f6ee,stroke:#2f7d4f,color:#0f2e1c
-    class joinA,joinB jn
-    class later lay
-```
-
-A request is investigated and backed with telemetry, turned into a work item, implemented, then
-tested and reviewed in a loop that turns until both agents approve — after which a pull request is
-opened. A second, scheduled pipeline reviews open pull requests hourly; a third picks up work the
-publisher set down, so a chain can wait days for review comments without holding a process open.
-It exercises concurrent fan-out, two rendezvous joins, a loop of unknown length, conditional
-prompts, and the hop arithmetic that makes the loop survivable.
-
-## Building
-
-```
-cargo xtask verify
-```
-
-That is the only definition of done: generated-code freshness, documentation checks, format, lint,
-test and doc build, with warnings denied. CI runs the same command, unchanged.
-
-| Crate | What it is |
-|---|---|
-| `layover-core` | Config, agents, routes, pipelines, prompts, the route graph, validation, itinerary accounting, barriers |
-| `layover-http` | The HTTP surface, **generated** from [`api/openapi.yaml`](api/openapi.yaml) |
-| `layover-store` | On-disk history and journal: day-segmented JSON Lines, 90-day retention |
-| `layover-dashboard` | The monitoring page and the API implementation behind it |
-| `layover-tower` | The supervisor — the only crate that starts a process |
-| `layover-mcp` | The MCP surface agents talk to Layover through |
-| `layover-cli` | The `layover` binary |
-
-## What works today
-
-| Built | Not built |
-|---|---|
-| `validate`, `explain`, `prompt`, `graph` | Worktrees: `access` and `workspace` are declared, and every agent still shares `work_dir` |
-| **Sessions: every agent's CLI output, live or replayed, read-only in the dashboard** | |
-| **`serve`: the Tower — fires schedules, runs the queue in parallel, hosts MCP, serves the dashboard** | |
-| **Restart recovery: a run the last Tower left is stopped, recorded and restarted** | |
-| **A run the model service ended is told from one that failed its own work, and restarted** | Reading Claude Code's and Codex's events for it |
-| **Schedules: `every` and `cron`, skipping a tick whose previous wave is still going** | |
-| **Upcoming: every scheduled tick, layover and queued flight, in the order it will start** | |
-| **Rendezvous joins: work is parked and its agent wakes once, with every verdict** | |
-| **Layovers: an agent sets work down and a resuming pipeline brings it back** | |
-| **Memory and learnings: injected into every run, and all ten agent tools connected** | |
-| **The MCP endpoint agents call back into: `layover_send` queues a real flight** | |
-| **Ground Stop, cancelling queued work, settling learnings** | |
-| **Help: answer an agent from the dashboard and the work continues, with its chain's flags** | |
-| **Chains: what one trigger caused, and whether it finished, stalled or failed** | |
-| **A versioned state directory: a newer layout is refused, an older one migrated** | |
-| **A token on the API by default, signed build provenance, and an SBOM per release** | |
-| `run`: drains the queue once, for when you want to watch it | |
-| **`doctor`: reads a factory's history and reports the quiet failures** | |
-| Run history, costs, the Reserve, help requests, learnings, reports | |
-| `autostart`, which registers `layover serve` at login | |
-
-**A factory runs itself, the loop with you is closed, work can wait, and runs remember.** A
-schedule fires, an agent starts, it hands work on through the MCP endpoint, a joined agent waits
-for every verdict it needs, and the chain finishes — inside the budget it started with, without
-anybody typing a command. Each run is given its own notes and what earlier runs of it worked out.
-An agent that needs to come back to something days later sets it down and ends; a resuming pipeline
-brings it back. When an agent gets stuck it says so and you can mark it fixed; when it works
-something out, you can keep that permanently or throw it away.
-
-**It has run on a real agent CLI, and it has been left alone for two days.**
-
-A throwaway repository with a planted bug, two agents and the actual `copilot` binary: the Analyst
-found `add` returning `a - b`, handed the finding to the Developer over MCP, and the Developer
-fixed it — unattended, end to end. That run found three things every test had passed over, because
-every test used a shell stand-in: no agent CLI could authenticate, the Copilot MCP flag in every
-example did not exist, and Copilot reports no cost at all — no dollars, only AI credits, which
-Layover now prices so that Fuel and the Reserve bind a Copilot factory.
-
-Then the soak: **48.46 hours, one process, no intervention.**
-
-| | |
-|---|---|
-| Run outcomes | **1,501 / 1,501 succeeded** — none failed, timed out, halted or was interrupted |
-| Heartbeat | 1,453 runs on a 2-minute schedule; longest gap **183 s**, none over 5 minutes |
-| Real agent chains | **24** two-agent MCP handoffs, one every two hours |
-| After 48 hours | **12.6 MB** memory, **106** handles, **1.2 minutes** of CPU consumed |
-
-It found one more thing, now fixed: Hangars were the only state retention never reached.
-
-`layover doctor` reads a factory's recorded history and exits non-zero when something in it would
-fail an unattended run — a stalled
-chain, a schedule that never fired, a cost total built from runners that reported nothing, a
-Ground Stop left engaged. Every one of those looks like nothing on a dashboard, which is why
-"did the soak pass?" was a judgement call until now. On that first real run it caught a layover
-nobody would ever collect, which was not the bug anyone was looking for.
-
-What remains unbuilt — worktree isolation above all — and what is still undecided about it is in
-[`docs/decisions.md`](docs/decisions.md#still-open).
-
 ## Contributing
 
 Contributions are welcome from humans and from agents, and the rules are the same for both:
-[`CONTRIBUTING.md`](CONTRIBUTING.md) is the short version, [`AGENTS.md`](AGENTS.md) the full one.
+[`CONTRIBUTING.md`](CONTRIBUTING.md) is the short version — setting up, the one command that
+decides whether a change is done, and the crates — and [`AGENTS.md`](AGENTS.md) the full one.
 Vulnerabilities go through [`SECURITY.md`](SECURITY.md) rather than the issue tracker.
-
-### Why the gate matters more than the process
-
-**Verification, not generation, is the bottleneck.** A lights-out factory does not stall because
-an agent cannot write code; it stalls because nobody — agent or human — can tell whether the code
-is correct without asking someone else. So the repository's most important artifact is a single
-command that returns a binary verdict:
-
-```
-cargo xtask verify
-```
-
-CI runs that exact command and nothing else, so a local pass is a CI pass. That is worth having
-whoever is typing: it means a first-time contributor can know their change is acceptable before
-opening a pull request, rather than finding out from a review comment three days later.
-
-The same property is what lets this repository be worked on unattended, which it is. Neither use
-is at the other's expense.
 
 ## License
 

@@ -67,7 +67,7 @@ the chain that set its work down could reach.
 
 Scoping also narrows what `validate` asks of a pipeline. Reach, hop depth and flag declarations are
 checked over each pipeline's own routes, so a pipeline need not declare flags for agents its routes
-cannot reach. See [Configuration](./configuration.md#scoping-a-route-to-workflows) for the syntax
+cannot reach. See [Configuration](./routes.md#scoping-a-route-to-workflows) for the syntax
 and the rules two overlapping routes must follow.
 
 ## An agent in one workflow
@@ -198,7 +198,7 @@ workspace = "per-itinerary"
 > implementation has to settle first — which commit a worktree starts from, what happens to a
 > developer's uncommitted change, when a worktree is removed, and what to do when `work_dir` is
 > not a git repository — is recorded as an open question in
-> [`decisions.md`](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md#still-open).
+> [`decisions.md`](./design/decisions.md#still-open).
 
 Two instances that both reach a `read-write` agent therefore edit the same files at the same time,
 whatever `workspace` says. That fails in the way hardest to notice — plausible output built from

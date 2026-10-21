@@ -23,6 +23,11 @@ context = "default"
 # committable. Name whichever your runner wants -- ANTHROPIC_API_KEY for `claude`, GH_TOKEN or
 # COPILOT_GITHUB_TOKEN for `copilot` -- and add per-agent `env_from` for anything only one agent
 # should hold, such as the publisher's write token.
+#
+# Recommended for a factory that runs unattended: a CLI home of its own -- CLAUDE_CONFIG_DIR,
+# COPILOT_HOME, CODEX_HOME -- set for the Tower and named here, so a few hundred runs a day stay out
+# of your own session history and never load your personal plugins or MCP servers. Left out here
+# because a name that is not set refuses the run. See book/src/configuration.md.
 env_from = ["ANTHROPIC_API_KEY"]
 
 # 22 = 2N + 6 at N = 8, sized for the *longer* of the two entry paths: the scheduled pipeline

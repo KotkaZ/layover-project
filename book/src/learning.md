@@ -71,7 +71,7 @@ down for the agents that come after it. It applies to **future runs of that agen
 
 The obvious design puts a human between a proposal and its use, and it does not work.
 
-A sibling project built exactly that, carefully: a proposal format, duplicate detection, impact
+An earlier agent factory built exactly that, carefully: a proposal format, duplicate detection, impact
 ratings, a review endpoint, a dashboard queue. After 22 days of real operation it held **88
 learnings, every one still pending, none ever approved** — and since only approved learnings were
 injected, **not one had ever reached a run**. Everything was built except the step that creates

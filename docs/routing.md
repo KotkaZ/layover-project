@@ -37,7 +37,7 @@ Nothing about this is special — it is two ordinary flights.
 count rather than splitting it, so Hops bounds *depth* only. With `max_hops = 8` and a branching
 factor of 3, one trigger permits up to 3⁸ ≈ 6,500 runs. **Fuel is what bounds breadth**, which is
 why it is a requirement rather than a later refinement — see the decision log in
-[`decisions.md`](decisions.md#13-decision-log), *Why Fuel is required from the first runnable
+[`decisions.md`](decisions.md#decision-log), *Why Fuel is required from the first runnable
 release rather than deferred*.
 
 ## 3. Rendezvous joins
@@ -295,9 +295,9 @@ still reach — an upstream only another workflow's route leads to cannot delive
 
 ### What validation checks per workflow
 
-Each check that asks "what can a chain reach" asks it of each way in over that way in's own graph:
-a pipeline from its entry over its scoped routes, a direct trigger from its agent over the global
-ones.
+Each check that asks "what can a chain reach" asks it once for every way in, over the graph that
+way in sees: a pipeline from its entry over its scoped routes, a direct trigger from its agent over
+the global ones.
 
 - An agent no way in reaches is reported unreachable, and hop depth is the best any way in manages
   — the same best case the checks have always taken.

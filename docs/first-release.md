@@ -342,7 +342,7 @@ read hopefully; an older one is migrated forward once, and says so. There is no 
 that rewrites its own binary while potentially supervising running children is a category of bug
 nobody needs, and the installers already handle it. *(Revisited on 15 October 2026: Layover may
 update itself, but only once nothing is running and no rendezvous holds work — the condition this
-paragraph names. The reasoning is in [`decisions.md`](decisions.md#13-decision-log), under "Why
+paragraph names. The reasoning is in [`decisions.md`](decisions.md#decision-log), under "Why
 Layover looks for its own updates after all".)*
 
 ### What the first runnable release had to prove

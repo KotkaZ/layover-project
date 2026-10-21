@@ -15,44 +15,18 @@ Read `docs/architecture.md` before changing anything structural.
 
 ## Project status
 
-**Released and running unattended.** 1.0 shipped on 23 September 2026 after a 48-hour soak driving
-the real Copilot CLI — 1,501 runs, all succeeded — and semantic versioning applies from there. The
-current version is in the workspace `Cargo.toml`; what each release added is in `CHANGELOG.md`.
+**Released, and running unattended**; semantic versioning applies from 1.0. The current version is
+in the workspace `Cargo.toml`, what each release added in `CHANGELOG.md`, and what Layover does
+today — and does not do yet — in the book's [Status](book/src/index.md#status), which is the one
+place that says so. Two gaps matter whenever you change something: there is no isolation between
+agents — `access` and `workspace` are declared and every agent still shares `work_dir` — and Codex
+cannot yet be wired to the MCP endpoint.
 
-The crates, all built and tested:
-
-- `crates/layover-core` — configuration, agents, routes, pipelines, prompt composition, the route
-  graph, load-time validation, itinerary accounting (Hops, Fuel, run cap) and rendezvous barriers.
-- `crates/layover-http` — the HTTP surface, **generated** from `api/openapi.yaml`. Types, the
-  `Api` trait and the axum router.
-- `crates/layover-store` — on-disk run history: day-segmented JSON Lines, 90-day retention.
-- `crates/layover-dashboard` — the monitoring page and the `Api` implementation behind it.
-- `crates/layover-tower` — the supervisor. The only crate that starts a process, and the first
-  place in the project that can do something irreversible.
-- `crates/layover-mcp` — the MCP surface agents talk to Layover through. Untrusted input arrives
-  here; identity comes from the token and never from the request.
-- `crates/layover-update` — finding newer releases and staging them: the release manifest,
-  versions, the download, its SHA-256 and `gh`-verified provenance, safe unpacking, asking the new
-  binary what it is, and the gate against a factory. Makes the only network requests Layover
-  itself makes.
-- `crates/layover-cli` — the `layover` binary: `validate`, `explain`, `graph`, `prompt`, `serve`,
-  `stop`, `run`, `doctor`, `autostart`, `update`, `about`.
-
-**`layover serve` runs a factory unattended.** It fires scheduled pipelines, drains the queue —
-up to `max_concurrent_runs` agents at once — spawns agent CLIs with an MCP endpoint and a per-run
-token, holds work at rendezvous joins, settles runs a previous Tower left behind, and writes every
-run to history. An agent that calls `layover_send` queues a real flight and the same process runs
-the next agent, charging every hop to the one itinerary that began the chain.
-
-The dashboard watches it behind a token: the route map, each chain on its own, run history, cost,
-help requests a person can answer, and each running agent's output as its CLI prints it,
-read-only. What does not exist is isolation between agents — `access` and `workspace` are declared
-and every agent still shares `work_dir` — and Codex cannot yet be wired to the MCP endpoint.
-
-Why the system is shaped as it is lives in the decision log in `docs/decisions.md`, and what is
-still genuinely undecided is the short list at its end; do not guess at those.
-[`docs/first-release.md`](docs/first-release.md) records the decisions made before 1.0, with their
-reasoning.
+What each crate is for is under [Where things live](#where-things-live). Why the system is shaped
+as it is lives in the decision log — `docs/decisions.md` and the topic files it lists in
+`docs/decisions/` — and what is still genuinely undecided is the short list at the end of
+`docs/decisions.md`; do not guess at those. [`docs/first-release.md`](docs/first-release.md)
+records the decisions made before 1.0, with their reasoning.
 
 ## The golden rule
 
@@ -82,31 +56,37 @@ repository is meant to be worked on by agents.
 
 | If you changed... | Then update... |
 |---|---|
-| Anything in `layover.toml`'s shape | `book/src/configuration.md`, every example in `examples/` that uses it, `docs/architecture.md` §6 |
+| Anything in `layover.toml`'s shape | `book/src/configuration.md` (every key is in its tables; what a runner, route or `[update]` key does is in `runners.md`, `routes.md` or `updating.md`), every example in `examples/` that uses it, `docs/architecture.md` §6 |
 | Cost accounting, Fuel, the Reserve or a rate card | `book/src/cost.md`, `docs/risks.md` risks 4 and 5 |
-| Route, join or barrier semantics | `docs/routing.md`, `book/src/configuration.md` |
+| Route, join or barrier semantics | `docs/routing.md`, `book/src/routes.md` |
 | Pipelines, triggers or flags | `book/src/pipelines.md`, `examples/workitem-factory/` |
 | Prompt composition | `book/src/prompts.md` |
 | The HTTP surface | `api/openapi.yaml` (the contract — never edit `generated.rs`), `book/src/http-api.md` |
 | A safety rail: Hops, Fuel, run cap, Ground Stop | `docs/architecture.md`, `docs/risks.md`, and the arithmetic in `examples/workitem-factory/README.md` |
-| A decision that was not obvious | The decision log in `docs/decisions.md` — *why*, not what |
-| Anything listed as open in `docs/decisions.md` | Answer it in the decision log above it, with the reasoning, and delete the question |
-| A new known hazard | `docs/risks.md` |
+| A decision that was not obvious | The topic file it belongs to in `docs/decisions/`, listed in `docs/decisions.md` — *why*, not what |
+| Anything listed as open in `docs/decisions.md` | Answer it in the decision log, with the reasoning, and delete the question |
+| A new known hazard | `docs/risks.md`, or `docs/risks-releases.md` for releases and updating |
 | MCP servers, workspaces or autostart | `book/src/configuration.md`, `book/src/pipelines.md`, `book/src/install.md` |
+| What a run's environment carries: `env_from`, the scrubbed variables, a CLI's home | `book/src/runners.md` (*A CLI home of the factory's own*), `book/src/install.md`, `docs/risks.md` risk 30 |
 | Any diagram | Use Mermaid, not ASCII — GitHub and the book both render it |
-| Recovery, steering or the handover | `book/src/recovery.md`, `docs/decisions.md` |
-| The dashboard, history or cost windows | `book/src/dashboard.md`, `book/src/cost.md` |
-| Help requests or learnings | `book/src/learning.md`, `docs/decisions.md` |
-| The CLI's commands or flags | `crates/layover-cli/README.md`, `book/src/install.md` |
-| How Layover is installed or released | `dist-workspace.toml` then `dist generate`, `book/src/install.md`, both READMEs |
+| Recovery, steering or the handover | `book/src/recovery.md`, `docs/decisions/recovery.md` |
+| The dashboard, history or cost windows | `book/src/dashboard.md` and its two pages, `dashboard-chains.md` and `dashboard-runs.md`; `book/src/cost.md` |
+| Help requests or learnings | `book/src/learning.md`, `docs/decisions/learning.md` |
+| The CLI's commands or flags | `book/src/cli.md`, `crates/layover-cli/README.md`, `book/src/install.md` |
+| How Layover is installed or released | `dist-workspace.toml` then `dist init --yes`, `RELEASING.md`, `book/src/install.md`, both READMEs |
+| How Layover updates itself: `[update]`, `layover update`, the gate | `book/src/updating.md`, the `[update]` table in `book/src/configuration.md`, `docs/decisions/updates.md`, `docs/risks-releases.md` |
+| A message a person sees when something fails | `book/src/troubleshooting.md`, if it is one people will search for |
+| A term in the vocabulary below | `book/src/glossary.md`, and the [Terminology](#terminology) table |
+| A file in `docs/` added, renamed or removed | `book/src/SUMMARY.md`, which lists it as `./design/…` — the book's design pages are written from `docs/` |
 
-`cargo xtask verify` enforces the parts a machine can check: links that resolve, generated code
-that matches its specification, examples that still parse and validate. It cannot tell you whether
+`cargo xtask verify` enforces the parts a machine can check: links and `#anchors` that resolve,
+every `docs/` file listed in the book, every command and flag in `cli.md`, every `layover.toml` key
+in the configuration reference and every endpoint in `http-api.md`, generated code that matches its
+specification, examples that still parse and validate. It cannot tell you whether
 a paragraph is still true. That part is yours.
 
 **If a change contradicts something written down, fix the writing in the same commit.** Do not
 leave it for later, do not open a follow-up issue, and do not wait to be asked.
-
 
 ## Conventions
 
@@ -122,7 +102,8 @@ leave it for later, do not open a follow-up issue, and do not wait to be asked.
 ## Terminology
 
 This codebase uses an airport metaphor consistently. These are the canonical names — use them in
-type names, API fields and prose alike.
+type names, API fields and prose alike. The book's [glossary](book/src/glossary.md) defines them,
+and the rest of the vocabulary, for people using Layover.
 
 | Term | Meaning |
 |---|---|
@@ -159,23 +140,10 @@ things then need updating by hand, and the compiler only finds them one at a tim
 
 ## Cutting a release
 
-The version lives in four places, and missing any one of them fails `cargo xtask verify` a step
-at a time rather than all at once:
-
-1. `version` in the workspace `Cargo.toml`.
-2. The inter-crate dependency versions in every `crates/*/Cargo.toml` — `layover-core = { path =
-   "…", version = "1.7.0" }`. Cargo refuses to resolve the workspace until these agree.
-3. `version:` in `api/openapi.yaml`.
-4. `cargo xtask generate-api`, because (3) changes the generated file.
-
-Its `CHANGELOG.md` section needs a `**Compatibility.**` paragraph — `verify` refuses one without —
-because installed Layovers show it as what the release changes before they install it. Upgrading
-`dist` needs the pinned manifest in `crates/layover-update/tests/fixtures/` refreshed; a test says
-how.
-
-**Never hand-edit `.github/workflows/release.yml`.** It is generated, and `dist host` checks it
-against what dist would produce and refuses a release that disagrees. Change `dist-workspace.toml`
-and run `dist init --yes` instead. Hand-editing it has already cost one failed release.
+[`RELEASING.md`](RELEASING.md) is the whole process; follow it. Two things in it have each cost a
+failed release: the version lives in **four places**, which `verify` finds one at a time; and
+**`.github/workflows/release.yml` is generated** — never hand-edit it; change `dist-workspace.toml`
+and run `dist init --yes`.
 
 ## Testing against a real agent CLI
 
@@ -192,19 +160,22 @@ this repository's own source**. `layover doctor` reports what the run left behin
 |---|---|
 | `api/openapi.yaml` | **The HTTP contract.** Edit this, never `generated.rs`. |
 | `dist-workspace.toml` | **Release configuration.** Edit this, never `.github/workflows/release.yml`. |
-| `book/` | The published documentation site (mdBook → GitHub Pages) |
+| `RELEASING.md` | **How a release is cut**, for maintainers |
+| `book/` | The published documentation site (mdBook → GitHub Pages): the latest release at the root, `main` at `/dev/` |
+| `book/src/design/` | **Generated** from `docs/` by `cargo xtask book`; never committed. Edit `docs/`. |
 | `docs/architecture.md` | System design |
-| `docs/decisions.md` | Why the system that exists is shaped as it is, and what is still open |
+| `docs/decisions.md` | The decision log's index, and what is still open |
+| `docs/decisions/` | Why the system that exists is shaped as it is, one file per topic |
 | `docs/first-release.md` | Decisions made before 1.0, with their reasoning |
 | `docs/routing.md` | Route map semantics, joins, failure paths |
-| `docs/risks.md` | Known risks and mitigations |
+| `docs/risks.md`, `docs/risks-releases.md` | Known risks and mitigations; the second for releases and updating |
 | `examples/workitem-factory/` | The reference factory, with its sizing arithmetic |
 | `crates/layover-core` | Domain types: config, agents, routes, pipelines, prompts, graph, validation, itinerary, barriers |
 | `crates/layover-http` | The generated HTTP surface and the `Api` trait |
 | `crates/layover-store` | On-disk run history, the journal, Hangars and retention |
 | `crates/layover-dashboard` | The monitoring dashboard: route map, chains, sessions, runs, cost |
-| `crates/layover-tower` | The supervisor: dispatch, rails, recovery — the only crate that starts a process |
-| `crates/layover-mcp` | The MCP endpoint agents call back into |
-| `crates/layover-update` | Release discovery and staging: manifest, versions, download, provenance, gate |
-| `crates/layover-cli` | The `layover` binary |
-| `xtask/` | `verify`, `generate-api` and `docs` |
+| `crates/layover-tower` | The supervisor: dispatch, rails, recovery — the only crate that starts a process, and the first place that can do something irreversible |
+| `crates/layover-mcp` | The MCP endpoint agents call back into. Untrusted input arrives here; identity comes from the token, never the request |
+| `crates/layover-update` | Release discovery and staging: manifest, versions, download, provenance, gate. Makes the only network requests Layover itself makes |
+| `crates/layover-cli` | The `layover` binary: `validate`, `explain`, `graph`, `prompt`, `serve`, `stop`, `run`, `doctor`, `autostart`, `update`, `about` |
+| `xtask/` | `verify`, `generate-api`, `docs`, and `book`, which writes the design pages |

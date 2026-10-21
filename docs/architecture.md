@@ -431,7 +431,7 @@ layover/
 │   ├── layover-store/    # history, the journal, Hangars, live-run records, retention
 │   ├── layover-mcp/      # the MCP endpoint agents call back into, per-run token auth
 │   ├── layover-tower/    # the supervisor: clock, dispatch, rails, recovery, ground stop
-│   ├── layover-dashboard/# the monitoring page and the Api implementation behind it
+│   ├── layover-dashboard/ # the monitoring page and the Api implementation behind it
 │   ├── layover-update/   # finding, staging and verifying newer releases
 │   └── layover-cli/      # the `layover` binary
 ├── examples/             # six factories, parsed and validated by the test suite
@@ -483,6 +483,6 @@ distinction between *policy* and *findings*.
 ## 13. Where the reasoning lives
 
 Rationale for every decision that was not self-evident, and every question still open, is in
-[`decisions.md`](decisions.md). It is kept separate because it grows with every change while
-this document describes a system that is meant to settle down.
+[`decisions.md`](decisions.md) and the topic files it lists. It is kept separate because it grows
+with every change while this document describes a system that is meant to settle down.
 

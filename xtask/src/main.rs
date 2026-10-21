@@ -7,6 +7,9 @@
 //! from `api/openapi.yaml`, and the documentation is checked for links that no longer resolve.
 //! Both run inside `verify`, which is what makes them binding rather than advisory.
 
+mod anchors;
+mod api_docs;
+mod book;
 mod changelog;
 mod docs;
 mod openapi;
@@ -28,6 +31,24 @@ fn main() -> ExitCode {
             }
             Err(error) => {
                 eprintln!("{error}");
+                ExitCode::FAILURE
+            }
+        },
+        Some("book") => match book_arguments() {
+            Ok((tree, git_ref)) => match book::generate(tree.as_deref().unwrap_or(&root), &git_ref)
+            {
+                Ok(report) => {
+                    println!("{report}");
+                    ExitCode::SUCCESS
+                }
+                Err(error) => {
+                    eprintln!("{error}");
+                    ExitCode::FAILURE
+                }
+            },
+            Err(error) => {
+                eprintln!("{error}");
+                usage();
                 ExitCode::FAILURE
             }
         },
@@ -59,6 +80,27 @@ fn usage() {
     eprintln!("  verify        format, lint, generated-code freshness, docs, test, doc build");
     eprintln!("  generate-api  regenerate the HTTP server from api/openapi.yaml");
     eprintln!("  docs          check documentation links and examples");
+    eprintln!("  book [--root DIR] [--ref REF]");
+    eprintln!("                write book/src/design/ from docs/, linking code at REF (main)");
+}
+
+/// `--root` and `--ref` for `book`: which tree to write the design pages into, and which commit
+/// links to code should name.
+fn book_arguments() -> Result<(Option<PathBuf>, String), String> {
+    let mut tree = None;
+    let mut git_ref = "main".to_owned();
+    let mut args = std::env::args().skip(2);
+    while let Some(arg) = args.next() {
+        let value = args
+            .next()
+            .ok_or_else(|| format!("`{arg}` needs a value"))?;
+        match arg.as_str() {
+            "--root" => tree = Some(PathBuf::from(value)),
+            "--ref" => git_ref = value,
+            other => return Err(format!("unknown argument `{other}`")),
+        }
+    }
+    Ok((tree, git_ref))
 }
 
 /// The repository root, found from this crate's manifest rather than the working directory.

@@ -7,6 +7,8 @@
 
 mod applying;
 mod arriving;
+#[cfg(test)]
+mod cli_docs;
 mod commands;
 mod doctor;
 mod mcp;

@@ -10,6 +10,10 @@
 /book/mermaid.min.js
 /book/mermaid-init.js
 
+# The design pages, written from docs/ by `cargo xtask book` when the book is built. docs/ is the
+# source; a committed copy would be a second one.
+/book/src/design/
+
 # Layover runtime state.
 #
 # Every directory, not just the repository root: `layover serve` writes `.layover/` next to

@@ -1,8 +1,9 @@
 # The tools an agent has
 
 Layover speaks [MCP](https://modelcontextprotocol.io/), which all three supported CLIs understand
-natively. An agent reaches Layover the same way it reaches any other tool server, and the tools
-below are what it finds there.
+natively — though Codex cannot yet be told where Layover's endpoint is; see
+[How a run reaches them](#how-a-run-reaches-them). An agent reaches Layover the same way it reaches
+any other tool server, and the tools below are what it finds there.
 
 ## Why the list is short
 
@@ -106,7 +107,7 @@ token itself is in the `claude_json` file, because that is where the CLI looks f
 minted for this run alone and revoked the moment the run ends. The `codex_toml` file names the
 variable it is in instead (`bearer_token_env_var`).
 
-Which file is written depends on the runner's `mcp.format`, which a [preset](./configuration.md#what-a-preset-supplies)
+Which file is written depends on the runner's `mcp.format`, which a [preset](./runners.md#what-a-preset-supplies)
 supplies and a written-out `command` states. The flag is appended to the command unless the
 command places `{mcp}` itself:
 
@@ -125,7 +126,7 @@ mcp     = { flag = "-c", format = "codex_toml" }
 > not a path, so a Codex run wired this way is refused before it starts. The file Layover writes
 > is the right shape — one `[mcp_servers.<name>]` table per server — but Codex has no flag that
 > reads one. Recorded as an open question in
-> [`decisions.md`](https://github.com/KotkaZ/layover-project/blob/main/docs/decisions.md#still-open);
+> [`decisions.md`](./design/decisions.md#still-open);
 > Claude Code and Copilot CLI are unaffected.
 
 `prefix` is prepended to the path. Copilot CLI's `--additional-mcp-config` takes *either* a JSON
