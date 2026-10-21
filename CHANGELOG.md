@@ -8,6 +8,8 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+## [1.16.0] — 2026-10-21
+
 The route map is laid out in reading order, so a workflow with shortcuts and loops reads along its
 main path; and the documentation is reorganised around what a person looks for: a first factory
 that runs on one CLI, pages for updating and troubleshooting, the design inside the book, and a site
@@ -961,7 +963,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.15.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.16.0...HEAD
+[1.16.0]: https://github.com/KotkaZ/layover-project/compare/v1.15.0...v1.16.0
 [1.15.0]: https://github.com/KotkaZ/layover-project/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/KotkaZ/layover-project/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/KotkaZ/layover-project/compare/v1.12.0...v1.13.0
