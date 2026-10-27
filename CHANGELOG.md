@@ -8,6 +8,8 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+## [1.16.1] — 2026-10-27
+
 A Copilot run that dies at start-up because the model it was given is not available is restarted
 like any other run the model service ended, and `layover doctor` names an agent the model service
 keeps ending.
@@ -989,7 +991,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.16.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.16.1...HEAD
+[1.16.1]: https://github.com/KotkaZ/layover-project/compare/v1.16.0...v1.16.1
 [1.16.0]: https://github.com/KotkaZ/layover-project/compare/v1.15.0...v1.16.0
 [1.15.0]: https://github.com/KotkaZ/layover-project/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/KotkaZ/layover-project/compare/v1.13.0...v1.14.0
