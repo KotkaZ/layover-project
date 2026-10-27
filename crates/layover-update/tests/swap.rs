@@ -22,6 +22,12 @@ fn name() -> &'static str {
 }
 
 /// A real program at `path`, started and kept running: the old binary, mid-run.
+///
+/// On Unix a copy of the shell, told to wait. Not a copy of `sleep`: on Ubuntu 26.04 that is
+/// uutils' multi-call binary, which decides what to be from the name it was started as, and
+/// started as `layover` it exits at once. A shell runs as itself whatever it is called, and
+/// `; exit 0` keeps it from handing its process to `sleep`, so the image that keeps running is the
+/// one this test replaced.
 fn running_at(path: &Path) -> Child {
     let (program, args): (PathBuf, &[&str]) = if cfg!(windows) {
         let root = std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into());
@@ -30,7 +36,7 @@ fn running_at(path: &Path) -> Child {
             &["-n", "30", "127.0.0.1"],
         )
     } else {
-        (PathBuf::from("/bin/sleep"), &["30"])
+        (PathBuf::from("/bin/sh"), &["-c", "sleep 30; exit 0"])
     };
     std::fs::copy(&program, path).expect("copies a real program");
     #[cfg(unix)]
