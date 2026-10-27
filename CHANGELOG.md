@@ -8,6 +8,8 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+## [1.17.0] — 2026-10-27
+
 A stalled or failed chain somebody dealt with another way can be dismissed, so it stops counting as
 needing a person without anything running again.
 
@@ -15,7 +17,11 @@ needing a person without anything running again.
 differently. The HTTP API gains `POST` and `DELETE /itineraries/{itinerary_id}/dismiss`, a
 `dismissed` field on each chain and a `dismissed` count on `GET /itineraries`; `stalled` and
 `failed` keep counting every such chain, dismissed or not. Dismissals are kept in
-`.layover/journal/dismissed.jsonl`, which an earlier release ignores.
+`.layover/journal/dismissed.jsonl`, which an earlier release ignores, so the state directory's
+layout is unchanged and going back to 1.16 loses nothing: a dismissed chain only counts as needing
+attention again. For library users, `Api` gains `dismiss_itinerary` and `undismiss_itinerary`,
+`Itinerary` and `ItineraryList` gain `dismissed`, and `layover_store` gains `Dismissal` with
+`Journal::dismiss`, `undismiss` and `dismissals`.
 
 ### Added
 
@@ -1011,7 +1017,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.16.1...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.17.0...HEAD
+[1.17.0]: https://github.com/KotkaZ/layover-project/compare/v1.16.1...v1.17.0
 [1.16.1]: https://github.com/KotkaZ/layover-project/compare/v1.16.0...v1.16.1
 [1.16.0]: https://github.com/KotkaZ/layover-project/compare/v1.15.0...v1.16.0
 [1.15.0]: https://github.com/KotkaZ/layover-project/compare/v1.14.0...v1.15.0
