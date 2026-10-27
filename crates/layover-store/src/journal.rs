@@ -171,7 +171,9 @@ impl Journal {
         Ok(resolved)
     }
 
-    /// Deletes help segments past the retention horizon, returning how many went.
+    /// Deletes help segments past the retention horizon, returning how many went — with the
+    /// reports, stalls and skipped ticks kept beside them, and the dismissals of chains whose runs
+    /// went too.
     ///
     /// Learnings are deliberately untouched: one that expired for being old would be the single
     /// thing here that got worse the longer it was right.
@@ -184,7 +186,8 @@ impl Journal {
         let reports = crate::segment::prune_segments(&self.root, "reports", horizon)?;
         let stalls = crate::segment::prune_segments(&self.root, "stalls", horizon)?;
         let skips = crate::segment::prune_segments(&self.root, "skips", horizon)?;
-        Ok(help + reports + stalls + skips)
+        let dismissals = self.forget_dismissals(horizon)?;
+        Ok(help + reports + stalls + skips + dismissals)
     }
 
     /// Reads the learnings.

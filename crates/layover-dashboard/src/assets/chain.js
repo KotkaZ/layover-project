@@ -6,8 +6,8 @@
 // is where. This view answers that for one chain at a time, and keeps answering while it works.
 //
 // Separate from app.js, which is already long; it uses that file's helpers (`get`, `el`, `when`,
-// `duration`, `money`, `showView`) and the session and reply windows, all of which exist by the
-// time anything here is called.
+// `duration`, `money`, `showView`), the session and reply windows, and dismiss.js's buttons, all of
+// which exist by the time anything here is called.
 
 const chainView = { id: null, timer: null, svg: null };
 
@@ -49,8 +49,8 @@ function chainHeader(chain, runs) {
     el("code", "", chain.itinerary_id),
   );
   const state = $("#chain-state");
-  state.className = `outcome ${chain.state}`;
-  state.textContent = STATES[chain.state] ?? chain.state;
+  state.className = `outcome ${chain.state}${chain.dismissed ? " dismissed" : ""}`;
+  state.textContent = `${STATES[chain.state] ?? chain.state}${chain.dismissed ? " · dismissed" : ""}`;
 
   const ended = chain.finished_at ? new Date(chain.finished_at) : new Date();
   const took = Math.max(0, Math.round((ended - new Date(chain.started_at)) / 1000));
@@ -70,6 +70,9 @@ function chainHeader(chain, runs) {
   const detail = $("#chain-detail");
   detail.hidden = !chain.detail;
   detail.textContent = chain.detail ?? "";
+  const dismissed = $("#chain-dismissed");
+  dismissed.hidden = !chain.dismissed;
+  dismissed.textContent = chain.dismissed ? `${dismissedLine(chain.dismissed)}.` : "";
 
   const actions = $("#chain-actions");
   actions.replaceChildren();
@@ -79,6 +82,8 @@ function chainHeader(chain, runs) {
     answer.addEventListener("click", () => openReplyFor(chain.waiting_for.run_id));
     actions.append(answer);
   }
+  if (dismissable(chain)) actions.append(dismissButton(chain));
+  if (chain.dismissed) actions.append(undismissButton(chain));
   if (startable(chain.pipeline)) {
     const onward = el("button", "link", "Continue…");
     onward.title = "Trigger this workflow again, with this chain's flags.";

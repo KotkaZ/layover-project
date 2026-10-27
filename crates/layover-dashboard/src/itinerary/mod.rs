@@ -34,6 +34,14 @@
 //! Nothing is queued, nothing is stalled at a barrier, nothing was refused: the chain simply stops,
 //! and without a state of its own it read as `finished`. So a chain whose last run failed, timed out
 //! or was interrupted, and that nobody has continued, says so.
+//!
+//! # The chain somebody has dealt with
+//!
+//! A stalled or failed chain stays that way until something continues it, and some never should
+//! be: the fix was made by hand, or the work is no longer wanted. A person can say so — a
+//! [`Dismissal`] — and the chain keeps its state, because that is still what happened, and carries
+//! the dismissal beside it so nothing counts it as needing anybody. A dismissal is of the run the
+//! chain ended on: if the chain goes on and ends badly again, that is a failure nobody has seen.
 
 use std::collections::BTreeMap;
 
@@ -44,9 +52,10 @@ use layover_core::queue::Queued;
 use layover_core::run::{Outcome, RunRecord};
 use layover_core::stall::Stall;
 use layover_http::{HelpAsk, Itinerary, ItineraryState};
+use layover_store::Dismissal;
 
 /// What else is known about chains beside their runs: what the Tower gave up on, what is queued,
-/// and what agents asked people.
+/// what agents asked people, and which chains people have dismissed.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Context<'a> {
     /// Chains the Tower gave up on.
@@ -59,6 +68,8 @@ pub struct Context<'a> {
     pub ground_stop: bool,
     /// Workflows a person has switched off: a chain of one that has not started is held.
     pub switched_off: &'a [PipelineName],
+    /// Stalled and failed chains people have said were dealt with.
+    pub dismissals: &'a [Dismissal],
 }
 
 /// Groups runs into chains and works out what became of each.
@@ -157,6 +168,7 @@ fn not_started(id: &str, queued: &[&Queued], context: Context<'_>) -> Itinerary 
         continued_by: None,
         running: None,
         queued: names(queued.iter().map(|queued| &queued.flight.to)),
+        dismissed: None,
     }
 }
 
@@ -197,6 +209,7 @@ fn build(
         help,
         ground_stop,
         switched_off: _,
+        dismissals,
     } = context;
     let stall = stalls.iter().find(|stall| stall.itinerary.as_str() == id);
 
@@ -210,23 +223,17 @@ fn build(
             && request.is_open()
     });
 
-    let activity = if runs.iter().any(|record| record.finished_at.is_none()) {
-        Activity::Running
-    } else if pending
-        .iter()
-        .any(|queued| queued.flight.itinerary.as_str() == id)
-    {
-        Activity::Waiting
-    } else {
-        Activity::Quiet
-    };
+    let activity = activity_of(id, runs, pending);
 
     // Both directions of a reply: the chain this one continues, and every chain that continues
     // it, whether its runs have started yet or it is only the answer on a request.
     let continued_by = continued_by(id, help, everything);
 
     // A chain somebody has continued has been dealt with, however it ended.
-    let died = ended_on_failure(runs).filter(|_| continued_by.is_empty());
+    let ended = ended_on(runs);
+    let died = ended
+        .filter(|record| record.outcome.is_failure())
+        .filter(|_| continued_by.is_empty());
 
     let ending = if runs.iter().any(|record| record.outcome == Outcome::Halted) {
         Ending::Halted
@@ -236,16 +243,11 @@ fn build(
         Ending::Clean
     };
     let state = state_of(stall.is_some(), activity, asked, ending, ground_stop);
+    let dismissed = dismissed(id, state, ended, dismissals);
 
     // Named in the order they first ran, which is the order somebody reading the chain thinks
     // about it. Alphabetical would put the publisher before the analyst.
-    let mut agents: Vec<String> = Vec::new();
-    for record in runs {
-        let name = record.agent.to_string();
-        if !agents.contains(&name) {
-            agents.push(name);
-        }
-    }
+    let agents = names(runs.iter().map(|record| &record.agent));
 
     // A total built partly from silence is a floor, not a figure. Saying so is the difference
     // between a number somebody can plan against and one they should not.
@@ -272,7 +274,7 @@ fn build(
             .find_map(|r| r.pipeline.as_ref().map(ToString::to_string)),
         name: name_of(id, runs, pending),
         state,
-        agents: Some(agents),
+        agents,
         runs: i32::try_from(runs.len()).unwrap_or(i32::MAX),
         usd: runs.iter().map(|record| record.usd).sum(),
         measured: Some(measured),
@@ -309,7 +311,33 @@ fn build(
                 .filter(|queued| queued.flight.itinerary.as_str() == id)
                 .map(|queued| &queued.flight.to),
         ),
+        dismissed,
     }
+}
+
+/// The dismissal that stands for a chain: one of the run it ended on, while it is stalled or failed.
+///
+/// Only then. A chain that has since been continued no longer needs one, and one that ended on a
+/// later run has a failure nobody has looked at.
+fn dismissed(
+    id: &str,
+    state: ItineraryState,
+    ended: Option<&RunRecord>,
+    dismissals: &[Dismissal],
+) -> Option<layover_http::Dismissal> {
+    if !matches!(state, ItineraryState::Stalled | ItineraryState::Failed) {
+        return None;
+    }
+    let ended = ended?;
+    dismissals
+        .iter()
+        .find(|dismissal| dismissal.itinerary.as_str() == id && dismissal.run == ended.run)
+        .map(|dismissal| layover_http::Dismissal {
+            run_id: dismissal.run.as_str().to_owned(),
+            by: dismissal.by.clone(),
+            at: dismissal.at.to_string(),
+            note: dismissal.note.clone(),
+        })
 }
 
 /// What a chain waiting only for a restart's back-off is waiting for, so `working` with nothing
@@ -329,14 +357,14 @@ fn backing_off(id: &str, pending: &[Queued]) -> Option<String> {
         .next()
 }
 
-/// The run a chain ended on, when it ended on one that failed, timed out or was interrupted: the
-/// last to finish, so in a fan-out a branch that died while another went on does not count.
-fn ended_on_failure<'a>(runs: &[&'a RunRecord]) -> Option<&'a RunRecord> {
+/// The run a chain ended on: the last to finish, so in a fan-out a branch that died while another
+/// went on is not it. Whether that run failed, timed out or was interrupted is what makes a chain
+/// `failed`; which run it was is what a dismissal names.
+pub(crate) fn ended_on<'a>(runs: &[&'a RunRecord]) -> Option<&'a RunRecord> {
     runs.iter()
         .copied()
         .filter(|record| record.finished_at.is_some())
         .max_by_key(|record| (record.finished_at, record.started_at))
-        .filter(|record| record.outcome.is_failure())
 }
 
 /// Every chain that continues `id`: the chains replies to its help requests started, and any run
@@ -362,6 +390,20 @@ fn continued_by(id: &str, help: &[HelpRequest], everything: &[RunRecord]) -> Vec
     found.sort();
     found.dedup();
     found
+}
+
+/// Whether anything is still happening in chain `id`: a run in it alive, or work for it queued.
+fn activity_of(id: &str, runs: &[&RunRecord], pending: &[Queued]) -> Activity {
+    if runs.iter().any(|record| record.finished_at.is_none()) {
+        Activity::Running
+    } else if pending
+        .iter()
+        .any(|queued| queued.flight.itinerary.as_str() == id)
+    {
+        Activity::Waiting
+    } else {
+        Activity::Quiet
+    }
 }
 
 /// Whether anything is still happening in a chain.

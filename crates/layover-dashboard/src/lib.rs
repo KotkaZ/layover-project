@@ -31,6 +31,7 @@ mod api;
 mod assets;
 pub mod auth;
 mod chain;
+mod dismiss;
 mod itinerary;
 mod live;
 mod map;

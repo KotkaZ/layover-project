@@ -17,16 +17,17 @@ use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt as _;
 use layover_http::{
     Access, Agent, AgentList, Api, Blocker, CancelFlightPath, CostBucket, CostDay, CostReport,
-    CostSource, CostSummary, CostWindow, EventStream, FlightAccepted, GetCostsQuery, GetGraphQuery,
-    GetItineraryPath, GetReportPath, GetRunPath, GetUpcomingQuery, GroundStop, Health, HelpList,
-    HelpReplied, HelpReplyRequest, HelpRequest, HelpResolved, Impact, Itinerary, ItineraryDetail,
-    ItineraryList, ItineraryState, JudgeLearningPath, JudgeLearningRequest, Learning, LearningList,
-    LearningState, ListHelpQuery, ListItinerariesQuery, ListLearningsQuery, ListRunsQuery,
-    OPERATIONS, PendingFlight, PendingList, Pipeline, PipelineList, PipelineSwitch, Problem,
-    Report, ReserveState, ResolveHelpRequest, RouteMap, Run, RunList, RunStatus, ScheduledFire,
-    ScheduledWorkflow, SendFlightRequest, SkipReason, SkippedTick, Status, StreamRunPath,
-    StreamRunQuery, SwitchOffPipelinePath, SwitchOnPipelinePath, TokenUsage, Trigger, TriggerKind,
-    Upcoming, WaitingLayover, WindowSpan, Workspace, router,
+    CostSource, CostSummary, CostWindow, DismissItineraryPath, DismissItineraryRequest, Dismissal,
+    EventStream, FlightAccepted, GetCostsQuery, GetGraphQuery, GetItineraryPath, GetReportPath,
+    GetRunPath, GetUpcomingQuery, GroundStop, Health, HelpList, HelpReplied, HelpReplyRequest,
+    HelpRequest, HelpResolved, Impact, Itinerary, ItineraryDetail, ItineraryList, ItineraryState,
+    JudgeLearningPath, JudgeLearningRequest, Learning, LearningList, LearningState, ListHelpQuery,
+    ListItinerariesQuery, ListLearningsQuery, ListRunsQuery, OPERATIONS, PendingFlight,
+    PendingList, Pipeline, PipelineList, PipelineSwitch, Problem, Report, ReserveState,
+    ResolveHelpRequest, RouteMap, Run, RunList, RunStatus, ScheduledFire, ScheduledWorkflow,
+    SendFlightRequest, SkipReason, SkippedTick, Status, StreamRunPath, StreamRunQuery,
+    SwitchOffPipelinePath, SwitchOnPipelinePath, TokenUsage, Trigger, TriggerKind,
+    UndismissItineraryPath, Upcoming, WaitingLayover, WindowSpan, Workspace, router,
 };
 use tower::ServiceExt as _;
 
@@ -372,11 +373,45 @@ impl Api for Stub {
                 continued_by: None,
                 running: None,
                 queued: None,
+                dismissed: None,
             }],
             stalled: 1,
             awaiting_human: 0,
             failed: 0,
+            dismissed: 0,
         })
+    }
+
+    async fn dismiss_itinerary(
+        &self,
+        path: DismissItineraryPath,
+        body: DismissItineraryRequest,
+    ) -> Result<Itinerary, Problem> {
+        let mut chain = self
+            .get_itinerary(GetItineraryPath {
+                itinerary_id: path.itinerary_id,
+            })
+            .await?
+            .itinerary;
+        chain.dismissed = Some(Dismissal {
+            run_id: "run_reviewer".to_owned(),
+            by: body.by.unwrap_or_else(|| "karl".to_owned()),
+            at: "2026-09-17T11:00:00Z".to_owned(),
+            note: body.note,
+        });
+        Ok(chain)
+    }
+
+    async fn undismiss_itinerary(
+        &self,
+        path: UndismissItineraryPath,
+    ) -> Result<Itinerary, Problem> {
+        Ok(self
+            .get_itinerary(GetItineraryPath {
+                itinerary_id: path.itinerary_id,
+            })
+            .await?
+            .itinerary)
     }
 
     async fn get_itinerary(&self, path: GetItineraryPath) -> Result<ItineraryDetail, Problem> {
@@ -564,7 +599,7 @@ fn json(body: &str) -> serde_json::Value {
 
 #[test]
 fn every_specified_operation_is_routed() {
-    assert_eq!(OPERATIONS.len(), 29);
+    assert_eq!(OPERATIONS.len(), 31);
 
     for (method, path, operation) in OPERATIONS {
         assert!(path.starts_with('/'), "`{operation}` has an odd path");
@@ -723,6 +758,27 @@ async fn a_workflow_is_switched_off_and_on_at_its_own_path() {
     let (status, _, on) = call("DELETE", "/pipelines/review-bot/switch-off", None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(json(&on)["switched_off"], false);
+}
+
+#[tokio::test]
+async fn a_chain_is_dismissed_and_undismissed_at_its_own_path() {
+    let (status, _, dismissed) = call(
+        "POST",
+        "/itineraries/itn_1/dismiss",
+        Some(r#"{"note":"fixed by hand"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json(&dismissed)["state"], "stalled", "it keeps its state");
+    assert_eq!(json(&dismissed)["dismissed"]["note"], "fixed by hand");
+    assert_eq!(json(&dismissed)["dismissed"]["run_id"], "run_reviewer");
+
+    let (status, _, undone) = call("DELETE", "/itineraries/itn_1/dismiss", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(json(&undone)["dismissed"].is_null());
+
+    let (status, _, _) = call("POST", "/itineraries/itn_2/dismiss", Some("{}")).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

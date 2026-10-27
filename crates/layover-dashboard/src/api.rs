@@ -20,15 +20,15 @@ use layover_core::pipeline::{FlagError, Pipeline as CorePipeline, PipelineName};
 use layover_core::queue::Queued;
 use layover_core::run::Outcome;
 use layover_http::{
-    AgentList, Api, CancelFlightPath, CostBucket, CostReport, CostWindow, EventStream,
-    FlightAccepted, GetCostsQuery, GetGraphQuery, GetItineraryPath, GetReportPath, GetRunPath,
-    GetUpcomingQuery, GroundStop, Health, HelpList, HelpReplied, HelpReplyRequest, HelpResolved,
-    ItineraryDetail, ItineraryList, ItineraryState, JudgeLearningPath, JudgeLearningRequest,
-    Judgement, Learning, LearningList, ListHelpQuery, ListItinerariesQuery, ListLearningsQuery,
-    ListRunsQuery, PendingList, PipelineList, PipelineSwitch, Problem, Report, ReserveState,
-    ResolveHelpRequest, RouteMap, Run, RunList, RunStatus, SendFlightRequest, Status,
-    StreamRunPath, StreamRunQuery, SwitchOffPipelinePath, SwitchOnPipelinePath, Upcoming,
-    UpdateStatus,
+    AgentList, Api, CancelFlightPath, CostBucket, CostReport, CostWindow, DismissItineraryPath,
+    DismissItineraryRequest, EventStream, FlightAccepted, GetCostsQuery, GetGraphQuery,
+    GetItineraryPath, GetReportPath, GetRunPath, GetUpcomingQuery, GroundStop, Health, HelpList,
+    HelpReplied, HelpReplyRequest, HelpResolved, Itinerary, ItineraryDetail, ItineraryList,
+    ItineraryState, JudgeLearningPath, JudgeLearningRequest, Judgement, Learning, LearningList,
+    ListHelpQuery, ListItinerariesQuery, ListLearningsQuery, ListRunsQuery, PendingList,
+    PipelineList, PipelineSwitch, Problem, Report, ReserveState, ResolveHelpRequest, RouteMap, Run,
+    RunList, RunStatus, SendFlightRequest, Status, StreamRunPath, StreamRunQuery,
+    SwitchOffPipelinePath, SwitchOnPipelinePath, UndismissItineraryPath, Upcoming, UpdateStatus,
 };
 use layover_store::{HelpFilter, History, Journal, RunFilter};
 
@@ -662,6 +662,7 @@ impl Api for Dashboard {
             .unwrap_or_default();
 
         let off: Vec<PipelineName> = self.switched_off().into_keys().collect();
+        let dismissals = self.0.journal.dismissals().unwrap_or_default();
         let mut chains = crate::itinerary::itineraries(
             &records,
             crate::itinerary::Context {
@@ -670,6 +671,7 @@ impl Api for Dashboard {
                 help: &help,
                 ground_stop: self.ground_stop_engaged(),
                 switched_off: &off,
+                dismissals: &dismissals,
             },
         );
 
@@ -685,8 +687,30 @@ impl Api for Dashboard {
             stalled: count(ItineraryState::Stalled),
             awaiting_human: count(ItineraryState::AwaitingHuman),
             failed: count(ItineraryState::Failed),
+            dismissed: i32::try_from(
+                chains
+                    .iter()
+                    .filter(|chain| chain.dismissed.is_some())
+                    .count(),
+            )
+            .unwrap_or(i32::MAX),
             itineraries: chains,
         })
+    }
+
+    async fn dismiss_itinerary(
+        &self,
+        path: DismissItineraryPath,
+        body: DismissItineraryRequest,
+    ) -> Result<Itinerary, Problem> {
+        self.dismiss(&path.itinerary_id, &body)
+    }
+
+    async fn undismiss_itinerary(
+        &self,
+        path: UndismissItineraryPath,
+    ) -> Result<Itinerary, Problem> {
+        self.undismiss(&path.itinerary_id)
     }
 
     async fn reply_help(&self, body: HelpReplyRequest) -> Result<HelpReplied, Problem> {

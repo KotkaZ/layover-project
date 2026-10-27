@@ -64,7 +64,8 @@ than the work: it is restarted after a back-off where the agent's `recovery` is 
 `max_recovery_attempts`, and the detail says why when it was not — see
 [Recovery](./recovery.md#when-the-model-service-fails). Any other failure is the run's own, and is
 never restarted. **Continue…** on the chain's page starts the workflow again with that chain's
-flags.
+flags. If you have already dealt with it another way, **Dismiss…** says so: it stays `failed`, and
+stops counting as needing you.
 
 **`the model service failed: Model "…" from --model flag is not available.`** Copilot CLI checked
 the model the agent runs on before it made a call, and the service was not offering it. In an

@@ -38,12 +38,7 @@ impl Dashboard {
         }
 
         let run = RunId::from(request.run_id.as_str());
-        let by = request
-            .by
-            .as_deref()
-            .map(str::trim)
-            .filter(|by| !by.is_empty())
-            .map_or_else(operator, str::to_owned);
+        let by = who(request.by.as_deref());
         let at = Timestamp::now();
 
         let answered = self
@@ -129,8 +124,16 @@ impl Dashboard {
     }
 }
 
-/// Who is replying when nobody said: the account the dashboard runs as, which on a machine one
-/// person runs a factory from is that person.
+/// Who a person said they were, or when they said nothing, the account the dashboard runs as —
+/// which on a machine one person runs a factory from is that person.
+pub(crate) fn who(given: Option<&str>) -> String {
+    given
+        .map(str::trim)
+        .filter(|by| !by.is_empty())
+        .map_or_else(operator, str::to_owned)
+}
+
+/// The account the dashboard runs as.
 fn operator() -> String {
     std::env::var("USERNAME")
         .or_else(|_| std::env::var("USER"))

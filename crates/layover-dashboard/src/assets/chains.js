@@ -9,15 +9,17 @@
 // nobody reads to the bottom of.
 //
 // Uses app.js's helpers (`get`, `el`, `$`, `money`, `whenCell`, `workflowCell`, `STATES`,
-// `scope`, `pipelinesByName`) and chain.js's and reply.js's `openChain` and `openReplyFor`.
+// `scope`, `pipelinesByName`), chain.js's and reply.js's `openChain` and `openReplyFor`, and
+// dismiss.js's `needsAttention`, `dismissable`, `dismissButton` and `dismissedLine`.
 
-const chainsView = { all: [], shown: 0, stalled: 0, awaiting: 0, failed: 0 };
+const chainsView = { all: [], shown: 0, stalled: 0, awaiting: 0, failed: 0, dismissed: 0 };
 const CHAINS_PAGE = 50;
 const ATTENTION = new Set(["working", "awaiting_human", "stalled", "failed", "halted"]);
 
 /// A chain's state, and for one that is working, where it is.
 function chainState(chain) {
   const state = STATES[chain.state] ?? chain.state;
+  if (chain.dismissed) return `${state} · dismissed`;
   if (chain.state !== "working") return state;
   if (chain.running) return `${state} · at ${chain.running.join(", ")}`;
   if (chain.queued) return `${state} · queued`;
@@ -39,7 +41,7 @@ function chainsShown() {
   return chainsView.all.filter((chain) => {
     // The header's workflow narrows this list as it narrows every other.
     if (scope() && chain.pipeline !== scope()) return false;
-    if (state === "attention" && !ATTENTION.has(chain.state)) return false;
+    if (state === "attention" && !needsAttention(chain)) return false;
     if (state && state !== "attention" && chain.state !== state) return false;
     if (hideRoutine && routine(chain)) return false;
     if (!needle) return true;
@@ -58,11 +60,12 @@ function chainRow(chain) {
     el("td", "", (chain.agents ?? []).join(" → ") || "—"),
     el("td", "num", String(chain.runs)),
     el("td", "num", cost),
-    el("td", `outcome ${chain.state}`, chainState(chain)),
+    el("td", `outcome ${chain.state}${chain.dismissed ? " dismissed" : ""}`, chainState(chain)),
   );
 
-  // Only what needs a person here: a chain waiting for an answer gets it. Continuing a chain is
-  // a new piece of work, and lives on the chain's own page rather than on every finished row.
+  // Only what needs a person here: a chain waiting for an answer gets it, and one that stopped
+  // can be dismissed by somebody who dealt with it another way. Continuing a chain is a new piece
+  // of work, and lives on the chain's own page rather than on every finished row.
   const actions = el("td", "actions");
   if (chain.waiting_for) {
     const answer = el("button", "link", "Reply…");
@@ -70,12 +73,14 @@ function chainRow(chain) {
     answer.addEventListener("click", () => openReplyFor(chain.waiting_for.run_id));
     actions.append(answer);
   }
+  if (dismissable(chain)) actions.append(dismissButton(chain));
   actions.append(el("span", "open", "›"));
   row.append(actions);
 
   // The reason lives in a tooltip rather than a column: it is a sentence, and a column wide
   // enough for it would squeeze out everything that is scannable.
-  row.title = chain.detail ? `${chain.detail} — open this chain` : "Open this chain";
+  const why = [chain.detail, chain.dismissed && dismissedLine(chain.dismissed)].filter(Boolean);
+  row.title = why.length ? `${why.join(" — ")} — open this chain` : "Open this chain";
   row.classList.add("readable", "opens");
   row.addEventListener("click", (event) => {
     if (event.target.closest("button")) return;
@@ -94,12 +99,13 @@ function showChains(more = false) {
   for (const chain of shown.slice(from, chainsView.shown)) body.append(chainRow(chain));
 
   const total = chainsView.all.length;
-  const attention = chainsView.all.filter((chain) => ATTENTION.has(chain.state)).length;
+  const attention = chainsView.all.filter(needsAttention).length;
   const parts = [`${total} chain(s)`];
   if (attention) parts.push(`${attention} need attention`);
   if (chainsView.stalled) parts.push(`${chainsView.stalled} stalled`);
   if (chainsView.failed) parts.push(`${chainsView.failed} failed`);
   if (chainsView.awaiting) parts.push(`${chainsView.awaiting} waiting for you`);
+  if (chainsView.dismissed) parts.push(`${chainsView.dismissed} dismissed`);
   if (shown.length !== total) parts.push(`${shown.length} shown`);
   $("#chains-count").textContent = total === 0 ? "Nothing ran in this window." : parts.join(" · ");
 
@@ -115,7 +121,7 @@ function showChains(more = false) {
   if (!empty.hidden) {
     empty.append(
       $("#chains-state").value === "attention"
-        ? `Nothing needs attention — all ${total} chain(s) in this window finished. `
+        ? `Nothing needs attention among the ${total} chain(s) in this window. `
         : "No chain matches. ",
     );
     const all = el("button", "link", "Show every chain");
@@ -135,24 +141,25 @@ async function loadChains() {
   const params = new URLSearchParams({ window: $("#chains-window").value });
 
   try {
-    const {
-      itineraries,
-      stalled,
-      awaiting_human: awaiting,
-      failed,
-    } = await get(`/itineraries?${params}`);
+    const { itineraries, awaiting_human: awaiting, dismissed } = await get(`/itineraries?${params}`);
+    // Stalled and failed as a person sees them: those somebody dismissed need nobody.
+    const open = (state) =>
+      itineraries.filter((chain) => chain.state === state && !chain.dismissed).length;
+    const stalled = open("stalled");
+    const failed = open("failed");
     chainsView.all = itineraries;
     chainsView.stalled = stalled;
     chainsView.awaiting = awaiting;
     chainsView.failed = failed;
+    chainsView.dismissed = dismissed;
     // A refresh keeps however many pages somebody had opened, so they do not lose their place.
     const pages = Math.max(1, Math.ceil(chainsView.shown / CHAINS_PAGE));
     showChains();
     for (let page = 1; page < pages; page += 1) showChains(true);
     updated("#chains-updated");
 
-    // Red for the chains nothing will move again by itself: stalled at a barrier, or ended on a
-    // run that failed.
+    // Red for the chains nothing will move again by itself and nobody has dismissed: stalled at a
+    // barrier, or ended on a run that failed.
     const badge = $("#stalled-badge");
     badge.textContent = String(stalled + failed);
     badge.hidden = stalled + failed === 0;

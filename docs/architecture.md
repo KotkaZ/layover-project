@@ -303,6 +303,7 @@ Everything a factory accumulates lives in `.layover/`, beside its `layover.toml`
 ├── journal/
 │   ├── pending.jsonl            # the queue
 │   ├── switched-off.jsonl       # workflows a person switched off; absent when none is
+│   ├── dismissed.jsonl          # stalled or failed chains a person dismissed; absent when none is
 │   ├── layovers.jsonl           # work set down to be resumed later
 │   ├── learnings.jsonl          # what agents proposed, and what became of it
 │   ├── help-2026-09-23.jsonl    # help requests, segmented by day

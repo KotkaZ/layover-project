@@ -393,6 +393,7 @@ function start() {
   startJournal();
   startSessions();
   startReplies();
+startDismissals();
   startChains();
   startUpcoming();
   startAttention();

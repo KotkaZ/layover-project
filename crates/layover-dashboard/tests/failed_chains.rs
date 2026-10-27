@@ -1,5 +1,6 @@
 //! What the dashboard says about a chain that ended on a failed run, and a run the model service
-//! ended: the chain is `failed` until a restart is queued, and the run says whose failure it was.
+//! ended: the chain is `failed` until a restart is queued, the run says whose failure it was, and a
+//! person can dismiss the chain once they have dealt with it.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -31,12 +32,24 @@ impl Factory {
 
     /// Writes a run of `chain` that the model service ended a minute ago.
     fn provider_failure(&self, chain: &ItineraryId) {
+        self.ran(
+            chain,
+            r#""outcome":"failed","source":"copilot_credits","usd":0.3,"exit_code":1,"detail":"exited with code 1: the model service failed (http_400); not restarted: this agent's `recovery` policy is `manual`; a human decides","cause":"provider_error","request_id":"00000-7a12""#,
+        );
+    }
+
+    /// Writes a run of `chain` that went well, a minute ago.
+    fn success(&self, chain: &ItineraryId) {
+        self.ran(chain, r#""outcome":"succeeded","source":"unreported""#);
+    }
+
+    fn ran(&self, chain: &ItineraryId, how: &str) {
         let at = jiff::Timestamp::now()
             .checked_sub(jiff::SignedDuration::from_mins(1))
             .expect("in range");
         let day = at.to_string().chars().take(10).collect::<String>();
         let line = format!(
-            r#"{{"run":"run_wolf","itinerary":"{chain}","agent":"wolf","outcome":"failed","started_at":"{at}","finished_at":"{at}","source":"copilot_credits","usd":0.3,"exit_code":1,"detail":"exited with code 1: the model service failed (http_400); not restarted: this agent's `recovery` policy is `manual`; a human decides","cause":"provider_error","request_id":"00000-7a12"}}"#,
+            r#"{{"run":"run_wolf","itinerary":"{chain}","agent":"wolf","started_at":"{at}","finished_at":"{at}",{how}}}"#,
             chain = chain.as_str()
         );
         fs::write(
@@ -51,6 +64,17 @@ impl Factory {
     }
 
     async fn get(&self, path: &str) -> serde_json::Value {
+        let (status, body) = self.send("GET", path, None).await;
+        assert_eq!(status, StatusCode::OK, "{path}: {body}");
+        body
+    }
+
+    async fn send(
+        &self,
+        method: &str,
+        path: &str,
+        body: Option<&str>,
+    ) -> (StatusCode, serde_json::Value) {
         let app = router(
             Dashboard::new(DashboardState {
                 config_path: self.0.join("layover.toml"),
@@ -60,23 +84,25 @@ impl Factory {
             }),
             Guard::Open,
         );
+        let request = Request::builder().method(method).uri(path);
+        let request = match body {
+            Some(body) => request
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_owned())),
+            None => request.body(Body::empty()),
+        };
         let response = app
-            .oneshot(
-                Request::builder()
-                    .uri(path)
-                    .body(Body::empty())
-                    .expect("request"),
-            )
+            .oneshot(request.expect("request"))
             .await
             .expect("responds");
-        assert_eq!(response.status(), StatusCode::OK, "{path}");
+        let status = response.status();
         let bytes = response
             .into_body()
             .collect()
             .await
             .expect("body")
             .to_bytes();
-        serde_json::from_slice(&bytes).expect("JSON")
+        (status, serde_json::from_slice(&bytes).expect("JSON"))
     }
 }
 
@@ -167,4 +193,75 @@ async fn a_chain_whose_restart_is_backing_off_is_working_and_the_queue_says_when
     let restart = &flights["pending"][0];
     assert_eq!(restart["attempt"], 2);
     assert_eq!(restart["not_before"], at.to_string());
+}
+
+#[tokio::test]
+async fn a_failed_chain_somebody_dismissed_stays_failed_and_stops_needing_anybody() {
+    let factory = Factory::new("dismissed");
+    let chain = ItineraryId::generate();
+    factory.provider_failure(&chain);
+    // It starts nothing, so a Ground Stop does not refuse it.
+    fs::write(factory.0.join("ground-stop"), "").expect("engages");
+    let path = format!("/itineraries/{}/dismiss", chain.as_str());
+
+    let (status, dismissed) = factory
+        .send(
+            "POST",
+            &path,
+            Some(r#"{"by":"karl","note":"  merged the fix by hand  "}"#),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{dismissed}");
+    assert_eq!(
+        dismissed["state"], "failed",
+        "what happened stays on record"
+    );
+    assert_eq!(dismissed["dismissed"]["by"], "karl");
+    assert_eq!(dismissed["dismissed"]["note"], "merged the fix by hand");
+    assert_eq!(dismissed["dismissed"]["run_id"], "run_wolf");
+
+    let chains = factory.get("/itineraries?window=last_24h").await;
+    assert_eq!(chains["failed"], 1, "{chains}");
+    assert_eq!(chains["dismissed"], 1, "{chains}");
+    assert_eq!(
+        chains["itineraries"][0]["dismissed"],
+        dismissed["dismissed"]
+    );
+
+    // A second press, by somebody else, keeps who did it first.
+    let (status, again) = factory.send("POST", &path, Some(r#"{"by":"ada"}"#)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(again["dismissed"], dismissed["dismissed"]);
+
+    let (status, undone) = factory.send("DELETE", &path, None).await;
+    assert_eq!(status, StatusCode::OK, "{undone}");
+    assert!(undone["dismissed"].is_null(), "{undone}");
+    let chains = factory.get("/itineraries?window=last_24h").await;
+    assert_eq!(chains["dismissed"], 0, "it needs attention again: {chains}");
+
+    let (status, _) = factory.send("DELETE", &path, None).await;
+    assert_eq!(status, StatusCode::OK, "undoing twice changes nothing");
+}
+
+#[tokio::test]
+async fn only_a_stalled_or_failed_chain_can_be_dismissed() {
+    let factory = Factory::new("refused");
+    let chain = ItineraryId::generate();
+    factory.success(&chain);
+
+    let (status, refused) = factory
+        .send(
+            "POST",
+            &format!("/itineraries/{}/dismiss", chain.as_str()),
+            Some("{}"),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{refused}");
+    assert_eq!(refused["title"], "it finished");
+
+    let unknown = format!("/itineraries/{}/dismiss", ItineraryId::generate().as_str());
+    let (status, _) = factory.send("POST", &unknown, Some("{}")).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = factory.send("DELETE", &unknown, None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }

@@ -404,3 +404,5 @@ fn a_chain_whose_run_was_halted_is_halted_even_when_it_also_failed() {
 
     assert_eq!(built[0].state, ItineraryState::Halted);
 }
+
+mod dismissals;

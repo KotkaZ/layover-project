@@ -27,6 +27,8 @@ const SCRIPTS: &[(&str, &str)] = &[
     ("/sessions.js", include_str!("assets/sessions.js")),
     // Answering help requests, and continuing a chain with its own flags.
     ("/reply.js", include_str!("assets/reply.js")),
+    // Dismissing a stalled or failed chain somebody dealt with another way.
+    ("/dismiss.js", include_str!("assets/dismiss.js")),
     // One chain, whole: its map drawn for it alone, and its runs in order.
     ("/chain.js", include_str!("assets/chain.js")),
     // A chain against the clock, and the flags it ran with.

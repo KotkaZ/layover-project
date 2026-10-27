@@ -271,6 +271,31 @@ pub enum CostWindow {
     AllTime,
 }
 
+/// Who is dismissing a chain, and why.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DismissItineraryRequest {
+    /// Who is dismissing it. Defaults to the account the dashboard runs as.
+    #[serde(default)]
+    pub by: Option<String>,
+    /// Why — how it was dealt with — for whoever reads the chain later.
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+/// Who said a stalled or failed chain had been dealt with, and when.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Dismissal {
+    /// When.
+    pub at: String,
+    /// Who dismissed it, as they gave it, or the account the dashboard runs as.
+    pub by: String,
+    /// Why, when they said.
+    #[serde(default)]
+    pub note: Option<String>,
+    /// The run the chain had ended on, which is what was dismissed.
+    pub run_id: String,
+}
+
 /// Whose failure a failed run was, when it was not the run's own work.
 ///
 /// `provider_error`: the model service rejected or dropped a call, and nothing after it shows
@@ -485,6 +510,11 @@ pub struct Itinerary {
     /// continued it.
     #[serde(default)]
     pub detail: Option<String>,
+    /// A person's word that this stalled or failed chain has been dealt with, so it no longer
+    /// needs attention. Absent for any other chain, and once the chain has ended on a
+    /// different run from the one that was dismissed.
+    #[serde(default)]
+    pub dismissed: Option<Dismissal>,
     /// When the last run of the chain ended. Null while it is still working.
     #[serde(default)]
     pub finished_at: Option<String>,
@@ -546,6 +576,9 @@ pub struct ItineraryDetail {
 pub struct ItineraryList {
     /// How many of them are waiting for a person to answer a help request.
     pub awaiting_human: i32,
+    /// How many of the stalled and failed ones a person has dismissed. What still needs
+    /// somebody is `stalled + failed - dismissed`.
+    pub dismissed: i32,
     /// How many of them ended on a run that failed, with nothing after it.
     pub failed: i32,
     /// Chains, most recently started first.
@@ -571,6 +604,9 @@ pub struct ItineraryList {
 /// `failed` ended on a run that failed, timed out or was interrupted, with nothing queued or
 /// running after it: the work stopped short, and no agent will pick it up. A chain somebody
 /// has continued is not counted.
+///
+/// A `stalled` or `failed` chain somebody has dealt with another way can be dismissed: it
+/// keeps its state and carries `dismissed`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ItineraryState {
     /// `working`
@@ -1583,6 +1619,20 @@ pub struct GetItineraryPath {
     pub itinerary_id: String,
 }
 
+/// path parameters for `dismissItinerary`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DismissItineraryPath {
+    /// Identifier of the chain.
+    pub itinerary_id: String,
+}
+
+/// path parameters for `undismissItinerary`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UndismissItineraryPath {
+    /// Identifier of the chain.
+    pub itinerary_id: String,
+}
+
 /// query parameters for `listLearnings`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListLearningsQuery {
@@ -1862,6 +1912,34 @@ pub trait Api: Send + Sync + 'static {
         &self,
         path: GetItineraryPath,
     ) -> impl core::future::Future<Output = Result<ItineraryDetail, Problem>> + Send;
+    /// Say a stalled or failed chain has been dealt with, without running anything.
+    ///
+    /// For a chain somebody has handled another way — fixed by hand, or no longer wanted. It keeps
+    /// its state, so what happened stays on record, and carries `dismissed`: who, when, and why
+    /// if they said. It stops counting as needing attention.
+    ///
+    /// A dismissal is of the run the chain ended on. If the chain goes on and ends on another
+    /// failed run, or stalls again, it needs attention again. Continuing the work is
+    /// **Continue…**, or `POST /flights`, not this.
+    ///
+    /// Dismissing a chain already dismissed changes nothing: the first dismissal is kept. A
+    /// Ground Stop does not refuse it, because it starts nothing.
+    ///
+    /// `POST /itineraries/{itinerary_id}/dismiss`
+    fn dismiss_itinerary(
+        &self,
+        path: DismissItineraryPath,
+        body: DismissItineraryRequest,
+    ) -> impl core::future::Future<Output = Result<Itinerary, Problem>> + Send;
+    /// Undo a dismissal, so the chain needs attention again.
+    ///
+    /// Removing a dismissal that is not there changes nothing and is not an error.
+    ///
+    /// `DELETE /itineraries/{itinerary_id}/dismiss`
+    fn undismiss_itinerary(
+        &self,
+        path: UndismissItineraryPath,
+    ) -> impl core::future::Future<Output = Result<Itinerary, Problem>> + Send;
     /// What agents have worked out, and how well established it is.
     ///
     /// A learning applies as soon as it is proposed and expires unless later runs arrive at it
@@ -2082,6 +2160,11 @@ pub fn router<A: Api>(api: std::sync::Arc<A>) -> axum::Router {
             "/itineraries/{itinerary_id}",
             axum::routing::get(handle_get_itinerary::<A>),
         )
+        .route(
+            "/itineraries/{itinerary_id}/dismiss",
+            axum::routing::post(handle_dismiss_itinerary::<A>)
+                .delete(handle_undismiss_itinerary::<A>),
+        )
         .route("/learnings", axum::routing::get(handle_list_learnings::<A>))
         .route(
             "/learnings/{learning_id}",
@@ -2252,6 +2335,27 @@ async fn handle_get_itinerary<A: Api>(
     }
 }
 
+async fn handle_dismiss_itinerary<A: Api>(
+    axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
+    axum::extract::Path(path): axum::extract::Path<DismissItineraryPath>,
+    axum::Json(body): axum::Json<DismissItineraryRequest>,
+) -> axum::response::Response {
+    match api.dismiss_itinerary(path, body).await {
+        Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
+        Err(problem) => problem.into_response(),
+    }
+}
+
+async fn handle_undismiss_itinerary<A: Api>(
+    axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
+    axum::extract::Path(path): axum::extract::Path<UndismissItineraryPath>,
+) -> axum::response::Response {
+    match api.undismiss_itinerary(path).await {
+        Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
+        Err(problem) => problem.into_response(),
+    }
+}
+
 async fn handle_list_learnings<A: Api>(
     axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
     axum::extract::Query(query): axum::extract::Query<ListLearningsQuery>,
@@ -2403,7 +2507,7 @@ async fn handle_skip_update<A: Api>(
 /// Every operation the specification declares, as (method, path, operationId).
 ///
 /// Exposed so tests can assert the router and the specification agree.
-pub const OPERATIONS: [(&str, &str, &str); 29] = [
+pub const OPERATIONS: [(&str, &str, &str); 31] = [
     ("GET", "/agents", "listAgents"),
     ("GET", "/costs", "getCosts"),
     ("GET", "/flights", "listPending"),
@@ -2418,6 +2522,16 @@ pub const OPERATIONS: [(&str, &str, &str); 29] = [
     ("POST", "/help/resolve", "resolveHelp"),
     ("GET", "/itineraries", "listItineraries"),
     ("GET", "/itineraries/{itinerary_id}", "getItinerary"),
+    (
+        "POST",
+        "/itineraries/{itinerary_id}/dismiss",
+        "dismissItinerary",
+    ),
+    (
+        "DELETE",
+        "/itineraries/{itinerary_id}/dismiss",
+        "undismissItinerary",
+    ),
     ("GET", "/learnings", "listLearnings"),
     ("PATCH", "/learnings/{learning_id}", "judgeLearning"),
     ("GET", "/pipelines", "listPipelines"),

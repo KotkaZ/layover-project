@@ -44,6 +44,8 @@
 //!     # async fn cancel_flight(&self, _: layover_http::CancelFlightPath) -> Result<layover_http::PendingList, Problem> { todo!() }
 //!     # async fn list_itineraries(&self, _: layover_http::ListItinerariesQuery) -> Result<layover_http::ItineraryList, Problem> { todo!() }
 //!     # async fn get_itinerary(&self, _: layover_http::GetItineraryPath) -> Result<layover_http::ItineraryDetail, Problem> { todo!() }
+//!     # async fn dismiss_itinerary(&self, _: layover_http::DismissItineraryPath, _: layover_http::DismissItineraryRequest) -> Result<layover_http::Itinerary, Problem> { todo!() }
+//!     # async fn undismiss_itinerary(&self, _: layover_http::UndismissItineraryPath) -> Result<layover_http::Itinerary, Problem> { todo!() }
 //!     # async fn get_report(&self, _: layover_http::GetReportPath) -> Result<layover_http::Report, Problem> { todo!() }
 //!     # async fn engage_ground_stop(&self) -> Result<layover_http::GroundStop, Problem> { todo!() }
 //!     # async fn release_ground_stop(&self) -> Result<layover_http::GroundStop, Problem> { todo!() }

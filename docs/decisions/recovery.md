@@ -136,6 +136,19 @@ last run, by when it finished, ended badly, and nothing came after it. "Last by 
 fan-out branch that failed while another went on to the end is not the chain's end. A chain somebody
 continued is `finished`, because a person dealt with it.
 
+**Why a dismissed chain keeps its state, and why a dismissal names a run.** Continuing was the only
+way to clear a `failed` or `stalled` chain, so one fixed by hand, or no longer wanted, stayed in
+*needs attention* and the red count until it aged out of the window — and a count that cannot be
+cleared stops being read, which is the failure the state exists to prevent. A dismissal is the
+chain's counterpart of resolving a help request. It does not make the chain `finished`: that would
+rewrite what happened, and the state is evidence somebody may look for later. So it sits beside the
+state and only the counts that ask for a person leave it out — `stalled` and `failed` still count
+it, with `dismissed` beside them. It names the run the chain had ended on, not the chain, because
+that run's failure is what a person looked at and judged; a chain that is restarted and fails again
+has a failure nobody has seen, and a dismissal of the chain would hide it. Only `stalled` and
+`failed` can be dismissed: a chain waiting for an answer already has its own ways out, and a halted
+one is held by something a person releases.
+
 **Why a run 1.3.0 lost ends when its transcript was last written.** Its record says only that it
 was started. The time the next Tower noticed it is the one thing certainly *not* when it ended — a
 run that died twenty-nine minutes in read as taking almost six hours. The transcript is appended to

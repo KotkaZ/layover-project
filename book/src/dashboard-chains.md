@@ -23,8 +23,7 @@ it is listed by its name, above its workflow.
 
 **`waiting for you` looks finished too.** Every run in it ended cleanly and nothing is queued —
 because its last run filed a fatal help request and stopped. It has a **Reply…** beside it and an
-amber count on the tab — the only button a row in the list carries, because it is the only thing
-there that needs a person. Resolving the request without replying makes it `finished`; replying makes
+amber count on the tab. Resolving the request without replying makes it `finished`; replying makes
 it `finished`, continued by the chain the reply started.
 
 **`failed` is a chain that simply stopped.** The run that would have sent the work on did not
@@ -42,6 +41,18 @@ pull request never appeared. Its detail says which run ended it and why:
 end does not make the chain `failed`. A chain whose run the model service ended and whose restart
 is waiting out its back-off is `working`, and says so. A chain somebody has [continued](#chains) —
 **Continue…** on its page — has been dealt with and is `finished`.
+
+**Dismiss…** is for a stalled or failed chain somebody dealt with another way — the fix made by
+hand, the work no longer wanted — so it stops asking for a person without anything running again.
+It is beside such a chain in the list and on its page, and asks how it was dealt with and who you
+are, both optional. The chain keeps its state, because that is still what happened, and reads
+`failed · dismissed`, greyed, with `Dismissed by karl · 2 h ago: merged the fix by hand` on its
+page. It leaves *needs attention*, the red count on the tab, the count in the page's title and the
+notifications. **Undo dismiss** on its page puts it back.
+
+A dismissal is of the run the chain ended on. If the chain goes on — restarted, say — and ends on
+another failed run, or stalls again, nobody has seen that, and it needs attention again. Dismissals are kept with the journal, survive a restart, and go when retention
+removes the runs they were about.
 
 **Continue…**, on a chain's own page and in a run's report, opens the trigger window with that
 workflow chosen and its flags set as that chain had them, saying where they came from. Change them
@@ -72,15 +83,15 @@ row; the `›` at its end says so — to see it whole.
 
 A factory with a few schedules starts hundreds of chains a week, almost all of them routine work
 that finished. So the list **opens on what needs attention** — `working`, `waiting for you`,
-`stalled`, `failed` and `halted` — and says how many it is not showing: `864 chain(s) · 3 need
-attention · 1 failed`. The red count on the tab is the stalled and failed chains together: the ones
-nothing will move again by itself.
+`stalled`, `failed` and `halted`, less any somebody dismissed — and says how many it is not
+showing: `864 chain(s) · 3 need attention · 1 failed · 2 dismissed`. The red count on the tab is the
+stalled and failed chains nobody has dismissed: the ones nothing will move again by itself.
 When nothing does, it says so, with a link to show every chain.
 
 | Filter | Narrows to |
 |---|---|
 | **Window** | Chains started in it |
-| **State** | *needs attention* (the default), *any*, or one state |
+| **State** | *needs attention* (the default), *any*, or one state. A dismissed chain is listed under its state, not under *needs attention* |
 | **Find** | Chains whose name, workflow, agents or identifier contain the words |
 | **Hide finished scheduled chains** | Leaves out a schedule's chains that nobody named and that finished: the routine ticks |
 

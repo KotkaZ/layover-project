@@ -251,6 +251,8 @@ tr:last-child td { border-bottom: 0; }
 /* Stalled is deliberately the loudest thing on the page. Every run in a stalled chain reports
    success, so nothing else here will draw the eye to it. */
 .outcome.stalled { color: var(--bad); text-decoration: underline wavy; }
+/* Dealt with: still what happened, no longer an alarm. */
+.outcome.dismissed { color: var(--muted); text-decoration: none; }
 
 /* The kill switch sits in the header rather than behind a tab, because the moment you want it is
    the moment you do not want to go looking for it. */

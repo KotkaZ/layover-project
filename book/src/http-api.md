@@ -41,8 +41,10 @@ Point any OpenAPI tool at the file to get a client, a mock server or rendered do
 | `GET` | `/flights` | | What is queued and waiting, each with its chain's `name`, and `held` when it opens a chain of a switched-off workflow. Each says which `attempt` at its work it is, and a restart after the model service failed carries `not_before`, when its back-off ends. |
 | `DELETE` | `/flights/{flight_id}` | | Cancel queued work. Only what has not started. |
 | `GET` | `/upcoming` | `hours` | What will start on its own. See below. |
-| `GET` | `/itineraries` | `window`, `state` | Chains of work, and whether each finished, stalled, `failed` — ended on a run that failed, with nothing after it — or is waiting for a person (`awaiting_human`), with a count of each of the three. Each carries its `name`, its `flags`, `waiting_for` when it waits, the chains it `continues` or is `continued_by`, and where a working chain is: the agents `running` in it and those it has work `queued` for. A chain is listed from the moment its first flight is queued, with no runs yet. |
+| `GET` | `/itineraries` | `window`, `state` | Chains of work, and whether each finished, stalled, `failed` — ended on a run that failed, with nothing after it — or is waiting for a person (`awaiting_human`), with a count of each of the three and of those `dismissed`. Each carries its `name`, its `flags`, `waiting_for` when it waits, the chains it `continues` or is `continued_by`, where a working chain is — the agents `running` in it and those it has work `queued` for — and `dismissed` when a person has said a stalled or failed one was dealt with. A chain is listed from the moment its first flight is queued, with no runs yet. |
 | `GET` | `/itineraries/{itinerary_id}` | | One chain, whole. See below. |
+| `POST` | `/itineraries/{itinerary_id}/dismiss` | | Say a stalled or failed chain was dealt with another way, with an optional `by` and `note`. Answers with the chain. See [dismissing a chain](#dismissing-a-chain). |
+| `DELETE` | `/itineraries/{itinerary_id}/dismiss` | | Undo it, so the chain needs attention again. Undoing twice is a success. |
 | `GET` | `/runs` | `status`, `itinerary_id`, `agent`, `pipeline`, `window`, `limit` | Runs, live and historical. Runs alive now come first, as `running`, read from the Tower's live records — history holds a run only once it is over. Each says the `model`, `reasoning_effort` and `context` it ran with, `null` for what its command line did not set and for runs recorded before Layover kept them, and its chain's `chain_name`. A failed run the model service ended carries `cause: provider_error` and the provider's `request_id`. |
 | `GET` | `/runs/{run_id}` | | One run, including how it ended. |
 | `GET` | `/runs/{run_id}/report` | | What that agent wrote about its own run. |
@@ -75,6 +77,31 @@ nothing has run in, is running in or has queued for is `404`.
 `null` and `[]` are different on purpose. A run recorded by an earlier release, a join restarted
 after the Tower that released it went away, and a run the Reserve refused before it began do not
 know who sent them, and a route drawn from a guess would look exactly like one that was taken.
+
+## Dismissing a chain
+
+A stalled or failed chain stays that way until something continues it. When somebody has dealt
+with it another way — the fix made by hand, the work no longer wanted — they can say so:
+
+```sh
+curl -X POST localhost:7878/itineraries/itn_01JRX.../dismiss \
+  -H 'content-type: application/json' -d '{"note": "merged the fix by hand"}'
+curl -X DELETE localhost:7878/itineraries/itn_01JRX.../dismiss   # undo
+```
+
+The chain keeps its state and carries `dismissed`: `run_id`, the run it had ended on, which is what
+was dismissed; `by`, as given or the account the dashboard runs as; `at`; and `note`. Dismissing it
+again keeps the first. If it later ends on another run — restarted, and failed again — the
+dismissal no longer applies and `dismissed` is null. `GET /itineraries` keeps counting it in
+`stalled` or `failed`, and counts it in `dismissed` too, so what still needs somebody is
+`stalled + failed - dismissed`.
+
+| Status | When |
+|---|---|
+| `404` | Nothing has run, is running or is queued in that chain |
+| `409` | It is not stalled or failed — a chain waiting for an answer is settled by replying to or resolving its help request — or nothing in it has ended yet |
+
+It starts nothing, so a Ground Stop does not refuse it.
 
 ## Watching a run
 

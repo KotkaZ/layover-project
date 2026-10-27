@@ -266,7 +266,8 @@ opening the page asks GitHub nothing, and a `--watch-only` dashboard says the sa
 
 A factory runs unattended, so the page is usually in a background tab when an agent stops to ask
 something. The badges on the tabs only help somebody already looking. So the tab's **title** counts
-what needs a person — open help requests, and stalled and failed chains, `(3) Layover` — where it
+what needs a person — open help requests, and stalled and failed chains nobody has
+[dismissed](./dashboard-chains.md#chains), `(3) Layover` — where it
 can be seen from the tab strip; a chain waiting for you is already counted, since what it waits on
 is an open help request. The counts are kept current every thirty seconds whichever tab is showing.
 

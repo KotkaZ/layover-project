@@ -8,6 +8,26 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+A stalled or failed chain somebody dealt with another way can be dismissed, so it stops counting as
+needing a person without anything running again.
+
+**Compatibility.** Additive: every factory that loaded under 1.16 loads unchanged, and nothing runs
+differently. The HTTP API gains `POST` and `DELETE /itineraries/{itinerary_id}/dismiss`, a
+`dismissed` field on each chain and a `dismissed` count on `GET /itineraries`; `stalled` and
+`failed` keep counting every such chain, dismissed or not. Dismissals are kept in
+`.layover/journal/dismissed.jsonl`, which an earlier release ignores.
+
+### Added
+
+- **Dismissing a stalled or failed chain.** One dealt with another way — fixed by hand, no longer
+  wanted — could only be cleared by running it again, so it stayed in *needs attention*, the red
+  count and the page's title for the whole window. **Dismiss…**, beside it in the Chains list and
+  on its page, records who, when and why; the chain keeps its state, reads `failed · dismissed`,
+  and stops counting as needing a person. **Undo dismiss** puts it back. A dismissal is of the run
+  the chain ended on, so a chain that fails again needs attention again. Over HTTP:
+  `POST`/`DELETE /itineraries/{itinerary_id}/dismiss`, a `dismissed` field on each chain and a
+  `dismissed` count on the list.
+
 ## [1.16.1] — 2026-10-27
 
 A Copilot run that dies at start-up because the model it was given is not available is restarted

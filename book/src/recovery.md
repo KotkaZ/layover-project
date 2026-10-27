@@ -249,7 +249,8 @@ Whatever the cause, a chain whose last run failed, timed out or was interrupted 
 or running after it, and nobody having continued it — is `failed` on the dashboard: in the Chains
 list's *needs attention*, in the count on the tab and in the page's title, and in the bell's
 notifications. It used to read as `finished`. Restarting a provider error removes the most common
-cause; this is what makes the rest visible. See [Chains](./dashboard-chains.md#chains).
+cause; this is what makes the rest visible. One you have dealt with another way can be
+**dismissed**: it stays `failed`, and stops counting. See [Chains](./dashboard-chains.md#chains).
 
 ## Status
 

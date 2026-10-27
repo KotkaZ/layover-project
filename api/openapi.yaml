@@ -444,6 +444,84 @@ paths:
               schema:
                 $ref: "#/components/schemas/Problem"
 
+  /itineraries/{itinerary_id}/dismiss:
+    post:
+      operationId: dismissItinerary
+      summary: Say a stalled or failed chain has been dealt with, without running anything.
+      description: |
+        For a chain somebody has handled another way — fixed by hand, or no longer wanted. It keeps
+        its state, so what happened stays on record, and carries `dismissed`: who, when, and why
+        if they said. It stops counting as needing attention.
+
+        A dismissal is of the run the chain ended on. If the chain goes on and ends on another
+        failed run, or stalls again, it needs attention again. Continuing the work is
+        **Continue…**, or `POST /flights`, not this.
+
+        Dismissing a chain already dismissed changes nothing: the first dismissal is kept. A
+        Ground Stop does not refuse it, because it starts nothing.
+      tags: [control]
+      parameters:
+        - name: itinerary_id
+          in: path
+          required: true
+          description: Identifier of the chain.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        description: Who is dismissing it, and why. Both may be left out.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DismissItineraryRequest"
+      responses:
+        "200":
+          description: The chain, as `GET /itineraries` now lists it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Itinerary"
+        "404":
+          description: No run, live run or queued flight belongs to that chain.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: |
+            The chain is not stalled or failed. A chain waiting for an answer is settled by
+            replying to or resolving its help request instead.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+    delete:
+      operationId: undismissItinerary
+      summary: Undo a dismissal, so the chain needs attention again.
+      description: |
+        Removing a dismissal that is not there changes nothing and is not an error.
+      tags: [control]
+      parameters:
+        - name: itinerary_id
+          in: path
+          required: true
+          description: Identifier of the chain.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The chain, as `GET /itineraries` now lists it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Itinerary"
+        "404":
+          description: No run, live run or queued flight belongs to that chain.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
   /runs:
     get:
       operationId: listRuns
@@ -2189,6 +2267,9 @@ components:
         `failed` ended on a run that failed, timed out or was interrupted, with nothing queued or
         running after it: the work stopped short, and no agent will pick it up. A chain somebody
         has continued is not counted.
+
+        A `stalled` or `failed` chain somebody has dealt with another way can be dismissed: it
+        keeps its state and carries `dismissed`.
       enum: [working, finished, stalled, halted, awaiting_human, failed]
 
     HelpAsk:
@@ -2287,6 +2368,42 @@ components:
             Stop, for it to be released.
           items:
             type: string
+        dismissed:
+          $ref: "#/components/schemas/Dismissal"
+          description: |
+            A person's word that this stalled or failed chain has been dealt with, so it no longer
+            needs attention. Absent for any other chain, and once the chain has ended on a
+            different run from the one that was dismissed.
+
+    Dismissal:
+      type: object
+      description: Who said a stalled or failed chain had been dealt with, and when.
+      required: [run_id, by, at]
+      properties:
+        run_id:
+          type: string
+          description: The run the chain had ended on, which is what was dismissed.
+        by:
+          type: string
+          description: Who dismissed it, as they gave it, or the account the dashboard runs as.
+        at:
+          type: string
+          format: date-time
+          description: When.
+        note:
+          type: [string, "null"]
+          description: Why, when they said.
+
+    DismissItineraryRequest:
+      type: object
+      description: Who is dismissing a chain, and why.
+      properties:
+        by:
+          type: [string, "null"]
+          description: Who is dismissing it. Defaults to the account the dashboard runs as.
+        note:
+          type: [string, "null"]
+          description: Why — how it was dealt with — for whoever reads the chain later.
 
     ItineraryDetail:
       type: object
@@ -2316,7 +2433,7 @@ components:
     ItineraryList:
       type: object
       description: Chains of work.
-      required: [itineraries, stalled, awaiting_human, failed]
+      required: [itineraries, stalled, awaiting_human, failed, dismissed]
       properties:
         itineraries:
           type: array
@@ -2334,6 +2451,11 @@ components:
         failed:
           type: integer
           description: How many of them ended on a run that failed, with nothing after it.
+        dismissed:
+          type: integer
+          description: |
+            How many of the stalled and failed ones a person has dismissed. What still needs
+            somebody is `stalled + failed - dismissed`.
 
     PendingList:
       type: object

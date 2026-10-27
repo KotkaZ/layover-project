@@ -125,11 +125,7 @@ pub fn rewrite_segment<T: Serialize>(path: &Path, records: &[T]) -> Result<(), S
 ///
 /// Returns [`StoreError::Io`] if the directory cannot be listed or a file cannot be removed.
 pub fn prune_segments(root: &Path, prefix: &str, horizon: Timestamp) -> Result<usize, StoreError> {
-    let cutoff = horizon
-        .to_zoned(TimeZone::UTC)
-        .date()
-        .checked_sub(1.day())
-        .unwrap_or(Date::MIN);
+    let cutoff = kept_from(horizon);
 
     let mut removed = 0;
     for (date, path) in segments(root, prefix)? {
@@ -139,6 +135,16 @@ pub fn prune_segments(root: &Path, prefix: &str, horizon: Timestamp) -> Result<u
         }
     }
     Ok(removed)
+}
+
+/// The first UTC day whose segments survive pruning at `horizon`: the day before the horizon's,
+/// erring towards keeping a record rather than deleting one still inside the window.
+pub fn kept_from(horizon: Timestamp) -> Date {
+    horizon
+        .to_zoned(TimeZone::UTC)
+        .date()
+        .checked_sub(1.day())
+        .unwrap_or(Date::MIN)
 }
 
 /// The segment a record timestamped `at` belongs in.

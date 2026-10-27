@@ -27,6 +27,7 @@
 //! each end and filters by instant, which is cheap and cannot be wrong.
 
 mod answer;
+mod dismissals;
 pub mod hangar;
 mod history;
 mod journal;
@@ -39,6 +40,7 @@ pub mod stop;
 mod switches;
 
 pub use answer::Answered;
+pub use dismissals::Dismissal;
 pub use history::{History, RunFilter, StoreError};
 pub use journal::{HelpFilter, Journal};
 pub use layout::{Incompatible, Opened};

@@ -73,9 +73,9 @@ function noteAttention(counts) {
   if (attention.known) announce(before);
   attention.known = attention.help !== null && attention.stalled !== null;
 
-  // Open help requests, and chains nothing will move again by itself: stalled, or ended on a run
-  // that failed. A chain waiting for you is already counted: what it waits on is an open help
-  // request.
+  // Open help requests, and chains nothing will move again by itself that nobody has dismissed:
+  // stalled, or ended on a run that failed. A chain waiting for you is already counted: what it
+  // waits on is an open help request.
   const count = (attention.help ?? 0) + (attention.stalled ?? 0) + (attention.failed ?? 0);
   document.title = count > 0 ? `(${count}) Layover` : "Layover";
 }
