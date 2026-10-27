@@ -98,8 +98,17 @@ fields of each JSON event are matched, so a quote, which is a string inside anot
 does. And the failure has to be the last thing that happened: Copilot CLI recovers from many failed
 calls itself, reports a sub-agent's exhausted retries with the session's own error, and in one real
 run went on — woken by a background task — to finish its work after a 400 and then exit 1 for it.
-So a failure counts only with no tool started and no call succeeding after it. Claude Code and Codex
-have no reader yet, because a guessed one would restart runs that failed for their own reasons; a
+So a failure counts only with no tool started and no call succeeding after it. One failure is not an
+event: Copilot CLI checks the model it was given before it makes a call, and a model the service is
+not offering at that moment ends the run with a line of plain text, `Error: Model "gpt-6.1-sol" from
+--model flag is not available.` A short outage on 26 October 2026 did that to the run carrying a
+chain's only pending work, and because the line was not an event it read as the run's own failure:
+nothing restarted it and the chain sat silent for seventeen hours. That line counts too, under the
+same rule, and it is still safe from a quote: it must be a whole line of the transcript, in a known
+wording kept in one place, and an agent quoting it does so inside an event, whose line starts with
+`{` and is never compared. A model name the CLI does not have at all fails that way on every
+attempt; the attempts and back-off bound it, the record keeps the CLI's words, and `layover doctor`
+names an agent whose last runs were all ended so. Claude Code and Codex have no reader yet, because a guessed one would restart runs that failed for their own reasons; a
 runner can declare the events instead, as fields an event must have rather than a pattern.
 
 **Why the restart waits.** A provider fault often comes in a cluster; restarting into the same

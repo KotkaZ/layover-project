@@ -28,6 +28,7 @@ use layover_store::{HelpFilter, History, Journal, RunFilter};
 
 mod costs;
 mod money;
+mod service;
 mod switches;
 mod waits;
 
@@ -171,6 +172,7 @@ pub fn check(config: &Config, root: &Path, window: Window) -> Result<Report, Str
         .collect();
     waits::waits(config, root, &runs, &pending, &mut report);
     interrupted_runs(&runs, &mut report);
+    service::ended_by_service(config, &runs, &mut report);
     open_help(&journal, &span, &mut report);
     stranded_layovers(&journal, config, &mut report);
     ground_stop(root, &mut report);

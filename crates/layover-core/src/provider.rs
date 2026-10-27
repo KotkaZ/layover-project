@@ -15,6 +15,17 @@
 //! matches. A regular expression over output would match both, and would restart a run because it
 //! read about a failure.
 //!
+//! # One line of text, at start-up
+//!
+//! Copilot CLI checks the model it was given before it makes a call, and a model the service is
+//! not offering at that moment — an outage can leave one unlisted for minutes — ends the run with a
+//! line of plain text instead of an event: `Error: Model "gpt-6.1-sol" from --model flag is not
+//! available.` The run never started its work, so it was interrupted, not failed. That line counts
+//! only as a whole line of the transcript, in a wording listed in [`MODEL_UNAVAILABLE`]: an agent
+//! quoting it does so inside an event, whose line starts with `{` and is never compared. A model
+//! name the CLI does not have at all fails the same way every time; the restart's attempts and
+//! back-off bound that, and the CLI's own words stay in the run's record.
+//!
 //! # The failure has to be the last thing that happened
 //!
 //! Copilot CLI recovers from many failed calls by itself, and a sub-agent's failure is reported
@@ -141,16 +152,39 @@ const COPILOT_EVENTS: [&str; 4] = [
     "model.call_failure",
 ];
 
+/// The words Copilot CLI ends a run with at start-up when the model it was given is not available:
+/// each known wording, as what comes before the model's name and what comes after it, on a line of
+/// its own. The first was printed on 26 October 2026, when a short outage left the model a run was
+/// started with unlisted; a later wording is added here, with a test of its own.
+pub const MODEL_UNAVAILABLE: [(&str, &str); 1] =
+    [("Error: Model \"", "\" from --model flag is not available.")];
+
+/// What the CLI said, without its `Error: `, when `line` is, whole, Copilot CLI saying at start-up
+/// that the model it was given is not available.
+fn model_unavailable(line: &str) -> Option<&str> {
+    let line = line.trim();
+    MODEL_UNAVAILABLE.iter().find_map(|(before, after)| {
+        let model = line.strip_prefix(before)?.strip_suffix(after)?;
+        (!model.is_empty() && !model.contains('"'))
+            .then(|| line.strip_prefix("Error: ").unwrap_or(line))
+    })
+}
+
 /// Reads Copilot CLI's events from the end: the failure that ended the run is after the last
 /// sign it carried on — a tool starting, or a model call that succeeded.
 ///
 /// A failure is a `model.call_final_result` whose `result` is not `success`, a `session.error`
-/// whose `errorType` is `query`, or both. Read backwards, the first of each wins, because the
-/// first met is the latest.
+/// whose `errorType` is `query`, both, or the line Copilot CLI prints at start-up for a model that
+/// is not available. Read backwards, the first of each wins, because the first met is the latest.
 fn copilot(transcript: &str) -> Option<ProviderFailure> {
     let mut found: Option<ProviderFailure> = None;
 
     for line in transcript.lines().rev() {
+        if let Some(said) = model_unavailable(line) {
+            let failure = found.get_or_insert_with(ProviderFailure::default);
+            failure.message.get_or_insert_with(|| said.to_owned());
+            continue;
+        }
         if !COPILOT_EVENTS.iter().any(|kind| line.contains(kind)) {
             continue;
         }

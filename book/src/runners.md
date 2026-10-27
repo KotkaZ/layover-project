@@ -90,8 +90,10 @@ names none of them is not judged.
 
 A run the model service ended — a call rejected with `400 internal server error`, retries
 exhausted — is restarted like an interrupted one, where its agent's `recovery` allows; a run that
-failed its own work never is. Layover tells them apart from the CLI's JSON events, never from its
-text. See [Recovery](./recovery.md#when-the-model-service-fails).
+failed its own work never is. Layover tells them apart from the CLI's JSON events, never from text
+an agent could have quoted — the one line it reads that is not an event is Copilot CLI's own, whole,
+at start-up, saying the model it was given is not available. See
+[Recovery](./recovery.md#when-the-model-service-fails).
 
 Copilot CLI is read without being asked: the `copilot` preset, and a `command` that runs it by name
 with `--output-format json`. Claude Code and Codex are not read yet. `provider_errors` says

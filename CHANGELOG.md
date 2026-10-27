@@ -8,6 +8,32 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+A Copilot run that dies at start-up because the model it was given is not available is restarted
+like any other run the model service ended, and `layover doctor` names an agent the model service
+keeps ending.
+
+**Compatibility.** Additive: every factory that loaded under 1.16 loads unchanged. What an existing
+factory will notice: a Copilot run that ends with `Error: Model "…" from --model flag is not
+available.` is recorded with `cause: provider_error` and restarted under its agent's `recovery`
+policy — `automatic`, the default, up to `max_recovery_attempts` — where before it was the run's own
+failure and its chain stopped there. To keep that, set `provider_errors = { read = "none" }` on the
+runner or `recovery = "manual"` on the agent. `layover doctor` can now report a warning, and exit
+non-zero, for an agent whose last runs were all ended by the model service.
+
+### Fixed
+
+- **A model not available at start-up stopped the chain.** Copilot CLI says so in a line of text,
+  not an event, so the run read as its own failure, nothing restarted it, and the work it carried
+  sat until a person noticed. The line now counts as the model service's failure — as a whole line
+  only, so an agent quoting it never does — and the record keeps the CLI's words, so an outage can
+  be told from a mistyped `model`.
+
+### Added
+
+- **`layover doctor` names an agent the model service keeps ending**: one whose last runs — as many
+  as one piece of work may take, and at least two — were all `provider_error`, with what the CLI
+  said the last time.
+
 ## [1.16.0] — 2026-10-21
 
 The route map is laid out in reading order, so a workflow with shortcuts and loops reads along its

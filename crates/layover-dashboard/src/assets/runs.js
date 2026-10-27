@@ -34,7 +34,9 @@ function outcomeCell(run) {
   const cell = el("td", `outcome ${run.status}`, run.status.replace("_", " "));
   if (run.cause === "provider_error") {
     cell.append(el("span", "cause", " · model service"));
-    cell.title = `The model service failed a call and the run ended there${run.request_id ? ` (request ${run.request_id})` : ""}. ${run.detail ?? ""}`.trim();
+    // A rejected call, or a model it did not have when the run started: the detail says which, in
+    // the CLI's own words.
+    cell.title = `The model service ended the run, not its work${run.request_id ? ` (request ${run.request_id})` : ""}. ${run.detail ?? ""}`.trim();
   }
   return cell;
 }

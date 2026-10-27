@@ -265,6 +265,7 @@ The failures it looks for are the quiet ones — the ones that look like nothing
 | Layovers nothing will collect | Work an agent set down to come back to, in a factory where no pipeline `resumes` |
 | A Ground Stop left engaged | The factory is up, the dashboard is green, and nothing is running |
 | The Reserve refusing work | A factory that may not spend any more looks exactly like one with nothing to do |
+| An agent the model service keeps ending | Each of its runs is restarted, waits and fails the same way, then the attempts run out and the work waits for a person nobody told. Named when its last runs — as many as one piece of work may take, and at least two — were all ended by the model service, with what the CLI said the last time: an outage passes, a model the CLI does not have says `not available` every time |
 | Work that waited with a slot free | Queued longer than `timeout_sec` while fewer than `max_concurrent_runs` runs were alive, it looks like a busy factory. It is one where nothing was starting the work. A trigger a switched-off workflow holds is waiting on purpose and is not counted |
 
 Findings come in three weights. A **fault** means work was lost or money cannot be accounted for; a

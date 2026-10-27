@@ -247,3 +247,72 @@ fn what_the_cli_said_is_said_once_with_its_request() {
         "the model service failed (transport_error) (request req_1)"
     );
 }
+
+/// A run that never started its work: Copilot CLI loaded its MCP servers, then found the model it
+/// was given not available and said so in a line of plain text, as one did in a short outage on
+/// 26 October 2026.
+const MODEL_GONE: &str = r#"{"type":"session.mcp_server_starting","data":{"serverName":"layover"}}
+{"type":"session.mcp_server_tools_loaded","data":{"serverName":"layover","toolCount":10}}
+Error: Model "gpt-6.1-sol" from --model flag is not available.
+"#;
+
+#[test]
+fn a_model_not_available_at_start_up_is_the_model_services_failure() {
+    let failure = copilot(MODEL_GONE).expect("a provider failure");
+
+    assert_eq!(
+        failure.message.as_deref(),
+        Some(r#"Model "gpt-6.1-sol" from --model flag is not available."#),
+        "the CLI's own words, so a person can tell an outage from a typo"
+    );
+    assert_eq!(failure.result, None);
+    assert_eq!(failure.request_id, None);
+    assert_eq!(
+        failure.to_string(),
+        r#"the model service failed: Model "gpt-6.1-sol" from --model flag is not available."#
+    );
+}
+
+#[test]
+fn every_known_wording_of_it_is_read() {
+    for (before, after) in MODEL_UNAVAILABLE {
+        let line = format!("{before}claude-opus-5.5{after}\r\n");
+        assert!(copilot(&line).is_some(), "{line}");
+    }
+}
+
+#[test]
+fn the_start_up_line_quoted_inside_an_event_is_not_one() {
+    // An agent reading the log of an earlier run, and saying what it found: the same words, as a
+    // string inside an event, which is never compared against them.
+    let line = r#"Error: Model \"gpt-6.1-sol\" from --model flag is not available."#;
+    let quoting = format!(
+        r#"{WORK}{{"type":"tool.execution_complete","data":{{"toolCallId":"t29","success":true,"result":{{"content":"{line}"}}}}}}
+{{"type":"assistant.message","data":{{"content":"The tester died with {line}"}}}}
+{{"type":"result","exitCode":1}}
+"#
+    );
+
+    assert_eq!(copilot(&quoting), None);
+}
+
+#[test]
+fn the_start_up_line_counts_only_whole_and_only_last() {
+    let carried_on_with_a_call = format!(
+        "{MODEL_GONE}{{\"type\":\"model.call_final_result\",\"data\":{{\"result\":\"success\"}}}}\n"
+    );
+    let carried_on_with_a_tool = format!(
+        "{MODEL_GONE}{{\"type\":\"tool.execution_start\",\"data\":{{\"toolCallId\":\"t1\",\"toolName\":\"powershell\"}}}}\n"
+    );
+    assert_eq!(copilot(&carried_on_with_a_call), None);
+    assert_eq!(copilot(&carried_on_with_a_tool), None);
+
+    for not_whole in [
+        "warning: Error: Model \"gpt-6.1-sol\" from --model flag is not available.",
+        "Error: Model \"gpt-6.1-sol\" from --model flag is not available. Retrying.",
+        "Error: Model \"\" from --model flag is not available.",
+        "Error: Model \"gpt-6.1-sol\" from --model flag is not supported.",
+    ] {
+        assert_eq!(copilot(not_whole), None, "{not_whole}");
+    }
+}

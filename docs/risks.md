@@ -434,8 +434,10 @@ which is what `doctor`, the slots and the Fuel meter all count.
 
 **What could happen.** A failed run is restarted only when its CLI's events say the model service
 failed its last call: for Copilot CLI, `model.call_final_result` with a `result` other than
-`success`, or `session.error` with `errorType` `query`, and no `tool.execution_start` or successful
-call after it. Those are names and values a CLI release can change. Renamed, a provider error reads
+`success`, `session.error` with `errorType` `query`, or the line of text it prints at start-up for a
+model that is not available — `Error: Model "…" from --model flag is not available.` — and no
+`tool.execution_start` or successful call after it. Those are names, values and words a CLI release
+can change; the words are kept in one list, `provider::MODEL_UNAVAILABLE`, with a test for each. Renamed, a provider error reads
 as the run's own failure and is not restarted — the behaviour before restarts existed, and the chain
 shows as `failed`. Misread the other way, a run that failed its own work is restarted, and fails
 again.

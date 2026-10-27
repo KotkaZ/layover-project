@@ -38,6 +38,12 @@ const TESTS_FAILED: &str = r#"{"type":"tool.execution_start","data":{"toolCallId
 {"type":"result","sessionId":"753e","exitCode":1}
 "#;
 
+/// A run that never started its work: the CLI found the model it was given not available, and said
+/// so in a line of plain text rather than an event.
+const MODEL_GONE: &str = r#"{"type":"session.mcp_server_tools_loaded","data":{"serverName":"layover"}}
+Error: Model "gpt-6.1-sol" from --model flag is not available.
+"#;
+
 /// Writes `stream` and a script that prints it and exits 1 — unless `recovers`, when a run told it
 /// is attempt 2 exits 0 instead. Returns the runner's `command`.
 fn stand_in(temp: &Temp, name: &str, stream: &str, recovers: bool) -> String {
@@ -446,5 +452,44 @@ fn a_restart_backing_off_is_waited_for_and_then_started() {
     assert!(
         started.elapsed() >= std::time::Duration::from_millis(1_000),
         "not before it was due"
+    );
+}
+
+#[test]
+fn a_model_not_available_at_start_up_is_restarted_and_says_so_in_the_cli_s_words() {
+    // The run woken by the work a chain had pending died in a short outage before it made a call,
+    // and the chain sat silent for seventeen hours: the line was text, not an event, so it read as
+    // the run's own failure.
+    let temp = Temp::new("provider-model-gone");
+    let gone = stand_in(&temp, "gone", MODEL_GONE, false);
+    let tower = factory(&temp, &text(&gone, &gone, ""));
+
+    run(&tower, vec![human("wolf"), human("mailman")]);
+
+    let records = history(&temp.0);
+    let said =
+        r#"the model service failed: Model "gpt-6.1-sol" from --model flag is not available."#;
+    let wolf = only(&records, "wolf")[0];
+    assert_eq!(wolf.cause, Some(FailureCause::ProviderError));
+    let detail = wolf.detail.as_deref().unwrap_or_default();
+    assert!(
+        detail.starts_with(&format!(
+            "exited with code 1: {said}; restarting as attempt 2"
+        )),
+        "{detail}"
+    );
+    let pending = journal(&temp.0).pending().expect("reads the queue");
+    assert!(
+        matches!(&pending[..], [restart] if restart.flight.to.as_str() == "wolf"),
+        "one restart, of the run whose recovery is automatic: {pending:?}"
+    );
+
+    let mailman = only(&records, "mailman")[0];
+    assert_eq!(mailman.cause, Some(FailureCause::ProviderError));
+    let detail = mailman.detail.as_deref().unwrap_or_default();
+    assert!(detail.contains(said), "{detail}");
+    assert!(
+        detail.contains("not restarted: this agent's `recovery` policy is `manual`"),
+        "{detail}"
     );
 }

@@ -114,7 +114,10 @@ from:
    `result` is not `success` (`http_400`, `http_503`, `transport_error`, …), a `session.error` whose
    `errorType` is `query`, or both — with no tool started and no call succeeding after them.
    Bookkeeping after the error (`session.usage_checkpoint`, `assistant.idle`, a background task's
-   output) does not count as carrying on.
+   output) does not count as carrying on. One failure Copilot CLI reports as a line of text rather
+   than an event, and it counts too: at start-up, before any call, a model the service is not
+   offering at that moment — `Error: Model "gpt-6.1-sol" from --model flag is not available.` — read
+   only as a whole line, never inside an event, where it would be a quote.
 2. **It records the run as `failed`**, never `succeeded`, with `cause: provider_error`, the
    provider's request id, and a detail saying what the service said and what happens next:
 

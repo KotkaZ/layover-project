@@ -66,6 +66,13 @@ than the work: it is restarted after a back-off where the agent's `recovery` is 
 never restarted. **Continue…** on the chain's page starts the workflow again with that chain's
 flags.
 
+**`the model service failed: Model "…" from --model flag is not available.`** Copilot CLI checked
+the model the agent runs on before it made a call, and the service was not offering it. In an
+outage that passes, and the run is restarted like any the model service ended. A model name the
+CLI does not have at all — a typo, a model not in your plan — fails the same way every attempt, and
+`layover doctor` names an agent whose last runs all ended so. Check the agent's `model` against
+what `copilot` offers you, then continue the chain.
+
 **`stalled`: `` `publisher` never woke: nothing live could still deliver reviewer ``.** A joined
 agent was waiting for a verdict that can no longer come. `doctor` reports
 `N chain(s) stalled, stranding M flight(s)`.
