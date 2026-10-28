@@ -8,6 +8,8 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+## [1.18.0] — 2026-10-28
+
 A `manual` agent's run the model service ended before it started any tool is restarted, and one that
 is not restarted is put in front of a person as a help request.
 
@@ -1048,7 +1050,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.17.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.18.0...HEAD
+[1.18.0]: https://github.com/KotkaZ/layover-project/compare/v1.17.0...v1.18.0
 [1.17.0]: https://github.com/KotkaZ/layover-project/compare/v1.16.1...v1.17.0
 [1.16.1]: https://github.com/KotkaZ/layover-project/compare/v1.16.0...v1.16.1
 [1.16.0]: https://github.com/KotkaZ/layover-project/compare/v1.15.0...v1.16.0
