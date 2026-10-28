@@ -7,10 +7,12 @@
 
 use axum::http::StatusCode;
 use jiff::{SignedDuration, Timestamp};
+use layover_core::agent::AgentName;
 use layover_core::config::Config;
 use layover_core::cost::{Span, Window};
 use layover_core::diagram::{Layout, Scope, render_svg};
 use layover_core::flight::ItineraryId;
+use layover_core::handover::RecoveryPolicy;
 use layover_core::pipeline::PipelineName;
 use layover_core::queue::Queued;
 use layover_core::run::RunRecord;
@@ -148,6 +150,10 @@ impl Dashboard {
             .unwrap_or_default();
         let dismissals = journal.dismissals().unwrap_or_default();
         let off: Vec<PipelineName> = self.switched_off().into_keys().collect();
+        let manual = self
+            .config()
+            .map(|config| manual_agents(&config))
+            .unwrap_or_default();
 
         itineraries(
             &gathered.records,
@@ -158,6 +164,7 @@ impl Dashboard {
                 ground_stop: self.ground_stop_engaged(),
                 switched_off: &off,
                 dismissals: &dismissals,
+                manual: &manual,
             },
         )
         .into_iter()
@@ -185,4 +192,14 @@ fn unknown(id: &ItineraryId) -> Problem {
         "nothing has run, is running or is queued in `{}`",
         id.as_str()
     ))
+}
+
+/// The agents whose `recovery` is `manual`.
+pub(crate) fn manual_agents(config: &Config) -> Vec<AgentName> {
+    config
+        .agents
+        .iter()
+        .filter(|(_, agent)| agent.recovery == RecoveryPolicy::Manual)
+        .map(|(name, _)| name.clone())
+        .collect()
 }

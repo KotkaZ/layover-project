@@ -119,6 +119,34 @@ Tower restarted while it waits still waits — and one that comes back after it 
 once. A restart after a Tower restart waits for nothing, because what interrupted it is over by the
 time a Tower comes back.
 
+**Why a `manual` agent's run that started no tool is restarted after all.** On 28 October 2026 the
+model service answered 401 for a few minutes. Two runs of an agent marked `manual` failed in it, and
+one was the hourly tick collecting a layover its agent had booked to follow a pull request: its
+transcript was start-up events and the error — no tool started, no call succeeded. `manual` left it,
+the layover was spent, nothing booked it again, and the pull request stopped being followed without
+anybody being told. `manual` exists so that work which must not happen twice is not repeated, and
+every side effect an agent has — a command, a file, `layover_send`, `layover_book`, any MCP call —
+is a tool it starts, which Copilot CLI reports as a `tool.execution_start` event and, when it ends,
+a `tool.execution_complete`. A run with neither did nothing, so restarting it cannot repeat
+anything, and leaving it only loses the work. So it is restarted, counted on the same attempts,
+after the same back-off, on every rail, and never through a Ground Stop; its record and its chain
+say why. It needs a reader that sees tools: the count is taken from the same top-level events as the
+failure, never from text, and either event counts as proof a tool started, because this reads an
+absence — the weaker evidence — and one event renamed in a later Copilot CLI must not make a run
+that acted look untouched. A declared reader, which names failures and signs of carrying on rather
+than tools, cannot show that none started, so its runner's `manual` agents keep the old rule. Only a
+provider error: a Tower that went away read none of its run's events. `never` still means never.
+
+**Why a `manual` agent's provider failure that is not restarted files a help request.** The run that
+was left — it had started a tool, its attempts were spent, a Ground Stop was engaged — was a failed
+run in history and a failed chain, and the help queue, the one place built to reach a person, said
+nothing; it was more than an hour before anybody noticed. So the Tower files a help request for the
+agent: not fatal, since nothing waits on an answer, blocker `environment`, naming the run, its chain,
+the provider's request id, how many tools it had started and, when it was collecting a layover, that
+the layover is spent. It records the chain's workflow and flags, so a reply starts the agent again as
+that chain would have. Only for `manual`: an `automatic` agent's work restarts by itself, and one
+whose attempts run out is in `layover doctor`.
+
 **Why restarting provider errors is on by default.** `recovery` already says, per agent, whether
 doing its work twice is safe, and it defaults to `automatic`; a separate switch for provider errors
 would be a second knob for the same question. A factory that marked its irreversible agents `manual`

@@ -60,9 +60,10 @@ its detail says why.
 **`failed`: `` `coder` failed, and nothing came after it: exited with code 1: … ``.** The run that
 would have sent the work on did not finish, and nothing is queued after it. When the detail says
 **the model service failed** (`http_400`, `transport_error`, …), the service ended the run rather
-than the work: it is restarted after a back-off where the agent's `recovery` is `automatic`, up to
-`max_recovery_attempts`, and the detail says why when it was not — see
-[Recovery](./recovery.md#when-the-model-service-fails). Any other failure is the run's own, and is
+than the work: it is restarted after a back-off where the agent's `recovery` is `automatic` — or
+`manual`, when the run had started no tool — up to `max_recovery_attempts`, and the detail says why
+when it was not — see [Recovery](./recovery.md#when-the-model-service-fails). A `manual` agent's run
+that was not restarted also files a help request. Any other failure is the run's own, and is
 never restarted. **Continue…** on the chain's page starts the workflow again with that chain's
 flags. If you have already dealt with it another way, **Dismiss…** says so: it stays `failed`, and
 stops counting as needing you.

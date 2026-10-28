@@ -479,9 +479,15 @@ fn a_model_not_available_at_start_up_is_restarted_and_says_so_in_the_cli_s_words
         "{detail}"
     );
     let pending = journal(&temp.0).pending().expect("reads the queue");
-    assert!(
-        matches!(&pending[..], [restart] if restart.flight.to.as_str() == "wolf"),
-        "one restart, of the run whose recovery is automatic: {pending:?}"
+    let mut restarted: Vec<&str> = pending
+        .iter()
+        .map(|restart| restart.flight.to.as_str())
+        .collect();
+    restarted.sort_unstable();
+    assert_eq!(
+        restarted,
+        ["mailman", "wolf"],
+        "both: the `manual` one too, since a run that never made a call did nothing to repeat"
     );
 
     let mailman = only(&records, "mailman")[0];
@@ -489,7 +495,9 @@ fn a_model_not_available_at_start_up_is_restarted_and_says_so_in_the_cli_s_words
     let detail = mailman.detail.as_deref().unwrap_or_default();
     assert!(detail.contains(said), "{detail}");
     assert!(
-        detail.contains("not restarted: this agent's `recovery` policy is `manual`"),
+        detail.contains(
+            "it started no tool, so restarting although this agent's `recovery` policy is `manual`"
+        ),
         "{detail}"
     );
 }

@@ -33,6 +33,17 @@
 //! carried on after it: no tool started, no model call succeeded. A run that hit a 400, waited for a
 //! background task, was woken by it and finished its work, then exited 1 because of the earlier
 //! error, did its work, and is not restarted.
+//!
+//! # Whether the run had done anything
+//!
+//! Everything an agent does to the world — a command, a file, a message it sends, every MCP call,
+//! `layover_send` and `layover_book` among them — is a tool it starts, and Copilot CLI reports each
+//! with a `tool.execution_start` event and its end with `tool.execution_complete`. So a run with
+//! none of those had done nothing, and starting it again cannot repeat anything:
+//! [`Reading::tools_started`] counts them, by the same top-level rule, taking either event as proof
+//! — an absence is the weaker evidence, and one renamed event must not make a run that acted look
+//! untouched. Only a reader that sees tools can say none started; a declared one names failures,
+//! not tools, and says nothing.
 
 use std::fmt;
 
@@ -141,12 +152,42 @@ impl Reading<'_> {
             Self::Nothing => None,
         }
     }
+
+    /// How many tools the run started, when this reader can tell — `Some(0)` is a run that had
+    /// done nothing. `None` when it cannot: only Copilot CLI's events name every tool.
+    ///
+    /// The starts or the completions, whichever are more: a tool that finished was started, and
+    /// an absence is the weaker evidence — a CLI that renamed one of the two events must not make a
+    /// run that acted look as though it did nothing.
+    #[must_use]
+    pub fn tools_started(&self, transcript: &str) -> Option<usize> {
+        match self {
+            Self::Copilot => {
+                let count = |kind: &str| {
+                    transcript
+                        .lines()
+                        .filter(|line| line.contains(kind))
+                        .filter_map(event)
+                        .filter(|event| event.get("type").and_then(Value::as_str) == Some(kind))
+                        .count()
+                };
+                Some(count(TOOL_STARTED).max(count(TOOL_FINISHED)))
+            }
+            Self::Declared(_) | Self::Nothing => None,
+        }
+    }
 }
+
+/// The event Copilot CLI prints as a tool starts: the first sign of anything a run did.
+const TOOL_STARTED: &str = "tool.execution_start";
+
+/// The event Copilot CLI prints as a tool finishes.
+const TOOL_FINISHED: &str = "tool.execution_complete";
 
 /// The events Copilot CLI's classification looks at. A line naming none of them cannot change
 /// the answer, so it is not parsed: a forty-minute run prints tens of megabytes.
 const COPILOT_EVENTS: [&str; 4] = [
-    "tool.execution_start",
+    TOOL_STARTED,
     "model.call_final_result",
     "session.error",
     "model.call_failure",
@@ -195,7 +236,7 @@ fn copilot(transcript: &str) -> Option<ProviderFailure> {
         let text = |key: &str| data.get(key).and_then(Value::as_str).map(str::to_owned);
 
         match event.get("type").and_then(Value::as_str) {
-            Some("tool.execution_start") => return found,
+            Some(TOOL_STARTED) => return found,
             Some("model.call_final_result") => match text("result") {
                 Some(result) if result == "success" => return found,
                 Some(result) => {

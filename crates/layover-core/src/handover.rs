@@ -438,12 +438,30 @@ pub enum ChildState {
     Unknown,
 }
 
+/// What an interrupted run is known to have done before it stopped.
+///
+/// A separate type for the same reason as [`ChildState`]: passing the wrong answer silently lets a
+/// `manual` agent's work happen twice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Acted {
+    /// Its CLI's events show it started no tool, so nothing it could do to the world was begun and
+    /// starting it again cannot repeat anything.
+    Nothing,
+    /// It started a tool, or there is no telling whether it did.
+    Maybe,
+}
+
 /// Decides whether interrupted work may be restarted.
 ///
 /// `child` is what the Tower currently knows about the previous run's process. For an
 /// interruption the Tower only *inferred* — a restart, a lost pipe — it must have checked before
 /// a new run is authorised, because recovering alongside a process that is still going duplicates
 /// whatever that process was doing.
+///
+/// `acted` is what that run is known to have done. A `manual` agent's run the model service ended
+/// before it started any tool is restarted like an `automatic` one: `manual` exists so work is not
+/// done twice, and that run did none. Only for a provider error, the one interruption whose run's
+/// every step the Tower read from its own events.
 ///
 /// # Errors
 ///
@@ -453,6 +471,7 @@ pub fn authorize_recovery(
     policy: RecoveryPolicy,
     interruption: &Interruption,
     child: ChildState,
+    acted: Acted,
     attempts_so_far: u32,
     max_attempts: u32,
 ) -> Result<(), RecoveryDenied> {
@@ -464,8 +483,11 @@ pub fn authorize_recovery(
         return Err(RecoveryDenied::ChildUnaccountedFor);
     }
 
+    let did_nothing =
+        acted == Acted::Nothing && matches!(interruption, Interruption::ProviderError { .. });
     match policy {
         RecoveryPolicy::Never => return Err(RecoveryDenied::PolicyForbids),
+        RecoveryPolicy::Manual if did_nothing => {}
         RecoveryPolicy::Manual => return Err(RecoveryDenied::NeedsAHuman),
         RecoveryPolicy::Automatic => {}
     }
@@ -598,16 +620,80 @@ mod tests {
             "the Tower watched it exit"
         );
         assert_eq!(
-            authorize_recovery(RecoveryPolicy::Automatic, &error, ChildState::Gone, 0, 2),
+            authorize_recovery(
+                RecoveryPolicy::Automatic,
+                &error,
+                ChildState::Gone,
+                Acted::Maybe,
+                0,
+                2
+            ),
             Ok(())
         );
         assert_eq!(
-            authorize_recovery(RecoveryPolicy::Manual, &error, ChildState::Gone, 0, 2),
+            authorize_recovery(
+                RecoveryPolicy::Manual,
+                &error,
+                ChildState::Gone,
+                Acted::Maybe,
+                0,
+                2
+            ),
             Err(RecoveryDenied::NeedsAHuman)
         );
         assert_eq!(
-            authorize_recovery(RecoveryPolicy::Automatic, &error, ChildState::Gone, 2, 2),
+            authorize_recovery(
+                RecoveryPolicy::Automatic,
+                &error,
+                ChildState::Gone,
+                Acted::Maybe,
+                2,
+                2
+            ),
             Err(RecoveryDenied::OutOfAttempts { max_attempts: 2 })
+        );
+    }
+
+    #[test]
+    fn a_manual_agent_s_run_the_service_ended_before_it_did_anything_is_restarted() {
+        // `manual` is about not doing work twice. Every side effect is a tool call, and this run
+        // started none, so there is nothing to repeat — and not restarting it loses the work.
+        let error = Interruption::ProviderError { request_id: None };
+        let decide = |policy, acted, attempts| {
+            authorize_recovery(policy, &error, ChildState::Gone, acted, attempts, 2)
+        };
+
+        assert_eq!(decide(RecoveryPolicy::Manual, Acted::Nothing, 0), Ok(()));
+        assert_eq!(
+            decide(RecoveryPolicy::Manual, Acted::Maybe, 0),
+            Err(RecoveryDenied::NeedsAHuman),
+            "a run that started a tool, or that nobody can tell about, waits for a person"
+        );
+        assert_eq!(
+            decide(RecoveryPolicy::Manual, Acted::Nothing, 2),
+            Err(RecoveryDenied::OutOfAttempts { max_attempts: 2 }),
+            "and it counts against the same attempts"
+        );
+        assert_eq!(
+            decide(RecoveryPolicy::Never, Acted::Nothing, 0),
+            Err(RecoveryDenied::PolicyForbids),
+            "`never` means never"
+        );
+    }
+
+    #[test]
+    fn only_a_provider_error_lets_a_manual_agent_restart_untouched_work() {
+        // A Tower that went away read none of its run's events, so it cannot know nothing happened.
+        assert_eq!(
+            authorize_recovery(
+                RecoveryPolicy::Manual,
+                &Interruption::TowerRestart,
+                ChildState::Gone,
+                Acted::Nothing,
+                0,
+                2
+            ),
+            Err(RecoveryDenied::NeedsAHuman)
         );
     }
 
@@ -676,6 +762,7 @@ mod tests {
                 RecoveryPolicy::Automatic,
                 &Interruption::GroundStop,
                 ChildState::Gone,
+                Acted::Maybe,
                 0,
                 3
             ),
@@ -698,6 +785,7 @@ mod tests {
                     RecoveryPolicy::Automatic,
                     &interruption,
                     ChildState::Gone,
+                    Acted::Maybe,
                     0,
                     3
                 ),
@@ -719,6 +807,7 @@ mod tests {
                     RecoveryPolicy::Automatic,
                     &interruption,
                     ChildState::Unknown,
+                    Acted::Maybe,
                     0,
                     3
                 ),
@@ -742,6 +831,7 @@ mod tests {
                     RecoveryPolicy::Automatic,
                     &interruption,
                     ChildState::Unknown,
+                    Acted::Maybe,
                     0,
                     3
                 ),
@@ -757,6 +847,7 @@ mod tests {
                 RecoveryPolicy::Automatic,
                 &Interruption::Timeout,
                 ChildState::Gone,
+                Acted::Maybe,
                 3,
                 3
             ),
@@ -767,6 +858,7 @@ mod tests {
                 RecoveryPolicy::Automatic,
                 &Interruption::Timeout,
                 ChildState::Gone,
+                Acted::Maybe,
                 2,
                 3
             ),
@@ -781,6 +873,7 @@ mod tests {
                 RecoveryPolicy::Never,
                 &Interruption::Timeout,
                 ChildState::Gone,
+                Acted::Maybe,
                 0,
                 3
             ),
@@ -791,6 +884,7 @@ mod tests {
                 RecoveryPolicy::Manual,
                 &Interruption::Timeout,
                 ChildState::Gone,
+                Acted::Maybe,
                 0,
                 3
             ),
@@ -807,6 +901,7 @@ mod tests {
                 RecoveryPolicy::Automatic,
                 &Interruption::Timeout,
                 ChildState::Gone,
+                Acted::Maybe,
                 0,
                 0
             ),

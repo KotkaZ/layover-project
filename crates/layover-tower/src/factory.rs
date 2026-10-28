@@ -604,9 +604,13 @@ impl Factory {
         let provider = (outcome == Outcome::Failed)
             .then(|| self.provider_failure(&ticket.authorised.runner, &transcript))
             .flatten();
+        // Whether it had done anything: a `manual` agent's run that started no tool is restarted.
+        let tools = provider
+            .as_ref()
+            .and_then(|_| self.tools_started(&ticket.authorised.runner, &transcript));
         let restart = provider
             .as_ref()
-            .map(|failure| self.restart_after(ticket, failure));
+            .map(|failure| self.restart_after(ticket, failure, tools));
         let detail = match (&provider, &restart) {
             (Some(failure), Some(restart)) => Some(crate::provider::detail(
                 finished.exit_code,
@@ -642,7 +646,9 @@ impl Factory {
             cause: provider
                 .as_ref()
                 .map(|_| layover_core::run::FailureCause::ProviderError),
-            request_id: provider.and_then(|failure| failure.request_id),
+            request_id: provider
+                .as_ref()
+                .and_then(|failure| failure.request_id.clone()),
             blocked_on: self.blocked_on(&ticket.run, ticket.started_at),
             pid: None,
             flags: self.recorded_flags(&ticket.chain),
@@ -653,6 +659,11 @@ impl Factory {
         // Last, because until the outcome is written the run is still unaccounted for. Forgetting
         // it first would lose a run that this process failed to finish recording.
         let _ = self.live.finished(&ticket.run);
+        // A `manual` agent's run that was not restarted goes in front of a person, not only into
+        // history, which nobody reads until they already know something is wrong.
+        if let (Some(failure), Some(Err(why))) = (&provider, &restart) {
+            self.ask_about(ticket, failure, why, tools);
+        }
         // Before the run stops counting as alive: a schedule asks whether its workflow is busy by
         // looking at runs alive and then at the queue, and a restart queued after the run was
         // forgotten could be in neither, letting a tick start a second wave beside it.
@@ -884,7 +895,7 @@ impl Factory {
     /// The flags to write into a run's record: those its chain was composed with, for a chain a
     /// workflow opened. A chain no workflow opened has none of its own, and writing every declared
     /// flag at its default would claim choices nobody made.
-    fn recorded_flags(&self, chain: &ItineraryId) -> BTreeMap<String, bool> {
+    pub(crate) fn recorded_flags(&self, chain: &ItineraryId) -> BTreeMap<String, bool> {
         if self.chains.pipeline_of(chain).is_some() {
             self.flags_for(chain).to_map()
         } else {

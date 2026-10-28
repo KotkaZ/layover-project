@@ -316,3 +316,69 @@ fn the_start_up_line_counts_only_whole_and_only_last() {
         assert_eq!(copilot(not_whole), None, "{not_whole}");
     }
 }
+
+/// A run the service failed before it did anything: its MCP servers came up, its first call was
+/// refused, and it ended. Twenty-nine lines like these lost a pull request's follow-up on 28 October.
+const NOTHING_DONE: &str = r#"{"type":"session.mcp_server_tools_loaded","data":{"serverName":"layover"}}
+{"type":"session.mcp_server_tools_loaded","data":{"serverName":"ado"}}
+{"type":"assistant.turn_start","data":{"turnId":"1"}}
+{"type":"model.call_start","data":{"turnId":"1","model":"claude-opus-5.5"}}
+{"type":"model.call_final_result","data":{"model":"claude-opus-5.5","isByok":false,"result":"http_401"}}
+{"type":"session.error","data":{"errorType":"query","message":"Authorization error. Your credentials may be expired or invalid.","statusCode":401,"providerCallId":"00000-401a"}}
+{"type":"result","sessionId":"a401","exitCode":1}
+"#;
+
+#[test]
+fn a_run_the_service_failed_before_it_started_a_tool_started_none() {
+    assert_eq!(Reading::Copilot.tools_started(NOTHING_DONE), Some(0));
+    assert!(copilot(NOTHING_DONE).is_some(), "and is a provider error");
+    assert_eq!(
+        Reading::Copilot.tools_started(
+            "{\"type\":\"session.mcp_server_tools_loaded\",\"data\":{}}\n\
+             Error: Model \"gpt-6.1-sol\" from --model flag is not available.\n"
+        ),
+        Some(0),
+        "nor did one that never made a call"
+    );
+}
+
+#[test]
+fn every_tool_a_run_started_is_counted_and_a_quoted_one_is_not() {
+    // A message quoting a log that holds a tool start is a string inside another event.
+    let quoted = r#"{"type":"assistant.message","data":{"content":"the log said {\"type\":\"tool.execution_start\",\"data\":{}}"}}"#;
+    let transcript = format!("{WORK}{quoted}\n{WORK}{REJECTED}");
+
+    assert_eq!(Reading::Copilot.tools_started(&transcript), Some(2));
+    assert_eq!(
+        Reading::Copilot.tools_started(&format!("{quoted}\n")),
+        Some(0)
+    );
+}
+
+#[test]
+fn a_tool_that_finished_was_started_even_if_its_start_is_missing() {
+    // Absence is the weaker evidence: a renamed start event must not make a run look untouched.
+    let finished_only =
+        r#"{"type":"tool.execution_complete","data":{"toolCallId":"t1","success":true}}"#;
+
+    assert_eq!(
+        Reading::Copilot.tools_started(&format!("{finished_only}\n{REJECTED}")),
+        Some(1)
+    );
+}
+
+#[test]
+fn only_a_reader_that_sees_tools_can_say_none_started() {
+    // A declared reader names failures and signs of carrying on, not tools, so it cannot show that
+    // nothing was done; nor can a runner that is not read at all.
+    let declared = ProviderErrors {
+        failed: vec![serde_json::from_str(r#"{"type":"error"}"#).expect("a shape")],
+        ..ProviderErrors::default()
+    };
+
+    assert_eq!(
+        Reading::Declared(&declared).tools_started(NOTHING_DONE),
+        None
+    );
+    assert_eq!(Reading::Nothing.tools_started(NOTHING_DONE), None);
+}

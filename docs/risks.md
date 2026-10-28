@@ -276,7 +276,9 @@ work, and doing half of it would be worse than none.
 **Mitigation until then.** `recovery = "manual"` on the one irreversible agent in the reference
 factory, and the handover text telling a resumed run to check whether the earlier one already did
 the thing — after a model-service failure, that its tools may well have acted. Both rely on the
-agent looking, which is weaker than a key.
+agent looking, which is weaker than a key. The one case `manual` does not stop is the safe one: a
+run the model service ended before it started any tool, which did nothing to repeat; a `manual` run
+that had started one is left, and the Tower files a help request for it.
 
 ### 18. A runner that under-reports its cost defeats both money rails
 
@@ -450,6 +452,9 @@ per piece of work, each restart an ordinary run against Hops, Fuel, `max_runs` a
 `recovery = "manual"` honoured, and a Ground Stop forbidding it. The shapes are pinned by tests built
 from real Copilot CLI 1.0.97 transcripts. A runner that wants none of it sets
 `provider_errors = { read = "none" }`; one for a CLI that changed declares the events itself.
+`manual` lets a run restart only when it started no tool, which reads an *absence* — the weaker
+direction — so a tool counts as started when either its start or its completion is in the
+transcript, and one renamed event cannot make a run that acted look untouched.
 
 ### 30. An agent CLI run in your own home has your own tools
 

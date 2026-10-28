@@ -33,7 +33,7 @@ use layover_core::agent::AgentName;
 use layover_core::cost::TokenUsage;
 use layover_core::cost::Window;
 use layover_core::flight::{Flight, ItineraryId, RunId};
-use layover_core::handover::{ChildState, Interruption, Recovery, authorize_recovery};
+use layover_core::handover::{Acted, ChildState, Interruption, Recovery, authorize_recovery};
 use layover_core::pipeline::PipelineName;
 use layover_core::queue::Queued;
 use layover_core::run::{Outcome, RunRecord};
@@ -280,6 +280,8 @@ impl Factory {
             agent.recovery,
             &interruption,
             found.child(),
+            // Nothing read its events while it ran, so nothing can say it did nothing.
+            Acted::Maybe,
             attempt.saturating_sub(1),
             self.config.defaults.max_recovery_attempts,
         )

@@ -125,6 +125,11 @@ cli = "copilot"
 [agents.wolf]
 prompt = "verify"
 entry = true
+
+[agents.mailman]
+prompt = "post"
+entry = true
+recovery = "manual"
 "#;
 
 #[tokio::test]
@@ -264,4 +269,36 @@ async fn only_a_stalled_or_failed_chain_can_be_dismissed() {
     assert_eq!(status, StatusCode::NOT_FOUND);
     let (status, _) = factory.send("DELETE", &unknown, None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn a_manual_agent_s_restart_says_why_it_is_restarted_at_all() {
+    // `manual` agents are not restarted, so one that is needs saying why: its run did nothing.
+    let factory = Factory::new("manual-restart");
+    let chain = ItineraryId::generate();
+    factory.provider_failure(&chain);
+    factory
+        .journal()
+        .queue(
+            Queued::new(
+                Flight::new(chain.clone(), Origin::Human, "mailman".into(), "post", 6),
+                None,
+                BTreeMap::new(),
+            )
+            .restarting(Recovery {
+                previous: RunId::from("run_wolf"),
+                interruption: Interruption::ProviderError { request_id: None },
+                attempt: 2,
+            })
+            .waiting_until(jiff::Timestamp::now() + jiff::SignedDuration::from_mins(1)),
+        )
+        .expect("queues");
+
+    let chains = factory.get("/itineraries?window=last_24h").await;
+    assert_eq!(chains["itineraries"][0]["state"], "working");
+    assert_eq!(
+        chains["itineraries"][0]["detail"],
+        "`mailman` restarts after the model service failed before it started any tool — its \
+         `recovery` is `manual`, but there is nothing to repeat — attempt 2, once its wait is over"
+    );
 }

@@ -54,6 +54,10 @@ use layover_core::stall::Stall;
 use layover_http::{HelpAsk, Itinerary, ItineraryState};
 use layover_store::Dismissal;
 
+use dismissed::dismissed;
+
+mod dismissed;
+
 /// What else is known about chains beside their runs: what the Tower gave up on, what is queued,
 /// what agents asked people, and which chains people have dismissed.
 #[derive(Debug, Default, Clone, Copy)]
@@ -70,6 +74,9 @@ pub struct Context<'a> {
     pub switched_off: &'a [PipelineName],
     /// Stalled and failed chains people have said were dealt with.
     pub dismissals: &'a [Dismissal],
+    /// Agents whose `recovery` is `manual`: one waiting to restart after the model service failed
+    /// is restarted only because its run had started no tool.
+    pub manual: &'a [AgentName],
 }
 
 /// Groups runs into chains and works out what became of each.
@@ -210,6 +217,7 @@ fn build(
         ground_stop,
         switched_off: _,
         dismissals,
+        manual,
     } = context;
     let stall = stalls.iter().find(|stall| stall.itinerary.as_str() == id);
 
@@ -281,7 +289,7 @@ fn build(
         started_at,
         finished_at,
         detail: detail_for(state, stall, asked, runs, died)
-            .or_else(|| backing_off(id, pending))
+            .or_else(|| backing_off(id, pending, manual))
             .or_else(|| {
                 (!continued_by.is_empty())
                     .then(|| format!("continued as {}", continued_by.join(", ")))
@@ -315,46 +323,27 @@ fn build(
     }
 }
 
-/// The dismissal that stands for a chain: one of the run it ended on, while it is stalled or failed.
-///
-/// Only then. A chain that has since been continued no longer needs one, and one that ended on a
-/// later run has a failure nobody has looked at.
-fn dismissed(
-    id: &str,
-    state: ItineraryState,
-    ended: Option<&RunRecord>,
-    dismissals: &[Dismissal],
-) -> Option<layover_http::Dismissal> {
-    if !matches!(state, ItineraryState::Stalled | ItineraryState::Failed) {
-        return None;
-    }
-    let ended = ended?;
-    dismissals
-        .iter()
-        .find(|dismissal| dismissal.itinerary.as_str() == id && dismissal.run == ended.run)
-        .map(|dismissal| layover_http::Dismissal {
-            run_id: dismissal.run.as_str().to_owned(),
-            by: dismissal.by.clone(),
-            at: dismissal.at.to_string(),
-            note: dismissal.note.clone(),
-        })
-}
-
 /// What a chain waiting only for a restart's back-off is waiting for, so `working` with nothing
-/// running does not read as stuck.
-fn backing_off(id: &str, pending: &[Queued]) -> Option<String> {
+/// running does not read as stuck — and, for an agent that is otherwise never restarted, why it is.
+fn backing_off(id: &str, pending: &[Queued], manual: &[AgentName]) -> Option<String> {
     let now = jiff::Timestamp::now();
     pending
         .iter()
-        .filter(|queued| queued.flight.itinerary.as_str() == id && !queued.is_due(now))
+        .find(|queued| queued.flight.itinerary.as_str() == id && !queued.is_due(now))
         .map(|queued| {
+            let why = if manual.contains(&queued.flight.to) {
+                " before it started any tool — its `recovery` is `manual`, but there is nothing to \
+                 repeat"
+            } else {
+                ""
+            };
             format!(
-                "`{}` restarts after the model service failed — attempt {}, once its wait is over",
+                "`{}` restarts after the model service failed{why} — attempt {}, once its wait is \
+                 over",
                 queued.flight.to,
                 queued.attempt()
             )
         })
-        .next()
 }
 
 /// The run a chain ended on: the last to finish, so in a fan-out a branch that died while another

@@ -30,6 +30,12 @@ category is for.
 Requests go to the journal, beside run history, which is what the dashboard's help tab, `layover
 doctor` and the run record read.
 
+The Tower files one itself, for the agent, in one case: a `manual` agent's run the model service
+ended and that was [not restarted](./recovery.md#a-run-that-did-nothing). That run could not ask —
+it was over before it knew — and a failed run in history is not where anybody looks. It is filed as
+`environment`, not fatal, saying which run and chain, the provider's request id, how many tools the
+run had started, and any layover it had collected and spent.
+
 The categories are measured rather than imagined. In a working prototype's help file, five of six
 entries were permission or access failures: a denied tool guard, a denied git read, an HTTP 422,
 a TLS handshake.

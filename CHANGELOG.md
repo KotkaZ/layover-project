@@ -8,6 +8,37 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+A `manual` agent's run the model service ended before it started any tool is restarted, and one that
+is not restarted is put in front of a person as a help request.
+
+**Compatibility.** Every factory that loaded under 1.17 loads unchanged; the HTTP API, the MCP tools
+and the state directory's layout do not change. What an existing factory will notice: an agent with
+`recovery = "manual"` whose run the model service ended — read from Copilot CLI's events — **before it
+started any tool** is now restarted, on the same `max_recovery_attempts` and back-off as any other,
+where before it was left; such a run did nothing that could happen twice. One that had started a
+tool is still left, and now also files a help request (`environment`, not fatal), so it shows in
+the help queue and the page's count. To keep one agent from being restarted after a provider failure
+at all, give it `recovery = "never"` (which files no help request either); factory-wide,
+`max_recovery_attempts = 0`, or `provider_errors = { read = "none" }` on a runner. For library
+users, `authorize_recovery` takes an `Acted`, and `Reading` gains `tools_started`.
+
+### Changed
+
+- **A `manual` agent's run that did nothing is restarted.** `manual` keeps work from happening
+  twice, and every side effect is a tool call. When a 401 outage ended a `manual` agent's run before
+  it started a tool, leaving it spent the layover it was collecting and a pull request stopped being
+  followed, unnoticed for over an hour. A run whose events show no tool started or finished is now
+  restarted under `manual` too, and its record and chain say why: `it started no tool, so restarting
+  although this agent's recovery policy is manual`. Ground Stop, attempts and back-off apply as
+  before; a runner without Copilot CLI's events keeps the old rule.
+
+### Added
+
+- **A help request when a `manual` agent's provider failure is not restarted.** Filed by the Tower
+  for the agent, naming the run, its chain, the provider's request id, how many tools it had started
+  and any layover it had collected and spent. It records the chain's workflow and flags, so
+  **Reply** starts the agent again as that chain would have.
+
 ## [1.17.0] — 2026-10-27
 
 A stalled or failed chain somebody dealt with another way can be dismissed, so it stops counting as

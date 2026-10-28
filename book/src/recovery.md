@@ -85,7 +85,7 @@ recovery = "manual"
 | Policy | Meaning |
 |---|---|
 | `automatic` | Restart without asking, up to the limit. The default. |
-| `manual` | Record the interruption and wait for a human to ask. |
+| `manual` | Record the interruption and wait for a human to ask — except a run the model service ended [before it started any tool](#a-run-that-did-nothing), which had nothing to repeat. |
 | `never` | Do not restart. The itinerary stays interrupted. |
 
 The question is not whether the Tower *can* restart an agent but whether doing its work twice is
@@ -127,8 +127,9 @@ from:
    ```
 
 3. **It applies the agent's `recovery` policy and `max_recovery_attempts`**, exactly as for an
-   interruption: `automatic` restarts it, `manual` records it and waits for a person, `never` leaves
-   it. A Ground Stop engaged when the run ended forbids the restart.
+   interruption: `automatic` restarts it, `manual` records it and waits for a person — unless the
+   run [did nothing](#a-run-that-did-nothing) — and `never` leaves it. A Ground Stop engaged when
+   the run ended forbids the restart.
 4. **The restart waits**: a minute before the first, five before the second, fifteen after that. A
    provider fault often comes in a cluster, and restarting into it would spend an attempt on
    nothing. The wait is kept on the queued flight, so a Tower restarted meanwhile still waits, and
@@ -160,6 +161,34 @@ A run that outlived `timeout_sec` is `timed_out`, never a provider error.
 prints are looked at. An agent quoting an error — a tool result holding a log that says
 `session.error`, a message explaining a 400 — is a string inside another event and never matches,
 which a pattern over the output would.
+
+### A run that did nothing
+
+`manual` says an agent's work must not happen twice. Everything an agent does to the world — a
+command, a file, a message, any MCP call, `layover_send` and `layover_book` — is a tool it starts,
+and Copilot CLI reports each one. So a `manual` agent's run that the model service ended before it
+started **any tool** is restarted all the same: on the same attempts, after the same wait, on every
+rail, and never through a Ground Stop. Its record says why:
+
+```text
+exited with code 1: the model service failed (http_401): Authorization error. Your credentials may
+be expired or invalid. (request 00000-401a); it started no tool, so restarting although this agent's
+`recovery` policy is `manual`, as attempt 2 after a 1-minute wait
+```
+
+and its chain, while it waits: `` `ado-operator` restarts after the model service failed before it
+started any tool — its `recovery` is `manual`, but there is nothing to repeat — attempt 2, once its
+wait is over``. A run that started even one tool is left, as `manual` says. Only a runner read as
+Copilot CLI can show that no tool started; one that declares its own events, or is not read, keeps
+`manual` as it was.
+
+When a `manual` agent's run the model service ended is **not** restarted — it had started a tool, its
+attempts were spent, a Ground Stop was engaged — the Tower files a [help
+request](./learning.md#asking-for-help) for it, so it reaches a person rather than only history: blocker
+`environment`, not fatal, naming the run, its chain, the provider's request id and how many tools it
+had started. When the run was collecting a [layover](./pipelines.md#resuming-booked-work), it says the layover is spent —
+nothing will follow up on what it was waiting for unless somebody does. **Reply** starts the agent
+again in a new chain with this one's workflow and flags; **Resolve** once it is dealt with.
 
 ### Which runners are read
 

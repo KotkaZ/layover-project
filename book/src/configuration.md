@@ -280,7 +280,7 @@ prompt_file = "tester.md"
 | `env_from` | — | Names of environment variables forwarded to this agent's CLI on top of `[defaults] env_from`: a credential only this agent should hold. A name that is not set refuses the run. See [credentials for the CLI itself](./runners.md#credentials-for-the-cli-itself). |
 | `mcp` | — | The other MCP servers this agent may reach, keyed by name. See [MCP servers](#mcp-servers). |
 | `work_dir` | — | Work somewhere other than the shared `work_dir`. Relative to this file; an absolute path is used as written. |
-| `recovery` | `automatic` | `manual` if repeating this agent's work would do damage. Applies to a run interrupted by the Tower going away and to one the [model service ended](./recovery.md#when-the-model-service-fails). See [Recovery](./recovery.md). |
+| `recovery` | `automatic` | `manual` if repeating this agent's work would do damage. Applies to a run interrupted by the Tower going away and to one the [model service ended](./recovery.md#when-the-model-service-fails); a `manual` agent's run the service ended before it started any tool is restarted all the same, since it [did nothing](./recovery.md#a-run-that-did-nothing). See [Recovery](./recovery.md). |
 | `max_concurrent` | — | At most this many runs of this agent alive at once, within `max_concurrent_runs`. `1` for an agent that must never overlap itself. |
 
 ### MCP servers

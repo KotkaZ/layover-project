@@ -663,6 +663,10 @@ impl Api for Dashboard {
 
         let off: Vec<PipelineName> = self.switched_off().into_keys().collect();
         let dismissals = self.0.journal.dismissals().unwrap_or_default();
+        let manual = config
+            .as_ref()
+            .map(crate::chain::manual_agents)
+            .unwrap_or_default();
         let mut chains = crate::itinerary::itineraries(
             &records,
             crate::itinerary::Context {
@@ -672,6 +676,7 @@ impl Api for Dashboard {
                 ground_stop: self.ground_stop_engaged(),
                 switched_off: &off,
                 dismissals: &dismissals,
+                manual: &manual,
             },
         );
 
