@@ -8,6 +8,8 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+## [1.19.0] — 2026-10-29
+
 An agent can find out which chain and run it is in, to stamp on what it creates.
 
 **Compatibility.** Additive: every factory that loaded under 1.18 loads unchanged, and nothing runs
@@ -1070,7 +1072,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.18.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.19.0...HEAD
+[1.19.0]: https://github.com/KotkaZ/layover-project/compare/v1.18.0...v1.19.0
 [1.18.0]: https://github.com/KotkaZ/layover-project/compare/v1.17.0...v1.18.0
 [1.17.0]: https://github.com/KotkaZ/layover-project/compare/v1.16.1...v1.17.0
 [1.16.1]: https://github.com/KotkaZ/layover-project/compare/v1.16.0...v1.16.1
