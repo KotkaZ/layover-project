@@ -8,6 +8,26 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+An agent can find out which chain and run it is in, to stamp on what it creates.
+
+**Compatibility.** Additive: every factory that loaded under 1.18 loads unchanged, and nothing runs
+differently. `layover_status` now answers `` You are `developer`, run `run_…` in chain `itn_…`. This
+chain may send 3 more message(s). `` — the same sentence with the two identifiers added — and its
+description tells agents to put the chain id on pull requests, comments and work items. A prompt
+that parses the old answer word for word should be checked.
+
+### Added
+
+- **The chain and run ids, from `layover_status`.** An agent can now stamp the chain on a pull
+  request, comment or work item it creates, so a person can trace it back to the chain on the
+  dashboard (`#chain=<id>`). Read from the run's token, like the rest of its identity.
+
+### Fixed
+
+- **`layover_status` no longer claims to report budget.** It said it told an agent how much budget
+  remained, and never did; the reference factory's developer prompt told agents to check Fuel with
+  it. Both now say Hops, which is what it reports.
+
 ## [1.18.0] — 2026-10-28
 
 A `manual` agent's run the model service ended before it started any tool is restarted, and one that

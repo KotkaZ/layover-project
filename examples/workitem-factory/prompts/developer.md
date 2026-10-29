@@ -13,5 +13,5 @@ both, never only the one that complained. A verdict from the other agent about t
 version of the code is stale, and sending to one alone leaves the rendezvous waiting for a
 sibling that never comes.
 
-Call layover_status() before you begin. If Hops or Fuel are nearly gone, do not start a repair
+Call layover_status() before you begin. If Hops are nearly gone, do not start a repair
 you cannot finish: leave the workspace in a coherent state and say so in your last flight.

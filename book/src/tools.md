@@ -18,7 +18,7 @@ applied was whether an agent could do its job without it.
 | `layover_help` | Say something is in the way, and which kind of thing: `blocker` is one of `access`, `tooling`, `ambiguity`, `environment`, `decision` or `other`. The channel that stops a quiet failure travelling downstream. |
 | `layover_memory_read` | Read your own notes in full. |
 | `layover_memory_write` | Add to your own notes, for future runs of you. |
-| `layover_status` | What this chain has left: how many messages, how much budget. |
+| `layover_status` | Which chain and run this is, and how many more messages the chain may send. Put the chain id on a pull request, comment or work item the agent creates, so it can be traced back to the chain on the dashboard. |
 | `layover_learn` | Propose something future runs should know. Applies at once; lapses unless rediscovered. |
 | `layover_logbook_append` | Add to the factory's shared memory, stamped with who wrote it. |
 | `layover_wait` | Set work down to be picked up later, by a pipeline that resumes layovers. |
@@ -291,6 +291,12 @@ This is not a formality. Every rail in the system — Hops, Fuel, the run cap, w
 is indexed by the agent's name, so an agent that could name itself could claim another agent's
 permissions and another agent's budget. There is no code path in which a field an agent sent
 becomes an identity, and a test asserts that sending an `agent` field changes nothing.
+
+`layover_status` reads the other way: it tells the agent its chain and run identifiers, from the
+token, so it can write them where a person will look — `Made by Layover chain itn_01K…` on a pull
+request, a comment or a work item — and that person can open the chain on the dashboard
+(`#chain=<id>`). An identifier an agent repeats back is only ever text; nothing takes it as who the
+agent is.
 
 ## A refused call is a successful answer
 

@@ -268,8 +268,11 @@ fn run_tool(
         }
 
         Tool::Status => Ok(format!(
-            "You are `{}`. This chain may send {} more message(s).",
-            session.agent, session.hops_remaining
+            "You are `{}`, run `{}` in chain `{}`. This chain may send {} more message(s).",
+            session.agent,
+            session.run.as_str(),
+            session.itinerary.as_str(),
+            session.hops_remaining
         )),
 
         Tool::Wait => {
@@ -801,6 +804,32 @@ mod tests {
         assert!(
             text.contains('3'),
             "the remaining hops should be stated: {text}"
+        );
+    }
+
+    #[test]
+    fn status_names_the_chain_and_the_run_so_work_can_be_stamped_with_them() {
+        // A pull request, a comment or a work item that says which chain made it is one somebody
+        // can trace back to the dashboard. Read from the Tower's session, never from the agent.
+        let session = session();
+        let request = request(
+            "tools/call",
+            json!({ "name": "layover_status", "arguments": {} }),
+        );
+        let text = text_of(
+            &handle(&request, &session, &Spy::default())
+                .expect("a call expects a reply")
+                .result
+                .expect("a tool call always returns a result"),
+        );
+
+        assert!(
+            text.contains(&format!("chain `{}`", session.itinerary.as_str())),
+            "{text}"
+        );
+        assert!(
+            text.contains(&format!("run `{}`", session.run.as_str())),
+            "{text}"
         );
     }
 

@@ -116,8 +116,10 @@ impl Tool {
                  whole factory needs, not for your own notes."
             }
             Self::Status => {
-                "Ask what this chain has left: how many more messages it may send, and how much \
-                 budget remains. Worth checking before fanning out to several agents."
+                "Ask which chain and run this is, and how many more messages this chain may send. \
+                 Worth checking before fanning out to several agents. Put the chain id on a pull \
+                 request, comment or work item you create, so a person can trace it back to the \
+                 chain that made it."
             }
             Self::Wait => {
                 "Set this work down and have it picked up later, when something you are waiting \

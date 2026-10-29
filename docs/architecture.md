@@ -374,7 +374,7 @@ What a wrapped agent can do.
 |---|---|
 | `layover_send` | Send a flight. The only way work moves; returns its flight ID. |
 | `layover_peers` | Which agents this one may reach, and what each is for. |
-| `layover_status` | Hops and Fuel remaining. |
+| `layover_status` | Hops remaining, and which chain and run this is. |
 | `layover_memory_read` / `layover_memory_write` | The agent's own `memory.md`. |
 | `layover_logbook_append` | Shared memory, stamped with who wrote it; serialized by the Tower. |
 | `layover_report` | What the run concluded — the account of it that survives it. |
@@ -388,8 +388,10 @@ Two of these matter more than they look:
 
 - `layover_peers()` is how an agent discovers the graph at runtime instead of having the topology
   hard-coded into its prompt. The route map stays the single source of truth.
-- `layover_status()` lets a well-behaved agent wind down gracefully as budget runs low, rather
-  than being killed mid-thought when it hits zero.
+- `layover_status()` lets a well-behaved agent wind down gracefully as its Hops run low, rather
+  than being refused mid-thought when they reach zero. It also says which chain and run this is,
+  read from the token like everything else, so an agent can stamp the chain on the pull request,
+  comment or work item it creates and a person can trace that back.
 
 ## 10. HTTP surface
 
