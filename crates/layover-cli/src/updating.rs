@@ -455,9 +455,14 @@ fn successor(binary: &Path, address: SocketAddr, state: &Path) -> std::io::Resul
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt as _;
-        // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP: it outlives this process and the console
-        // or task that started it. Never CREATE_BREAKAWAY_FROM_JOB, which a scheduled task refuses.
-        command.creation_flags(0x0000_0008 | 0x0000_0200);
+        // CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP: a console of its own, with no window, and
+        // its own group, so it outlives this process and is attached to neither the console nor
+        // the task that started it. A console it has, rather than none, because every console
+        // program it starts — each run, each process probe — inherits it; started with none
+        // (DETACHED_PROCESS), each got a new console of its own, and on Windows 11 a Terminal window.
+        // Replaced, not added to: Windows ignores CREATE_NO_WINDOW beside DETACHED_PROCESS. Never
+        // CREATE_BREAKAWAY_FROM_JOB, which a scheduled task refuses.
+        command.creation_flags(0x0800_0000 | 0x0000_0200);
     }
     #[cfg(unix)]
     {

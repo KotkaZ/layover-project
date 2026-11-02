@@ -142,6 +142,7 @@ to them: Layover says to run `brew upgrade KotkaZ/tap/layover` or `npm install -
 ## Under a service manager
 
 Started by the logon task on Windows, a Tower hands over to the new version in place, and keeps
-running after the task's own command has ended. Under systemd or launchd it exits 75 for the service
+running after the task's own command has ended — with no window, and the agent runs it starts open
+none either. Under systemd or launchd it exits 75 for the service
 to start the new version: regenerate an older service file with `layover autostart` so it says so
 (`LAYOVER_SUPERVISOR`), though a systemd service is recognised without it.
