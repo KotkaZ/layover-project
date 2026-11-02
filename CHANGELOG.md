@@ -8,6 +8,8 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+## [1.19.1] — 2026-11-02
+
 On Windows, a Tower that updated itself in place no longer opens a window for every agent run.
 
 **Compatibility.** Every factory that loaded under 1.19 loads unchanged, and nothing about the
@@ -1092,7 +1094,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.19.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.19.1...HEAD
+[1.19.1]: https://github.com/KotkaZ/layover-project/compare/v1.19.0...v1.19.1
 [1.19.0]: https://github.com/KotkaZ/layover-project/compare/v1.18.0...v1.19.0
 [1.18.0]: https://github.com/KotkaZ/layover-project/compare/v1.17.0...v1.18.0
 [1.17.0]: https://github.com/KotkaZ/layover-project/compare/v1.16.1...v1.17.0
