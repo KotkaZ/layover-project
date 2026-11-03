@@ -103,9 +103,15 @@ versions at once, and must not be left down. Under systemd and launchd the servi
 every process in the service when its main one exits, so a successor the old Tower started would be
 killed with it; there the old Tower exits 75 — `EX_TEMPFAIL`, which both restart — and the manager
 starts the new binary. A spike on the maintainer's machine showed the Windows Task Scheduler does
-not restart a task that exits non-zero, and its five-minute watchdog is slow; but a child started
-with `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP` outlives the task's command (and adding
-`CREATE_BREAKAWAY_FROM_JOB` is refused). So on Windows, and anywhere without a service manager, the
+not restart a task that exits non-zero, and its five-minute watchdog is slow; but a child started in
+a process group of its own, with a console of its own, outlives the task's command (and adding
+`CREATE_BREAKAWAY_FROM_JOB` is refused). That child is started `CREATE_NO_WINDOW |
+CREATE_NEW_PROCESS_GROUP`: a console with no window, not the task's. It was first started
+`DETACHED_PROCESS`, with no console at all, and then every console program it started — each agent
+run, each process probe — was given a console of its own by Windows, and on Windows 11 a Terminal
+window each: three Copilot runs opened three windows on the maintainer's desktop after the first
+update in place. With a hidden console of its own, they share it, as they share the console of a
+Tower started any other way. So on Windows, and anywhere without a service manager, the
 old Tower closes its dashboard, starts the new binary at the same address, and waits for it to
 answer as the new version before it exits. That has a property the restart path lacks: the old
 process supervises the new one, so a release that cannot start at all is rolled back by the Tower it

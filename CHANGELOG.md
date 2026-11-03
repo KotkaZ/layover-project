@@ -8,6 +8,28 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+## [1.19.1] — 2026-11-02
+
+On Windows, a Tower that updated itself in place no longer opens a window for every agent run.
+
+**Compatibility.** Every factory that loaded under 1.19 loads unchanged, and nothing about the
+configuration, the HTTP API, the MCP tools or the state directory changes. On Windows the Tower an
+in-place update starts now has a hidden console of its own, which the agent runs and process probes
+it starts share, instead of each opening a window. The outgoing Tower is what starts its successor,
+so the update *to* this release, done by 1.19 or earlier, still starts it without a console and its
+runs still open windows: restart it once — at the next logon, or `layover stop` and run the logon
+task — and every update after that hands over without them.
+
+### Fixed
+
+- **A window for every agent run after an update on Windows.** The Tower an in-place update started
+  had no console at all, so Windows gave each console program it started — every agent run, and the
+  `powershell` that checks whether a run's process is still alive — a console of its own, and on
+  Windows 11 a Terminal window each, titled after the runner. It is now started with a console of
+  its own and no window (`CREATE_NO_WINDOW` in place of `DETACHED_PROCESS`), which they share; it is
+  still in a process group of its own, so it still outlives the logon task that started the Tower it
+  replaced.
+
 ## [1.19.0] — 2026-10-29
 
 An agent can find out which chain and run it is in, to stamp on what it creates.
@@ -1072,7 +1094,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.19.0...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.19.1...HEAD
+[1.19.1]: https://github.com/KotkaZ/layover-project/compare/v1.19.0...v1.19.1
 [1.19.0]: https://github.com/KotkaZ/layover-project/compare/v1.18.0...v1.19.0
 [1.18.0]: https://github.com/KotkaZ/layover-project/compare/v1.17.0...v1.18.0
 [1.17.0]: https://github.com/KotkaZ/layover-project/compare/v1.16.1...v1.17.0

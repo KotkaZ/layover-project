@@ -73,15 +73,7 @@ impl Drop for Temp {
     fn drop(&mut self) {
         // A Tower handed over to is no child of this test: if one outlived a failed assertion,
         // it is found by the pid the handover recorded, and ended.
-        let started = handover::request(&self.state())
-            .map(|request| request.progress)
-            .unwrap_or_default()
-            .iter()
-            .find_map(|line| {
-                let (_, rest) = line.split_once("(pid ")?;
-                rest.split(')').next()?.parse::<u32>().ok()
-            });
-        if let Some(pid) = started {
+        if let Some(pid) = successor(&self.state()) {
             let _ = if cfg!(windows) {
                 Command::new("taskkill")
                     .args(["/F", "/PID", &pid.to_string()])
@@ -99,6 +91,18 @@ impl Drop for Temp {
             std::thread::sleep(Duration::from_millis(250));
         }
     }
+}
+
+/// The process the handover started as the new Tower, from the `(pid N)` its progress records.
+fn successor(state: &Path) -> Option<u32> {
+    handover::request(state)
+        .map(|request| request.progress)
+        .unwrap_or_default()
+        .iter()
+        .find_map(|line| {
+            let (_, rest) = line.split_once("(pid ")?;
+            rest.split(')').next()?.parse::<u32>().ok()
+        })
 }
 
 fn name() -> &'static str {
@@ -297,6 +301,58 @@ fn a_tower_hands_over_to_the_release_it_installed_at_its_own_address() {
         .collect();
     assert!(events.contains(&"applied".to_owned()), "{events:?}");
     assert!(events.contains(&"healthy".to_owned()), "{events:?}");
+
+    stop(&temp, &address);
+}
+
+/// How many processes `parent` started that are named `name`, as `Win32_Process` reports them.
+#[cfg(windows)]
+fn children_named(parent: u32, name: &str) -> usize {
+    let script = format!(
+        "@(Get-CimInstance Win32_Process -Filter \"ParentProcessId = {parent} AND Name = '{name}'\").Count"
+    );
+    let output = Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+        .stdin(Stdio::null())
+        .output()
+        .expect("PowerShell runs");
+    let said = String::from_utf8_lossy(&output.stdout);
+    said.trim().parse().unwrap_or_else(|_| {
+        panic!(
+            "Win32_Process said {said:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+    })
+}
+
+#[cfg(windows)]
+#[test]
+fn on_windows_the_tower_handed_over_to_has_a_console_of_its_own_with_no_window() {
+    // A Tower with no console gives every console program it starts — each agent run, each process
+    // probe — a console of its own, and on Windows 11 a Terminal window each. One with a hidden
+    // console lends it to them, as a Tower started any other way lends them the one it was given.
+    let temp = Temp::new("console");
+    factory(&temp);
+    let (mut old, address) = serve(&temp);
+    staged(&temp, Path::new(env!("CARGO_BIN_EXE_layover")));
+
+    ask(&temp);
+
+    let status = until("the old Tower exiting", Duration::from_secs(90), || {
+        old.try_wait().expect("asks")
+    });
+    let request = handover::request(&temp.state()).expect("kept");
+    assert!(status.success(), "{status:?}: {:?}", request.progress);
+    let new = successor(&temp.state()).expect("the handover names the new Tower's process");
+    until("the new Tower answering", Duration::from_secs(30), || {
+        health(&address)
+    });
+
+    assert_eq!(
+        children_named(new, "conhost.exe"),
+        1,
+        "the new Tower {new} should host one hidden console of its own"
+    );
 
     stop(&temp, &address);
 }
