@@ -61,3 +61,12 @@ checksum = "sha256"
 github-attestations = true
 # Path that installers should place binaries in
 install-path = "CARGO_HOME"
+
+# dist 0.32 builds Apple silicon on `macos-14`, which GitHub retired on 2 November 2026: a job
+# naming it is refused before it starts ("The configuration … is not supported"), and with one
+# target missing the release never reaches `host`, so nothing is published. `macos-15` is a label
+# GitHub still supports. The runner does not decide which macOS the binary runs on — rustc's
+# deployment target does — and Intel already builds on `macos-15-intel`. Drop this once a dist
+# upgrade's default is a supported image.
+[dist.github-custom-runners]
+aarch64-apple-darwin = "macos-15"
