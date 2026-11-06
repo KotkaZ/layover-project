@@ -123,8 +123,7 @@ function chainMap(map) {
   traceable(canvas, {
     describe: (name) => agentsByName.get(name),
     showRuns: (name) => {
-      $("#runs-agent").value = name;
-      showView("runs");
+      sessionsOf(name);
     },
   });
 }
@@ -143,7 +142,7 @@ function chainRuns(runs, pending) {
       whenCell(run.started_at),
       el("td", "", run.agent),
       fromCell,
-      // runs.js's: a failure the model service caused says so.
+      // sessions.js's: a failure the model service caused says so.
       outcomeCell(run),
       el("td", "num", duration(run.duration_sec)),
       el(

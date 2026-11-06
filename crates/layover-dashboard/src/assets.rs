@@ -23,7 +23,9 @@ const STYLE: &str = include_str!("assets/style.css");
 const SCRIPTS: &[(&str, &str)] = &[
     // Tracing one agent's routes on the route map.
     ("/routemap.js", include_str!("assets/routemap.js")),
-    // Watching sessions: the session list and the read-only terminals.
+    // One session's read-only terminal.
+    ("/terminal.js", include_str!("assets/terminal.js")),
+    // Sessions: everything running, live, over the history of every run.
     ("/sessions.js", include_str!("assets/sessions.js")),
     // Answering help requests, and continuing a chain with its own flags.
     ("/reply.js", include_str!("assets/reply.js")),
@@ -47,8 +49,6 @@ const SCRIPTS: &[(&str, &str)] = &[
     ("/router.js", include_str!("assets/router.js")),
     // The list of chains: filtered, searched and paged.
     ("/chains.js", include_str!("assets/chains.js")),
-    // The list of runs, paged.
-    ("/runs.js", include_str!("assets/runs.js")),
     // Help requests and learnings.
     ("/journal.js", include_str!("assets/journal.js")),
     // What needs a person, in the title and as notifications.

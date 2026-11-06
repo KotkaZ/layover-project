@@ -22,7 +22,7 @@
 - [Cost](./cost.md)
 - [The dashboard](./dashboard.md)
   - [Chains and the route map](./dashboard-chains.md)
-  - [Runs, cost and retention](./dashboard-runs.md)
+  - [Sessions, cost and retention](./dashboard-runs.md)
 - [Help and learnings](./learning.md)
 - [Recovery and steering](./recovery.md)
 - [HTTP API](./http-api.md)

@@ -276,7 +276,8 @@ async fn the_page_and_its_assets_are_served_from_the_binary() {
         ("/style.css", ".routemap"),
         ("/app.js", "function showView"),
         ("/cost.js", "async function loadCost"),
-        ("/sessions.js", "class Terminal"),
+        ("/sessions.js", "async function loadSessions"),
+        ("/terminal.js", "class Terminal"),
         ("/reply.js", "async function submitReply"),
         ("/chain.js", "async function openChain"),
         ("/upcoming.js", "async function loadUpcoming"),
@@ -285,7 +286,6 @@ async fn the_page_and_its_assets_are_served_from_the_binary() {
         ("/timeline.js", "function chainTimeline"),
         ("/router.js", "function applyRoute"),
         ("/chains.js", "async function loadChains"),
-        ("/runs.js", "async function loadRuns"),
         ("/journal.js", "async function loadJournal"),
         ("/attention.js", "function noteAttention"),
     ] {

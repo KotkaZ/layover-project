@@ -1,282 +1,137 @@
-// Watching agents work: every running session, and the replay of ones that are over.
+// Sessions: every run the factory supervises — the ones going now, live, and every one before them.
 //
-// Read-only by construction. Each terminal is an EventSource on `/runs/{id}/stream`, which sends
-// what the agent's CLI printed, already rendered the way the CLI would draw it in a terminal —
-// there is nothing here to type into, and nothing an agent can tell from being watched.
+// One tab for what used to be two. A list of runs and a list of sessions were the same runs, with
+// and without filters, and a session was only ever a run's terminal. So the live view sits on top —
+// every session running now, side by side, each added as it starts — and the history under it is
+// where any other one is picked from, to watch live or replay once it is over.
 //
-// Loaded before app.js, so it uses the helpers there ($, el, get, when, duration, scoped,
-// openReport) and chain.js's openChain only inside functions that run after all have loaded.
+// Uses app.js's helpers (`get`, `el`, `$`, `money`, `duration`, `when`, `whenCell`, `workflowCell`,
+// `scoped`, `openReport`, `updated`, `showView`, `WINDOWS`), router.js's `routeChanged` and
+// `routeExtras`, terminal.js's `Terminal` and chain.js's `openChain`, all inside functions.
 
-// The prefix each kind of entry is drawn with, as the CLI itself marks them.
-const MARKS = {
-  prompt: "›",
-  think: "∴",
-  say: "",
-  tool: "●",
-  done: "└",
-  failed: "✗",
-  info: "·",
-  raw: "",
+// More live terminals than this would hold enough connections open to starve the rest of the page.
+const MAX_TILES = 4;
+const SESSIONS_PAGE = 100;
+// The live view is kept current this often, and the history under it every third time.
+const SESSIONS_EVERY_MS = 5000;
+
+// `picked`: the session somebody chose to watch on its own, or null while the view follows what is
+// running. `running`: what was running when last asked, for the workflow in view. `closed`: live
+// sessions somebody closed, which the next refresh must not put straight back.
+const sessions = {
+  terminals: new Map(),
+  picked: null,
+  running: [],
+  closed: new Set(),
+  limit: 0,
+  timer: null,
+  ticks: 0,
 };
 
-// Far more than anyone scrolls back through, and few enough that a page tiling four sessions for
-// an afternoon stays quick.
-const KEEP_LINES = 4000;
-// More tiles than this would hold enough connections open to starve the rest of the page.
-const MAX_TILES = 4;
-
-// `chosen`: somebody picked a session or closed one, so the page stops picking for them.
-const sessions = { terminals: new Map(), tiled: false, timer: null, chosen: false };
-
-class Terminal {
-  constructor(run, host, onClose) {
-    this.run = run;
-    this.last = null;
-    this.ended = false;
-    this.trimmed = false;
-
-    this.node = el("div", "terminal");
-    const head = el("div", "term-head");
-    this.dot = el("span", "dot running");
-    this.title = el("span", "term-title");
-    this.state = el("span", "term-state", "connecting…");
-    const close = el("button", "term-close", "×");
-    close.title = "Stop watching";
-    close.addEventListener("click", () => onClose(this));
-    // Where the session belongs, and what it wrote about itself once it is over.
-    const chain = el("button", "term-link", "chain");
-    chain.type = "button";
-    chain.title = `See chain ${run.itinerary_id} whole`;
-    chain.addEventListener("click", () => openChain(run.itinerary_id));
-    this.report = el("button", "term-link", "report");
-    this.report.type = "button";
-    this.report.title = "What the agent wrote about this run";
-    this.report.hidden = run.status === "running";
-    this.report.addEventListener("click", () => openReport(run.run_id, run));
-    head.append(this.dot, this.title, this.state, chain, this.report, el("span", "ro", "read-only"), close);
-
-    this.body = el("div", "term-body");
-    this.lines = el("div", "term-lines");
-    this.live = el("div", "term-live");
-    this.body.append(this.lines, this.live);
-    this.node.append(head, this.body);
-    host.append(this.node);
-
-    this.describe();
-    this.connect();
-  }
-
-  describe() {
-    const run = this.run;
-    const effort = run.reasoning_effort ? `effort ${run.reasoning_effort}` : null;
-    const context = run.context ? run.context.replace(/[_-]/g, " ") : null;
-    const parts = [run.agent, run.chain_name, run.pipeline, run.model, effort, context].filter(Boolean);
-    this.title.textContent = parts.join(" · ");
-    this.title.title = `${run.run_id}\nchain ${run.itinerary_id}`;
-  }
-
-  connect() {
-    const after = this.last ? `?after=${encodeURIComponent(this.last)}` : "";
-    const source = new EventSource(`/runs/${encodeURIComponent(this.run.run_id)}/stream${after}`);
-    this.source = source;
-
-    source.addEventListener("open", () => {
-      // Whatever was half-typed when the connection dropped will not be finished by this one.
-      this.live.replaceChildren();
-      this.state.textContent = this.run.status === "running" ? "live" : "replay";
-    });
-    source.addEventListener("entry", (event) => {
-      this.last = event.lastEventId;
-      this.entry(JSON.parse(event.data));
-    });
-    source.addEventListener("partial", (event) => {
-      this.last = event.lastEventId;
-      this.partial(JSON.parse(event.data));
-    });
-    source.addEventListener("end", (event) => {
-      source.close();
-      this.end(JSON.parse(event.data));
-    });
-    // The browser would reconnect by itself, from the start. Doing it by hand resumes where the
-    // stream broke off instead of replaying the whole session again.
-    source.onerror = () => {
-      source.close();
-      if (this.ended || this.closed) return;
-      this.state.textContent = "reconnecting…";
-      setTimeout(() => {
-        if (!this.closed) this.connect();
-      }, 2000);
-    };
-  }
-
-  close() {
-    this.closed = true;
-    this.source?.close();
-    this.node.remove();
-  }
-
-  following() {
-    if ($("#sessions-follow").checked) return true;
-    const body = this.body;
-    return body.scrollHeight - body.scrollTop - body.clientHeight < 40;
-  }
-
-  line(kind, text, at) {
-    const row = el("div", `line ${kind}`);
-    row.append(
-      el("span", "t", at ? new Date(at).toLocaleTimeString([], { hour12: false }) : ""),
-      el("span", "m", MARKS[kind] ?? ""),
-      el("span", "x", text),
-    );
-    return row;
-  }
-
-  entry(entry) {
-    const follow = this.following();
-    if (entry.closes) this.live.querySelector(`[data-id="${CSS.escape(entry.closes)}"]`)?.remove();
-    this.lines.append(this.line(entry.kind, entry.text, entry.at));
-
-    if (this.lines.childElementCount > KEEP_LINES) {
-      for (let i = 0; i < KEEP_LINES / 10; i++) this.lines.firstElementChild?.remove();
-      if (!this.trimmed) {
-        this.trimmed = true;
-        this.lines.prepend(this.line("info", "earlier output is not kept on the page; reopen the session to see it all"));
-      }
-    }
-    if (follow) this.body.scrollTop = this.body.scrollHeight;
-  }
-
-  partial(partial) {
-    const follow = this.following();
-    let row = this.live.querySelector(`[data-id="${CSS.escape(partial.id)}"]`);
-    if (!partial.text) {
-      row?.remove();
-      return;
-    }
-    if (!row) {
-      row = this.line(partial.kind, "");
-      row.classList.add("typing");
-      row.dataset.id = partial.id;
-      this.live.append(row);
-    }
-    row.querySelector(".x").textContent = partial.text;
-    if (follow) this.body.scrollTop = this.body.scrollHeight;
-  }
-
-  end(end) {
-    this.ended = true;
-    this.report.hidden = false;
-    this.live.replaceChildren();
-    const status = end.status ?? "over";
-    this.dot.className = `dot ${status}`;
-    this.state.textContent = status.replace("_", " ");
-    if (end.missing) {
-      this.lines.append(
-        this.line("info", "No transcript was kept for this run: it is past the 90-day horizon, or never started."),
-      );
-    }
-    const closing = el("div", `line end ${status}`, `── ${status.replace("_", " ")} ──`);
-    if (end.detail) closing.title = end.detail;
-    this.lines.append(closing);
-    if (this.following()) this.body.scrollTop = this.body.scrollHeight;
-  }
-}
-
-function forget(terminal) {
-  sessions.chosen = true;
-  terminal.close();
-  sessions.terminals.delete(terminal.run.run_id);
-  markOpen();
-}
-
-// Shows one session, on its own.
-function openSession(run) {
-  sessions.chosen = true;
-  sessions.tiled = false;
-  $("#sessions-tile").setAttribute("aria-pressed", "false");
-  for (const terminal of sessions.terminals.values()) terminal.close();
-  sessions.terminals.clear();
-  watch(run);
-  showView("sessions");
-}
+// ── The live view ──────────────────────────────────────────────────────────────────────────────
 
 function watch(run) {
   if (sessions.terminals.has(run.run_id)) return;
-  $("#sessions-empty").hidden = true;
   sessions.terminals.set(run.run_id, new Terminal(run, $("#terminals"), forget));
-  markOpen();
 }
 
-// Every session that is running, side by side, as many as fit.
-function tile(running) {
-  for (const run of running) {
-    if (sessions.terminals.has(run.run_id)) continue;
+function forget(terminal) {
+  terminal.close();
+  sessions.terminals.delete(terminal.run.run_id);
+  // Closing the one session picked goes back to what is live.
+  if (sessions.picked === terminal.run.run_id) {
+    sessions.picked = null;
+    followLive();
+    routeChanged();
+  } else {
+    sessions.closed.add(terminal.run.run_id);
+  }
+  drawViewer();
+}
+
+function closeAll() {
+  for (const terminal of sessions.terminals.values()) terminal.close();
+  sessions.terminals.clear();
+}
+
+/// Every session running now, side by side: one that starts joins, and one that ends stays until
+/// its place is needed, so how it ended can be read.
+function followLive() {
+  for (const run of sessions.running) {
+    if (sessions.terminals.has(run.run_id) || sessions.closed.has(run.run_id)) continue;
     if (sessions.terminals.size >= MAX_TILES) {
-      // Make room by letting go of a session that has ended, never of one still going.
       const over = [...sessions.terminals.values()].find((terminal) => terminal.ended);
       if (!over) break;
-      forget(over);
+      over.close();
+      sessions.terminals.delete(over.run.run_id);
     }
     watch(run);
   }
 }
 
-function markOpen() {
-  document.querySelectorAll("#session-list .session").forEach((item) => {
-    item.classList.toggle("open", sessions.terminals.has(item.dataset.run));
-  });
-  $("#terminals").classList.toggle("tiled", sessions.terminals.size > 1);
-  $("#terminals").classList.toggle("crowded", sessions.terminals.size > 2);
-  $("#sessions-empty").hidden = sessions.terminals.size > 0;
+/// Watches one session on its own: live while it runs, a replay once it is over.
+function pick(run) {
+  sessions.picked = run.run_id;
+  closeAll();
+  watch(run);
+  drawViewer();
+  routeChanged();
 }
 
-function sessionItem(run) {
-  const item = el("button", "session");
-  item.type = "button";
-  item.dataset.run = run.run_id;
-  const top = el("span", "who");
-  top.append(el("span", `dot ${run.status}`), el("b", "", run.agent));
-  // The chain's name and workflow on a line of their own, cut short rather than wrapped beside
-  // the agent's name.
-  const what = [run.chain_name, run.pipeline].filter(Boolean).join(" · ");
-  const where = el("span", "where muted", what);
-  where.title = what;
-  const sub = el(
-    "span",
-    "muted",
-    run.status === "running"
-      ? `running ${duration(run.duration_sec)}`
-      : `${run.status.replace("_", " ")} ${when(run.finished_at)}`,
-  );
-  item.append(top, where, sub);
-  item.title = `${run.run_id}${run.detail ? `\n${run.detail}` : ""}`;
-  item.addEventListener("click", () => (sessions.tiled ? watch(run) : openSession(run)));
-  return item;
+function backToLive() {
+  sessions.picked = null;
+  sessions.closed.clear();
+  closeAll();
+  followLive();
+  drawViewer();
+  routeChanged();
 }
 
-async function loadSessions() {
-  const list = $("#session-list");
-  try {
-    const params = scoped(new URLSearchParams({ window: "last_24h", limit: "40" }));
-    const { runs } = await get(`/runs?${params}`);
-    const running = runs.filter((run) => run.status === "running");
-    const over = runs.filter((run) => run.status !== "running").slice(0, 25);
+/// Opens the Sessions tab on one session: from a chain, a report or a timeline.
+function openSession(run) {
+  pick(run);
+  showView("sessions");
+  window.scrollTo({ top: 0 });
+}
 
-    list.replaceChildren(el("h2", "", `Running now · ${running.length}`));
-    if (running.length === 0) list.append(el("p", "hint", "Nothing is running."));
-    running.forEach((run) => list.append(sessionItem(run)));
-    list.append(el("h2", "", "Ended in the last 24 hours"));
-    if (over.length === 0) list.append(el("p", "hint", "Nothing has ended."));
-    over.forEach((run) => list.append(sessionItem(run)));
+/// Opens the Sessions tab on one agent's history: from the route map or a chain's map.
+function sessionsOf(agent) {
+  $("#sessions-agent").value = agent;
+  sessions.limit = 0;
+  showView("sessions");
+}
 
-    if (sessions.tiled) tile(running);
-    // Opening the tab with nothing picked shows what is going on now: the newest running session.
-    else if (!sessions.chosen && sessions.terminals.size === 0 && running.length > 0) watch(running[0]);
-    markOpen();
-    setLiveBadge(running.length);
-  } catch (error) {
-    list.replaceChildren(el("p", "empty", `Could not read the sessions: ${error.message}`));
+/// The heading over the terminals, and which rows of the history are on screen.
+function drawViewer() {
+  const running = sessions.running.length;
+  const picked = sessions.picked && sessions.terminals.get(sessions.picked);
+  const heading = $("#watch-heading");
+  if (picked) {
+    const live = picked.run.status === "running" && !picked.ended;
+    heading.replaceChildren(
+      el("span", `dot ${live ? "running" : picked.run.status}`),
+      el("span", "", `${live ? "Watching" : "Replaying"} ${picked.run.agent}`),
+    );
+  } else {
+    heading.replaceChildren(
+      el("span", `dot ${running ? "running" : ""}`),
+      el("span", "", running ? `Live · ${running} running` : "Nothing running"),
+    );
+    if (running > MAX_TILES) {
+      heading.append(el("span", "muted", `${MAX_TILES} shown; pick another below to watch it`));
+    }
   }
+  const back = $("#watch-live");
+  back.hidden = !sessions.picked;
+  back.textContent = running ? `← Live · ${running} running` : "← Live";
+
+  const shown = sessions.terminals.size;
+  $("#terminals").classList.toggle("tiled", shown > 1);
+  $("#terminals").classList.toggle("crowded", shown > 2);
+  $("#sessions-empty").hidden = shown > 0;
+  document.querySelectorAll("#sessions-table tbody tr").forEach((row) => {
+    row.classList.toggle("open", sessions.terminals.has(row.dataset.run));
+  });
 }
 
 function setLiveBadge(count) {
@@ -285,23 +140,194 @@ function setLiveBadge(count) {
   badge.hidden = count === 0;
 }
 
+async function loadLive() {
+  try {
+    const params = scoped(new URLSearchParams({ status: "running", window: "last_24h", limit: "50" }));
+    sessions.running = (await get(`/runs?${params}`)).runs;
+    if (!sessions.picked) followLive();
+    drawViewer();
+  } catch {
+    // The history under it says when the Tower cannot be read; one line of that is enough.
+  }
+}
+
+// ── The history ────────────────────────────────────────────────────────────────────────────────
+
+/// A chain's identifier, short enough to scan: the end of it, which is where ULIDs differ.
+function shortChain(id) {
+  return id ? `…${id.slice(-6)}` : "—";
+}
+
+/// What a run ran on, as its command line said: the model, and its effort where one was set.
+function ranOn(run) {
+  const cell = el("td", "muted ran");
+  if (!run.model) {
+    cell.textContent = "—";
+    return cell;
+  }
+  cell.textContent = run.reasoning_effort ? `${run.model} · ${run.reasoning_effort}` : run.model;
+  cell.title = [run.model, run.reasoning_effort && `effort ${run.reasoning_effort}`, run.context]
+    .filter(Boolean)
+    .join(" · ");
+  return cell;
+}
+
+/// How a run ended — and, for a failure that was not the run's own, whose it was.
+function outcomeCell(run) {
+  const cell = el("td", `outcome ${run.status}`);
+  cell.append(el("span", `dot ${run.status}`), run.status.replace("_", " "));
+  if (run.cause === "provider_error") {
+    cell.append(el("span", "cause", " · model service"));
+    // A rejected call, or a model it did not have when the run started: the detail says which, in
+    // the CLI's own words.
+    cell.title = `The model service ended the run, not its work${run.request_id ? ` (request ${run.request_id})` : ""}. ${run.detail ?? ""}`.trim();
+  }
+  return cell;
+}
+
+function sessionRow(run) {
+  const row = el("tr", "readable");
+  row.dataset.run = run.run_id;
+  // A run still going has not finished: say when it started, and that it is still going.
+  row.append(
+    run.status === "running"
+      ? whenCell(run.started_at, "started ")
+      : whenCell(run.finished_at ?? run.started_at),
+    el("td", "agent", run.agent),
+    workflowCell(run.pipeline, run.chain_name),
+    ranOn(run),
+    outcomeCell(run),
+    el("td", "num", duration(run.duration_sec)),
+    // A run still going has not been billed yet, which is not the same as reporting nothing.
+    el(
+      "td",
+      "num",
+      run.status === "running" ? "—" : run.cost_usd === null ? "not reported" : money(run.cost_usd),
+    ),
+  );
+
+  const chain = el("td");
+  const open = el("button", "link", shortChain(run.itinerary_id));
+  open.type = "button";
+  open.title = `${run.chain_name ? `${run.chain_name} — ` : ""}${run.itinerary_id}: see this chain whole`;
+  open.addEventListener("click", (event) => {
+    event.stopPropagation();
+    openChain(run.itinerary_id);
+  });
+  chain.append(open);
+
+  const actions = el("td", "actions");
+  const report = el("button", "link", "Report");
+  report.type = "button";
+  report.title = "What the agent wrote about this run";
+  report.addEventListener("click", (event) => {
+    event.stopPropagation();
+    openReport(run.run_id, run);
+  });
+  actions.append(report);
+  row.append(chain, actions);
+
+  row.title = `${run.status === "running" ? "Watch it live" : "Replay it"}${run.detail ? ` — ${run.detail}` : ""}`;
+  row.addEventListener("click", () => {
+    pick(run);
+    // The viewer is the top of the tab; scrolling an element into view would tuck its heading
+    // under the page's sticky header.
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+  return row;
+}
+
+/// Loads the newest sessions that pass the filters; `more` asks for the next page as well.
+async function loadHistory(more = false) {
+  const body = $("#sessions-table tbody");
+  const empty = $("#sessions-none");
+  sessions.limit = more ? sessions.limit + SESSIONS_PAGE : Math.max(sessions.limit, SESSIONS_PAGE);
+  const params = new URLSearchParams({
+    window: $("#sessions-window").value,
+    limit: String(sessions.limit + 1),
+  });
+  if ($("#sessions-status").value) params.set("status", $("#sessions-status").value);
+  if ($("#sessions-agent").value.trim()) params.set("agent", $("#sessions-agent").value.trim());
+  scoped(params);
+
+  try {
+    const { runs } = await get(`/runs?${params}`);
+    // One more than shown is asked for, so whether there is another page is known without a
+    // second request.
+    const hasMore = runs.length > sessions.limit;
+    body.replaceChildren(...runs.slice(0, sessions.limit).map(sessionRow));
+
+    empty.hidden = runs.length > 0;
+    empty.textContent = $("#sessions-status").value || $("#sessions-agent").value.trim()
+      ? "No session in this window matches."
+      : "Nothing ran in this window.";
+    $("#sessions-table").hidden = runs.length === 0;
+    const button = $("#sessions-more");
+    button.hidden = !hasMore;
+    button.textContent = `Show ${SESSIONS_PAGE} more`;
+    updated("#sessions-updated");
+    drawViewer();
+  } catch (error) {
+    body.replaceChildren();
+    $("#sessions-table").hidden = true;
+    $("#sessions-more").hidden = true;
+    empty.hidden = false;
+    empty.textContent = `Could not read history: ${error.message}`;
+  }
+}
+
+async function loadSessions() {
+  await Promise.all([loadLive(), loadHistory()]);
+}
+
 // Kept current only while it is being looked at.
 function watchSessions(visible) {
   clearInterval(sessions.timer);
   sessions.timer = null;
   if (!visible) return;
   loadSessions();
-  sessions.timer = setInterval(loadSessions, 5000);
+  sessions.ticks = 0;
+  sessions.timer = setInterval(() => {
+    if (document.hidden) return;
+    sessions.ticks += 1;
+    loadLive();
+    if (sessions.ticks % 3 === 0) loadHistory();
+  }, SESSIONS_EVERY_MS);
 }
 
 function startSessions() {
-  $("#sessions-tile").addEventListener("click", () => {
-    sessions.chosen = true;
-    sessions.tiled = !sessions.tiled;
-    $("#sessions-tile").setAttribute("aria-pressed", String(sessions.tiled));
-    loadSessions();
-  });
+  $("#sessions-window").replaceChildren(
+    ...WINDOWS.map(([slug, label]) => {
+      const option = el("option", "", label);
+      option.value = slug;
+      option.selected = slug === "last_7d";
+      return option;
+    }),
+  );
+  const fresh = () => {
+    sessions.limit = 0;
+    routeChanged();
+    loadHistory();
+  };
+  for (const id of ["#sessions-window", "#sessions-status"]) $(id).addEventListener("change", fresh);
+  $("#sessions-agent").addEventListener("input", fresh);
+  $("#sessions-more").addEventListener("click", () => loadHistory(true));
+  $("#watch-live").addEventListener("click", backToLive);
   $("#sessions-thinking").addEventListener("change", (event) => {
     $("#terminals").classList.toggle("hide-think", !event.target.checked);
   });
+
+  // The session picked is part of the address, so a link to one opens it.
+  routeExtras.sessions = (params) => {
+    if (!params) return { run: sessions.picked ?? "" };
+    const wanted = params.get("run");
+    if (!wanted) {
+      if (sessions.picked) backToLive();
+      return undefined;
+    }
+    if (wanted !== sessions.picked) {
+      get(`/runs/${encodeURIComponent(wanted)}`).then(pick).catch(backToLive);
+    }
+    return undefined;
+  };
 }

@@ -300,4 +300,4 @@ runner fixes is reported as readily as one the agent declares, and a value its r
 is not reported at all. Only flags whose meaning is certain are read back — `--model`, and Copilot
 CLI's `--reasoning-effort` and `--context`, separate or joined. A value carried by a flag this does
 not read, such as Codex's `-c`, is reported as the agent declares it. Every run's record keeps the
-model, effort and context it ran with; see [Runs](./dashboard-runs.md#runs).
+model, effort and context it ran with; see [Sessions](./dashboard-runs.md#sessions).

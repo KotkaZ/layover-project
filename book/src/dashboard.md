@@ -7,7 +7,7 @@ answers.
 - **What has it been doing?** Run history, for as long as retention keeps it.
 - **What is that costing?** Totals over periods you can actually reason about.
 
-The [Chains and the route map](./dashboard-chains.md) and [Runs, cost and retention](./dashboard-runs.md)
+The [Chains and the route map](./dashboard-chains.md) and [Sessions, cost and retention](./dashboard-runs.md)
 views have pages of their own.
 
 ```console
@@ -41,16 +41,18 @@ The page keeps what you are looking at in its address — the tab, the workflow 
 filters — so a reload, a bookmark or a link sent to a colleague opens it as you left it:
 
 ```text
-http://127.0.0.1:7878/#runs?status=failed&workflow=eagle-eye
+http://127.0.0.1:7878/#sessions?status=failed&workflow=eagle-eye
+http://127.0.0.1:7878/#sessions?run=run_01M6QS8SG95ST8MKQDTC31VBEH
 http://127.0.0.1:7878/#chains?state=stalled&window=last_30d
 http://127.0.0.1:7878/#journal?agent=wolf&q=kusto
 ```
 
-The route map, Chains and Runs keep themselves current every fifteen seconds while they are on
-screen — each says when it last read the Tower, `updated 14:03:05` — and catch up at once when you
-come back to a tab left in the background. Sessions, Upcoming and an open chain keep faster clocks
-of their own. A refresh keeps your place: the pages of a list you had open, and an agent you had
-clicked on the map.
+The route map and Chains keep themselves current every fifteen seconds while they are on screen —
+each says when it last read the Tower, `updated 14:03:05` — and catch up at once when you come back
+to a tab left in the background. Sessions, Upcoming and an open chain keep faster clocks of their
+own. A refresh keeps your place: the pages of a list you had open, a session you had picked, and an
+agent you had clicked on the map. An address from before Sessions took in the Runs tab, `#runs?…`,
+opens Sessions with the same filters.
 
 Changing tab is a step in the browser's history, so **Back** returns to the last tab; changing a
 filter is not, so Back is not buried under every keystroke. A chain keeps its own address,
@@ -103,34 +105,9 @@ letting more be booked is not a kill switch.
 
 ## Watching agents work
 
-![The Sessions tab: three running sessions and the ones that ended listed on the left, and a coder's session as its CLI prints it — its prompt, reasoning, each tool call with what came back, and the AI credits so far](./assets/dashboard-sessions.png)
-
-**Sessions** shows every run that is going now, and the ones that ended in the last day, each as
-its CLI would show it in a terminal: the first lines of what it was asked, its reasoning, every
-tool it called with a few lines of what came back, and what it said. Text the model is still
-writing appears as it arrives, and is replaced by the finished message. A session that ends says
-how — `succeeded`, `failed`, `timed out` — and a finished one replays from the start, which is how
-you see the route an agent took to its conclusion rather than only the conclusion.
-
-Opening the tab with nothing picked opens the newest running session, so what is happening now is
-on screen at once; once you pick or close one, the page stops picking for you. A terminal's header
-links to the run's **chain** and, once it is over, to its **report**.
-
-**Tile running sessions** puts every running session side by side, up to four, and adds new ones as
-they start. **Show thinking** hides the reasoning when you only want the actions; **Follow** keeps
-each terminal at its latest line. The green number on the tab is how many runs are alive. In
-**Runs**, a running row has **Watch** and a finished one **Transcript**; so does a report.
-
-It is **read-only**. There is nowhere to type, and an agent cannot tell it is being watched: the
-dashboard reads the transcript the Tower already writes to each run's Hangar, so it works the same
-from a `--watch-only` dashboard beside a running `serve`.
-
-What is shown is rendered, not raw. A forty-minute Copilot review writes tens of megabytes, most of
-it the same text twice — once token by token, then whole — and the page shows each thing once.
-Tool output is cut to its first lines and the prompt to its first two; the whole of both are in the
-run's Hangar (`.layover/hangars/<agent>/<run>/`). Credentials are masked the way they are in a
-run's failure detail. Copilot CLI's JSON events and Claude Code's `stream-json` are understood;
-anything else — Codex, a script — is shown as it was printed.
+**Sessions** shows every run going now, live, side by side, each as its CLI prints it — and under
+it the history of every run, any of which opens there to watch or replay. It is read-only: nothing
+there reaches the agent. See [Sessions](./dashboard-runs.md#sessions).
 
 ## What starts next
 
@@ -168,8 +145,8 @@ ticks, 7d**.
 
 ## Reading what an agent did
 
-Every row on **Runs** opens the report that agent wrote about its own run: a headline, the body,
-and the artifacts it produced.
+**Report**, beside every session in **Sessions** and every run on a chain's page, opens the report
+that agent wrote about its own run: a headline, the body, and the artifacts it produced.
 
 A report is not a transcript. A transcript contains every approach the agent abandoned, and reading
 one to find out what happened is slower than doing the work again. Asking the agent to state its

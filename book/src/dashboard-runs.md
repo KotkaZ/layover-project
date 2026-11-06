@@ -1,20 +1,53 @@
-# Runs, cost and retention
+# Sessions, cost and retention
 
-Three views of the [dashboard](./dashboard.md): every supervised run, what they cost, and how long
-any of it is kept.
+Three views of the [dashboard](./dashboard.md): every supervised run — live, and as history — what
+they cost, and how long any of it is kept.
 
-## Runs
+## Sessions
 
-![The Runs tab: every run newest first, with its agent, its chain's name and workflow, the model and effort it ran on, its outcome, how long it took, what it cost and its chain — one still running with Watch, and one failed](./assets/dashboard-runs.png)
+![The Sessions tab: three sessions running live side by side — a tester running the nightly suite, a reviewer requesting changes on a pull request, and a coder mid-sentence — each as its CLI prints it, with its model and effort; and under them the history, starting with the three running sessions](./assets/dashboard-sessions.png)
 
-Every supervised execution, newest first, filterable by window, outcome and agent, a hundred at a
-time with **Show 100 more** below. A running run says `running · started 4 min ago` rather than
-when it finished. Each says which **chain** it belongs to — the end of its identifier, where
-identifiers differ, with the chain's name in the tooltip — and clicking that opens the chain.
+A session is one supervised run, seen the way its agent's CLI would show it in a terminal. The tab
+is in two parts: what is running now, live, on top, and every session before it underneath.
+
+**Live, on top.** Every session running now, side by side — up to four — each as its CLI prints
+it: the first lines of what it was asked, its reasoning, every tool it called with a few lines of
+what came back, and what it said. Text the model is still writing appears as it arrives, and is
+replaced by the finished message. A session that starts joins the others; one that ends says how —
+`succeeded`, `failed`, `timed out` — and stays until its place is needed. Close one with **×** and
+it stays closed. Each terminal's header names its agent, its chain and workflow, the model and
+effort it runs at, and links to its **chain** and, once it is over, its **report**. The green number
+on the tab is how many runs are alive.
+
+**History, underneath.** Every session, newest first, filterable by window, outcome and agent, a
+hundred at a time with **Show 100 more** below. Running ones come first, with a pulsing dot. Click
+any row and it opens in the viewer on its own — live while it runs, a replay from the start once it
+is over, which is how you see the route an agent took to its conclusion rather than only the
+conclusion. **← Live** goes back to everything running. The sessions on screen are marked in the
+list. **Report** opens what the agent wrote about its run, and the chain column opens its chain:
+the end of its identifier, where identifiers differ, with the chain's name in the tooltip.
 **Ran on** is the model and effort the run's command line gave it; hover it for the context too.
 
-Each run keeps the **model, effort and context** its command line gave it, so history answers
-"which effort did that run use?" without opening a transcript; a session's header shows them, and
+**Show thinking** hides the reasoning when you only want the actions; **Follow** keeps each terminal
+at its latest line. The session you picked is in the page's address, `#sessions?run=run_…`, so a
+reload keeps it and a link opens it. A chain's own page, its timeline and a report open a session
+here too.
+
+It is **read-only**. There is nowhere to type, and an agent cannot tell it is being watched: the
+dashboard reads the transcript the Tower already writes to each run's Hangar, so it works the same
+from a `--watch-only` dashboard beside a running `serve`.
+
+What is shown is rendered, not raw. A forty-minute Copilot review writes tens of megabytes, most of
+it the same text twice — once token by token, then whole — and the page shows each thing once.
+Tool output is cut to its first lines and the prompt to its first two; the whole of both are in the
+run's Hangar (`.layover/hangars/<agent>/<run>/`). Credentials are masked the way they are in a
+run's failure detail. Copilot CLI's JSON events and Claude Code's `stream-json` are understood;
+anything else — Codex, a script — is shown as it was printed.
+
+### What history keeps about each
+
+Each session keeps the **model, effort and context** its command line gave it, so history answers
+"which effort did that run use?" without opening a transcript; a terminal's header shows them, and
 `GET /runs` returns them as `model`, `reasoning_effort` and `context`. Runs recorded before Layover
 kept effort and context have neither.
 

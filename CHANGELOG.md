@@ -8,6 +8,28 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+The dashboard's Runs tab is part of Sessions: what is running, live, on top of the history of every
+run.
+
+**Compatibility.** Nothing about the configuration, the HTTP API, the MCP tools or the state
+directory changes; `GET /runs` answers as before. On the dashboard, **Runs** is gone as a tab and
+its table, with every filter, is the history under **Sessions**. A bookmark or link to `#runs?…`
+opens Sessions with the same filters.
+
+### Changed
+
+- **Runs and Sessions are one tab, Sessions.** It opens on every session running now, live, side by
+  side — up to four, joined by each that starts — over the history of every run with the filters
+  the Runs tab had. Click a row and it opens in the viewer on its own, live or as a replay; **←
+  Live** goes back. The session picked is in the address, `#sessions?run=…`, so a reload keeps it;
+  a live session closed with **×** stays closed; the sessions on screen are marked in the history.
+  The route map's and a chain's "show this agent's runs" open it filtered to that agent.
+
+### Fixed
+
+- **The live count on the Sessions tab could stick.** Once nothing was running or queued, the count
+  stopped being updated and kept its last number until the page was reloaded.
+
 ## [1.19.1] — 2026-11-02
 
 On Windows, a Tower that updated itself in place no longer opens a window for every agent run.

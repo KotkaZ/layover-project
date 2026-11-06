@@ -223,8 +223,7 @@ function drawGraph(name, canvas, svg) {
   traceable(canvas, {
     describe: (agent) => agentsByName.get(agent),
     showRuns: (agent) => {
-      $("#runs-agent").value = agent;
-      showView("runs");
+      sessionsOf(agent);
     },
   });
 }

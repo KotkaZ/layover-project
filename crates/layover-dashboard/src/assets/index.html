@@ -15,7 +15,6 @@
     <button class="tab" data-view="chains">Chains<span id="stalled-badge" class="badge" hidden></span><span id="awaiting-badge" class="badge waiting" title="Chains waiting for you to answer" hidden></span></button>
     <button class="tab" data-view="sessions">Sessions<span id="live-badge" class="badge live" hidden></span></button>
     <button class="tab" data-view="upcoming">Upcoming</button>
-    <button class="tab" data-view="runs">Runs</button>
     <button class="tab" data-view="cost">Cost</button>
     <button class="tab" data-view="journal">Help &amp; learnings<span id="help-badge" class="badge" hidden></span></button>
   </nav>
@@ -141,23 +140,51 @@
   </section>
 
   <section id="sessions" class="view" hidden>
-    <div class="bar">
-      <p class="hint">
-        What each agent's CLI is printing, as it prints it, and the replay of runs that are over.
-        Read-only: nothing here reaches the agent.
-      </p>
-      <label><input id="sessions-follow" type="checkbox" checked> Follow</label>
-      <label><input id="sessions-thinking" type="checkbox" checked> Show thinking</label>
-      <button id="sessions-tile" class="btn" type="button" aria-pressed="false"
-        title="Show every running session side by side, up to four, and add new ones as they start">Tile running sessions</button>
-    </div>
-    <div class="sessions">
-      <aside id="session-list"></aside>
-      <div>
-        <p id="sessions-empty" class="empty">Pick a session to watch it, or tile everything that is running.</p>
-        <div id="terminals"></div>
+    <div class="watch">
+      <div class="watch-bar">
+        <h2 id="watch-heading" class="watch-heading"></h2>
+        <button id="watch-live" class="btn" type="button" hidden
+          title="Back to every session running now, side by side">← Live</button>
+        <span class="watch-options">
+          <label><input id="sessions-follow" type="checkbox" checked> Follow</label>
+          <label><input id="sessions-thinking" type="checkbox" checked> Show thinking</label>
+        </span>
       </div>
+      <p id="sessions-empty" class="watch-empty">
+        Every session running shows here, live, as it starts. Pick any one below to replay it.
+      </p>
+      <div id="terminals"></div>
     </div>
+
+    <div class="bar">
+      <h2 class="history-head">History</h2>
+      <label>Window <select id="sessions-window" data-default="last_7d"></select></label>
+      <label>Outcome
+        <select id="sessions-status">
+          <option value="">any</option>
+          <option value="running">running</option>
+          <option value="succeeded">succeeded</option>
+          <option value="failed">failed</option>
+          <option value="timed_out">timed out</option>
+          <option value="halted">halted</option>
+          <option value="interrupted">interrupted</option>
+        </select>
+      </label>
+      <label>Agent <input id="sessions-agent" type="search" placeholder="any" list="agent-names"></label>
+      <datalist id="agent-names"></datalist>
+      <span id="sessions-updated" class="updated end"></span>
+    </div>
+    <table id="sessions-table">
+      <thead>
+        <tr>
+          <th>When</th><th>Agent</th><th>Workflow</th><th>Ran on</th><th>Outcome</th>
+          <th class="num">Took</th><th class="num">Cost</th><th>Chain</th><th></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <p id="sessions-none" class="empty" hidden></p>
+    <button id="sessions-more" class="btn more" type="button" hidden></button>
   </section>
 
   <section id="upcoming" class="view" hidden>
@@ -215,37 +242,6 @@
       <tbody></tbody>
     </table>
     <p id="skips-empty" class="empty" hidden></p>
-  </section>
-
-  <section id="runs" class="view" hidden>
-    <div class="bar">
-      <label>Window <select id="runs-window" data-default="last_7d"></select></label>
-      <label>Outcome
-        <select id="runs-status">
-          <option value="">any</option>
-          <option value="running">running</option>
-          <option value="succeeded">succeeded</option>
-          <option value="failed">failed</option>
-          <option value="timed_out">timed out</option>
-          <option value="halted">halted</option>
-          <option value="interrupted">interrupted</option>
-        </select>
-      </label>
-      <label>Agent <input id="runs-agent" type="search" placeholder="any" list="agent-names"></label>
-      <datalist id="agent-names"></datalist>
-      <span id="runs-updated" class="updated end"></span>
-    </div>
-    <table id="runs-table">
-      <thead>
-        <tr>
-          <th>When</th><th>Agent</th><th>Workflow</th><th>Ran on</th><th>Outcome</th>
-          <th class="num">Took</th><th class="num">Cost</th><th>Chain</th><th></th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-    <p id="runs-empty" class="empty" hidden></p>
-    <button id="runs-more" class="btn more" type="button" hidden></button>
   </section>
 
   <section id="cost" class="view" hidden>
@@ -497,6 +493,7 @@
 </dialog>
 
 <script src="/routemap.js"></script>
+<script src="/terminal.js"></script>
 <script src="/sessions.js"></script>
 <script src="/reply.js"></script>
 <script src="/dismiss.js"></script>
@@ -509,7 +506,6 @@
 <script src="/router.js"></script>
 <script src="/cost.js"></script>
 <script src="/chains.js"></script>
-<script src="/runs.js"></script>
 <script src="/journal.js"></script>
 <script src="/attention.js"></script>
 <script src="/update.js"></script>

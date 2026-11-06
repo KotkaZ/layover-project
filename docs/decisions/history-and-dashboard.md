@@ -63,6 +63,16 @@ replaces, so a live session still shows the model typing.
 a new run carrying a handover, never input to a live process. A terminal that looked interactive and
 was not would invite exactly the wrong expectation, so it says *read-only* on every pane.
 
+**Why runs and sessions are one tab.** They were two: **Runs**, a table of every run with filters,
+and **Sessions**, a list of the runs going now or ended in the last day beside a terminal for the
+one picked. The list was the table again with fewer columns and no filters, and a session was only
+ever a run's terminal — every way into one, from the table, a chain or a report, opened the other
+tab. Two tabs over the same runs made a person choose between seeing what was happening and finding
+what had happened. So there is one, named for what a person watches: what is running now on top,
+live, side by side — the tab's first purpose, kept on screen before anything is picked — and the
+history under it is where any other session is picked from, to watch or replay in the same place.
+The table keeps every filter and column it had, and `#runs?…` addresses open it.
+
 **Why the dashboard asks the Tower when a schedule next fires.** A cron expression could be
 evaluated anywhere, but an `every` schedule counts from when the Tower started, and a tick held by
 a Ground Stop fires when it is released — neither is in `layover.toml`. A page that worked the

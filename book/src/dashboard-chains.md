@@ -104,7 +104,7 @@ were open.
 
 Trigger a development workflow three times and its route map is still one drawing. It colours the
 coder while *any* of the three runs it, so it says that the coder is running and not which of the
-three is where. Opening a chain — from **Chains**, from a run's chain in **Runs**, from the buttons
+three is where. Opening a chain — from **Chains**, from a session's chain in **Sessions**, from the buttons
 under its workflow's map, or straight after triggering it — shows that chain on its own:
 
 - **Its workflow's map, drawn for it alone.** The same drawing, so the two can be compared at a

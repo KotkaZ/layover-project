@@ -92,7 +92,7 @@ function spend(summary) {
 
 // What refreshes itself while it is on screen, and how. Sessions, Upcoming and a chain keep
 // their own, faster, clocks.
-const LIVE = { map: () => loadMap(true), chains: () => loadChains(), runs: () => loadRuns() };
+const LIVE = { map: () => loadMap(true), chains: () => loadChains() };
 const LIVE_EVERY_MS = 15000;
 let liveTimer = null;
 
@@ -125,7 +125,6 @@ function showView(name) {
   });
   if (name === "map") loadMap();
   if (name === "chains") loadChains();
-  if (name === "runs") loadRuns();
   if (name === "cost") loadCost();
   if (name === "journal") loadJournal();
   watchSessions(name === "sessions");
@@ -231,10 +230,11 @@ async function loadQueued() {
   try {
     const { pending, dispatched_by: by, alive_runs: alive, max_concurrent_runs: limit } =
       await get("/flights");
+    // The Sessions tab's count, read here on every page: what is alive factory-wide.
+    setLiveBadge(alive);
     note.hidden = pending.length === 0 && alive === 0;
     if (note.hidden) return;
 
-    setLiveBadge(alive);
     // Amber only when queued work has nothing to start it; a busy factory is news, not trouble.
     note.classList.toggle("caveat", pending.length > 0 && !by);
     const running = `${alive} of ${limit} run(s) alive`;
@@ -364,15 +364,6 @@ async function loadAgentNames() {
 }
 
 function start() {
-  $("#runs-window").replaceChildren(
-    ...WINDOWS.map(([slug, label]) => {
-      const option = el("option", "", label);
-      option.value = slug;
-      option.selected = slug === "last_7d";
-      return option;
-    }),
-  );
-
   $("#chains-window").replaceChildren(
     ...WINDOWS.map(([slug, label]) => {
       const option = el("option", "", label);
@@ -389,7 +380,6 @@ function start() {
   startTrigger();
   $("#ground-stop").addEventListener("click", toggleGroundStop);
   startChainsList();
-  startRuns();
   startJournal();
   startSessions();
   startReplies();
@@ -410,7 +400,6 @@ startDismissals();
     routeChanged();
     loadMap();
     loadChains();
-    loadRuns();
     loadCost();
     loadJournal();
     loadHelpBadge();

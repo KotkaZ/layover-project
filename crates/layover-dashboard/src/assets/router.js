@@ -1,9 +1,10 @@
 // Addresses for every view and its filters, so a reload, a bookmark or a link to a colleague
-// opens the page where it was: `#runs?status=failed&workflow=eagle-eye`, `#chains?state=stalled`.
+// opens the page where it was: `#sessions?status=failed&workflow=eagle-eye`, `#chains?state=stalled`.
 //
 // A new view is a new history entry, so Back returns to the last one; changing a filter rewrites
 // the current entry rather than burying Back under every keystroke. A chain keeps its own form,
-// `#chain=<id>`, which links written before this still use.
+// `#chain=<id>`, which links written before this still use, and `#runs?…` — the tab Sessions took
+// in — opens Sessions with the same filters.
 //
 // Uses app.js's `$`, `scope` and `showView`, and chain.js's `chainView`, `openChain` and
 // `chainInAddress`. A view that keeps state outside its controls — the Cost tab's window — adds
@@ -18,7 +19,7 @@ const ROUTE_PARAMS = {
     q: "#chains-search",
     routine: "#chains-routine",
   },
-  runs: { window: "#runs-window", status: "#runs-status", agent: "#runs-agent" },
+  sessions: { window: "#sessions-window", status: "#sessions-status", agent: "#sessions-agent" },
   journal: { learnings: "#learn-state", agent: "#learn-agent", q: "#learn-search" },
   upcoming: { hours: "#upcoming-hours" },
 };
@@ -97,7 +98,8 @@ function applyRoute() {
       if (chain !== chainView.id) openChain(chain);
       return;
     }
-    const [name, query] = location.hash.replace(/^#/, "").split("?");
+    const [named, query] = location.hash.replace(/^#/, "").split("?");
+    const name = named === "runs" ? "sessions" : named;
     const view = document.getElementById(name)?.classList.contains("view") && name !== "chain"
       ? name
       : "map";
