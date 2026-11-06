@@ -8,6 +8,8 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+## [1.20.0] — 2026-11-06
+
 The dashboard's Runs tab is part of Sessions: what is running, live, on top of the history of every
 run.
 
@@ -1116,7 +1118,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.19.1...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.20.0...HEAD
+[1.20.0]: https://github.com/KotkaZ/layover-project/compare/v1.19.1...v1.20.0
 [1.19.1]: https://github.com/KotkaZ/layover-project/compare/v1.19.0...v1.19.1
 [1.19.0]: https://github.com/KotkaZ/layover-project/compare/v1.18.0...v1.19.0
 [1.18.0]: https://github.com/KotkaZ/layover-project/compare/v1.17.0...v1.18.0
