@@ -8,10 +8,11 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
-## [1.20.0] — 2026-11-06
+## [1.20.1] — 2026-11-06
 
 The dashboard's Runs tab is part of Sessions: what is running, live, on top of the history of every
-run.
+run. 1.20.0 was tagged but never published — its Apple silicon build could not start once GitHub
+retired the runner it was built on — so this is the first release with these changes.
 
 **Compatibility.** Nothing about the configuration, the HTTP API, the MCP tools or the state
 directory changes; `GET /runs` answers as before. On the dashboard, **Runs** is gone as a tab and
@@ -1121,8 +1122,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.20.0...HEAD
-[1.20.0]: https://github.com/KotkaZ/layover-project/compare/v1.19.1...v1.20.0
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.20.1...HEAD
+[1.20.1]: https://github.com/KotkaZ/layover-project/compare/v1.19.1...v1.20.1
 [1.19.1]: https://github.com/KotkaZ/layover-project/compare/v1.19.0...v1.19.1
 [1.19.0]: https://github.com/KotkaZ/layover-project/compare/v1.18.0...v1.19.0
 [1.18.0]: https://github.com/KotkaZ/layover-project/compare/v1.17.0...v1.18.0
