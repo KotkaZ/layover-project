@@ -130,13 +130,47 @@ pub fn put_request(state: &Path, request: &Request) -> std::io::Result<()> {
 }
 
 /// Adds a line of progress to the request under way, and ends it with `outcome` when given.
+///
+/// Two processes add lines at once as a matter of course: the Tower handing over says which
+/// process it started just as that process, booting, says it started. Each holds the request's
+/// lock from its read to its write, or one writes back a request without the other's line.
 pub fn progress(state: &Path, line: &str, outcome: Option<&str>) {
+    let _held = Held::request(state);
     if let Some(mut request) = request(state) {
         request.progress.push(line.to_owned());
         if let Some(outcome) = outcome {
             request.outcome = Some(outcome.to_owned());
         }
         let _ = put_request(state, &request);
+    }
+}
+
+/// An exclusive lock on `update/request.lock`, released when dropped.
+///
+/// A file of its own rather than the request itself, because a lock on Windows also stops others
+/// reading the file it is on, and the dashboard reads the request while the Tower writes it.
+struct Held(File);
+
+impl Held {
+    /// Waits for the lock. When it cannot be had at all — the folder cannot be written, the lock is
+    /// refused — progress is written without it, as it was before there was one.
+    fn request(state: &Path) -> Option<Self> {
+        let dir = dir(state);
+        std::fs::create_dir_all(&dir).ok()?;
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(dir.join("request.lock"))
+            .ok()?;
+        file.lock().ok()?;
+        Some(Self(file))
+    }
+}
+
+impl Drop for Held {
+    fn drop(&mut self) {
+        let _ = self.0.unlock();
     }
 }
 
@@ -266,24 +300,24 @@ mod tests {
         let _ = std::fs::remove_dir_all(&state);
     }
 
+    fn asked() -> Request {
+        Request {
+            version: "1.15.0".parse().expect("valid"),
+            rollback: false,
+            now: false,
+            including_manual: false,
+            by: "karl".to_owned(),
+            at: Timestamp::now(),
+            progress: Vec::new(),
+            outcome: None,
+            until: None,
+        }
+    }
+
     #[test]
     fn progress_is_added_to_the_request_under_way() {
         let state = temp("progress");
-        put_request(
-            &state,
-            &Request {
-                version: "1.15.0".parse().expect("valid"),
-                rollback: false,
-                now: false,
-                including_manual: false,
-                by: "karl".to_owned(),
-                at: Timestamp::now(),
-                progress: Vec::new(),
-                outcome: None,
-                until: None,
-            },
-        )
-        .expect("writes");
+        put_request(&state, &asked()).expect("writes");
 
         progress(&state, "draining", None);
         progress(&state, "applied", Some("applied"));
@@ -293,6 +327,32 @@ mod tests {
         assert_eq!(request.outcome.as_deref(), Some("applied"));
         clear_request(&state);
         assert!(super::request(&state).is_none());
+        let _ = std::fs::remove_dir_all(&state);
+    }
+
+    #[test]
+    fn lines_added_at_the_same_moment_are_all_kept() {
+        // The Tower handing over says which process it started just as that process, booting,
+        // says it started: two writers, each reading the request and writing it back.
+        let state = temp("together");
+        put_request(&state, &asked()).expect("writes");
+
+        let writers: Vec<_> = (0..4)
+            .map(|writer| {
+                let state = state.clone();
+                std::thread::spawn(move || {
+                    for line in 0..25 {
+                        progress(&state, &format!("{writer}.{line}"), None);
+                    }
+                })
+            })
+            .collect();
+        for writer in writers {
+            writer.join().expect("writes");
+        }
+
+        let kept = request(&state).expect("reads").progress;
+        assert_eq!(kept.len(), 100, "lines were lost: {kept:?}");
         let _ = std::fs::remove_dir_all(&state);
     }
 }

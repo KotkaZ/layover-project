@@ -134,6 +134,14 @@ for as long as it lives, and a second `serve` on the same factory refuses to sta
 during a handover, for the new Tower to take. `layover run` takes no such lock: it is the one-shot
 command, and its old freedom to run beside a `serve` is unchanged.
 
+**Why the request's progress is written under a lock of its own.** Both Towers in a handover add
+lines to the request, and at the same moment: the old one says which process it started just as that
+process, booting, says it started. Each read the request, added its line and wrote it back, so the
+one that wrote last dropped the other's line — on a busy Windows runner, the line naming the new
+Tower's process, which a test reads to find it. Each now holds `update/request.lock` from its read to
+its write. It is a file of its own, not the request, because a lock on Windows also stops others
+reading the file it is on, and the dashboard reads the request while the Tower writes it.
+
 **Why healthy means once round the loop and an answer.** A new version has to show it can do the
 job, not only that it started: it opened the state directory, loaded and validated the factory —
 both refuse to start otherwise — went once round its loop, which reads the queue and settles what it

@@ -296,6 +296,7 @@ Everything a factory accumulates lives in `.layover/`, beside its `layover.toml`
 ├── update/
 │   ├── gate.json                # what the staged release made of this layover.toml
 │   ├── request.json             # `layover update apply`: the Tower drains, swaps and hands over
+│   ├── request.lock             # held while either Tower in a handover adds to the request's progress
 │   └── handover.json            # from what, to what, and whether the new Tower proved itself
 ├── logbook.md                   # shared memory (the default path); Tower-serialized writes
 ├── history/

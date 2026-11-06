@@ -31,6 +31,9 @@ opens Sessions with the same filters.
 
 - **The live count on the Sessions tab could stick.** Once nothing was running or queued, the count
   stopped being updated and kept its last number until the page was reloaded.
+- **An update's progress could lose a line.** The Tower handing over and the one it starts both add
+  to the progress an install shows, often at the same moment, and then one line was dropped — most
+  often the one naming the new Tower's process. Each now waits for the other to finish writing.
 
 ## [1.19.1] — 2026-11-02
 
