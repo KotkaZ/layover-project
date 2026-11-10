@@ -12,6 +12,14 @@ status](README.md#project-status).
 
 ### Added
 
+- **An agent skill that sets up a first factory.** Given to an agent with
+  `gh skill install KotkaZ/layover-project first-layover-factory`, it asks what the factory is for,
+  which CLI it runs on, where its agents work and what one piece of work may spend. It downloads
+  `examples/planner.toml` at the installed Layover's own version, so it loads with that binary, and
+  adapts it. It checks the result with `layover validate --strict` and shows the user `explain` and
+  the entry agent's prompt. It offers the factory a CLI home of its own, and starts the Tower and
+  the first run only when the user says so. See
+  [Letting an agent set it up](https://kotkaz.github.io/layover-project/first-factory.html#letting-an-agent-set-it-up).
 - **An agent skill that installs Layover.** Given to an agent (Copilot CLI, Claude Code, Codex and
   others) with `gh skill install KotkaZ/layover-project install-layover`, it installs Layover the
   checked way. It downloads the latest release, checks its SHA-256, and checks its provenance

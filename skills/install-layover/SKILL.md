@@ -183,7 +183,8 @@ Tell the user:
 Then point them on:
 
 - [Your first factory](https://kotkaz.github.io/layover-project/first-factory.html): three agents
-  in a loop, on Copilot CLI. Never create a factory inside a checkout of Layover's own source.
+  in a loop, on Copilot CLI. If you have the `first-layover-factory` skill, offer to set one up with
+  them now. Never create a factory inside a checkout of Layover's own source.
 - `layover validate --strict` in the factory's directory, before anything runs.
 - [Starting with the computer](https://kotkaz.github.io/layover-project/install.html#starting-with-the-computer):
   `layover autostart` writes what starts the factory at logon and prints the command that

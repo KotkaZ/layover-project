@@ -58,6 +58,20 @@ is queued without starting it.
 > the same chain, on the same budget. `layover run` does the same once, for whatever is queued, and
 > then exits. See [Status](./index.md#status).
 
+## Letting an agent set it up
+
+The [`first-layover-factory`](https://github.com/KotkaZ/layover-project/blob/main/skills/first-layover-factory/SKILL.md)
+skill does this with you. It asks what the factory is for, which CLI it runs on, where its agents
+work and how much one piece of work may spend. It starts from this example, at the version you have
+installed, and adapts it, then checks it with `validate --strict` and shows you the route map and
+the first agent's prompt. It offers the factory a CLI home of its own, and starts nothing that costs
+money until you say so. Give it to your agent with the GitHub CLI, as the
+[install skill](./install.md#letting-an-agent-install-it) is given:
+
+```sh
+gh skill install KotkaZ/layover-project first-layover-factory --agent github-copilot --scope user
+```
+
 ## What it does not say
 
 Notice what is missing: any statement of what happens *after* the coder finishes. The route map

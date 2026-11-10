@@ -114,3 +114,13 @@ short enough to read are the point. It lives in this repository, where `gh skill
 and takes the version from the latest release, so an agent gets the steps written for the release
 they install. `verify` checks its frontmatter, because a skill with a malformed one is refused
 nowhere: agents simply never offer it.
+
+**Why the first-factory skill downloads the example rather than carrying one.** A factory written
+for a newer Layover than the one installed fails to load, and a template kept inside the skill would
+be a second copy of `examples/planner.toml` to keep in step. So `skills/first-layover-factory` reads
+the installed version from `layover about --json` and downloads that example at that release's tag.
+The file it adapts is the one the test suite loads and the book walks through, and it fits the
+binary that will run it. The skill asks before the first run, because every run is a paid model
+session and every agent runs as the user. It leaves `layover serve` to the user's own terminal
+unless asked, because a Tower outlives the agent's command, and the person who started it is the one
+who should stop it.
