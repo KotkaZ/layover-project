@@ -110,7 +110,8 @@ gh skill install KotkaZ/layover-project install-layover --agent github-copilot -
 `--scope user` makes it available in every repository. Then ask the agent to install Layover. An
 agent can also read
 [`skills/install-layover/SKILL.md`](https://github.com/KotkaZ/layover-project/blob/main/skills/install-layover/SKILL.md)
-directly and follow it.
+directly and follow it. Once Layover is installed, the `first-layover-factory` skill sets up a
+first factory with you: see [Your first factory](./first-factory.md#letting-an-agent-set-it-up).
 
 ## With npm
 

@@ -56,7 +56,7 @@ repository is meant to be worked on by agents.
 
 | If you changed... | Then update... |
 |---|---|
-| Anything in `layover.toml`'s shape | `book/src/configuration.md` (every key is in its tables; what a runner, route or `[update]` key does is in `runners.md`, `routes.md` or `updating.md`), every example in `examples/` that uses it, `docs/architecture.md` §6 |
+| Anything in `layover.toml`'s shape | `book/src/configuration.md` (every key is in its tables; what a runner, route or `[update]` key does is in `runners.md`, `routes.md` or `updating.md`), every example in `examples/` that uses it, `docs/architecture.md` §6, `skills/first-layover-factory/SKILL.md` (it adapts `examples/planner.toml`) |
 | Cost accounting, Fuel, the Reserve or a rate card | `book/src/cost.md`, `docs/risks.md` risks 4 and 5 |
 | Route, join or barrier semantics | `docs/routing.md`, `book/src/routes.md` |
 | Pipelines, triggers or flags | `book/src/pipelines.md`, `examples/workitem-factory/` |
@@ -72,7 +72,7 @@ repository is meant to be worked on by agents.
 | Recovery, steering or the handover | `book/src/recovery.md`, `docs/decisions/recovery.md` |
 | The dashboard, history or cost windows | `book/src/dashboard.md` and its two pages, `dashboard-chains.md` and `dashboard-runs.md`; `book/src/cost.md` |
 | Help requests or learnings | `book/src/learning.md`, `docs/decisions/learning.md` |
-| The CLI's commands or flags | `book/src/cli.md`, `crates/layover-cli/README.md`, `book/src/install.md` |
+| The CLI's commands or flags | `book/src/cli.md`, `crates/layover-cli/README.md`, `book/src/install.md`, the skills in `skills/` that run them |
 | How Layover is installed or released | `dist-workspace.toml` then `dist init --yes`, `RELEASING.md`, `book/src/install.md`, both READMEs, `skills/install-layover/SKILL.md` |
 | How Layover updates itself: `[update]`, `layover update`, the gate | `book/src/updating.md`, the `[update]` table in `book/src/configuration.md`, `docs/decisions/updates.md`, `docs/risks-releases.md` |
 | A message a person sees when something fails | `book/src/troubleshooting.md`, if it is one people will search for |
@@ -179,5 +179,5 @@ this repository's own source**. `layover doctor` reports what the run left behin
 | `crates/layover-mcp` | The MCP endpoint agents call back into. Untrusted input arrives here; identity comes from the token, never the request |
 | `crates/layover-update` | Release discovery and staging: manifest, versions, download, provenance, gate. Makes the only network requests Layover itself makes |
 | `crates/layover-cli` | The `layover` binary: `validate`, `explain`, `graph`, `prompt`, `serve`, `stop`, `run`, `doctor`, `autostart`, `update`, `about` |
-| `skills/` | Agent skills, in the format `gh skill install` reads: `install-layover` installs Layover the checked way |
+| `skills/` | Agent skills, in the format `gh skill install` reads: `install-layover` installs Layover the checked way; `first-layover-factory` sets up a user's first factory from `examples/planner.toml` |
 | `xtask/` | `verify`, `generate-api`, `docs`, and `book`, which writes the design pages |

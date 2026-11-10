@@ -23,7 +23,7 @@ what they are about, and within a file kept in the order they were made:
 
 | Topic | What it covers |
 |---|---|
-| [The shape of the system](decisions/foundations.md) | Supervising CLIs, MCP, fresh runs, the Logbook, the generated HTTP server, licence, toolchain, documentation and the install skill |
+| [The shape of the system](decisions/foundations.md) | Supervising CLIs, MCP, fresh runs, the Logbook, the generated HTTP server, licence, toolchain, documentation and the agent skills |
 | [Routes, joins and reach](decisions/routes.md) | Joins and barriers, Hops at load time, scoped routes and what validation checks |
 | [Workflows, triggers and spawning](decisions/workflows.md) | Pipelines, schedules, manual triggers, spawning, layovers, follow-ups and per-workflow rails |
 | [Prompts, flags and what a run is told](decisions/prompts.md) | Conditional prompts, the sender, flags and names that travel with a chain, and reports |

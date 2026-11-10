@@ -84,6 +84,11 @@ On the dashboard, start the `build` workflow and give it a goal.
 and [`examples/`](examples/README.md) has five more, up to the reference factory: nine agents, two
 rendezvous joins and a review loop, with the arithmetic that sizes its rails.
 
+Or let your agent set one up with you: give it the skill with
+`gh skill install KotkaZ/layover-project first-layover-factory`, then ask it for a Layover factory.
+It adapts this example to what you want, checks it, and starts nothing that costs money until you
+say so.
+
 > **Give a factory a CLI home of its own.** Its runs otherwise use yours — `~/.copilot`,
 > `~/.claude`, `~/.codex` — filling your session history and loading your personal plugins and MCP
 > servers. Set `COPILOT_HOME`, `CLAUDE_CONFIG_DIR` or `CODEX_HOME` for the Tower and forward it with
