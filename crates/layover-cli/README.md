@@ -23,7 +23,8 @@ brew install KotkaZ/tap/layover
 ```
 
 ...or a shell one-liner, a PowerShell one-liner, or npm — see the
-[install guide](https://kotkaz.github.io/layover-project/install.html).
+[install guide](https://kotkaz.github.io/layover-project/install.html), which also has a skill that
+lets an agent install it for you.
 
 The binary is called `layover`.
 

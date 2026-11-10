@@ -10,6 +10,16 @@ status](README.md#project-status).
 
 **Compatibility.** Nothing changes for an existing factory.
 
+### Added
+
+- **An agent skill that installs Layover.** Given to an agent (Copilot CLI, Claude Code, Codex and
+  others) with `gh skill install KotkaZ/layover-project install-layover`, it installs Layover the
+  checked way. It downloads the latest release, checks its SHA-256, and checks its provenance
+  whenever `gh` is signed in. It installs into the Cargo home, where Layover can update it later,
+  then checks the agent CLIs the factory will drive. It stops on a failed check, leaves a Layover
+  that is already installed alone, and asks before it changes `PATH`. See
+  [Letting an agent install it](https://kotkaz.github.io/layover-project/install.html#letting-an-agent-install-it).
+
 ### Fixed
 
 - **The install guide's checked install could not check anything on Windows.** It read the

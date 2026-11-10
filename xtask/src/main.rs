@@ -13,6 +13,7 @@ mod book;
 mod changelog;
 mod docs;
 mod openapi;
+mod skills;
 mod verify;
 
 use std::path::{Path, PathBuf};

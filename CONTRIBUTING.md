@@ -28,7 +28,7 @@ If it fails, the output names the step. The two that surprise people:
 | Step | What it means |
 |---|---|
 | `generated` | `api/openapi.yaml` changed and `crates/layover-http/src/generated.rs` did not. Run `cargo xtask generate-api`. |
-| `docs` | A link or `#anchor` in a Markdown file no longer resolves; a file in `docs/` is missing from `book/src/SUMMARY.md`; or a command, flag, `layover.toml` key or endpoint is missing from its reference page. The message names which. |
+| `docs` | A link or `#anchor` in a Markdown file no longer resolves; a file in `docs/` is missing from `book/src/SUMMARY.md`; a command, flag, `layover.toml` key or endpoint is missing from its reference page; or a skill in `skills/` has frontmatter an agent host would not accept. The message names which. |
 
 ## Getting set up
 

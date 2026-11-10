@@ -57,6 +57,10 @@ cargo install layover-cli
 > whose binary is *also* called `layover`. Install `layover-cli`; the binary it gives you is
 > `layover`.
 
+Or have your agent do it: `gh skill install KotkaZ/layover-project install-layover`, then ask it to
+install Layover. It checks the download's checksum and provenance and stops on a failed check —
+see [Letting an agent install it](https://kotkaz.github.io/layover-project/install.html#letting-an-agent-install-it).
+
 Archives for all five targets, with a `sha256.sum` covering them, are on the
 [releases page](https://github.com/KotkaZ/layover-project/releases/latest). The
 [install guide](https://kotkaz.github.io/layover-project/install.html) covers checking them, building from

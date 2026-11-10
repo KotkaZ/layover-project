@@ -73,7 +73,7 @@ repository is meant to be worked on by agents.
 | The dashboard, history or cost windows | `book/src/dashboard.md` and its two pages, `dashboard-chains.md` and `dashboard-runs.md`; `book/src/cost.md` |
 | Help requests or learnings | `book/src/learning.md`, `docs/decisions/learning.md` |
 | The CLI's commands or flags | `book/src/cli.md`, `crates/layover-cli/README.md`, `book/src/install.md` |
-| How Layover is installed or released | `dist-workspace.toml` then `dist init --yes`, `RELEASING.md`, `book/src/install.md`, both READMEs |
+| How Layover is installed or released | `dist-workspace.toml` then `dist init --yes`, `RELEASING.md`, `book/src/install.md`, both READMEs, `skills/install-layover/SKILL.md` |
 | How Layover updates itself: `[update]`, `layover update`, the gate | `book/src/updating.md`, the `[update]` table in `book/src/configuration.md`, `docs/decisions/updates.md`, `docs/risks-releases.md` |
 | A message a person sees when something fails | `book/src/troubleshooting.md`, if it is one people will search for |
 | A term in the vocabulary below | `book/src/glossary.md`, and the [Terminology](#terminology) table |
@@ -81,8 +81,9 @@ repository is meant to be worked on by agents.
 
 `cargo xtask verify` enforces the parts a machine can check: links and `#anchors` that resolve,
 every `docs/` file listed in the book, every command and flag in `cli.md`, every `layover.toml` key
-in the configuration reference and every endpoint in `http-api.md`, generated code that matches its
-specification, examples that still parse and validate. It cannot tell you whether
+in the configuration reference and every endpoint in `http-api.md`, the frontmatter an agent host
+needs to find each skill in `skills/`, generated code that matches its specification, examples that
+still parse and validate. It cannot tell you whether
 a paragraph is still true. That part is yours.
 
 **If a change contradicts something written down, fix the writing in the same commit.** Do not
@@ -178,4 +179,5 @@ this repository's own source**. `layover doctor` reports what the run left behin
 | `crates/layover-mcp` | The MCP endpoint agents call back into. Untrusted input arrives here; identity comes from the token, never the request |
 | `crates/layover-update` | Release discovery and staging: manifest, versions, download, provenance, gate. Makes the only network requests Layover itself makes |
 | `crates/layover-cli` | The `layover` binary: `validate`, `explain`, `graph`, `prompt`, `serve`, `stop`, `run`, `doctor`, `autostart`, `update`, `about` |
+| `skills/` | Agent skills, in the format `gh skill install` reads: `install-layover` installs Layover the checked way |
 | `xtask/` | `verify`, `generate-api`, `docs`, and `book`, which writes the design pages |
