@@ -99,3 +99,18 @@ now follows the latest release, and `main` is published at `/dev/` with a banner
 a fix to the documentation is visible at once and reaches the root with the next release (decided
 with the maintainer, 2026-10-20). The rebuild is triggered by the Release workflow finishing,
 because a release published with the workflow's own token starts no other workflow.
+
+**Why an agent installs Layover from a skill, and the checked way.** People ask an agent to install
+a tool, and an agent following the install guide reaches for its first command, which pipes a
+script into a shell. On Windows that script checks nothing. So `skills/install-layover` makes the
+careful path the default instead: the checksum always, provenance whenever `gh` is signed in, and a
+stop, rather than a workaround, when either fails. It installs into the Cargo home's `bin`, where
+dist's installers and `cargo install` put Layover too, so one binary is replaced rather than a
+second left to shadow it on `PATH`, and Layover's updater treats it as one it may replace. It never
+installs over a Layover that is already there, because a factory may be running from that file;
+`layover update apply` drains the factory before it replaces anything. It is written as steps
+rather than shipped as a script, because a script would be one more installer to trust, and steps
+short enough to read are the point. It lives in this repository, where `gh skill install` finds it
+and takes the version from the latest release, so an agent gets the steps written for the release
+they install. `verify` checks its frontmatter, because a skill with a malformed one is refused
+nowhere: agents simply never offer it.

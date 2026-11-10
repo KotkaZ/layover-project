@@ -19,6 +19,8 @@
 //!   [`crate::api_docs`]
 //! - every release section of `CHANGELOG.md` says what it changes for an existing factory, in a
 //!   `**Compatibility.**` paragraph — see [`crate::changelog`]
+//! - every agent skill in `skills/` has the frontmatter an agent host needs to find it — see
+//!   [`crate::skills`]
 //!
 //! What is deliberately not checked: prose. No tool can tell whether a paragraph is still true.
 //! That is what the standing instruction in `AGENTS.md` is for.
@@ -62,6 +64,7 @@ pub fn check(root: &Path) -> Result<String, Failure> {
     check_design_listed(root, &mut problems);
     check_spec_version(root, &mut problems);
     problems.extend(crate::api_docs::problems(root));
+    problems.extend(crate::skills::problems(root));
     match std::fs::read_to_string(root.join("CHANGELOG.md")) {
         Ok(changelog) => problems.extend(crate::changelog::problems(&changelog)),
         Err(error) => problems.push(format!("could not read CHANGELOG.md: {error}")),

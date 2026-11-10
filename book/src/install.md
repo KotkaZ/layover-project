@@ -94,6 +94,24 @@ The binaries are not code-signed — no Authenticode on Windows and no notarizat
 operating system may still warn the first time one runs. Why provenance came first is in
 [`docs/first-release.md`](./design/first-release.md).
 
+## Letting an agent install it
+
+This repository carries an [agent skill](https://agentskills.io) that installs Layover the careful
+way. It downloads the release and checks it as above, provenance included when `gh` is signed in,
+and installs it into the Cargo home's `bin`, where Layover can later update it. Then it checks the
+agent CLIs a factory needs. It stops on a failed check, leaves an installed Layover alone, and asks
+before it changes your `PATH`. Give it to your agent with the GitHub CLI:
+
+```sh
+gh skill install KotkaZ/layover-project install-layover --agent github-copilot --scope user
+```
+
+`--agent` names your agent (`claude-code`, `codex`, `cursor` and many more work too), and
+`--scope user` makes it available in every repository. Then ask the agent to install Layover. An
+agent can also read
+[`skills/install-layover/SKILL.md`](https://github.com/KotkaZ/layover-project/blob/main/skills/install-layover/SKILL.md)
+directly and follow it.
+
 ## With npm
 
 Worth knowing about, because if you are using Layover you almost certainly already have Node: the
