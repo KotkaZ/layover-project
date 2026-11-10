@@ -5,30 +5,30 @@ they cost, and how long any of it is kept.
 
 ## Sessions
 
-![The Sessions tab: three sessions running live side by side — a tester running the nightly suite, a reviewer requesting changes on a pull request, and a coder mid-sentence — each as its CLI prints it, with its model and effort; and under them the history, starting with the three running sessions](./assets/dashboard-sessions.png)
+![The Sessions tab: one session picked, a coder fixing a retry policy, watched live as its CLI prints it, with its model and workflow in the terminal's header; and under it the history, the running sessions first, with the picked one marked](./assets/dashboard-sessions.png)
 
 A session is one supervised run, seen the way its agent's CLI would show it in a terminal. The tab
-is in two parts: what is running now, live, on top, and every session before it underneath.
+is the history of every session, and a session opens above it when you pick one: live while it
+runs, a replay once it is over. Nothing opens by itself. A line at the top says how many are running
+now, and the green number on the tab is how many runs are alive.
 
-**Live, on top.** Every session running now, side by side — up to four — each as its CLI prints
-it: the first lines of what it was asked, its reasoning, every tool it called with a few lines of
-what came back, and what it said. Text the model is still writing appears as it arrives, and is
-replaced by the finished message. A session that starts joins the others; one that ends says how —
-`succeeded`, `failed`, `timed out` — and stays until its place is needed. Close one with **×** and
-it stays closed. Each terminal's header names its agent, its chain and workflow, the model and
-effort it runs at, and links to its **chain** and, once it is over, its **report**. The green number
-on the tab is how many runs are alive.
+**The history.** Every session, newest first, filterable by window, outcome and agent, a hundred at a
+time with **Show 100 more** below. Running ones come first, with a pulsing dot. Click any row and it
+opens above the list — live while it runs, a replay from the start once it is over, which is how you
+see the route an agent took to its conclusion rather than only the conclusion. Clicking another row
+opens that one instead, and the one open is marked in the list. **Report** opens what the agent
+wrote about its run, and the chain column opens its chain: the end of its identifier, where
+identifiers differ, with the chain's name in the tooltip. **Ran on** is the model and effort the
+run's command line gave it; hover it for the context too.
 
-**History, underneath.** Every session, newest first, filterable by window, outcome and agent, a
-hundred at a time with **Show 100 more** below. Running ones come first, with a pulsing dot. Click
-any row and it opens in the viewer on its own — live while it runs, a replay from the start once it
-is over, which is how you see the route an agent took to its conclusion rather than only the
-conclusion. **← Live** goes back to everything running. The sessions on screen are marked in the
-list. **Report** opens what the agent wrote about its run, and the chain column opens its chain:
-the end of its identifier, where identifiers differ, with the chain's name in the tooltip.
-**Ran on** is the model and effort the run's command line gave it; hover it for the context too.
+**The session open** shows what its CLI prints: the first lines of what it was asked, its reasoning,
+every tool it called with a few lines of what came back, and what it said. Text the model is still
+writing appears as it arrives, and is replaced by the finished message. A session that ends says how
+— `succeeded`, `failed`, `timed out` — and stays open, so how it ended can be read. Its header names
+its agent, its chain and workflow, the model and effort it runs at, and links to its **chain** and,
+once it is over, its **report**. **×** closes it.
 
-**Show thinking** hides the reasoning when you only want the actions; **Follow** keeps each terminal
+**Show thinking** hides the reasoning when you only want the actions; **Follow** keeps the terminal
 at its latest line. The session you picked is in the page's address, `#sessions?run=run_…`, so a
 reload keeps it and a link opens it. A chain's own page, its timeline and a report open a session
 here too.

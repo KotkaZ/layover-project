@@ -68,10 +68,9 @@ and **Sessions**, a list of the runs going now or ended in the last day beside a
 one picked. The list was the table again with fewer columns and no filters, and a session was only
 ever a run's terminal — every way into one, from the table, a chain or a report, opened the other
 tab. Two tabs over the same runs made a person choose between seeing what was happening and finding
-what had happened. So there is one, named for what a person watches: what is running now on top,
-live, side by side — the tab's first purpose, kept on screen before anything is picked — and the
-history under it is where any other session is picked from, to watch or replay in the same place.
-The table keeps every filter and column it had, and `#runs?…` addresses open it.
+what had happened. So there is one, named for what a person watches, and the history is where any
+session is picked from, to watch live or replay in the same place. The table keeps every filter and
+column it had, and `#runs?…` addresses open it.
 
 **Why the dashboard asks the Tower when a schedule next fires.** A cron expression could be
 evaluated anywhere, but an `every` schedule counts from when the Tower started, and a tick held by
@@ -158,3 +157,12 @@ from each pipeline's entry by name, since the configuration keeps pipelines by n
 their written order would change a public type for no difference on any factory that exists. And a
 spawn is walked like any route, so it stays right of its spawner unless it closes a loop with
 another workflow's routes on the whole-factory map, where it is drawn back like any route that does.
+
+**Why a session opens only when it is picked.** Sessions opened on every session running, live, up
+to four side by side, each joined by the next to start. On a busy factory that was four terminals
+scrolling at once above the list a person had come to read, more than anybody followed, and it
+pushed the history below the fold. A person watches one session at a time, and usually one they
+went looking for. So nothing opens by itself: the tab is the history, running sessions first, with
+a line saying how many are running, and one session opens above it when it is picked, live or as a
+replay (decided with the maintainer, 2026-11-10). Watching one at a time also keeps a single stream
+open per page, rather than up to four.

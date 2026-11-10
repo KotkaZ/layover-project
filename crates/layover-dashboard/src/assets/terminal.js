@@ -19,8 +19,8 @@ const MARKS = {
   raw: "",
 };
 
-// Far more than anyone scrolls back through, and few enough that a page tiling four sessions for
-// an afternoon stays quick.
+// Far more than anyone scrolls back through, and few enough that a session watched for an
+// afternoon stays quick.
 const KEEP_LINES = 4000;
 
 class Terminal {

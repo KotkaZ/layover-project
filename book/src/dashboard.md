@@ -105,9 +105,9 @@ letting more be booked is not a kill switch.
 
 ## Watching agents work
 
-**Sessions** shows every run going now, live, side by side, each as its CLI prints it — and under
-it the history of every run, any of which opens there to watch or replay. It is read-only: nothing
-there reaches the agent. See [Sessions](./dashboard-runs.md#sessions).
+**Sessions** is the history of every run, the ones going now first. Pick one and it opens above the
+list as its CLI prints it, live while it runs or as a replay once it is over; nothing opens until
+you pick. It is read-only: nothing there reaches the agent. See [Sessions](./dashboard-runs.md#sessions).
 
 ## What starts next
 

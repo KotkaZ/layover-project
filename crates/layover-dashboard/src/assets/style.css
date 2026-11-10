@@ -553,25 +553,24 @@ tr.opens:hover td .open { color: var(--accent); }
 
 .reserve p { margin: 0.45rem 0 0; }
 
-/* Sessions: everything running, live, over the history of every run.
+/* Sessions: the history of every run, and above it the one session picked from it.
  *
- * The terminals are dark whatever the page's theme, because they are terminals: the point is that
- * a session reads the way the agent's CLI would read in one. Each line is a grid of time, mark and
- * text, so a tool's output indents under its call the way the CLI draws it. They are sized to leave
- * the history in sight below them: what is running is the first thing on the tab, not all of it.
+ * The terminal is dark whatever the page's theme, because it is a terminal: the point is that a
+ * session reads the way the agent's CLI would read in one. Each line is a grid of time, mark and
+ * text, so a tool's output indents under its call the way the CLI draws it. It is sized to leave
+ * the history in sight below it.
  */
 /* A badge with nothing to count says nothing: its `display` would otherwise beat `hidden`. */
 .badge[hidden] { display: none; }
 .badge.live { background: var(--ok); }
-.watch { margin-bottom: 26px; }
-.watch-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.watch { margin-bottom: 22px; }
+.watch-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .watch-heading { display: flex; align-items: center; gap: 9px; margin: 0; font-size: 15px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--ink); }
 .watch-heading .muted { font-size: 13px; font-weight: 400; color: var(--muted); }
 .watch-heading .dot { width: 9px; height: 9px; }
 .watch-options { display: flex; align-items: center; gap: 16px; margin-left: auto; font-size: 13px; color: var(--muted); }
+.watch-options[hidden] { display: none; }
 .watch-options label { display: flex; gap: 6px; align-items: center; }
-.watch-empty { margin: 0; padding: 22px; border: 1px dashed var(--line); border-radius: 12px; text-align: center; color: var(--muted); font-size: 14px; }
-.watch-empty[hidden] { display: none; }
 h2.history-head { margin: 0 6px 0 0; font-size: 15px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--ink); }
 #sessions-table tr.open td { background: color-mix(in srgb, var(--accent) 9%, transparent); }
 #sessions-table tr.open td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
@@ -585,10 +584,7 @@ td.outcome .dot { margin-right: 7px; vertical-align: 1px; }
 @keyframes pulse { 50% { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) { .dot.running { animation: none; } }
 
-#terminals { display: grid; gap: 12px; }
-#terminals.tiled { grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); }
-#terminals.crowded { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-@media (max-width: 960px) { #terminals.tiled, #terminals.crowded { grid-template-columns: 1fr; } }
+#terminals:not(:empty) { margin-top: 10px; }
 .terminal { --term-bg: #0d1117; --term-ink: #c9d1d9; --term-dim: #7d8590; display: flex; flex-direction: column; background: var(--term-bg); color: var(--term-ink); border: 1px solid #30363d; border-radius: 10px; overflow: hidden; min-width: 0; }
 .term-head { display: flex; align-items: center; gap: 9px; padding: 7px 12px; background: #161b22; border-bottom: 1px solid #30363d; font-size: 13px; }
 .term-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 0 1 auto; }
@@ -600,8 +596,6 @@ td.outcome .dot { margin-right: 7px; vertical-align: 1px; }
 .term-close { border: 0; background: none; color: var(--term-dim); font-size: 17px; line-height: 1; cursor: pointer; padding: 0 2px; }
 .term-close:hover { color: var(--term-ink); }
 .term-body { height: min(60vh, 680px); min-height: 260px; overflow: auto; padding: 8px 0 12px; font: 12.5px/1.5 ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace; }
-#terminals.tiled .term-body { height: min(52vh, 560px); }
-#terminals.crowded .term-body { height: min(36vh, 400px); min-height: 220px; }
 .line { display: grid; grid-template-columns: 64px 16px 1fr; padding: 0 12px 0 6px; }
 .line .t { color: #484f58; font-size: 11px; padding-top: 1px; }
 .line .m { color: var(--term-dim); }

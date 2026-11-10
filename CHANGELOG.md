@@ -28,6 +28,14 @@ status](README.md#project-status).
   that is already installed alone, and asks before it changes `PATH`. See
   [Letting an agent install it](https://kotkaz.github.io/layover-project/install.html#letting-an-agent-install-it).
 
+### Changed
+
+- **Sessions opens a session only when you pick one.** The tab no longer opens every session
+  running, live, up to four side by side. It is the history of every run, the running ones first,
+  under a line saying how many are running; click a row and that one session opens above the list,
+  live while it runs or as a replay once it is over. **×** closes it, and the **← Live** button is
+  gone.
+
 ### Fixed
 
 - **The install guide's checked install could not check anything on Windows.** It read the

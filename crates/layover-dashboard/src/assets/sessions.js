@@ -1,88 +1,46 @@
-// Sessions: every run the factory supervises — the ones going now, live, and every one before them.
+// Sessions: every run the factory supervises — the ones going now, and every one before them.
 //
 // One tab for what used to be two. A list of runs and a list of sessions were the same runs, with
-// and without filters, and a session was only ever a run's terminal. So the live view sits on top —
-// every session running now, side by side, each added as it starts — and the history under it is
-// where any other one is picked from, to watch live or replay once it is over.
+// and without filters, and a session was only ever a run's terminal. So the tab is the history,
+// running sessions first, and a session opens above it only when one is picked: live while it
+// runs, a replay once it is over. Nothing opens by itself; several terminals streaming at once was
+// more than anybody read.
 //
 // Uses app.js's helpers (`get`, `el`, `$`, `money`, `duration`, `when`, `whenCell`, `workflowCell`,
 // `scoped`, `openReport`, `updated`, `showView`, `WINDOWS`), router.js's `routeChanged` and
 // `routeExtras`, terminal.js's `Terminal` and chain.js's `openChain`, all inside functions.
 
-// More live terminals than this would hold enough connections open to starve the rest of the page.
-const MAX_TILES = 4;
 const SESSIONS_PAGE = 100;
-// The live view is kept current this often, and the history under it every third time.
+// How many are running is kept current this often, and the history every third time.
 const SESSIONS_EVERY_MS = 5000;
 
-// `picked`: the session somebody chose to watch on its own, or null while the view follows what is
-// running. `running`: what was running when last asked, for the workflow in view. `closed`: live
-// sessions somebody closed, which the next refresh must not put straight back.
+// `open`: the terminal of the session picked, or null while none is. `running`: how many sessions
+// were running when last asked, in the workflow in view.
 const sessions = {
-  terminals: new Map(),
-  picked: null,
-  running: [],
-  closed: new Set(),
+  open: null,
+  running: 0,
   limit: 0,
   timer: null,
   ticks: 0,
 };
 
-// ── The live view ──────────────────────────────────────────────────────────────────────────────
+// ── The session picked ─────────────────────────────────────────────────────────────────────────
 
-function watch(run) {
-  if (sessions.terminals.has(run.run_id)) return;
-  sessions.terminals.set(run.run_id, new Terminal(run, $("#terminals"), forget));
-}
-
-function forget(terminal) {
-  terminal.close();
-  sessions.terminals.delete(terminal.run.run_id);
-  // Closing the one session picked goes back to what is live.
-  if (sessions.picked === terminal.run.run_id) {
-    sessions.picked = null;
-    followLive();
-    routeChanged();
-  } else {
-    sessions.closed.add(terminal.run.run_id);
-  }
-  drawViewer();
-}
-
-function closeAll() {
-  for (const terminal of sessions.terminals.values()) terminal.close();
-  sessions.terminals.clear();
-}
-
-/// Every session running now, side by side: one that starts joins, and one that ends stays until
-/// its place is needed, so how it ended can be read.
-function followLive() {
-  for (const run of sessions.running) {
-    if (sessions.terminals.has(run.run_id) || sessions.closed.has(run.run_id)) continue;
-    if (sessions.terminals.size >= MAX_TILES) {
-      const over = [...sessions.terminals.values()].find((terminal) => terminal.ended);
-      if (!over) break;
-      over.close();
-      sessions.terminals.delete(over.run.run_id);
-    }
-    watch(run);
-  }
-}
-
-/// Watches one session on its own: live while it runs, a replay once it is over.
+/// Watches one session: live while it runs, a replay once it is over.
 function pick(run) {
-  sessions.picked = run.run_id;
-  closeAll();
-  watch(run);
+  if (sessions.open?.run.run_id !== run.run_id) {
+    sessions.open?.close();
+    sessions.open = new Terminal(run, $("#terminals"), unpick);
+  }
   drawViewer();
   routeChanged();
 }
 
-function backToLive() {
-  sessions.picked = null;
-  sessions.closed.clear();
-  closeAll();
-  followLive();
+/// Closes the session open, leaving the history.
+function unpick() {
+  if (!sessions.open) return;
+  sessions.open.close();
+  sessions.open = null;
   drawViewer();
   routeChanged();
 }
@@ -101,36 +59,33 @@ function sessionsOf(agent) {
   showView("sessions");
 }
 
-/// The heading over the terminals, and which rows of the history are on screen.
+/// The heading over the viewer, and which row of the history is open.
 function drawViewer() {
-  const running = sessions.running.length;
-  const picked = sessions.picked && sessions.terminals.get(sessions.picked);
+  const open = sessions.open;
   const heading = $("#watch-heading");
-  if (picked) {
-    const live = picked.run.status === "running" && !picked.ended;
+  if (open) {
+    const live = open.run.status === "running" && !open.ended;
     heading.replaceChildren(
-      el("span", `dot ${live ? "running" : picked.run.status}`),
-      el("span", "", `${live ? "Watching" : "Replaying"} ${picked.run.agent}`),
+      el("span", `dot ${live ? "running" : open.run.status}`),
+      el("span", "", `${live ? "Watching" : "Replaying"} ${open.run.agent}`),
     );
   } else {
+    const running = sessions.running;
     heading.replaceChildren(
       el("span", `dot ${running ? "running" : ""}`),
-      el("span", "", running ? `Live · ${running} running` : "Nothing running"),
+      el("span", "", running ? `${running} running` : "Nothing running"),
+      el(
+        "span",
+        "muted",
+        running
+          ? "Pick a session below to watch it live, or any other to replay it."
+          : "Pick a session below to replay it.",
+      ),
     );
-    if (running > MAX_TILES) {
-      heading.append(el("span", "muted", `${MAX_TILES} shown; pick another below to watch it`));
-    }
   }
-  const back = $("#watch-live");
-  back.hidden = !sessions.picked;
-  back.textContent = running ? `← Live · ${running} running` : "← Live";
-
-  const shown = sessions.terminals.size;
-  $("#terminals").classList.toggle("tiled", shown > 1);
-  $("#terminals").classList.toggle("crowded", shown > 2);
-  $("#sessions-empty").hidden = shown > 0;
+  $("#watch-options").hidden = !open;
   document.querySelectorAll("#sessions-table tbody tr").forEach((row) => {
-    row.classList.toggle("open", sessions.terminals.has(row.dataset.run));
+    row.classList.toggle("open", row.dataset.run === open?.run.run_id);
   });
 }
 
@@ -143,8 +98,7 @@ function setLiveBadge(count) {
 async function loadLive() {
   try {
     const params = scoped(new URLSearchParams({ status: "running", window: "last_24h", limit: "50" }));
-    sessions.running = (await get(`/runs?${params}`)).runs;
-    if (!sessions.picked) followLive();
+    sessions.running = (await get(`/runs?${params}`)).runs.length;
     drawViewer();
   } catch {
     // The history under it says when the Tower cannot be read; one line of that is enough.
@@ -312,21 +266,20 @@ function startSessions() {
   for (const id of ["#sessions-window", "#sessions-status"]) $(id).addEventListener("change", fresh);
   $("#sessions-agent").addEventListener("input", fresh);
   $("#sessions-more").addEventListener("click", () => loadHistory(true));
-  $("#watch-live").addEventListener("click", backToLive);
   $("#sessions-thinking").addEventListener("change", (event) => {
     $("#terminals").classList.toggle("hide-think", !event.target.checked);
   });
 
   // The session picked is part of the address, so a link to one opens it.
   routeExtras.sessions = (params) => {
-    if (!params) return { run: sessions.picked ?? "" };
+    if (!params) return { run: sessions.open?.run.run_id ?? "" };
     const wanted = params.get("run");
     if (!wanted) {
-      if (sessions.picked) backToLive();
+      unpick();
       return undefined;
     }
-    if (wanted !== sessions.picked) {
-      get(`/runs/${encodeURIComponent(wanted)}`).then(pick).catch(backToLive);
+    if (wanted !== sessions.open?.run.run_id) {
+      get(`/runs/${encodeURIComponent(wanted)}`).then(pick).catch(unpick);
     }
     return undefined;
   };
