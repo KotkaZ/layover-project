@@ -49,7 +49,7 @@ They are also not short: the shell installer is around 1,600 lines and the Power
 ### Installing with verification you can see
 
 If the above matters to you, skip the installers and do it by hand. This is fail-closed: a
-mismatch stops it.
+mismatch stops it before anything is unpacked.
 
 ```sh
 TARGET=x86_64-unknown-linux-gnu
@@ -59,22 +59,26 @@ curl -fsSLO "$BASE/layover-cli-$TARGET.tar.xz"
 curl -fsSLO "$BASE/layover-cli-$TARGET.tar.xz.sha256"
 
 # shasum on macOS, sha256sum on Linux -- use whichever you have, and do not skip it
-shasum -a 256 -c "layover-cli-$TARGET.tar.xz.sha256" || sha256sum -c "layover-cli-$TARGET.tar.xz.sha256"
-
-tar -xf "layover-cli-$TARGET.tar.xz"
+{ shasum -a 256 -c "layover-cli-$TARGET.tar.xz.sha256" || sha256sum -c "layover-cli-$TARGET.tar.xz.sha256"; } &&
+  tar -xf "layover-cli-$TARGET.tar.xz"
 ```
 
 ```powershell
 $target = 'x86_64-pc-windows-msvc'
 $base   = 'https://github.com/KotkaZ/layover-project/releases/latest/download'   # or releases/download/v1.7.0
 
-Invoke-WebRequest "$base/layover-cli-$target.zip" -OutFile layover.zip
-$expected = (Invoke-WebRequest "$base/layover-cli-$target.zip.sha256").Content.Split(' ')[0]
+Invoke-WebRequest "$base/layover-cli-$target.zip" -OutFile layover.zip -UseBasicParsing
+Invoke-WebRequest "$base/layover-cli-$target.zip.sha256" -OutFile layover.zip.sha256 -UseBasicParsing
+$expected = (Get-Content layover.zip.sha256 -Raw).Split(' ')[0]
 $actual   = (Get-FileHash layover.zip -Algorithm SHA256).Hash
 
 if ($actual -ine $expected) { throw "checksum mismatch: got $actual, expected $expected" }
 Expand-Archive layover.zip -DestinationPath .
 ```
+
+The `.sha256` is saved to a file and read from there because GitHub serves it as binary: PowerShell
+7 hands back bytes rather than text, and Windows PowerShell 5.1 fails outright on a response it
+tries to parse.
 
 `sha256.sum` on the release covers every artifact, if you would rather check them together.
 

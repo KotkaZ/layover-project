@@ -8,6 +8,16 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
+**Compatibility.** Nothing changes for an existing factory.
+
+### Fixed
+
+- **The install guide's checked install could not check anything on Windows.** It read the
+  `.sha256` straight from the download's response, which PowerShell 7 hands back as bytes and
+  Windows PowerShell 5.1 fails on, so the step stopped before comparing. It now saves the file and
+  reads it. The macOS and Linux steps unpacked the archive even after a checksum mismatch; a
+  mismatch now stops them.
+
 ## [1.20.1] — 2026-11-06
 
 The dashboard's Runs tab is part of Sessions: what is running, live, on top of the history of every
