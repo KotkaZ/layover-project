@@ -1241,6 +1241,72 @@ pub enum Status {
     Ok,
 }
 
+/// A drive holding the factory or its `work_dir`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SystemDisk {
+    /// What it holds, `factory` and `work_dir`, or both.
+    pub holds: Vec<String>,
+    /// Where it is mounted, such as `C:\` or `/`.
+    pub mount_point: String,
+    /// The drive's name, as the system reports it; may be empty.
+    pub name: String,
+    /// Its size.
+    pub total_bytes: i64,
+}
+
+/// The machine over a window, and Layover's share of it. For a moment after the process
+/// starts, until it has first looked at the machine, `cpus` and `memory_total_bytes` are 0
+/// and `disks` and `samples` are empty.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SystemReport {
+    /// Logical processors.
+    pub cpus: i32,
+    /// Each drive holding the factory or its `work_dir`, once.
+    pub disks: Vec<SystemDisk>,
+    /// Seconds between samples in `samples`.
+    pub every_sec: i32,
+    /// Physical memory.
+    pub memory_total_bytes: i64,
+    /// Oldest first. A gap means the machine slept or the process was busy.
+    pub samples: Vec<SystemSample>,
+    /// When this process began sampling. A window reaching further back than this has no
+    /// samples for that part.
+    pub since: String,
+    /// Which window this is.
+    pub window: SystemWindow,
+}
+
+/// One sample of the machine, or the average of a minute of them.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SystemSample {
+    /// When it was taken; for an average, the start of its minute.
+    pub at: String,
+    /// How busy all the processors were, from 0 to 100.
+    pub cpu_percent: f64,
+    /// Space used on each of `disks`, in the same order.
+    pub disk_used_bytes: Vec<i64>,
+    /// Layover's share of all the processors, from 0 to 100.
+    pub layover_cpu_percent: f64,
+    /// Physical memory Layover's processes hold.
+    pub layover_memory_bytes: i64,
+    /// How many processes Layover's share counts.
+    pub layover_processes: i32,
+    /// Physical memory in use.
+    pub memory_used_bytes: i64,
+}
+
+/// How far back the machine's history goes: the last hour, every sample, or the last 24 hours
+/// as one-minute averages. Both are rolling, ending now.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SystemWindow {
+    /// `last_hour`
+    #[serde(rename = "last_hour")]
+    LastHour,
+    /// `last_24h`
+    #[serde(rename = "last_24h")]
+    Last24h,
+}
+
 /// Tokens consumed. Cached reads and writes are counted apart from fresh input because
 /// providers price them very differently, and blending them makes any derived cost wrong by
 /// whatever the cache hit rate happened to be.
@@ -1718,6 +1784,15 @@ pub struct StreamRunQuery {
     pub after: Option<i64>,
 }
 
+/// query parameters for `getSystem`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GetSystemQuery {
+    /// How far back: `last_hour`, every sample, is the default; `last_24h` is one-minute
+    /// averages.
+    #[serde(default)]
+    pub window: Option<SystemWindow>,
+}
+
 /// query parameters for `getUpcoming`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GetUpcomingQuery {
@@ -2058,6 +2133,24 @@ pub trait Api: Send + Sync + 'static {
         path: StreamRunPath,
         query: StreamRunQuery,
     ) -> impl core::future::Future<Output = Result<EventStream, Problem>> + Send;
+    /// The machine's processors, memory and disk space over time, and Layover's share.
+    ///
+    /// Sampled every five seconds by the process serving this dashboard — `layover serve`, or a
+    /// `--watch-only` dashboard — and kept in its memory: the last hour as sampled, and the last
+    /// 24 hours as one-minute averages. Nothing is written to disk, so a restart begins the
+    /// history again; `since` says when this process began sampling.
+    ///
+    /// Layover's share is this process and everything it started — under `serve`, the Tower and
+    /// every agent CLI it runs, with whatever they started — and every agent run another Layover
+    /// process has alive now, with whatever it started. Each process is counted once.
+    ///
+    /// Disk space is that of each drive holding the factory or its `work_dir`.
+    ///
+    /// `GET /system`
+    fn get_system(
+        &self,
+        query: GetSystemQuery,
+    ) -> impl core::future::Future<Output = Result<SystemReport, Problem>> + Send;
     /// What will start on its own, and the scheduled ticks that did not.
     ///
     /// Work nobody has to trigger: every tick of a scheduled pipeline due within the window, and
@@ -2186,6 +2279,7 @@ pub fn router<A: Api>(api: std::sync::Arc<A>) -> axum::Router {
             "/runs/{run_id}/stream",
             axum::routing::get(handle_stream_run::<A>),
         )
+        .route("/system", axum::routing::get(handle_get_system::<A>))
         .route("/upcoming", axum::routing::get(handle_get_upcoming::<A>))
         .route("/update", axum::routing::get(handle_get_update::<A>))
         .route(
@@ -2447,6 +2541,16 @@ async fn handle_stream_run<A: Api>(
     }
 }
 
+async fn handle_get_system<A: Api>(
+    axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
+    axum::extract::Query(query): axum::extract::Query<GetSystemQuery>,
+) -> axum::response::Response {
+    match api.get_system(query).await {
+        Ok(value) => (axum::http::StatusCode::OK, axum::Json(value)).into_response(),
+        Err(problem) => problem.into_response(),
+    }
+}
+
 async fn handle_get_upcoming<A: Api>(
     axum::extract::State(api): axum::extract::State<std::sync::Arc<A>>,
     axum::extract::Query(query): axum::extract::Query<GetUpcomingQuery>,
@@ -2507,7 +2611,7 @@ async fn handle_skip_update<A: Api>(
 /// Every operation the specification declares, as (method, path, operationId).
 ///
 /// Exposed so tests can assert the router and the specification agree.
-pub const OPERATIONS: [(&str, &str, &str); 31] = [
+pub const OPERATIONS: [(&str, &str, &str); 32] = [
     ("GET", "/agents", "listAgents"),
     ("GET", "/costs", "getCosts"),
     ("GET", "/flights", "listPending"),
@@ -2549,6 +2653,7 @@ pub const OPERATIONS: [(&str, &str, &str); 31] = [
     ("GET", "/runs/{run_id}", "getRun"),
     ("GET", "/runs/{run_id}/report", "getReport"),
     ("GET", "/runs/{run_id}/stream", "streamRun"),
+    ("GET", "/system", "getSystem"),
     ("GET", "/upcoming", "getUpcoming"),
     ("GET", "/update", "getUpdate"),
     ("POST", "/update/apply", "applyUpdate"),

@@ -17,6 +17,7 @@
     <button class="tab" data-view="upcoming">Upcoming</button>
     <button class="tab" data-view="cost">Cost</button>
     <button class="tab" data-view="journal">Help &amp; learnings<span id="help-badge" class="badge" hidden></span></button>
+    <button class="tab" data-view="system">System</button>
   </nav>
   <label id="scope-label">Workflow <select id="scope"></select></label>
   <button id="trigger-open" class="btn primary" type="button">Trigger…</button>
@@ -342,6 +343,22 @@
     </table>
     <p id="learn-empty" class="empty" hidden></p>
   </section>
+
+  <section id="system" class="view" hidden>
+    <div class="bar">
+      <h2 class="history-head">This machine</h2>
+      <label>Window
+        <select id="system-window" data-default="last_hour">
+          <option value="last_hour">Last hour</option>
+          <option value="last_24h">Last 24 hours, by the minute</option>
+        </select>
+      </label>
+      <span id="system-since" class="hint"></span>
+      <span id="system-updated" class="updated end"></span>
+    </div>
+    <div id="system-graphs" class="system-graphs"></div>
+    <p id="system-none" class="empty" hidden></p>
+  </section>
 </main>
 
 <dialog id="trigger">
@@ -500,6 +517,7 @@
 <script src="/map.js"></script>
 <script src="/router.js"></script>
 <script src="/cost.js"></script>
+<script src="/system.js"></script>
 <script src="/chains.js"></script>
 <script src="/journal.js"></script>
 <script src="/attention.js"></script>

@@ -625,3 +625,32 @@ td.actions .link + .link { margin-left: 12px; }
 #reply-body { font: 12.5px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace; }
 #reply-flags .flag { display: inline-flex; gap: 6px; margin-right: 14px; }
 #reply-by { display: block; width: 100%; margin-top: 4px; font: inherit; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
+
+/* System: the machine's graphs. Each is drawn in a fixed box and stretched to its card, so its
+ * lines keep their width however wide the card is. */
+.system-graphs { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 14px; }
+.system-card { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.system-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.card .v.alarming { color: var(--bad); }
+.card .v small { margin-left: 6px; font-size: 14px; font-weight: 500; letter-spacing: 0; color: var(--muted); }
+.system-keys { display: flex; gap: 12px; padding-top: 2px; }
+.key { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.key i { width: 12px; height: 3px; border-radius: 2px; background: var(--accent); }
+.key.layover i { background: var(--join); }
+.graph-wrap { margin-top: 12px; }
+.graph { position: relative; height: 150px; border-bottom: 1px solid var(--line); }
+.graph svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.graph svg * { vector-effect: non-scaling-stroke; }
+.graph .grid { stroke: var(--line); stroke-width: 1; }
+.graph .trace { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.graph .trace.machine { stroke: var(--accent); }
+.graph .trace.layover { stroke: var(--join); }
+.graph .area.machine { fill: color-mix(in srgb, var(--accent) 14%, transparent); }
+.graph .cursor { stroke: var(--muted); stroke-dasharray: 3 3; }
+.graph .axis { position: absolute; top: -9px; left: 0; font-size: 11px; color: var(--muted); background: var(--panel); padding-right: 4px; }
+.ticks { display: flex; justify-content: space-between; margin-top: 4px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.readout { position: absolute; top: 8px; transform: translateX(10px); display: flex; flex-direction: column; gap: 2px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); box-shadow: 0 4px 14px rgb(0 0 0 / 10%); font-size: 12px; white-space: nowrap; pointer-events: none; z-index: 1; }
+.readout.flip { transform: translateX(calc(-100% - 10px)); }
+.readout[hidden] { display: none; }
+.readout b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.readout .key { color: var(--ink); }

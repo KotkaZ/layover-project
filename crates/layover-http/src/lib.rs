@@ -52,6 +52,7 @@
 //!     # async fn get_upcoming(&self, _: layover_http::GetUpcomingQuery) -> Result<layover_http::Upcoming, Problem> { todo!() }
 //!     # async fn switch_off_pipeline(&self, _: layover_http::SwitchOffPipelinePath) -> Result<layover_http::PipelineSwitch, Problem> { todo!() }
 //!     # async fn switch_on_pipeline(&self, _: layover_http::SwitchOnPipelinePath) -> Result<layover_http::PipelineSwitch, Problem> { todo!() }
+//!     # async fn get_system(&self, _: layover_http::GetSystemQuery) -> Result<layover_http::SystemReport, Problem> { todo!() }
 //! }
 //!
 //! let app = router(Arc::new(Stub));

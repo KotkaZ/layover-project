@@ -22,13 +22,14 @@ use layover_core::run::Outcome;
 use layover_http::{
     AgentList, Api, CancelFlightPath, CostBucket, CostReport, CostWindow, DismissItineraryPath,
     DismissItineraryRequest, EventStream, FlightAccepted, GetCostsQuery, GetGraphQuery,
-    GetItineraryPath, GetReportPath, GetRunPath, GetUpcomingQuery, GroundStop, Health, HelpList,
-    HelpReplied, HelpReplyRequest, HelpResolved, Itinerary, ItineraryDetail, ItineraryList,
-    ItineraryState, JudgeLearningPath, JudgeLearningRequest, Judgement, Learning, LearningList,
-    ListHelpQuery, ListItinerariesQuery, ListLearningsQuery, ListRunsQuery, PendingList,
-    PipelineList, PipelineSwitch, Problem, Report, ReserveState, ResolveHelpRequest, RouteMap, Run,
-    RunList, RunStatus, SendFlightRequest, Status, StreamRunPath, StreamRunQuery,
-    SwitchOffPipelinePath, SwitchOnPipelinePath, UndismissItineraryPath, Upcoming, UpdateStatus,
+    GetItineraryPath, GetReportPath, GetRunPath, GetSystemQuery, GetUpcomingQuery, GroundStop,
+    Health, HelpList, HelpReplied, HelpReplyRequest, HelpResolved, Itinerary, ItineraryDetail,
+    ItineraryList, ItineraryState, JudgeLearningPath, JudgeLearningRequest, Judgement, Learning,
+    LearningList, ListHelpQuery, ListItinerariesQuery, ListLearningsQuery, ListRunsQuery,
+    PendingList, PipelineList, PipelineSwitch, Problem, Report, ReserveState, ResolveHelpRequest,
+    RouteMap, Run, RunList, RunStatus, SendFlightRequest, Status, StreamRunPath, StreamRunQuery,
+    SwitchOffPipelinePath, SwitchOnPipelinePath, SystemReport, SystemWindow,
+    UndismissItineraryPath, Upcoming, UpdateStatus,
 };
 use layover_store::{HelpFilter, History, Journal, RunFilter};
 
@@ -63,16 +64,25 @@ pub struct Dashboard(
     Option<Arc<str>>,
     Option<crate::upcoming::Clocked>,
     Option<Arc<layover_update::Settings>>,
+    Option<Arc<crate::system::Monitor>>,
 );
 
 impl Dashboard {
     /// Creates a dashboard over a configuration file and a history directory.
     ///
-    /// It says nothing is running the queue until [`Dashboard::dispatched_by`] says what is, and
-    /// that it has no clock until [`Dashboard::timetable`] gives it one.
+    /// It says nothing is running the queue until [`Dashboard::dispatched_by`] says what is, that
+    /// it has no clock until [`Dashboard::timetable`] gives it one, and that nothing reads the
+    /// machine until [`Dashboard::system`] gives it what does.
     #[must_use]
     pub fn new(state: DashboardState) -> Self {
-        Self(Arc::new(state), None, None, None)
+        Self(Arc::new(state), None, None, None, None)
+    }
+
+    /// What reads the machine this dashboard runs on, for `GET /system`.
+    #[must_use]
+    pub fn system(mut self, monitor: Arc<crate::system::Monitor>) -> Self {
+        self.4 = Some(monitor);
+        self
     }
 
     /// Where `GET /update` reads what this machine knows about releases. The environment's, by
@@ -872,6 +882,14 @@ impl Api for Dashboard {
         path: SwitchOnPipelinePath,
     ) -> Result<PipelineSwitch, Problem> {
         self.switch(&path.pipeline_name, false)
+    }
+
+    async fn get_system(&self, query: GetSystemQuery) -> Result<SystemReport, Problem> {
+        let monitor = self.4.as_ref().ok_or_else(|| {
+            Problem::new(StatusCode::SERVICE_UNAVAILABLE, "nothing reads the machine")
+                .with_detail("this dashboard was started without anything to read the machine")
+        })?;
+        Ok(monitor.report(query.window.unwrap_or(SystemWindow::LastHour)))
     }
 }
 

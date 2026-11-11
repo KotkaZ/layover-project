@@ -166,3 +166,19 @@ went looking for. So nothing opens by itself: the tab is the history, running se
 a line saying how many are running, and one session opens above it when it is picked, live or as a
 replay (decided with the maintainer, 2026-11-10). Watching one at a time also keeps a single stream
 open per page, rather than up to four.
+
+**Why the System tab reads the machine in memory, and counts Layover's share by process tree.** A
+factory shares its machine, often with the person who runs it, and "is it slow because of my
+agents?" was answerable only from Task Manager. So the dashboard graphs the processors, memory and
+the disk space of the drives holding the factory and its `work_dir` (space only, not read and write
+speed, which says little about whether a factory can keep going). The process serving the dashboard
+reads the machine every five seconds and keeps the last hour as read and the last day as minute
+averages in its own memory. Nothing is written to `.layover/`: a restart begins the graphs again,
+which costs a person a gap in a graph, while writing them would put the machine's state into the
+factory's (all decided with the maintainer, 2026-11-11). Layover's share is the process serving the
+dashboard with every process it started, which under `serve` is the Tower and every agent CLI with
+whatever those started, plus every run another Layover process has alive now, from the `pid` in
+its live record. Each process is counted once. A child counts only if it started no earlier than
+its parent, because Windows reuses a dead process's identifier. The machine is read with
+`sysinfo`, not one hand-written reader per platform (PowerShell, `/proc`, `sysctl`), each tested on
+one CI runner at most.

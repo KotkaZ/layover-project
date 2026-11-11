@@ -19,15 +19,16 @@ use layover_http::{
     Access, Agent, AgentList, Api, Blocker, CancelFlightPath, CostBucket, CostDay, CostReport,
     CostSource, CostSummary, CostWindow, DismissItineraryPath, DismissItineraryRequest, Dismissal,
     EventStream, FlightAccepted, GetCostsQuery, GetGraphQuery, GetItineraryPath, GetReportPath,
-    GetRunPath, GetUpcomingQuery, GroundStop, Health, HelpList, HelpReplied, HelpReplyRequest,
-    HelpRequest, HelpResolved, Impact, Itinerary, ItineraryDetail, ItineraryList, ItineraryState,
-    JudgeLearningPath, JudgeLearningRequest, Learning, LearningList, LearningState, ListHelpQuery,
-    ListItinerariesQuery, ListLearningsQuery, ListRunsQuery, OPERATIONS, PendingFlight,
-    PendingList, Pipeline, PipelineList, PipelineSwitch, Problem, Report, ReserveState,
-    ResolveHelpRequest, RouteMap, Run, RunList, RunStatus, ScheduledFire, ScheduledWorkflow,
-    SendFlightRequest, SkipReason, SkippedTick, Status, StreamRunPath, StreamRunQuery,
-    SwitchOffPipelinePath, SwitchOnPipelinePath, TokenUsage, Trigger, TriggerKind,
-    UndismissItineraryPath, Upcoming, WaitingLayover, WindowSpan, Workspace, router,
+    GetRunPath, GetSystemQuery, GetUpcomingQuery, GroundStop, Health, HelpList, HelpReplied,
+    HelpReplyRequest, HelpRequest, HelpResolved, Impact, Itinerary, ItineraryDetail, ItineraryList,
+    ItineraryState, JudgeLearningPath, JudgeLearningRequest, Learning, LearningList, LearningState,
+    ListHelpQuery, ListItinerariesQuery, ListLearningsQuery, ListRunsQuery, OPERATIONS,
+    PendingFlight, PendingList, Pipeline, PipelineList, PipelineSwitch, Problem, Report,
+    ReserveState, ResolveHelpRequest, RouteMap, Run, RunList, RunStatus, ScheduledFire,
+    ScheduledWorkflow, SendFlightRequest, SkipReason, SkippedTick, Status, StreamRunPath,
+    StreamRunQuery, SwitchOffPipelinePath, SwitchOnPipelinePath, SystemDisk, SystemReport,
+    SystemSample, SystemWindow, TokenUsage, Trigger, TriggerKind, UndismissItineraryPath, Upcoming,
+    WaitingLayover, WindowSpan, Workspace, router,
 };
 use tower::ServiceExt as _;
 
@@ -558,6 +559,36 @@ impl Api for Stub {
             since: None,
         })
     }
+
+    async fn get_system(&self, query: GetSystemQuery) -> Result<SystemReport, Problem> {
+        let window = query.window.unwrap_or(SystemWindow::LastHour);
+        Ok(SystemReport {
+            window,
+            every_sec: if window == SystemWindow::LastHour {
+                5
+            } else {
+                60
+            },
+            since: "2026-11-11T09:00:00Z".to_owned(),
+            cpus: 8,
+            memory_total_bytes: 34_359_738_368,
+            disks: vec![SystemDisk {
+                name: "Windows".to_owned(),
+                mount_point: "C:\\".to_owned(),
+                total_bytes: 1_000_202_039_296,
+                holds: vec!["factory".to_owned(), "work_dir".to_owned()],
+            }],
+            samples: vec![SystemSample {
+                at: "2026-11-11T09:00:05Z".to_owned(),
+                cpu_percent: 23.5,
+                layover_cpu_percent: 4.1,
+                memory_used_bytes: 12_884_901_888,
+                layover_memory_bytes: 1_073_741_824,
+                layover_processes: 7,
+                disk_used_bytes: vec![412_316_860_416],
+            }],
+        })
+    }
 }
 
 async fn call(method: &str, uri: &str, body: Option<&str>) -> (StatusCode, String, String) {
@@ -599,7 +630,7 @@ fn json(body: &str) -> serde_json::Value {
 
 #[test]
 fn every_specified_operation_is_routed() {
-    assert_eq!(OPERATIONS.len(), 31);
+    assert_eq!(OPERATIONS.len(), 32);
 
     for (method, path, operation) in OPERATIONS {
         assert!(path.starts_with('/'), "`{operation}` has an odd path");
@@ -724,6 +755,31 @@ async fn upcoming_work_is_served_with_its_window_and_a_typed_skip_reason() {
 
     let (status, _, _) = call("GET", "/upcoming", None).await;
     assert_eq!(status, StatusCode::OK, "the window is optional");
+}
+
+#[tokio::test]
+async fn the_machine_is_served_over_the_window_asked_for() {
+    let (status, _, body) = call("GET", "/system?window=last_24h", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let report = json(&body);
+    assert_eq!(report["window"], "last_24h", "{report}");
+    assert_eq!(report["every_sec"], 60);
+    assert_eq!(report["disks"][0]["holds"][1], "work_dir");
+    assert_eq!(
+        report["samples"][0]["disk_used_bytes"][0],
+        412_316_860_416_i64
+    );
+
+    let (status, _, body) = call("GET", "/system", None).await;
+    assert_eq!(status, StatusCode::OK, "the window is optional");
+    assert_eq!(json(&body)["window"], "last_hour");
+
+    let (status, _, _) = call("GET", "/system?window=last_week", None).await;
+    assert_eq!(
+        status,
+        StatusCode::BAD_REQUEST,
+        "a window that is not one is refused"
+    );
 }
 
 #[tokio::test]

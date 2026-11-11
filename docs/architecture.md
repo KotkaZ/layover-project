@@ -420,6 +420,7 @@ exists in the specification but is not implemented is a compile error.
 | `GET` · `POST` | `/help` · `/help/resolve` · `/help/reply` | Help requests; mark them dealt with, or answer and continue the work |
 | `GET` · `PATCH` | `/learnings` · `/learnings/:id` | Learnings; keep one for good or stop using it |
 | `POST` · `DELETE` | `/ground-stop` | Halt everything; resume |
+| `GET` | `/system` | The machine's processors, memory and the factory's disk space over the last hour or day, with Layover's share, read in memory by the process serving the dashboard |
 
 Parameters and shapes are in the specification and in [HTTP API](../book/src/http-api.md).
 

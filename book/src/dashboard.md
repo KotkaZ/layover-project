@@ -7,6 +7,10 @@ answers.
 - **What has it been doing?** Run history, for as long as retention keeps it.
 - **What is that costing?** Totals over periods you can actually reason about.
 
+And because it runs on a real machine, often one somebody also works on, a fourth: **is the machine
+keeping up, and is the factory what is loading it?** The [System](#the-machine-it-runs-on) tab
+answers that.
+
 The [Chains and the route map](./dashboard-chains.md) and [Sessions, cost and retention](./dashboard-runs.md)
 views have pages of their own.
 
@@ -294,6 +298,31 @@ unless an agent rediscovers it first.
 The list opens on the learnings **in use** — provisional and confirmed — since those are the ones
 runs are being given. **Standing** shows the others, with how many of each there are; **Agent** and
 **Find** narrow it to one agent, or to the learnings that mention something.
+
+## The machine it runs on
+
+![The System tab: graphs of the last hour for the processors, memory and the disk holding the factory, each with its latest figure; the processor and memory graphs have a second line for Layover's own share](./assets/dashboard-system.png)
+
+**System** graphs the machine the dashboard runs on: how busy its processors are, how much memory is
+in use, and the space used on each drive holding the factory or its `work_dir`. Processors and memory
+each have a second line, **Layover**: what Layover's own processes use. That is the process serving
+the dashboard and everything it started — under `serve`, the Tower and every agent CLI it is
+running, with whatever those started — and every agent run another Layover process has alive now,
+from the live records every Tower keeps. So it tells the factory's load apart from everything else
+on the machine. A `--watch-only` dashboard counts the agents of the Tower beside it, but not that
+Tower's own process.
+
+**Last hour** is every reading, five seconds apart; **Last 24 hours, by the minute** is minute
+averages. Point at a graph to read it at that moment; a break in a line is time nothing was read,
+such as the machine asleep. A figure turns red at 90% of what the machine has. The tab is kept
+current while it is showing — every five seconds for the hour, every minute for the day — and the
+window is in the address, `#system?window=last_24h`. The machine is not any one workflow's, so the
+Workflow selector narrows nothing here.
+
+**The readings are kept in memory** by the process serving the dashboard, from the moment it
+started: a restart, or an update that hands over to a new Tower, begins them again, and the tab
+says since when. Nothing is written to `.layover/`, which holds only what is the factory's.
+
 ## Why it looks like this
 
 No npm, no framework, no build step. The page is HTML, CSS and a little vanilla JavaScript,

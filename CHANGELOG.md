@@ -8,10 +8,18 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
-**Compatibility.** Nothing changes for an existing factory.
+**Compatibility.** Nothing changes for an existing factory. The HTTP API gains `GET /system`, and
+the dashboard a System tab.
 
 ### Added
 
+- **A System tab: the machine the factory runs on.** Graphs of how busy the processors are, how much
+  memory is in use, and the space used on each drive holding the factory or its `work_dir`. The
+  processor and memory graphs have a second line for Layover's own share: the Tower and every agent
+  CLI it runs, with whatever they started. It covers the last hour, every five seconds, or the last
+  24 hours by the minute. Point at a graph to read any moment. The process serving the dashboard
+  keeps the readings in memory, so a restart begins them again. `GET /system` serves the same
+  figures.
 - **An agent skill that sets up a first factory.** Given to an agent with
   `gh skill install KotkaZ/layover-project first-layover-factory`, it asks what the factory is for,
   which CLI it runs on, where its agents work and what one piece of work may spend. It downloads

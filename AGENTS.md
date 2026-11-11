@@ -174,7 +174,7 @@ this repository's own source**. `layover doctor` reports what the run left behin
 | `crates/layover-core` | Domain types: config, agents, routes, pipelines, prompts, graph, validation, itinerary, barriers |
 | `crates/layover-http` | The generated HTTP surface and the `Api` trait |
 | `crates/layover-store` | On-disk run history, the journal, Hangars and retention |
-| `crates/layover-dashboard` | The monitoring dashboard: route map, chains, sessions, runs, cost |
+| `crates/layover-dashboard` | The monitoring dashboard: route map, chains, sessions, runs, cost, and the machine it runs on |
 | `crates/layover-tower` | The supervisor: dispatch, rails, recovery — the only crate that starts a process, and the first place that can do something irreversible |
 | `crates/layover-mcp` | The MCP endpoint agents call back into. Untrusted input arrives here; identity comes from the token, never the request |
 | `crates/layover-update` | Release discovery and staging: manifest, versions, download, provenance, gate. Makes the only network requests Layover itself makes |

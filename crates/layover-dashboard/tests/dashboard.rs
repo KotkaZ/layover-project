@@ -276,6 +276,7 @@ async fn the_page_and_its_assets_are_served_from_the_binary() {
         ("/style.css", ".routemap"),
         ("/app.js", "function showView"),
         ("/cost.js", "async function loadCost"),
+        ("/system.js", "async function loadSystem"),
         ("/sessions.js", "async function loadSessions"),
         ("/terminal.js", "class Terminal"),
         ("/reply.js", "async function submitReply"),

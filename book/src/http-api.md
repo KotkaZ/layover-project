@@ -57,6 +57,7 @@ Point any OpenAPI tool at the file to get a client, a mock server or rendered do
 | `POST` | `/ground-stop` | | Halt everything. Engaging twice is a success, not a conflict. |
 | `DELETE` | `/ground-stop` | | Resume. |
 | `GET` | `/runs/{run_id}/stream` | `after` | A run's CLI output as server-sent events, rendered as a terminal shows it — live while it runs, a replay once it is over. See below. |
+| `GET` | `/system` | `window` | The machine the dashboard runs on: how busy its processors are, its memory and the disk space of each drive holding the factory or its `work_dir`, with Layover's own share of the processors and memory. `last_hour` (the default) is every five-second reading; `last_24h` is minute averages. Read by the process serving the dashboard and kept in its memory, so `since` says when the readings began. A `503` from a dashboard with nothing reading the machine. |
 
 ## One chain
 

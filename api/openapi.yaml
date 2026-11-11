@@ -38,6 +38,8 @@ tags:
     summary: Starting and observing work.
   - name: control
     summary: Stopping everything.
+  - name: machine
+    summary: The machine the factory runs on.
 
 paths:
   /health:
@@ -369,6 +371,45 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Upcoming"
+
+  /system:
+    get:
+      operationId: getSystem
+      summary: The machine's processors, memory and disk space over time, and Layover's share.
+      description: |
+        Sampled every five seconds by the process serving this dashboard — `layover serve`, or a
+        `--watch-only` dashboard — and kept in its memory: the last hour as sampled, and the last
+        24 hours as one-minute averages. Nothing is written to disk, so a restart begins the
+        history again; `since` says when this process began sampling.
+
+        Layover's share is this process and everything it started — under `serve`, the Tower and
+        every agent CLI it runs, with whatever they started — and every agent run another Layover
+        process has alive now, with whatever it started. Each process is counted once.
+
+        Disk space is that of each drive holding the factory or its `work_dir`.
+      tags: [machine]
+      parameters:
+        - name: window
+          in: query
+          required: false
+          description: |
+            How far back: `last_hour`, every sample, is the default; `last_24h` is one-minute
+            averages.
+          schema:
+            $ref: "#/components/schemas/SystemWindow"
+      responses:
+        "200":
+          description: The machine over the window.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemReport"
+        "503":
+          description: Nothing in this process samples the machine.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 
   /itineraries:
     get:
@@ -2675,6 +2716,116 @@ components:
           description: Ticks skipped in the last seven days, most recent first, at most 100.
           items:
             $ref: "#/components/schemas/SkippedTick"
+
+    SystemWindow:
+      type: string
+      description: |
+        How far back the machine's history goes: the last hour, every sample, or the last 24 hours
+        as one-minute averages. Both are rolling, ending now.
+      enum: [last_hour, last_24h]
+
+    SystemReport:
+      type: object
+      description: |
+        The machine over a window, and Layover's share of it. For a moment after the process
+        starts, until it has first looked at the machine, `cpus` and `memory_total_bytes` are 0
+        and `disks` and `samples` are empty.
+      required: [window, every_sec, since, cpus, memory_total_bytes, disks, samples]
+      properties:
+        window:
+          $ref: "#/components/schemas/SystemWindow"
+          description: Which window this is.
+        every_sec:
+          type: integer
+          description: Seconds between samples in `samples`.
+        since:
+          type: string
+          format: date-time
+          description: |
+            When this process began sampling. A window reaching further back than this has no
+            samples for that part.
+        cpus:
+          type: integer
+          description: Logical processors.
+        memory_total_bytes:
+          type: integer
+          format: int64
+          description: Physical memory.
+        disks:
+          type: array
+          description: Each drive holding the factory or its `work_dir`, once.
+          items:
+            $ref: "#/components/schemas/SystemDisk"
+        samples:
+          type: array
+          description: Oldest first. A gap means the machine slept or the process was busy.
+          items:
+            $ref: "#/components/schemas/SystemSample"
+
+    SystemDisk:
+      type: object
+      description: A drive holding the factory or its `work_dir`.
+      required: [name, mount_point, total_bytes, holds]
+      properties:
+        name:
+          type: string
+          description: The drive's name, as the system reports it; may be empty.
+        mount_point:
+          type: string
+          description: Where it is mounted, such as `C:\` or `/`.
+        total_bytes:
+          type: integer
+          format: int64
+          description: Its size.
+        holds:
+          type: array
+          description: What it holds, `factory` and `work_dir`, or both.
+          items:
+            type: string
+            description: "`factory` or `work_dir`."
+
+    SystemSample:
+      type: object
+      description: One sample of the machine, or the average of a minute of them.
+      required:
+        - at
+        - cpu_percent
+        - layover_cpu_percent
+        - memory_used_bytes
+        - layover_memory_bytes
+        - layover_processes
+        - disk_used_bytes
+      properties:
+        at:
+          type: string
+          format: date-time
+          description: When it was taken; for an average, the start of its minute.
+        cpu_percent:
+          type: number
+          format: double
+          description: How busy all the processors were, from 0 to 100.
+        layover_cpu_percent:
+          type: number
+          format: double
+          description: Layover's share of all the processors, from 0 to 100.
+        memory_used_bytes:
+          type: integer
+          format: int64
+          description: Physical memory in use.
+        layover_memory_bytes:
+          type: integer
+          format: int64
+          description: Physical memory Layover's processes hold.
+        layover_processes:
+          type: integer
+          description: How many processes Layover's share counts.
+        disk_used_bytes:
+          type: array
+          description: Space used on each of `disks`, in the same order.
+          items:
+            type: integer
+            format: int64
+            description: Bytes used.
 
     Report:
       type: object

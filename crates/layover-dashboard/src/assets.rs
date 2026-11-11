@@ -25,7 +25,7 @@ const SCRIPTS: &[(&str, &str)] = &[
     ("/routemap.js", include_str!("assets/routemap.js")),
     // One session's read-only terminal.
     ("/terminal.js", include_str!("assets/terminal.js")),
-    // Sessions: everything running, live, over the history of every run.
+    // Sessions: the history of every run, and the one session picked from it.
     ("/sessions.js", include_str!("assets/sessions.js")),
     // Answering help requests, and continuing a chain with its own flags.
     ("/reply.js", include_str!("assets/reply.js")),
@@ -45,6 +45,8 @@ const SCRIPTS: &[(&str, &str)] = &[
     ("/map.js", include_str!("assets/map.js")),
     // Cost: the windows, day by day, the breakdowns and the Reserve.
     ("/cost.js", include_str!("assets/cost.js")),
+    // System: the machine's processors, memory and disk space, and Layover's share.
+    ("/system.js", include_str!("assets/system.js")),
     // Addresses for every view and its filters.
     ("/router.js", include_str!("assets/router.js")),
     // The list of chains: filtered, searched and paged.

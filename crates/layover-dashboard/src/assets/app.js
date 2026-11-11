@@ -130,6 +130,7 @@ function showView(name) {
   watchSessions(name === "sessions");
   watchChain(name === "chain");
   watchUpcoming(name === "upcoming");
+  watchSystem(name === "system");
   watchLive(name);
   routeTo(name);
 }
@@ -386,6 +387,7 @@ function start() {
 startDismissals();
   startChains();
   startUpcoming();
+  startSystem();
   startAttention();
   // Back to a tab left in the background, it is brought up to date at once rather than at the
   // next tick.

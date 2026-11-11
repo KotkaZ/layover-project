@@ -22,6 +22,7 @@ const ROUTE_PARAMS = {
   sessions: { window: "#sessions-window", status: "#sessions-status", agent: "#sessions-agent" },
   journal: { learnings: "#learn-state", agent: "#learn-agent", q: "#learn-search" },
   upcoming: { hours: "#upcoming-hours" },
+  system: { window: "#system-window" },
 };
 
 const router = { applying: false, last: null };

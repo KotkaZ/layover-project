@@ -702,7 +702,8 @@ fn dashboard_for(
         history,
         journal: Arc::clone(journal),
         ground_stop: history_dir.with_file_name("ground-stop"),
-    });
+    })
+    .system(layover_dashboard::Monitor::start(path));
     match timetable {
         None => dashboard,
         Some(timetable) => {
