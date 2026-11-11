@@ -8,8 +8,15 @@ status](README.md#project-status).
 
 ## [Unreleased]
 
-**Compatibility.** Nothing changes for an existing factory. The HTTP API gains `GET /system`, and
-the dashboard a System tab.
+## [1.21.0] — 2026-11-11
+
+A System tab graphs the machine the factory runs on, with Layover's own share of it. Sessions opens
+a session only when you pick one, and two agent skills install Layover and set up a first factory.
+
+**Compatibility.** Nothing about the configuration, the MCP tools or the state directory changes,
+and nothing is written to `.layover/` that was not before. The HTTP API gains `GET /system` and
+changes nothing else. On the dashboard, Sessions no longer opens the running sessions by itself:
+pick one from the list to watch it.
 
 ### Added
 
@@ -1166,7 +1173,8 @@ were blocking is now built.
 
 - First tagged release: installers and archives for five targets.
 
-[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.20.1...HEAD
+[Unreleased]: https://github.com/KotkaZ/layover-project/compare/v1.21.0...HEAD
+[1.21.0]: https://github.com/KotkaZ/layover-project/compare/v1.20.1...v1.21.0
 [1.20.1]: https://github.com/KotkaZ/layover-project/compare/v1.19.1...v1.20.1
 [1.19.1]: https://github.com/KotkaZ/layover-project/compare/v1.19.0...v1.19.1
 [1.19.0]: https://github.com/KotkaZ/layover-project/compare/v1.18.0...v1.19.0
